@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	applicationport "narratives/internal/application/port"
 	invdom "narratives/internal/domain/invitation"
@@ -18,29 +19,18 @@ import (
 
 // InvitationQueryPortは、招待リンクのtokenからInvitationInfoを取得するユースケースです。
 type InvitationQueryPort interface {
-	GetInvitationInfo(
-		ctx context.Context,
-		token string,
-	) (*invdom.InvitationInfo, error)
+	GetInvitationInfo(ctx context.Context, token string) (*invdom.InvitationInfo, error)
 }
 
-// InvitationCommandPortは、招待deliveryを作成または再利用し、
-// メール送信queueへ投入するユースケースです。
-//
-// tokenは内部処理だけで使用し、呼出元には返しません。
+// InvitationCommandPortは、招待の作成・送信と取消を行うユースケースです。
 type InvitationCommandPort interface {
-	CreateInvitationAndSend(
-		ctx context.Context,
-		memberDocID string,
-	) error
+	CreateInvitationAndSend(ctx context.Context, memberDocID string) error
+	CancelInvitation(ctx context.Context, memberDocID string) error
 }
 
 // InvitationCompletePortは、招待完了処理を行うユースケースです。
 type InvitationCompletePort interface {
-	CompleteInvitation(
-		ctx context.Context,
-		in CompleteInvitationInput,
-	) error
+	CompleteInvitation(ctx context.Context, in CompleteInvitationInput) error
 }
 
 // InvitationUsecasePortは、招待に関するQuery、Command、Completeをまとめた入口です。
@@ -72,6 +62,7 @@ type invitationUsecase struct {
 // invitationDeliveryRepo:
 //   - tokenとdelivery outboxの作成または再利用
 //   - delivery stateの永続化
+//   - 招待取消時のtoken失効
 //
 // deliveryQueue:
 //   - delivery IDの非同期メール送信queueへの投入
@@ -94,53 +85,26 @@ func NewInvitationUsecase(
 // ==============================
 
 // POST /invitations/validate
-func (u *invitationUsecase) GetInvitationInfo(
-	ctx context.Context,
-	token string,
-) (*invdom.InvitationInfo, error) {
+func (u *invitationUsecase) GetInvitationInfo(ctx context.Context, token string) (*invdom.InvitationInfo, error) {
 	if u == nil {
 		return nil, fmt.Errorf("invitation usecase is nil")
 	}
-
 	if u.invitationTokenRepo == nil {
-		return nil, fmt.Errorf(
-			"invitation token repository is not configured",
-		)
+		return nil, fmt.Errorf("invitation token repository is not configured")
 	}
-
-	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, invdom.ErrInvitationTokenNotFound
 	}
 
-	info, err := u.invitationTokenRepo.ResolveInvitationInfoByToken(
-		ctx,
-		token,
-	)
+	info, err := u.invitationTokenRepo.ResolveInvitationInfoByToken(ctx, token)
 	if err != nil {
 		switch {
-		case errors.Is(
-			err,
-			invdom.ErrInvitationTokenNotFound,
-		),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenExpired,
-			),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenUsed,
-			),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenRevoked,
-			),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenNotDelivered,
-			):
+		case errors.Is(err, invdom.ErrInvitationTokenNotFound),
+			errors.Is(err, invdom.ErrInvitationTokenExpired),
+			errors.Is(err, invdom.ErrInvitationTokenUsed),
+			errors.Is(err, invdom.ErrInvitationTokenRevoked),
+			errors.Is(err, invdom.ErrInvitationTokenNotDelivered):
 			return nil, invdom.ErrInvitationTokenNotFound
-
 		default:
 			return nil, err
 		}
@@ -148,17 +112,10 @@ func (u *invitationUsecase) GetInvitationInfo(
 
 	normalizedInfo, err := info.Normalize()
 	if err != nil {
-		if errors.Is(
-			err,
-			invdom.ErrInvitationMemberIDRequired,
-		) {
+		if errors.Is(err, invdom.ErrInvitationMemberIDRequired) {
 			return nil, invdom.ErrInvitationTokenNotFound
 		}
-
-		return nil, fmt.Errorf(
-			"normalize invitation info failed: %w",
-			err,
-		)
+		return nil, fmt.Errorf("normalize invitation info failed: %w", err)
 	}
 
 	return &normalizedInfo, nil
@@ -169,63 +126,37 @@ func (u *invitationUsecase) GetInvitationInfo(
 // ==============================
 
 // POST /invitations
-func (u *invitationUsecase) CreateInvitationAndSend(
-	ctx context.Context,
-	memberDocID string,
-) error {
+func (u *invitationUsecase) CreateInvitationAndSend(ctx context.Context, memberDocID string) error {
 	if u == nil {
 		return fmt.Errorf("invitation usecase is nil")
 	}
-
 	if u.invitationDeliveryRepo == nil {
-		return fmt.Errorf(
-			"invitation delivery repository is not configured",
-		)
+		return fmt.Errorf("invitation delivery repository is not configured")
 	}
-
 	if u.memberRepo == nil {
-		return fmt.Errorf(
-			"member repository is not configured",
-		)
+		return fmt.Errorf("member repository is not configured")
 	}
-
 	if u.deliveryQueue == nil {
-		return fmt.Errorf(
-			"invitation delivery queue is not configured",
-		)
+		return fmt.Errorf("invitation delivery queue is not configured")
 	}
-
-	memberDocID = strings.TrimSpace(memberDocID)
 	if memberDocID == "" {
 		return fmt.Errorf("memberDocID is empty")
 	}
 
-	companyID := strings.TrimSpace(
-		CompanyIDFromContext(ctx),
-	)
+	companyID := CompanyIDFromContext(ctx)
 	if companyID == "" {
 		return fmt.Errorf("companyID is empty")
 	}
 
-	rec, err := u.memberRepo.GetByID(
-		ctx,
-		memberDocID,
-	)
+	rec, err := u.memberRepo.GetByID(ctx, memberDocID)
 	if err != nil {
-		return fmt.Errorf(
-			"find member by doc id failed: %w",
-			err,
-		)
+		return fmt.Errorf("find member by doc id failed: %w", err)
 	}
-
-	rec.DocID = strings.TrimSpace(rec.DocID)
 	if rec.DocID == "" {
 		return memdom.ErrNotFound
 	}
 
-	memberCompanyID := strings.TrimSpace(
-		rec.Member.CompanyID,
-	)
+	memberCompanyID := rec.Member.CompanyID
 	if memberCompanyID != companyID {
 		return memdom.ErrNotFound
 	}
@@ -238,65 +169,31 @@ func (u *invitationUsecase) CreateInvitationAndSend(
 		rec.Member.Email,
 	)
 	if err != nil {
-		return fmt.Errorf(
-			"create invitation info failed: %w",
-			err,
-		)
+		return fmt.Errorf("create invitation info failed: %w", err)
 	}
 
-	if !strings.EqualFold(
-		strings.TrimSpace(rec.Member.Status),
-		"active",
-	) {
+	if !strings.EqualFold(rec.Member.Status, "active") {
 		status := "inactive"
-
-		if _, err := u.memberRepo.Update(
-			ctx,
-			rec.DocID,
-			memdom.MemberPatch{
-				Status: &status,
-			},
-		); err != nil {
-			return fmt.Errorf(
-				"update member status before invitation failed: %w",
-				err,
-			)
+		if _, err := u.memberRepo.Update(ctx, rec.DocID, memdom.MemberPatch{Status: &status}); err != nil {
+			return fmt.Errorf("update member status before invitation failed: %w", err)
 		}
 	}
 
-	delivery, err :=
-		u.invitationDeliveryRepo.CreateOrReuseInvitationDelivery(
-			ctx,
-			info,
-		)
+	delivery, err := u.invitationDeliveryRepo.CreateOrReuseInvitationDelivery(ctx, info)
 	if err != nil {
-		return fmt.Errorf(
-			"create or reuse invitation delivery failed: %w",
-			err,
-		)
+		return fmt.Errorf("create or reuse invitation delivery failed: %w", err)
 	}
 
 	delivery, err = delivery.Normalize()
 	if err != nil {
-		return fmt.Errorf(
-			"normalize invitation delivery failed: %w",
-			err,
-		)
+		return fmt.Errorf("normalize invitation delivery failed: %w", err)
 	}
 
 	switch delivery.Status {
-	case invdom.InvitationDeliveryStatusPending,
-		invdom.InvitationDeliveryStatusRetryableFailed:
-		if err := u.deliveryQueue.EnqueueInvitationDelivery(
-			ctx,
-			delivery,
-		); err != nil {
-			return fmt.Errorf(
-				"enqueue invitation delivery failed: %w",
-				err,
-			)
+	case invdom.InvitationDeliveryStatusPending, invdom.InvitationDeliveryStatusRetryableFailed:
+		if err := u.deliveryQueue.EnqueueInvitationDelivery(ctx, delivery); err != nil {
+			return fmt.Errorf("enqueue invitation delivery failed: %w", err)
 		}
-
 		return nil
 
 	case invdom.InvitationDeliveryStatusProcessing:
@@ -308,13 +205,83 @@ func (u *invitationUsecase) CreateInvitationAndSend(
 		return nil
 
 	case invdom.InvitationDeliveryStatusFailed:
-		return fmt.Errorf(
-			"invitation delivery is already failed",
-		)
+		return fmt.Errorf("invitation delivery is already failed")
 
 	default:
 		return invdom.ErrInvitationDeliveryStatusInvalid
 	}
+}
+
+// ==============================
+// Command: Cancel
+// ==============================
+
+// DELETE /invitations/{memberId}
+//
+// 招待中のMemberだけを取消対象とします。
+// Firebase UIDが設定済みのMemberは通常Memberとして扱い、削除しません。
+// tokenを先に失効させ、その後Memberを再取得してUIDが依然空であることを確認してから物理削除します。
+func (u *invitationUsecase) CancelInvitation(ctx context.Context, memberDocID string) error {
+	if u == nil {
+		return fmt.Errorf("invitation usecase is nil")
+	}
+	if u.invitationDeliveryRepo == nil {
+		return fmt.Errorf("invitation delivery repository is not configured")
+	}
+	if u.memberRepo == nil {
+		return fmt.Errorf("member repository is not configured")
+	}
+	if memberDocID == "" {
+		return memdom.ErrNotFound
+	}
+
+	companyID := CompanyIDFromContext(ctx)
+	if companyID == "" {
+		return memdom.ErrNotFound
+	}
+
+	rec, err := u.memberRepo.GetByID(ctx, memberDocID)
+	if err != nil {
+		return err
+	}
+	if rec.DocID == "" || rec.Member.CompanyID != companyID {
+		return memdom.ErrNotFound
+	}
+	if rec.Member.UID != "" {
+		return memdom.ErrPreconditionFailed
+	}
+
+	revokedAt := time.Now().UTC()
+	if err := u.invitationDeliveryRepo.RevokeMemberInvitations(ctx, rec.DocID, companyID, revokedAt); err != nil {
+		switch {
+		case errors.Is(err, invdom.ErrInvitationCompanyMismatch):
+			return memdom.ErrNotFound
+		case errors.Is(err, invdom.ErrInvitationMemberIDRequired),
+			errors.Is(err, invdom.ErrInvitationCompanyIDRequired):
+			return memdom.ErrPreconditionFailed
+		default:
+			return fmt.Errorf("revoke member invitations failed: %w", err)
+		}
+	}
+
+	// Revoke処理と競合して招待完了が先にcommitしていた場合、
+	// UIDが設定済みになっているためMember削除を中止する。
+	current, err := u.memberRepo.GetByID(ctx, rec.DocID)
+	if err != nil {
+		return err
+	}
+	if current.DocID == "" || current.Member.CompanyID != companyID {
+		return memdom.ErrNotFound
+	}
+	if current.Member.UID != "" {
+		return memdom.ErrPreconditionFailed
+	}
+
+	if err := u.memberRepo.Delete(ctx, current.DocID); err != nil {
+		return fmt.Errorf("delete invited member failed: %w", err)
+	}
+
+	return nil
 }
 
 // ==============================
@@ -331,18 +298,12 @@ type CompleteInvitationInput struct {
 	Email         string
 }
 
-func (u *invitationUsecase) CompleteInvitation(
-	ctx context.Context,
-	in CompleteInvitationInput,
-) error {
+func (u *invitationUsecase) CompleteInvitation(ctx context.Context, in CompleteInvitationInput) error {
 	if u == nil {
 		return fmt.Errorf("invitation usecase is nil")
 	}
-
 	if u.invitationTokenRepo == nil {
-		return fmt.Errorf(
-			"invitation token repository is not configured",
-		)
+		return fmt.Errorf("invitation token repository is not configured")
 	}
 
 	completion, err := invdom.NewInvitationCompletion(
@@ -356,92 +317,44 @@ func (u *invitationUsecase) CompleteInvitation(
 	)
 	if err != nil {
 		switch {
-		case errors.Is(
-			err,
-			invdom.ErrInvitationTokenRequired,
-		),
-			errors.Is(
-				err,
-				invdom.ErrInvitationUIDRequired,
-			):
+		case errors.Is(err, invdom.ErrInvitationTokenRequired),
+			errors.Is(err, invdom.ErrInvitationUIDRequired):
 			return fmt.Errorf("token_or_uid_required")
 
-		case errors.Is(
-			err,
-			invdom.ErrInvitationNameFieldsRequired,
-		):
+		case errors.Is(err, invdom.ErrInvitationNameFieldsRequired):
 			return fmt.Errorf("name_fields_required")
 
-		case errors.Is(
-			err,
-			invdom.ErrInvitationEmailRequired,
-		):
+		case errors.Is(err, invdom.ErrInvitationEmailRequired):
 			return fmt.Errorf("email_required")
 
 		default:
-			return fmt.Errorf(
-				"create invitation completion failed: %w",
-				err,
-			)
+			return fmt.Errorf("create invitation completion failed: %w", err)
 		}
 	}
 
 	// Member更新、member UID mapping更新、token消費は、
 	// Repository実装の同一Firestore transaction内で一体的に実行する。
-	if err := u.invitationTokenRepo.CompleteInvitation(
-		ctx,
-		completion,
-	); err != nil {
+	if err := u.invitationTokenRepo.CompleteInvitation(ctx, completion); err != nil {
 		switch {
-		case errors.Is(
-			err,
-			invdom.ErrInvitationTokenNotFound,
-		),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenExpired,
-			),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenUsed,
-			),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenRevoked,
-			),
-			errors.Is(
-				err,
-				invdom.ErrInvitationTokenNotDelivered,
-			):
+		case errors.Is(err, invdom.ErrInvitationTokenNotFound),
+			errors.Is(err, invdom.ErrInvitationTokenExpired),
+			errors.Is(err, invdom.ErrInvitationTokenUsed),
+			errors.Is(err, invdom.ErrInvitationTokenRevoked),
+			errors.Is(err, invdom.ErrInvitationTokenNotDelivered):
 			return invdom.ErrInvitationTokenNotFound
 
-		case errors.Is(
-			err,
-			invdom.ErrInvitationMemberNotFound,
-		),
-			errors.Is(
-				err,
-				invdom.ErrInvitationCompanyMismatch,
-			):
+		case errors.Is(err, invdom.ErrInvitationMemberNotFound),
+			errors.Is(err, invdom.ErrInvitationCompanyMismatch):
 			return memdom.ErrNotFound
 
-		case errors.Is(
-			err,
-			invdom.ErrInvitationEmailMismatch,
-		):
+		case errors.Is(err, invdom.ErrInvitationEmailMismatch):
 			return fmt.Errorf("email_mismatch")
 
-		case errors.Is(
-			err,
-			invdom.ErrInvitationUIDAlreadyInUse,
-		):
+		case errors.Is(err, invdom.ErrInvitationUIDAlreadyInUse):
 			return fmt.Errorf("firebase_uid_already_in_use")
 
 		default:
-			return fmt.Errorf(
-				"complete invitation transaction failed: %w",
-				err,
-			)
+			return fmt.Errorf("complete invitation transaction failed: %w", err)
 		}
 	}
 

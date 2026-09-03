@@ -119,7 +119,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.AuthMw == nil {
 			return h
 		}
-
 		return deps.AuthMw.Handler(h)
 	}
 
@@ -128,7 +127,6 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.BootstrapMw == nil {
 			return h
 		}
-
 		return deps.BootstrapMw.Handler(h)
 	}
 
@@ -143,6 +141,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.Invitation != nil {
 		authInvitation := withAuth(deps.Invitation)
 		mux.Handle("/invitations", authInvitation)
+		mux.Handle("/invitations/", authInvitation)
 
 		publicInvitation := withPublic(deps.Invitation)
 		mux.Handle("/invitations/validate", publicInvitation)

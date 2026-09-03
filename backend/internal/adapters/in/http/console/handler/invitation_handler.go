@@ -20,11 +20,12 @@ import (
 /*
 InvitationHandler
 - POST /invitations
+- DELETE /invitations/{memberId}
 - POST /invitations/validate
 - POST /invitations/complete
 招待メールの送信はPOST /invitationsのみに固定する。
-招待完了時のUIDとemailはclient bodyから受け取らず、
-検証済みFirebase ID tokenから取得する。
+招待取消はDELETE /invitations/{memberId}で行う。
+招待完了時のUIDとemailはclient bodyから受け取らず、検証済みFirebase ID tokenから取得する。
 */
 type InvitationHandler struct {
 	InvitationUC usecase.InvitationUsecasePort
@@ -33,33 +34,31 @@ type InvitationHandler struct {
 	FirebaseAuth *firebaseauth.Client
 }
 
-func NewInvitationHandler(
-	invitationUC usecase.InvitationUsecasePort,
-	companyRepo compdom.Repository,
-	brandRepo branddom.Repository,
-	firebaseAuth *firebaseauth.Client,
-) *InvitationHandler {
-	return &InvitationHandler{
-		InvitationUC: invitationUC,
-		CompanyRepo:  companyRepo,
-		BrandRepo:    brandRepo,
-		FirebaseAuth: firebaseAuth,
-	}
+func NewInvitationHandler(invitationUC usecase.InvitationUsecasePort, companyRepo compdom.Repository, brandRepo branddom.Repository, firebaseAuth *firebaseauth.Client) *InvitationHandler {
+	return &InvitationHandler{InvitationUC: invitationUC, CompanyRepo: companyRepo, BrandRepo: brandRepo, FirebaseAuth: firebaseAuth}
 }
 
 type invitationValidateResponse struct {
 	CompanyName string   `json:"companyName,omitempty"`
 	BrandNames  []string `json:"brandNames,omitempty"`
 }
+
 type invitationValidateRequest struct {
 	Token string `json:"token"`
 }
+
 type createInvitationRequest struct {
 	MemberID string `json:"memberId"`
 }
+
 type createInvitationResponse struct {
 	MemberID string `json:"memberId"`
 }
+
+type cancelInvitationResponse struct {
+	MemberID string `json:"memberId"`
+}
+
 type invitationCompleteRequest struct {
 	Token         string `json:"token"`
 	LastName      string `json:"lastName"`
@@ -67,604 +66,374 @@ type invitationCompleteRequest struct {
 	FirstName     string `json:"firstName"`
 	FirstNameKana string `json:"firstNameKana"`
 }
+
 type invitationCompleteResponse struct {
 	Email       string   `json:"email"`
 	Permissions []string `json:"permissions"`
 }
+
 type invitationIdentity struct {
 	UID   string
 	Email string
 }
+
 type invitationIdentityContextKey struct{}
 
-func (h *InvitationHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	w.Header().Set(
-		"Content-Type",
-		"application/json; charset=utf-8",
-	)
-	switch r.URL.Path {
-	case "/invitations":
+func (h *InvitationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+
+	switch {
+	case r.URL.Path == "/invitations":
 		h.handleCreateInvitation(w, r)
-	case "/invitations/validate":
+	case r.URL.Path == "/invitations/validate":
 		h.handleResolveInfo(w, r)
-	case "/invitations/complete":
+	case r.URL.Path == "/invitations/complete":
 		h.handleComplete(w, r)
+	case strings.HasPrefix(r.URL.Path, "/invitations/"):
+		h.handleCancelInvitation(w, r)
 	default:
-		writeInvitationJSONError(
-			w,
-			http.StatusNotFound,
-			"not_found",
-		)
+		writeInvitationJSONError(w, http.StatusNotFound, "not_found")
 	}
 }
-func (h *InvitationHandler) handleCreateInvitation(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+
+func (h *InvitationHandler) handleCreateInvitation(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		writeInvitationJSONError(
-			w,
-			http.StatusMethodNotAllowed,
-			"method_not_allowed",
-		)
+		writeInvitationJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
 	if h.InvitationUC == nil {
-		writeInvitationJSONError(
-			w,
-			http.StatusInternalServerError,
-			"invitation_usecase_not_configured",
-		)
+		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_usecase_not_configured")
 		return
 	}
+
 	var req createInvitationRequest
 	if err := decodeInvitationJSON(r, &req); err != nil {
-		writeInvitationJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid_body",
-		)
+		writeInvitationJSONError(w, http.StatusBadRequest, "invalid_body")
 		return
 	}
-	memberID := strings.TrimSpace(req.MemberID)
+
+	memberID := req.MemberID
 	if memberID == "" {
-		writeInvitationJSONError(
-			w,
-			http.StatusBadRequest,
-			"memberId_required",
-		)
+		writeInvitationJSONError(w, http.StatusBadRequest, "memberId_required")
 		return
 	}
-	err := h.InvitationUC.CreateInvitationAndSend(
-		r.Context(),
-		memberID,
-	)
-	if err != nil {
+
+	if err := h.InvitationUC.CreateInvitationAndSend(r.Context(), memberID); err != nil {
 		if errors.Is(err, memdom.ErrNotFound) {
-			writeInvitationJSONError(
-				w,
-				http.StatusNotFound,
-				"member_not_found",
-			)
+			writeInvitationJSONError(w, http.StatusNotFound, "member_not_found")
 			return
 		}
-		writeInvitationJSONError(
-			w,
-			http.StatusInternalServerError,
-			"cannot_send_invitation",
-		)
+		writeInvitationJSONError(w, http.StatusInternalServerError, "cannot_send_invitation")
 		return
 	}
+
 	w.WriteHeader(http.StatusAccepted)
-	_ = json.NewEncoder(w).Encode(
-		createInvitationResponse{
-			MemberID: memberID,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(createInvitationResponse{MemberID: memberID})
 }
-func (h *InvitationHandler) handleResolveInfo(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
-		writeInvitationJSONError(
-			w,
-			http.StatusMethodNotAllowed,
-			"method_not_allowed",
-		)
+
+func (h *InvitationHandler) handleCancelInvitation(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.Header().Set("Allow", http.MethodDelete)
+		writeInvitationJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
 	if h.InvitationUC == nil {
-		writeInvitationJSONError(
-			w,
-			http.StatusInternalServerError,
-			"invitation_usecase_not_configured",
-		)
+		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_usecase_not_configured")
 		return
 	}
+
+	memberID := strings.TrimPrefix(r.URL.Path, "/invitations/")
+	if memberID == "" || strings.Contains(memberID, "/") {
+		writeInvitationJSONError(w, http.StatusNotFound, "not_found")
+		return
+	}
+
+	if err := h.InvitationUC.CancelInvitation(r.Context(), memberID); err != nil {
+		switch {
+		case errors.Is(err, memdom.ErrNotFound):
+			writeInvitationJSONError(w, http.StatusNotFound, "member_not_found")
+		case errors.Is(err, memdom.ErrPreconditionFailed):
+			writeInvitationJSONError(w, http.StatusPreconditionFailed, "invitation_not_pending")
+		default:
+			writeInvitationJSONError(w, http.StatusInternalServerError, "cannot_cancel_invitation")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(cancelInvitationResponse{MemberID: memberID})
+}
+
+func (h *InvitationHandler) handleResolveInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		writeInvitationJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+		return
+	}
+	if h.InvitationUC == nil {
+		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_usecase_not_configured")
+		return
+	}
+
 	var req invitationValidateRequest
 	if err := decodeInvitationJSON(r, &req); err != nil {
-		writeInvitationJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid_body",
-		)
+		writeInvitationJSONError(w, http.StatusBadRequest, "invalid_body")
 		return
 	}
-	token := strings.TrimSpace(req.Token)
-	if token == "" {
-		writeInvitationJSONError(
-			w,
-			http.StatusBadRequest,
-			"token_required",
-		)
+	if req.Token == "" {
+		writeInvitationJSONError(w, http.StatusBadRequest, "token_required")
 		return
 	}
+
 	ctx := r.Context()
-	info, err := h.InvitationUC.GetInvitationInfo(
-		ctx,
-		token,
-	)
+	info, err := h.InvitationUC.GetInvitationInfo(ctx, req.Token)
 	if err != nil {
-		if errors.Is(
-			err,
-			invdom.ErrInvitationTokenNotFound,
-		) || errors.Is(err, memdom.ErrNotFound) {
-			writeInvitationJSONError(
-				w,
-				http.StatusNotFound,
-				"invitation_token_not_found",
-			)
+		if errors.Is(err, invdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
+			writeInvitationJSONError(w, http.StatusNotFound, "invitation_token_not_found")
 			return
 		}
-		writeInvitationJSONError(
-			w,
-			http.StatusInternalServerError,
-			"failed_to_resolve_invitation_token",
-		)
+		writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_invitation_token")
 		return
 	}
+
 	companyName := info.CompanyID
 	if h.CompanyRepo != nil && info.CompanyID != "" {
-		companyEntity, err := h.CompanyRepo.GetByID(
-			ctx,
-			info.CompanyID,
-		)
+		companyEntity, err := h.CompanyRepo.GetByID(ctx, info.CompanyID)
 		if err != nil {
 			if !errors.Is(err, compdom.ErrNotFound) {
-				writeInvitationJSONError(
-					w,
-					http.StatusInternalServerError,
-					"failed_to_resolve_company_name",
-				)
+				writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_company_name")
 				return
 			}
 		} else if companyEntity.Name != "" {
 			companyName = companyEntity.Name
 		}
 	}
+
 	brandNames := info.AssignedBrandIDs
-	if h.BrandRepo != nil &&
-		len(info.AssignedBrandIDs) > 0 {
-		resolved := make(
-			[]string,
-			0,
-			len(info.AssignedBrandIDs),
-		)
-		for _, rawBrandID := range info.AssignedBrandIDs {
-			brandID := strings.TrimSpace(rawBrandID)
+	if h.BrandRepo != nil && len(info.AssignedBrandIDs) > 0 {
+		resolved := make([]string, 0, len(info.AssignedBrandIDs))
+
+		for _, brandID := range info.AssignedBrandIDs {
 			if brandID == "" {
 				continue
 			}
-			brand, err := h.BrandRepo.GetByID(
-				ctx,
-				brandID,
-			)
+
+			brand, err := h.BrandRepo.GetByID(ctx, brandID)
 			if err != nil {
-				if errors.Is(
-					err,
-					branddom.ErrNotFound,
-				) || errors.Is(
-					err,
-					branddom.ErrInvalidID,
-				) {
-					resolved = append(
-						resolved,
-						brandID,
-					)
+				if errors.Is(err, branddom.ErrNotFound) || errors.Is(err, branddom.ErrInvalidID) {
+					resolved = append(resolved, brandID)
 					continue
 				}
-				writeInvitationJSONError(
-					w,
-					http.StatusInternalServerError,
-					"failed_to_resolve_brand_name",
-				)
+				writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_brand_name")
 				return
 			}
-			brandName := strings.TrimSpace(brand.Name)
+
+			brandName := brand.Name
 			if brandName == "" {
 				brandName = brandID
 			}
-			resolved = append(
-				resolved,
-				brandName,
-			)
+
+			resolved = append(resolved, brandName)
 		}
+
 		brandNames = resolved
 	}
+
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(
-		invitationValidateResponse{
-			CompanyName: companyName,
-			BrandNames:  brandNames,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(invitationValidateResponse{CompanyName: companyName, BrandNames: brandNames})
 }
-func (h *InvitationHandler) handleComplete(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+
+func (h *InvitationHandler) handleComplete(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		writeInvitationJSONError(
-			w,
-			http.StatusMethodNotAllowed,
-			"method_not_allowed",
-		)
+		writeInvitationJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
-	h.withInvitationIdentity(
-		http.HandlerFunc(h.handleCompleteVerified),
-	).ServeHTTP(w, r)
+
+	h.withInvitationIdentity(http.HandlerFunc(h.handleCompleteVerified)).ServeHTTP(w, r)
 }
-func (h *InvitationHandler) handleCompleteVerified(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+
+func (h *InvitationHandler) handleCompleteVerified(w http.ResponseWriter, r *http.Request) {
 	if h.InvitationUC == nil {
-		writeInvitationJSONError(
-			w,
-			http.StatusInternalServerError,
-			"invitation_complete_usecase_not_configured",
-		)
+		writeInvitationJSONError(w, http.StatusInternalServerError, "invitation_complete_usecase_not_configured")
 		return
 	}
-	identity, ok := invitationIdentityFromContext(
-		r.Context(),
-	)
+
+	identity, ok := invitationIdentityFromContext(r.Context())
 	if !ok {
-		writeInvitationJSONError(
-			w,
-			http.StatusUnauthorized,
-			"verified_identity_required",
-		)
+		writeInvitationJSONError(w, http.StatusUnauthorized, "verified_identity_required")
 		return
 	}
+
 	var req invitationCompleteRequest
 	if err := decodeInvitationJSON(r, &req); err != nil {
-		writeInvitationJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid_body",
-		)
+		writeInvitationJSONError(w, http.StatusBadRequest, "invalid_body")
 		return
 	}
-	token := strings.TrimSpace(req.Token)
-	info, err := h.InvitationUC.GetInvitationInfo(
-		r.Context(),
-		token,
-	)
+
+	info, err := h.InvitationUC.GetInvitationInfo(r.Context(), req.Token)
 	if err != nil {
-		if errors.Is(
-			err,
-			invdom.ErrInvitationTokenNotFound,
-		) || errors.Is(err, memdom.ErrNotFound) {
-			writeInvitationJSONError(
-				w,
-				http.StatusNotFound,
-				"invitation_token_or_member_not_found",
-			)
+		if errors.Is(err, invdom.ErrInvitationTokenNotFound) || errors.Is(err, memdom.ErrNotFound) {
+			writeInvitationJSONError(w, http.StatusNotFound, "invitation_token_or_member_not_found")
 			return
 		}
-		writeInvitationJSONError(
-			w,
-			http.StatusInternalServerError,
-			"failed_to_resolve_invitation_token",
-		)
+		writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_resolve_invitation_token")
 		return
 	}
+
 	input := usecase.CompleteInvitationInput{
-		Token: token,
-		UID:   identity.UID,
-		LastName: strings.TrimSpace(
-			req.LastName,
-		),
-		LastNameKana: strings.TrimSpace(
-			req.LastNameKana,
-		),
-		FirstName: strings.TrimSpace(
-			req.FirstName,
-		),
-		FirstNameKana: strings.TrimSpace(
-			req.FirstNameKana,
-		),
-		Email: identity.Email,
+		Token:         req.Token,
+		UID:           identity.UID,
+		LastName:      req.LastName,
+		LastNameKana:  req.LastNameKana,
+		FirstName:     req.FirstName,
+		FirstNameKana: req.FirstNameKana,
+		Email:         identity.Email,
 	}
-	err = h.InvitationUC.CompleteInvitation(
-		r.Context(),
-		input,
-	)
-	if err != nil {
+
+	if err := h.InvitationUC.CompleteInvitation(r.Context(), input); err != nil {
 		switch {
-		case errors.Is(
-			err,
-			invdom.ErrInvitationTokenNotFound,
-		),
-			errors.Is(err, memdom.ErrNotFound):
-			writeInvitationJSONError(
-				w,
-				http.StatusNotFound,
-				"invitation_token_or_member_not_found",
-			)
+		case errors.Is(err, invdom.ErrInvitationTokenNotFound), errors.Is(err, memdom.ErrNotFound):
+			writeInvitationJSONError(w, http.StatusNotFound, "invitation_token_or_member_not_found")
 		case err.Error() == "token_or_uid_required":
-			writeInvitationJSONError(
-				w,
-				http.StatusBadRequest,
-				"token_or_uid_required",
-			)
+			writeInvitationJSONError(w, http.StatusBadRequest, "token_or_uid_required")
 		case err.Error() == "name_fields_required":
-			writeInvitationJSONError(
-				w,
-				http.StatusBadRequest,
-				"name_fields_required",
-			)
+			writeInvitationJSONError(w, http.StatusBadRequest, "name_fields_required")
 		case err.Error() == "email_required":
-			writeInvitationJSONError(
-				w,
-				http.StatusBadRequest,
-				"email_required",
-			)
+			writeInvitationJSONError(w, http.StatusBadRequest, "email_required")
 		case err.Error() == "email_mismatch":
-			writeInvitationJSONError(
-				w,
-				http.StatusForbidden,
-				"email_mismatch",
-			)
+			writeInvitationJSONError(w, http.StatusForbidden, "email_mismatch")
 		case err.Error() == "firebase_uid_already_in_use":
-			writeInvitationJSONError(
-				w,
-				http.StatusConflict,
-				"firebase_uid_already_in_use",
-			)
+			writeInvitationJSONError(w, http.StatusConflict, "firebase_uid_already_in_use")
 		default:
-			writeInvitationJSONError(
-				w,
-				http.StatusInternalServerError,
-				"failed_to_complete_invitation",
-			)
+			writeInvitationJSONError(w, http.StatusInternalServerError, "failed_to_complete_invitation")
 		}
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(
-		invitationCompleteResponse{
-			Email: identity.Email,
-			Permissions: append(
-				[]string(nil),
-				info.Permissions...,
-			),
-		},
-	)
+	_ = json.NewEncoder(w).Encode(invitationCompleteResponse{
+		Email:       identity.Email,
+		Permissions: append([]string(nil), info.Permissions...),
+	})
 }
-func (h *InvitationHandler) withInvitationIdentity(
-	next http.Handler,
-) http.Handler {
-	return http.HandlerFunc(
-		func(
-			w http.ResponseWriter,
-			r *http.Request,
-		) {
-			if h.FirebaseAuth == nil {
-				writeInvitationJSONError(
-					w,
-					http.StatusInternalServerError,
-					"firebase_auth_not_configured",
-				)
-				return
-			}
-			identity, err := h.verifyInvitationIdentity(r)
-			if err != nil {
-				writeInvitationIdentityError(w, err)
-				return
-			}
-			ctx := context.WithValue(
-				r.Context(),
-				invitationIdentityContextKey{},
-				identity,
-			)
-			next.ServeHTTP(
-				w,
-				r.WithContext(ctx),
-			)
-		},
-	)
+
+func (h *InvitationHandler) withInvitationIdentity(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h.FirebaseAuth == nil {
+			writeInvitationJSONError(w, http.StatusInternalServerError, "firebase_auth_not_configured")
+			return
+		}
+
+		identity, err := h.verifyInvitationIdentity(r)
+		if err != nil {
+			writeInvitationIdentityError(w, err)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), invitationIdentityContextKey{}, identity)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
-func invitationIdentityFromContext(
-	ctx context.Context,
-) (invitationIdentity, bool) {
-	identity, ok := ctx.Value(
-		invitationIdentityContextKey{},
-	).(invitationIdentity)
-	if !ok ||
-		strings.TrimSpace(identity.UID) == "" ||
-		strings.TrimSpace(identity.Email) == "" {
+
+func invitationIdentityFromContext(ctx context.Context) (invitationIdentity, bool) {
+	identity, ok := ctx.Value(invitationIdentityContextKey{}).(invitationIdentity)
+	if !ok || identity.UID == "" || identity.Email == "" {
 		return invitationIdentity{}, false
 	}
 	return identity, true
 }
-func writeInvitationIdentityError(
-	w http.ResponseWriter,
-	err error,
-) {
+
+func writeInvitationIdentityError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(
-		err,
-		errInvitationAuthorizationRequired,
-	):
-		writeInvitationJSONError(
-			w,
-			http.StatusUnauthorized,
-			"authorization_required",
-		)
-	case errors.Is(
-		err,
-		errInvitationInvalidIDToken,
-	):
-		writeInvitationJSONError(
-			w,
-			http.StatusUnauthorized,
-			"invalid_id_token",
-		)
-	case errors.Is(
-		err,
-		errInvitationUIDRequired,
-	):
-		writeInvitationJSONError(
-			w,
-			http.StatusUnauthorized,
-			"authenticated_uid_required",
-		)
-	case errors.Is(
-		err,
-		errInvitationEmailRequired,
-	):
-		writeInvitationJSONError(
-			w,
-			http.StatusUnauthorized,
-			"authenticated_email_required",
-		)
+	case errors.Is(err, errInvitationAuthorizationRequired):
+		writeInvitationJSONError(w, http.StatusUnauthorized, "authorization_required")
+	case errors.Is(err, errInvitationInvalidIDToken):
+		writeInvitationJSONError(w, http.StatusUnauthorized, "invalid_id_token")
+	case errors.Is(err, errInvitationUIDRequired):
+		writeInvitationJSONError(w, http.StatusUnauthorized, "authenticated_uid_required")
+	case errors.Is(err, errInvitationEmailRequired):
+		writeInvitationJSONError(w, http.StatusUnauthorized, "authenticated_email_required")
 	default:
-		writeInvitationJSONError(
-			w,
-			http.StatusUnauthorized,
-			"invalid_id_token",
-		)
+		writeInvitationJSONError(w, http.StatusUnauthorized, "invalid_id_token")
 	}
 }
 
 var (
-	errInvitationAuthorizationRequired = errors.New(
-		"invitation authorization required",
-	)
-	errInvitationInvalidIDToken = errors.New(
-		"invitation invalid id token",
-	)
-	errInvitationUIDRequired = errors.New(
-		"invitation authenticated uid required",
-	)
-	errInvitationEmailRequired = errors.New(
-		"invitation authenticated email required",
-	)
+	errInvitationAuthorizationRequired = errors.New("invitation authorization required")
+	errInvitationInvalidIDToken        = errors.New("invitation invalid id token")
+	errInvitationUIDRequired           = errors.New("invitation authenticated uid required")
+	errInvitationEmailRequired         = errors.New("invitation authenticated email required")
 )
 
-func (h *InvitationHandler) verifyInvitationIdentity(
-	r *http.Request,
-) (invitationIdentity, error) {
+func (h *InvitationHandler) verifyInvitationIdentity(r *http.Request) (invitationIdentity, error) {
 	idToken, err := invitationBearerToken(r)
 	if err != nil {
 		return invitationIdentity{}, err
 	}
-	token, err := h.FirebaseAuth.VerifyIDToken(
-		r.Context(),
-		idToken,
-	)
+
+	token, err := h.FirebaseAuth.VerifyIDToken(r.Context(), idToken)
 	if err != nil {
-		return invitationIdentity{},
-			errInvitationInvalidIDToken
+		return invitationIdentity{}, errInvitationInvalidIDToken
 	}
-	uid := strings.TrimSpace(token.UID)
+
+	uid := token.UID
 	if uid == "" {
-		return invitationIdentity{},
-			errInvitationUIDRequired
+		return invitationIdentity{}, errInvitationUIDRequired
 	}
+
 	email, ok := token.Claims["email"].(string)
 	if !ok {
-		return invitationIdentity{},
-			errInvitationEmailRequired
+		return invitationIdentity{}, errInvitationEmailRequired
 	}
-	email = strings.ToLower(
-		strings.TrimSpace(email),
-	)
+
+	email = strings.ToLower(email)
 	if email == "" {
-		return invitationIdentity{},
-			errInvitationEmailRequired
+		return invitationIdentity{}, errInvitationEmailRequired
 	}
-	return invitationIdentity{
-		UID:   uid,
-		Email: email,
-	}, nil
+
+	return invitationIdentity{UID: uid, Email: email}, nil
 }
-func invitationBearerToken(
-	r *http.Request,
-) (string, error) {
+
+func invitationBearerToken(r *http.Request) (string, error) {
 	const prefix = "Bearer "
-	authorization := strings.TrimSpace(
-		r.Header.Get("Authorization"),
-	)
-	if !strings.HasPrefix(
-		authorization,
-		prefix,
-	) {
-		return "",
-			errInvitationAuthorizationRequired
+
+	authorization := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authorization, prefix) {
+		return "", errInvitationAuthorizationRequired
 	}
-	idToken := strings.TrimSpace(
-		strings.TrimPrefix(
-			authorization,
-			prefix,
-		),
-	)
+
+	idToken := strings.TrimPrefix(authorization, prefix)
 	if idToken == "" {
-		return "",
-			errInvitationAuthorizationRequired
+		return "", errInvitationAuthorizationRequired
 	}
+
 	return idToken, nil
 }
-func decodeInvitationJSON(
-	r *http.Request,
-	destination any,
-) error {
+
+func decodeInvitationJSON(r *http.Request, destination any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
+
 	if err := decoder.Decode(destination); err != nil {
 		return err
 	}
+
 	var trailing any
 	err := decoder.Decode(&trailing)
+
 	if errors.Is(err, io.EOF) {
 		return nil
 	}
 	if err == nil {
-		return errors.New(
-			"multiple JSON values are not allowed",
-		)
+		return errors.New("multiple JSON values are not allowed")
 	}
+
 	return err
 }
-func writeInvitationJSONError(
-	w http.ResponseWriter,
-	status int,
-	message string,
-) {
+
+func writeInvitationJSONError(w http.ResponseWriter, status int, message string) {
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(
-		map[string]string{
-			"error": message,
-		},
-	)
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
