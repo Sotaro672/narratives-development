@@ -3,6 +3,7 @@
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
 import { API_BASE } from "../../../shared/http/apiBase";
 import type { PageParams, PageResult } from "../../../shared/types/common/common";
+import type { ProductBlueprintCategoryPath } from "../../productBlueprint/domain/productBlueprintCategory";
 
 export type ShippingSnapshot = {
   zipCode: string;
@@ -38,13 +39,14 @@ export type OrderDetailItemDTO = {
   productName: string;
   tokenName: string;
   listReadableId?: string;
-  categoryId: string;
-  categoryCode: string;
-  categoryNameJa: string;
-  categoryNameEn: string;
-  categoryKind: string;
-  categoryPath: string[];
+
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath;
   categoryFields: Record<string, unknown>;
+
+  /**
+   * Model variation の種別。
+   * ProductBlueprintCategory の種別ではない。
+   */
   kind: string;
   modelNumber: string;
   size: string;
@@ -52,6 +54,7 @@ export type OrderDetailItemDTO = {
   rgb?: number;
   volumeValue?: number;
   volumeUnit: string;
+
   qty: number;
   price: number;
   isCancelled: boolean;
@@ -98,14 +101,16 @@ export type OrderItemInventoryRowDTO = {
   productName?: string;
   tokenName?: string;
   listReadableId?: string;
-  categoryId?: string;
-  categoryCode?: string;
-  categoryNameJa?: string;
-  categoryNameEn?: string;
-  categoryKind?: string;
-  categoryPath?: string[];
+
+  productBlueprintCategoryPath?: ProductBlueprintCategoryPath;
   categoryFields?: Record<string, unknown>;
+
   modelId?: string;
+
+  /**
+   * Model variation の種別。
+   * ProductBlueprintCategory の種別ではない。
+   */
   kind?: string;
   modelNumber?: string;
   size?: string;
@@ -113,6 +118,7 @@ export type OrderItemInventoryRowDTO = {
   rgb?: string;
   volumeValue?: number;
   volumeUnit?: string;
+
   qty?: number;
   price?: number;
   isCancelled: boolean;

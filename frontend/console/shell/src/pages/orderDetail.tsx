@@ -8,11 +8,7 @@ import { formatJPY, useOrderDetail } from "../features/order/presentation/hooks/
 import type { OrderDetailItemDTO } from "../features/order/presentation/hooks/useOrderDetail";
 
 function isAlcoholItem(item: OrderDetailItemDTO): boolean {
-  return (
-    item.kind === "alcohol" ||
-    item.categoryKind === "alcohol" ||
-    item.categoryCode?.startsWith("alcohol.") === true
-  );
+  return item.productBlueprintCategoryPath[0] === "alcohol";
 }
 
 function getCategoryFieldValue(item: OrderDetailItemDTO, key: string): unknown {
@@ -147,54 +143,42 @@ export default function OrderDetail() {
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       アイテム数
                     </th>
-                    <td className="py-2 text-left">
-                      {items.length} 点
-                    </td>
+                    <td className="py-2 text-left">{items.length} 点</td>
                   </tr>
 
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       数量合計
                     </th>
-                    <td className="py-2 text-left">
-                      {quantity} 点
-                    </td>
+                    <td className="py-2 text-left">{quantity} 点</td>
                   </tr>
 
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       商品小計
                     </th>
-                    <td className="py-2 text-left">
-                      {formatJPY(subtotal)}
-                    </td>
+                    <td className="py-2 text-left">{formatJPY(subtotal)}</td>
                   </tr>
 
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       配送料
                     </th>
-                    <td className="py-2 text-left">
-                      {formatJPY(shippingAmount)}
-                    </td>
+                    <td className="py-2 text-left">{formatJPY(shippingAmount)}</td>
                   </tr>
 
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       消費税
                     </th>
-                    <td className="py-2 text-left">
-                      {formatJPY(consumptionTax)}
-                    </td>
+                    <td className="py-2 text-left">{formatJPY(consumptionTax)}</td>
                   </tr>
 
                   <tr>
                     <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                       合計金額
                     </th>
-                    <td className="py-2 text-left">
-                      {formatJPY(totalPrice)}
-                    </td>
+                    <td className="py-2 text-left">{formatJPY(totalPrice)}</td>
                   </tr>
                 </tbody>
               </table>
@@ -363,7 +347,6 @@ export default function OrderDetail() {
                                                 title={hex}
                                               />
                                             ) : null}
-
                                             <span>{name || "-"}</span>
                                           </div>
                                         );
@@ -404,9 +387,7 @@ export default function OrderDetail() {
                                 <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
                                   数量
                                 </th>
-                                <td className="py-2 text-left">
-                                  {item.qty}
-                                </td>
+                                <td className="py-2 text-left">{item.qty}</td>
                               </tr>
 
                               <tr>

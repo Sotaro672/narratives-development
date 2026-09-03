@@ -2,11 +2,11 @@
 
 export type ProductBlueprintCategoryFields = Record<string, unknown>;
 
-export type ProductCategoryKind =
+export type ProductBlueprintCategoryRoot =
   | "apparel"
   | "alcohol"
   | "cosmetics"
   | "healthcare"
-  | "other"
-  | "unknown"
-  | (string & {});
+  | "other";
+
+export type ProductCategoryKind = ProductBlueprintCategoryRoot | "unknown";

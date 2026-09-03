@@ -7,9 +7,11 @@ import type {
   MeasurementTableRow,
   ModelColorOption,
 } from "../../shared/types/catalog";
-import type { ProductCategoryKind } from "../../shared/types/category";
+import type {
+  ProductBlueprintCategoryRoot,
+  ProductCategoryKind,
+} from "../../shared/types/category";
 import type { ProductBlueprintReviewPage } from "../../shared/types/review";
-
 import {
   createCatalogMeasurementKeys,
   createCatalogMeasurementRows,
@@ -49,6 +51,30 @@ export type CatalogPageViewModel = {
   canAddToCart: boolean;
 };
 
+function isProductBlueprintCategoryRoot(
+  value: string | undefined,
+): value is ProductBlueprintCategoryRoot {
+  switch (value) {
+    case "apparel":
+    case "alcohol":
+    case "cosmetics":
+    case "healthcare":
+    case "other":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function resolveCatalogKind(
+  catalog: CatalogResponse | null,
+): ProductCategoryKind {
+  const root =
+    catalog?.productBlueprint.productBlueprintCategoryPath?.[0];
+
+  return isProductBlueprintCategoryRoot(root) ? root : "unknown";
+}
+
 export function createCatalogPageViewModel(args: {
   catalog: CatalogResponse | null;
   reviews: ProductBlueprintReviewPage | null;
@@ -58,17 +84,25 @@ export function createCatalogPageViewModel(args: {
   activeImageIndex: number;
   isAddingToCart: boolean;
 }): CatalogPageViewModel {
-  const catalogKind = args.catalog?.productBlueprint.productBlueprintCategoryKind ?? "unknown";
+  const catalogKind = resolveCatalogKind(args.catalog);
   const isAlcoholCatalog = catalogKind === "alcohol";
   const models = args.catalog?.modelVariations;
   const catalogImages = args.catalog?.listImages ?? [];
   const activeImage = catalogImages[args.activeImageIndex];
 
-  const measurementRows = createCatalogMeasurementRows({ models, isAlcoholCatalog });
-  const measurementKeys = createCatalogMeasurementKeys(measurementRows);
+  const measurementRows = createCatalogMeasurementRows({
+    models,
+    isAlcoholCatalog,
+  });
 
-  const alcoholOptions = isAlcoholCatalog ? createCatalogAlcoholOptions(models) : [];
-  const colorOptions = isAlcoholCatalog ? [] : createCatalogColorOptions(models);
+  const measurementKeys = createCatalogMeasurementKeys(measurementRows);
+  const alcoholOptions = isAlcoholCatalog
+    ? createCatalogAlcoholOptions(models)
+    : [];
+  const colorOptions = isAlcoholCatalog
+    ? []
+    : createCatalogColorOptions(models);
+
   const sizeOptions = isAlcoholCatalog
     ? []
     : createCatalogSizeOptions({
@@ -93,7 +127,8 @@ export function createCatalogPageViewModel(args: {
     ? getAvailableStock(args.catalog?.inventory, selectedModel.id)
     : undefined;
 
-  const hasSelectedModelStock = hasSelectedCatalogModelStock(selectedModelStock);
+  const hasSelectedModelStock =
+    hasSelectedCatalogModelStock(selectedModelStock);
 
   return {
     catalogKind,

@@ -105,14 +105,8 @@ type CatalogProductBlueprintDTO struct {
 	Printed          bool   `json:"printed"`
 	ProductIDTagType string `json:"productIdTagType"`
 
-	ProductBlueprintCategoryID     string   `json:"productBlueprintCategoryId,omitempty"`
-	ProductBlueprintCategoryCode   string   `json:"productBlueprintCategoryCode,omitempty"`
-	ProductBlueprintCategoryKind   string   `json:"productBlueprintCategoryKind,omitempty"`
-	ProductBlueprintCategoryNameEn string   `json:"productBlueprintCategoryNameEn,omitempty"`
-	ProductBlueprintCategoryNameJa string   `json:"productBlueprintCategoryNameJa,omitempty"`
-	ProductBlueprintCategoryPath   []string `json:"productBlueprintCategoryPath,omitempty"`
-
-	CategoryFields map[string]any `json:"categoryFields,omitempty"`
+	ProductBlueprintCategoryPath []string       `json:"productBlueprintCategoryPath,omitempty"`
+	CategoryFields               map[string]any `json:"categoryFields,omitempty"`
 
 	ModelRefs []CatalogProductBlueprintModelRefDTO `json:"modelRefs,omitempty"`
 }
