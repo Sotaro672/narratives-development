@@ -1,12 +1,5 @@
 // frontend/amol/src/features/shared/types/resaleReview.ts
 
-export type ResaleInteractionSummary = {
-  resaleId: string;
-  likeCount: number;
-  commentCount: number;
-  likedByMe: boolean;
-};
-
 export type ResaleReviewComment = {
   commentId: string;
   resaleId: string;

@@ -3,7 +3,6 @@ package resale_review
 
 import (
 	"errors"
-	"fmt"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -30,7 +29,6 @@ var (
 	ErrInvalidCommentBody  = errors.New("resaleReview: invalid comment body")
 	ErrInvalidCreatedAt    = errors.New("resaleReview: invalid createdAt")
 	ErrInvalidUpdatedAt    = errors.New("resaleReview: invalid updatedAt")
-	ErrInvalidLikeCount    = errors.New("resaleReview: invalid like count")
 	ErrInvalidCommentCount = errors.New("resaleReview: invalid comment count")
 	ErrNegativeCounter     = errors.New("resaleReview: counter would become negative")
 )
@@ -52,7 +50,6 @@ func IsInvalid(err error) bool {
 		errors.Is(err, ErrInvalidCommentBody) ||
 		errors.Is(err, ErrInvalidCreatedAt) ||
 		errors.Is(err, ErrInvalidUpdatedAt) ||
-		errors.Is(err, ErrInvalidLikeCount) ||
 		errors.Is(err, ErrInvalidCommentCount)
 }
 
@@ -67,18 +64,12 @@ func IsInternal(err error) bool {
 // ============================================================
 // Aggregate
 //
-// Firestore mapping idea:
+// Firestore mapping:
 //
 // resaleReviews/{resaleId}
-//   - likeCount
 //   - commentCount
 //   - createdAt
 //   - updatedAt
-//
-//   likes/{avatarId}
-//     - resaleId
-//     - avatarId
-//     - createdAt
 //
 //   comments/{commentId}
 //     - commentId
@@ -93,14 +84,11 @@ func IsInternal(err error) bool {
 //
 // NOTE:
 // - Authentication / authorization is application.usecase responsibility.
-// - Whether the current avatar can interact with the target resale is not
-//   decided in this domain.
 // - Avatar name / icon are presentation data and are not persisted here.
 // ============================================================
 
 type ResaleReviewAggregate struct {
 	ResaleID     string
-	LikeCount    int64
 	CommentCount int64
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -122,7 +110,6 @@ func NewResaleReviewAggregate(
 
 	return &ResaleReviewAggregate{
 		ResaleID:     resaleID,
-		LikeCount:    0,
 		CommentCount: 0,
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -132,10 +119,6 @@ func NewResaleReviewAggregate(
 func (r ResaleReviewAggregate) Validate() error {
 	if !isValidReferenceID(r.ResaleID) {
 		return ErrInvalidResaleID
-	}
-
-	if r.LikeCount < 0 {
-		return ErrInvalidLikeCount
 	}
 
 	if r.CommentCount < 0 {
@@ -153,22 +136,6 @@ func (r ResaleReviewAggregate) Validate() error {
 	return nil
 }
 
-func (r *ResaleReviewAggregate) IncrementLikeCount(now time.Time) {
-	r.LikeCount++
-	r.touch(now)
-}
-
-func (r *ResaleReviewAggregate) DecrementLikeCount(now time.Time) error {
-	if r.LikeCount <= 0 {
-		return ErrNegativeCounter
-	}
-
-	r.LikeCount--
-	r.touch(now)
-
-	return nil
-}
-
 func (r *ResaleReviewAggregate) IncrementCommentCount(now time.Time) {
 	r.CommentCount++
 	r.touch(now)
@@ -181,7 +148,6 @@ func (r *ResaleReviewAggregate) DecrementCommentCount(now time.Time) error {
 
 	r.CommentCount--
 	r.touch(now)
-
 	return nil
 }
 
@@ -191,74 +157,6 @@ func (r *ResaleReviewAggregate) touch(now time.Time) {
 	}
 
 	r.UpdatedAt = now.UTC()
-}
-
-// ============================================================
-// Like
-//
-// One avatar can have at most one Like for one resale.
-//
-// Recommended Firestore document:
-//
-// resaleReviews/{resaleId}/likes/{avatarId}
-//
-// Using avatarId as document ID naturally enforces uniqueness.
-// ============================================================
-
-type Like struct {
-	ResaleID  string
-	AvatarID  string
-	CreatedAt time.Time
-}
-
-func NewLike(
-	resaleID string,
-	avatarID string,
-	now time.Time,
-) (*Like, error) {
-	if !isValidReferenceID(resaleID) {
-		return nil, ErrInvalidResaleID
-	}
-
-	if !isValidReferenceID(avatarID) {
-		return nil, ErrInvalidAvatarID
-	}
-
-	if now.IsZero() {
-		now = time.Now().UTC()
-	} else {
-		now = now.UTC()
-	}
-
-	return &Like{
-		ResaleID:  resaleID,
-		AvatarID:  avatarID,
-		CreatedAt: now,
-	}, nil
-}
-
-func (l Like) Validate() error {
-	if !isValidReferenceID(l.ResaleID) {
-		return ErrInvalidResaleID
-	}
-
-	if !isValidReferenceID(l.AvatarID) {
-		return ErrInvalidAvatarID
-	}
-
-	if l.CreatedAt.IsZero() {
-		return ErrInvalidCreatedAt
-	}
-
-	return nil
-}
-
-func (l Like) DocumentID() (string, error) {
-	if !isValidReferenceID(l.AvatarID) {
-		return "", ErrInvalidAvatarID
-	}
-
-	return l.AvatarID, nil
 }
 
 // ============================================================
@@ -450,7 +348,6 @@ func (c *Comment) MarkRead(now time.Time) error {
 
 	c.IsRead = true
 	c.UpdatedAt = now
-
 	return nil
 }
 
@@ -483,57 +380,6 @@ func (c *Comment) MarkDeleted(now time.Time) error {
 	c.Body = ""
 	c.Deleted = true
 	c.UpdatedAt = now
-
-	return nil
-}
-
-// ============================================================
-// Viewer-specific summary
-//
-// This is calculated for the current avatar.
-// LikedByMe must not be persisted on the aggregate document.
-// ============================================================
-
-type InteractionSummary struct {
-	ResaleID     string `json:"resaleId"`
-	LikeCount    int64  `json:"likeCount"`
-	CommentCount int64  `json:"commentCount"`
-	LikedByMe    bool   `json:"likedByMe"`
-}
-
-func NewInteractionSummary(
-	resaleID string,
-	likeCount int64,
-	commentCount int64,
-	likedByMe bool,
-) (InteractionSummary, error) {
-	summary := InteractionSummary{
-		ResaleID:     resaleID,
-		LikeCount:    likeCount,
-		CommentCount: commentCount,
-		LikedByMe:    likedByMe,
-	}
-
-	if err := summary.Validate(); err != nil {
-		return InteractionSummary{}, err
-	}
-
-	return summary, nil
-}
-
-func (s InteractionSummary) Validate() error {
-	if !isValidReferenceID(s.ResaleID) {
-		return ErrInvalidResaleID
-	}
-
-	if s.LikeCount < 0 {
-		return ErrInvalidLikeCount
-	}
-
-	if s.CommentCount < 0 {
-		return ErrInvalidCommentCount
-	}
-
 	return nil
 }
 
@@ -553,7 +399,6 @@ func validateCommentBody(
 	}
 
 	hasContent := false
-
 	for _, r := range body {
 		if !unicode.IsSpace(r) {
 			hasContent = true
@@ -595,19 +440,4 @@ func isValidReferenceID(
 	}
 
 	return true
-}
-
-func ValidateLikeTarget(
-	resaleID string,
-	avatarID string,
-) error {
-	if !isValidReferenceID(resaleID) {
-		return fmt.Errorf("%w: resaleId", ErrInvalidResaleID)
-	}
-
-	if !isValidReferenceID(avatarID) {
-		return fmt.Errorf("%w: avatarId", ErrInvalidAvatarID)
-	}
-
-	return nil
 }

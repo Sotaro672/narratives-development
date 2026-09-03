@@ -5,11 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
 import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 
-import { fetchMarketProductBlueprintReviews } from "../../infrastructure/marketReviewApi";
-import { fetchMarketResaleById } from "../../infrastructure/marketResaleApi";
-import { fetchMarketResaleConditionImages } from "../../infrastructure/marketResaleImageApi";
-import { fetchMarketResaleInteractions } from "../../infrastructure/marketResaleReviewApi";
-
+import {
+  addResaleLike,
+  fetchResaleLikeStatus,
+  removeResaleLike,
+} from "../../../like/infrastructure/likeApi";
 import { createResaleConditionGalleryItems } from "../../../shared/presentation/utils/resaleConditionMedia";
 import {
   createProductModelDisplay,
@@ -19,8 +19,15 @@ import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type { ResaleConditionImage } from "../../../shared/types/resale";
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
 
+import { fetchMarketProductBlueprintReviews } from "../../infrastructure/marketReviewApi";
+import { fetchMarketResaleById } from "../../infrastructure/marketResaleApi";
+import { fetchMarketResaleConditionImages } from "../../infrastructure/marketResaleImageApi";
+import { fetchMarketResaleComments } from "../../infrastructure/marketResaleReviewApi";
+
 const DEFAULT_REVIEW_PAGE = 1;
 const DEFAULT_REVIEW_PER_PAGE = 20;
+const COMMENT_COUNT_PAGE = 1;
+const COMMENT_COUNT_PER_PAGE = 1;
 
 export type AddResaleProductToCart = (args: {
   resaleId: string;
@@ -36,11 +43,15 @@ export type UseMarketDetailPageResult = {
   item: MarketResaleListing | null;
   reviews: ProductBlueprintReviewPage | null;
   commentCount: number;
+  isLiked: boolean;
   loading: boolean;
   loadingReviews: boolean;
+  loadingLike: boolean;
   addingToCart: boolean;
+  updatingLike: boolean;
   error: string;
   reviewsError: string;
+  likeErrorMessage: string;
   cartMessage: string;
   cartErrorMessage: string;
   title: string;
@@ -58,10 +69,14 @@ export type UseMarketDetailPageResult = {
   handlePrevMedia: () => void;
   handleNextMedia: () => void;
   handleSelectMedia: (index: number) => void;
+  handleToggleLike: () => Promise<void>;
   handleAddToCart: () => Promise<boolean>;
 };
 
-function getErrorMessage(error: unknown, fallbackMessage: string): string {
+function getErrorMessage(
+  error: unknown,
+  fallbackMessage: string,
+): string {
   if (error instanceof Error && error.message.trim() !== "") {
     return error.message;
   }
@@ -79,12 +94,16 @@ export function useMarketDetailPage({
   const [images, setImages] = useState<ResaleConditionImage[]>([]);
   const [reviews, setReviews] = useState<ProductBlueprintReviewPage | null>(null);
   const [commentCount, setCommentCount] = useState(0);
+  const [isLiked, setIsLiked] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingReviews, setLoadingReviews] = useState(false);
+  const [loadingLike, setLoadingLike] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
+  const [updatingLike, setUpdatingLike] = useState(false);
   const [error, setError] = useState("");
   const [reviewsError, setReviewsError] = useState("");
+  const [likeErrorMessage, setLikeErrorMessage] = useState("");
   const [cartMessage, setCartMessage] = useState("");
   const [cartErrorMessage, setCartErrorMessage] = useState("");
 
@@ -110,30 +129,28 @@ export function useMarketDetailPage({
         return;
       }
 
-      const interactionPromise = fetchMarketResaleInteractions(normalizedResaleId)
-        .then((interaction) => interaction)
-        .catch(() => null);
+      const commentPagePromise = fetchMarketResaleComments({
+        resaleId: normalizedResaleId,
+        page: COMMENT_COUNT_PAGE,
+        perPage: COMMENT_COUNT_PER_PAGE,
+      }).catch(() => null);
 
       try {
-        const [nextItem, nextImages, interaction] = await Promise.all([
+        const [nextItem, nextImages, commentPage] = await Promise.all([
           fetchMarketResaleById(normalizedResaleId),
           fetchMarketResaleConditionImages(normalizedResaleId),
-          interactionPromise,
+          commentPagePromise,
         ]);
 
-        if (cancelled) {
-          return;
-        }
+        if (cancelled) return;
 
         setItem(nextItem);
         setImages(nextImages);
-        setCommentCount(interaction?.commentCount ?? 0);
+        setCommentCount(commentPage?.totalCount ?? 0);
 
         const productBlueprintId = textOrEmpty(nextItem.productBlueprintId);
 
-        if (!productBlueprintId) {
-          return;
-        }
+        if (!productBlueprintId) return;
 
         setLoadingReviews(true);
 
@@ -151,7 +168,10 @@ export function useMarketDetailPage({
           if (!cancelled) {
             setReviews(null);
             setReviewsError(
-              getErrorMessage(reviewError, "レビューの取得に失敗しました。"),
+              getErrorMessage(
+                reviewError,
+                "レビューの取得に失敗しました。",
+              ),
             );
           }
         } finally {
@@ -166,7 +186,10 @@ export function useMarketDetailPage({
           setReviews(null);
           setCommentCount(0);
           setError(
-            getErrorMessage(loadError, "出品情報の取得に失敗しました。"),
+            getErrorMessage(
+              loadError,
+              "出品情報の取得に失敗しました。",
+            ),
           );
         }
       } finally {
@@ -177,6 +200,51 @@ export function useMarketDetailPage({
     }
 
     void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedResaleId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLikeStatus() {
+      setIsLiked(false);
+      setLikeErrorMessage("");
+      setUpdatingLike(false);
+
+      if (!normalizedResaleId) {
+        setLoadingLike(false);
+        return;
+      }
+
+      setLoadingLike(true);
+
+      try {
+        const status = await fetchResaleLikeStatus(normalizedResaleId);
+
+        if (cancelled) return;
+
+        setIsLiked(status.liked);
+      } catch (likeError) {
+        if (cancelled) return;
+
+        setIsLiked(false);
+        setLikeErrorMessage(
+          getErrorMessage(
+            likeError,
+            "お気に入り状態の取得に失敗しました。",
+          ),
+        );
+      } finally {
+        if (!cancelled) {
+          setLoadingLike(false);
+        }
+      }
+    }
+
+    void loadLikeStatus();
 
     return () => {
       cancelled = true;
@@ -228,9 +296,7 @@ export function useMarketDetailPage({
   );
 
   const handlePrevMedia = useCallback(() => {
-    if (galleryItems.length <= 1) {
-      return;
-    }
+    if (galleryItems.length <= 1) return;
 
     setActiveMediaIndex((current) =>
       current <= 0 ? galleryItems.length - 1 : current - 1,
@@ -238,9 +304,7 @@ export function useMarketDetailPage({
   }, [galleryItems.length]);
 
   const handleNextMedia = useCallback(() => {
-    if (galleryItems.length <= 1) {
-      return;
-    }
+    if (galleryItems.length <= 1) return;
 
     setActiveMediaIndex((current) =>
       current >= galleryItems.length - 1 ? 0 : current + 1,
@@ -249,14 +313,49 @@ export function useMarketDetailPage({
 
   const handleSelectMedia = useCallback(
     (index: number) => {
-      if (index < 0 || index >= galleryItems.length) {
-        return;
-      }
+      if (index < 0 || index >= galleryItems.length) return;
 
       setActiveMediaIndex(index);
     },
     [galleryItems.length],
   );
+
+  const handleToggleLike = useCallback(async (): Promise<void> => {
+    if (
+      !normalizedResaleId ||
+      loadingLike ||
+      updatingLike
+    ) {
+      return;
+    }
+
+    setUpdatingLike(true);
+    setLikeErrorMessage("");
+
+    try {
+      const status = isLiked
+        ? await removeResaleLike(normalizedResaleId)
+        : await addResaleLike(normalizedResaleId);
+
+      setIsLiked(status.liked);
+    } catch (likeError) {
+      setLikeErrorMessage(
+        getErrorMessage(
+          likeError,
+          isLiked
+            ? "お気に入りの解除に失敗しました。"
+            : "お気に入りの登録に失敗しました。",
+        ),
+      );
+    } finally {
+      setUpdatingLike(false);
+    }
+  }, [
+    isLiked,
+    loadingLike,
+    normalizedResaleId,
+    updatingLike,
+  ]);
 
   const handleAddToCart = useCallback(async (): Promise<boolean> => {
     const targetResaleId = item?.id?.trim() ?? "";
@@ -282,23 +381,34 @@ export function useMarketDetailPage({
       return true;
     } catch (cartError) {
       setCartErrorMessage(
-        getErrorMessage(cartError, "カートへの追加に失敗しました。"),
+        getErrorMessage(
+          cartError,
+          "カートへの追加に失敗しました。",
+        ),
       );
       return false;
     } finally {
       setAddingToCart(false);
     }
-  }, [addResaleProductToCart, item?.id, item?.productId]);
+  }, [
+    addResaleProductToCart,
+    item?.id,
+    item?.productId,
+  ]);
 
   return {
     item,
     reviews,
     commentCount,
+    isLiked,
     loading,
     loadingReviews,
+    loadingLike,
     addingToCart,
+    updatingLike,
     error,
     reviewsError,
+    likeErrorMessage,
     cartMessage,
     cartErrorMessage,
     title,
@@ -316,6 +426,7 @@ export function useMarketDetailPage({
     handlePrevMedia,
     handleNextMedia,
     handleSelectMedia,
+    handleToggleLike,
     handleAddToCart,
   };
 }

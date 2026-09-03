@@ -2,14 +2,12 @@
 
 import {
   fetchResaleWithAuth,
-  type ApiDataResponse,
 } from "./resaleHttpClient";
 
 import type {
   ResaleChatBadgeCountResponse,
   ResaleChatListResponse,
   ResaleCommentsMarkAsReadResponse,
-  ResaleInteractionSummary,
   ResaleReviewComment,
   ResaleReviewCommentPage,
 } from "../../shared/types/resaleReview";
@@ -36,12 +34,10 @@ export type MarkMyResaleCommentsAsReadParams = {
 
 export type CreateMyResaleCommentResult = {
   comment: ResaleReviewComment;
-  interaction: ResaleInteractionSummary;
 };
 
 type CreateMyResaleCommentResponse = {
   data: ResaleReviewComment;
-  interaction: ResaleInteractionSummary;
 };
 
 function requireResaleId(resaleId: string): string {
@@ -125,7 +121,6 @@ export async function createMyResaleComment(
 
   return {
     comment: result.data,
-    interaction: result.interaction,
   };
 }
 
@@ -144,18 +139,14 @@ export async function markMyResaleCommentsAsRead(
 
 export async function deleteMyResaleComment(
   params: DeleteMyResaleCommentParams,
-): Promise<ResaleInteractionSummary> {
+): Promise<void> {
   const resaleId = requireResaleId(params.resaleId);
   const commentId = requireCommentId(params.commentId);
 
-  const result = await fetchResaleWithAuth<
-    ApiDataResponse<ResaleInteractionSummary>
-  >(
+  await fetchResaleWithAuth<unknown>(
     `/mall/me/resales/${encodeURIComponent(resaleId)}/comments/${encodeURIComponent(commentId)}`,
     {
       method: "DELETE",
     },
   );
-
-  return result.data;
 }

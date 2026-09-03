@@ -19,7 +19,6 @@ import (
 
 const (
 	resaleReviewsCollection      = "resaleReviews"
-	resaleReviewLikesSub         = "likes"
 	resaleReviewCommentsSub      = "comments"
 	resaleReviewCleanupBatchSize = 400
 )
@@ -40,10 +39,6 @@ func (r *ResaleReviewRepositoryFS) Aggregates() resalereview.AggregateRepository
 	return &resaleReviewAggregateRepositoryFS{root: r}
 }
 
-func (r *ResaleReviewRepositoryFS) Likes() resalereview.LikeRepository {
-	return &resaleReviewLikeRepositoryFS{root: r}
-}
-
 func (r *ResaleReviewRepositoryFS) Comments() resalereview.CommentRepository {
 	return &resaleReviewCommentRepositoryFS{root: r}
 }
@@ -62,14 +57,6 @@ func (r *ResaleReviewRepositoryFS) rootCol() *gfs.CollectionRef {
 
 func (r *ResaleReviewRepositoryFS) rootDoc(resaleID string) *gfs.DocumentRef {
 	return r.rootCol().Doc(resaleID)
-}
-
-func (r *ResaleReviewRepositoryFS) likesCol(resaleID string) *gfs.CollectionRef {
-	return r.rootDoc(resaleID).Collection(resaleReviewLikesSub)
-}
-
-func (r *ResaleReviewRepositoryFS) likeDoc(resaleID string, avatarID string) *gfs.DocumentRef {
-	return r.likesCol(resaleID).Doc(avatarID)
 }
 
 func (r *ResaleReviewRepositoryFS) commentsCol(resaleID string) *gfs.CollectionRef {
@@ -93,16 +80,9 @@ func (r *ResaleReviewRepositoryFS) validateConfigured() error {
 
 type resaleReviewAggregateDocument struct {
 	ResaleID     string    `firestore:"resaleId"`
-	LikeCount    int64     `firestore:"likeCount"`
 	CommentCount int64     `firestore:"commentCount"`
 	CreatedAt    time.Time `firestore:"createdAt"`
 	UpdatedAt    time.Time `firestore:"updatedAt"`
-}
-
-type resaleReviewLikeDocument struct {
-	ResaleID  string    `firestore:"resaleId"`
-	AvatarID  string    `firestore:"avatarId"`
-	CreatedAt time.Time `firestore:"createdAt"`
 }
 
 type resaleReviewCommentDocument struct {
@@ -120,7 +100,6 @@ type resaleReviewCommentDocument struct {
 func aggregateToDocument(entity resalereview.ResaleReviewAggregate) resaleReviewAggregateDocument {
 	return resaleReviewAggregateDocument{
 		ResaleID:     entity.ResaleID,
-		LikeCount:    entity.LikeCount,
 		CommentCount: entity.CommentCount,
 		CreatedAt:    entity.CreatedAt.UTC(),
 		UpdatedAt:    entity.UpdatedAt.UTC(),
@@ -139,7 +118,6 @@ func aggregateFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.ResaleR
 
 	entity := resalereview.ResaleReviewAggregate{
 		ResaleID:     document.ResaleID,
-		LikeCount:    document.LikeCount,
 		CommentCount: document.CommentCount,
 		CreatedAt:    document.CreatedAt.UTC(),
 		UpdatedAt:    document.UpdatedAt.UTC(),
@@ -151,41 +129,6 @@ func aggregateFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.ResaleR
 
 	if err := entity.Validate(); err != nil {
 		return resalereview.ResaleReviewAggregate{}, err
-	}
-
-	return entity, nil
-}
-
-func resaleReviewLikeToDocument(entity resalereview.Like) resaleReviewLikeDocument {
-	return resaleReviewLikeDocument{
-		ResaleID:  entity.ResaleID,
-		AvatarID:  entity.AvatarID,
-		CreatedAt: entity.CreatedAt.UTC(),
-	}
-}
-
-func resaleReviewLikeFromSnapshot(snapshot *gfs.DocumentSnapshot) (resalereview.Like, error) {
-	if snapshot == nil || snapshot.Ref == nil || !snapshot.Exists() {
-		return resalereview.Like{}, resalereview.ErrNotFound
-	}
-
-	var document resaleReviewLikeDocument
-	if err := snapshot.DataTo(&document); err != nil {
-		return resalereview.Like{}, err
-	}
-
-	entity := resalereview.Like{
-		ResaleID:  document.ResaleID,
-		AvatarID:  document.AvatarID,
-		CreatedAt: document.CreatedAt.UTC(),
-	}
-
-	if entity.AvatarID == "" {
-		entity.AvatarID = snapshot.Ref.ID
-	}
-
-	if err := entity.Validate(); err != nil {
-		return resalereview.Like{}, err
 	}
 
 	return entity, nil
@@ -305,14 +248,7 @@ func (r *resaleReviewAggregateRepositoryFS) Update(ctx context.Context, resaleID
 		return resalereview.ResaleReviewAggregate{}, resalereview.ErrInvalidResaleID
 	}
 
-	updates := make([]gfs.Update, 0, 3)
-	if patch.LikeCount != nil {
-		if *patch.LikeCount < 0 {
-			return resalereview.ResaleReviewAggregate{}, resalereview.ErrInvalidLikeCount
-		}
-		updates = append(updates, gfs.Update{Path: "likeCount", Value: *patch.LikeCount})
-	}
-
+	updates := make([]gfs.Update, 0, 2)
 	if patch.CommentCount != nil {
 		if *patch.CommentCount < 0 {
 			return resalereview.ResaleReviewAggregate{}, resalereview.ErrInvalidCommentCount
@@ -346,164 +282,6 @@ func (r *resaleReviewAggregateRepositoryFS) Delete(ctx context.Context, resaleID
 	}
 
 	_, err := r.root.rootDoc(resaleID).Delete(ctx)
-	return err
-}
-
-// ============================================================
-// Like repository
-// ============================================================
-
-type resaleReviewLikeRepositoryFS struct {
-	root *ResaleReviewRepositoryFS
-}
-
-var _ resalereview.LikeRepository = (*resaleReviewLikeRepositoryFS)(nil)
-
-func (r *resaleReviewLikeRepositoryFS) List(ctx context.Context, filter resalereview.FilterLike, sortSpec common.Sort, page common.Page) (common.PageResult[resalereview.Like], error) {
-	if r == nil || r.root == nil {
-		return common.PageResult[resalereview.Like]{}, errResaleReviewRepositoryNotConfigured
-	}
-	if err := r.root.validateConfigured(); err != nil {
-		return common.PageResult[resalereview.Like]{}, err
-	}
-
-	if filter.ResaleID == "" && filter.AvatarID == "" {
-		return common.PageResult[resalereview.Like]{}, resalereview.ErrInvalid
-	}
-
-	items := make([]resalereview.Like, 0)
-
-	if filter.ResaleID != "" {
-		it := r.root.likesCol(filter.ResaleID).Documents(ctx)
-		defer it.Stop()
-
-		for {
-			snapshot, err := it.Next()
-			if errors.Is(err, iterator.Done) {
-				break
-			}
-			if err != nil {
-				return common.PageResult[resalereview.Like]{}, err
-			}
-
-			item, err := resaleReviewLikeFromSnapshot(snapshot)
-			if err != nil {
-				return common.PageResult[resalereview.Like]{}, err
-			}
-			if !matchesLikeFilter(item, filter) {
-				continue
-			}
-
-			items = append(items, item)
-		}
-	} else {
-		parentIt := r.root.rootCol().Documents(ctx)
-		defer parentIt.Stop()
-
-		for {
-			parentSnapshot, err := parentIt.Next()
-			if errors.Is(err, iterator.Done) {
-				break
-			}
-			if err != nil {
-				return common.PageResult[resalereview.Like]{}, err
-			}
-
-			snapshot, err := r.root.likeDoc(parentSnapshot.Ref.ID, filter.AvatarID).Get(ctx)
-			if status.Code(err) == codes.NotFound {
-				continue
-			}
-			if err != nil {
-				return common.PageResult[resalereview.Like]{}, err
-			}
-
-			item, err := resaleReviewLikeFromSnapshot(snapshot)
-			if err != nil {
-				return common.PageResult[resalereview.Like]{}, err
-			}
-			if !matchesLikeFilter(item, filter) {
-				continue
-			}
-
-			items = append(items, item)
-		}
-	}
-
-	sortResaleReviewLikes(items, sortSpec)
-	return paginateResaleReviewLikes(items, page), nil
-}
-
-func (r *resaleReviewLikeRepositoryFS) FindByAvatar(ctx context.Context, resaleID string, avatarID string) (resalereview.Like, error) {
-	if r == nil || r.root == nil {
-		return resalereview.Like{}, errResaleReviewRepositoryNotConfigured
-	}
-	if err := r.root.validateConfigured(); err != nil {
-		return resalereview.Like{}, err
-	}
-	if err := resalereview.ValidateLikeTarget(resaleID, avatarID); err != nil {
-		return resalereview.Like{}, err
-	}
-
-	snapshot, err := r.root.likeDoc(resaleID, avatarID).Get(ctx)
-	if err != nil {
-		if status.Code(err) == codes.NotFound {
-			return resalereview.Like{}, resalereview.ErrNotFound
-		}
-		return resalereview.Like{}, err
-	}
-
-	return resaleReviewLikeFromSnapshot(snapshot)
-}
-
-func (r *resaleReviewLikeRepositoryFS) ExistsByAvatar(ctx context.Context, resaleID string, avatarID string) (bool, error) {
-	_, err := r.FindByAvatar(ctx, resaleID, avatarID)
-	if err == nil {
-		return true, nil
-	}
-	if resalereview.IsNotFound(err) {
-		return false, nil
-	}
-	return false, err
-}
-
-func (r *resaleReviewLikeRepositoryFS) CreateUnderParent(ctx context.Context, resaleID string, like resalereview.Like) (resalereview.Like, error) {
-	if r == nil || r.root == nil {
-		return resalereview.Like{}, errResaleReviewRepositoryNotConfigured
-	}
-	if err := r.root.validateConfigured(); err != nil {
-		return resalereview.Like{}, err
-	}
-
-	if err := like.Validate(); err != nil {
-		return resalereview.Like{}, err
-	}
-	if resaleID == "" || resaleID != like.ResaleID {
-		return resalereview.Like{}, resalereview.ErrInvalidResaleID
-	}
-
-	_, err := r.root.likeDoc(resaleID, like.AvatarID).Create(ctx, resaleReviewLikeToDocument(like))
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return resalereview.Like{}, resalereview.ErrConflict
-		}
-		return resalereview.Like{}, err
-	}
-
-	return like, nil
-}
-
-func (r *resaleReviewLikeRepositoryFS) DeleteByAvatar(ctx context.Context, resaleID string, avatarID string) error {
-	if r == nil || r.root == nil {
-		return errResaleReviewRepositoryNotConfigured
-	}
-	if err := r.root.validateConfigured(); err != nil {
-		return err
-	}
-	if err := resalereview.ValidateLikeTarget(resaleID, avatarID); err != nil {
-		return err
-	}
-
-	_, err := r.root.likeDoc(resaleID, avatarID).Delete(ctx)
 	return err
 }
 
@@ -684,140 +462,6 @@ type resaleReviewMutationRepositoryFS struct {
 }
 
 var _ resalereview.MutationRepository = (*resaleReviewMutationRepositoryFS)(nil)
-
-func (r *resaleReviewMutationRepositoryFS) AddLike(ctx context.Context, like resalereview.Like) (resalereview.ResaleReviewAggregate, resalereview.Like, error) {
-	if r == nil || r.root == nil {
-		return resalereview.ResaleReviewAggregate{}, resalereview.Like{}, errResaleReviewRepositoryNotConfigured
-	}
-	if err := r.root.validateConfigured(); err != nil {
-		return resalereview.ResaleReviewAggregate{}, resalereview.Like{}, err
-	}
-	if err := like.Validate(); err != nil {
-		return resalereview.ResaleReviewAggregate{}, resalereview.Like{}, err
-	}
-
-	aggregateRef := r.root.rootDoc(like.ResaleID)
-	likeRef := r.root.likeDoc(like.ResaleID, like.AvatarID)
-	var resultAggregate resalereview.ResaleReviewAggregate
-
-	err := r.root.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		var aggregate resalereview.ResaleReviewAggregate
-		aggregateExists := true
-
-		aggregateSnapshot, err := tx.Get(aggregateRef)
-		if err != nil {
-			if status.Code(err) != codes.NotFound {
-				return err
-			}
-
-			aggregateExists = false
-			created, err := resalereview.NewResaleReviewAggregate(like.ResaleID, like.CreatedAt)
-			if err != nil {
-				return err
-			}
-			aggregate = *created
-		} else {
-			aggregate, err = aggregateFromSnapshot(aggregateSnapshot)
-			if err != nil {
-				return err
-			}
-		}
-
-		_, err = tx.Get(likeRef)
-		if err == nil {
-			return resalereview.ErrConflict
-		}
-		if status.Code(err) != codes.NotFound {
-			return err
-		}
-
-		aggregate.IncrementLikeCount(like.CreatedAt)
-
-		if aggregateExists {
-			if err := tx.Set(aggregateRef, aggregateToDocument(aggregate)); err != nil {
-				return err
-			}
-		} else {
-			if err := tx.Create(aggregateRef, aggregateToDocument(aggregate)); err != nil {
-				return err
-			}
-		}
-
-		if err := tx.Create(likeRef, resaleReviewLikeToDocument(like)); err != nil {
-			return err
-		}
-
-		resultAggregate = aggregate
-		return nil
-	})
-	if err != nil {
-		if status.Code(err) == codes.AlreadyExists {
-			return resalereview.ResaleReviewAggregate{}, resalereview.Like{}, resalereview.ErrConflict
-		}
-		return resalereview.ResaleReviewAggregate{}, resalereview.Like{}, err
-	}
-
-	return resultAggregate, like, nil
-}
-
-func (r *resaleReviewMutationRepositoryFS) RemoveLike(ctx context.Context, resaleID string, avatarID string) (resalereview.ResaleReviewAggregate, error) {
-	if r == nil || r.root == nil {
-		return resalereview.ResaleReviewAggregate{}, errResaleReviewRepositoryNotConfigured
-	}
-	if err := r.root.validateConfigured(); err != nil {
-		return resalereview.ResaleReviewAggregate{}, err
-	}
-	if err := resalereview.ValidateLikeTarget(resaleID, avatarID); err != nil {
-		return resalereview.ResaleReviewAggregate{}, err
-	}
-
-	aggregateRef := r.root.rootDoc(resaleID)
-	likeRef := r.root.likeDoc(resaleID, avatarID)
-	var resultAggregate resalereview.ResaleReviewAggregate
-
-	err := r.root.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		aggregateSnapshot, err := tx.Get(aggregateRef)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return resalereview.ErrNotFound
-			}
-			return err
-		}
-
-		aggregate, err := aggregateFromSnapshot(aggregateSnapshot)
-		if err != nil {
-			return err
-		}
-
-		_, err = tx.Get(likeRef)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				resultAggregate = aggregate
-				return nil
-			}
-			return err
-		}
-
-		now := time.Now().UTC()
-		if err := aggregate.DecrementLikeCount(now); err != nil {
-			return err
-		}
-		if err := tx.Set(aggregateRef, aggregateToDocument(aggregate)); err != nil {
-			return err
-		}
-		if err := tx.Delete(likeRef); err != nil {
-			return err
-		}
-
-		resultAggregate = aggregate
-		return nil
-	})
-	if err != nil {
-		return resalereview.ResaleReviewAggregate{}, err
-	}
-
-	return resultAggregate, nil
-}
 
 func (r *resaleReviewMutationRepositoryFS) AddComment(ctx context.Context, comment resalereview.Comment) (resalereview.ResaleReviewAggregate, resalereview.Comment, error) {
 	if r == nil || r.root == nil {
@@ -1068,9 +712,6 @@ func (r *resaleReviewCleanupRepositoryFS) DeleteByResaleID(ctx context.Context, 
 		return resalereview.ErrInvalidResaleID
 	}
 
-	if err := deleteResaleReviewCollection(ctx, r.root.Client, r.root.likesCol(resaleID)); err != nil {
-		return err
-	}
 	if err := deleteResaleReviewCollection(ctx, r.root.Client, r.root.commentsCol(resaleID)); err != nil {
 		return err
 	}
@@ -1134,22 +775,6 @@ func deleteResaleReviewCollection(ctx context.Context, client *gfs.Client, colle
 // List helpers
 // ============================================================
 
-func matchesLikeFilter(item resalereview.Like, filter resalereview.FilterLike) bool {
-	if filter.ResaleID != "" && item.ResaleID != filter.ResaleID {
-		return false
-	}
-	if filter.AvatarID != "" && item.AvatarID != filter.AvatarID {
-		return false
-	}
-	if filter.Created.From != nil && item.CreatedAt.Before(*filter.Created.From) {
-		return false
-	}
-	if filter.Created.To != nil && item.CreatedAt.After(*filter.Created.To) {
-		return false
-	}
-	return true
-}
-
 func matchesCommentFilter(item resalereview.Comment, filter resalereview.FilterComment) bool {
 	if filter.ResaleID != "" && item.ResaleID != filter.ResaleID {
 		return false
@@ -1176,38 +801,6 @@ func matchesCommentFilter(item resalereview.Comment, filter resalereview.FilterC
 		return false
 	}
 	return true
-}
-
-func sortResaleReviewLikes(items []resalereview.Like, sortSpec common.Sort) {
-	descending := sortSpec.Order != common.SortAsc
-
-	sort.SliceStable(items, func(i, j int) bool {
-		left := items[i]
-		right := items[j]
-
-		switch sortSpec.Column {
-		case "avatarId", "AvatarID":
-			if left.AvatarID == right.AvatarID {
-				return left.CreatedAt.After(right.CreatedAt)
-			}
-			if descending {
-				return left.AvatarID > right.AvatarID
-			}
-			return left.AvatarID < right.AvatarID
-
-		default:
-			if left.CreatedAt.Equal(right.CreatedAt) {
-				if descending {
-					return left.AvatarID > right.AvatarID
-				}
-				return left.AvatarID < right.AvatarID
-			}
-			if descending {
-				return left.CreatedAt.After(right.CreatedAt)
-			}
-			return left.CreatedAt.Before(right.CreatedAt)
-		}
-	})
 }
 
 func sortComments(items []resalereview.Comment, sortSpec common.Sort) {
@@ -1253,35 +846,6 @@ func compareCommentID(left resalereview.CommentID, right resalereview.CommentID,
 		return string(left) > string(right)
 	}
 	return string(left) < string(right)
-}
-
-func paginateResaleReviewLikes(items []resalereview.Like, page common.Page) common.PageResult[resalereview.Like] {
-	pageNum, perPage, offset := fscommon.NormalizePage(page.Number, page.PerPage, 20, 200)
-	totalCount := len(items)
-	totalPages := fscommon.ComputeTotalPages(totalCount, perPage)
-
-	if offset >= totalCount {
-		return common.PageResult[resalereview.Like]{
-			Items:      []resalereview.Like{},
-			TotalCount: totalCount,
-			TotalPages: totalPages,
-			Page:       pageNum,
-			PerPage:    perPage,
-		}
-	}
-
-	end := offset + perPage
-	if end > totalCount {
-		end = totalCount
-	}
-
-	return common.PageResult[resalereview.Like]{
-		Items:      items[offset:end],
-		TotalCount: totalCount,
-		TotalPages: totalPages,
-		Page:       pageNum,
-		PerPage:    perPage,
-	}
 }
 
 func paginateComments(items []resalereview.Comment, page common.Page) common.PageResult[resalereview.Comment] {

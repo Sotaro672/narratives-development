@@ -93,30 +93,6 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if len(parts) == 2 && parts[1] == "interactions" {
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w)
-			return
-		}
-
-		h.getResaleInteractions(w, r, resaleID)
-		return
-	}
-
-	if len(parts) == 2 && parts[1] == "like" {
-		switch r.Method {
-		case http.MethodPut:
-			h.addResaleLike(w, r, resaleID)
-			return
-		case http.MethodDelete:
-			h.removeResaleLike(w, r, resaleID)
-			return
-		default:
-			methodNotAllowed(w)
-			return
-		}
-	}
-
 	if len(parts) == 2 && parts[1] == "comments" {
 		switch r.Method {
 		case http.MethodGet:
@@ -304,84 +280,6 @@ func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request,
 	})
 }
 
-func (h *MarketHandler) getResaleInteractions(w http.ResponseWriter, r *http.Request, resaleID string) {
-	ctx := r.Context()
-
-	if h == nil || h.resaleReviewUC == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error": "not_implemented",
-		})
-		return
-	}
-
-	avatarID, ok := currentMarketAvatarID(w, r)
-	if !ok {
-		return
-	}
-
-	summary, err := h.resaleReviewUC.GetSummary(ctx, resaleID, avatarID)
-	if err != nil {
-		writeResaleReviewErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": summary,
-	})
-}
-
-func (h *MarketHandler) addResaleLike(w http.ResponseWriter, r *http.Request, resaleID string) {
-	ctx := r.Context()
-
-	if h == nil || h.resaleReviewUC == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error": "not_implemented",
-		})
-		return
-	}
-
-	avatarID, ok := currentMarketAvatarID(w, r)
-	if !ok {
-		return
-	}
-
-	summary, err := h.resaleReviewUC.AddLike(ctx, resaleID, avatarID)
-	if err != nil {
-		writeResaleReviewErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": summary,
-	})
-}
-
-func (h *MarketHandler) removeResaleLike(w http.ResponseWriter, r *http.Request, resaleID string) {
-	ctx := r.Context()
-
-	if h == nil || h.resaleReviewUC == nil {
-		writeJSON(w, http.StatusNotImplemented, map[string]string{
-			"error": "not_implemented",
-		})
-		return
-	}
-
-	avatarID, ok := currentMarketAvatarID(w, r)
-	if !ok {
-		return
-	}
-
-	summary, err := h.resaleReviewUC.RemoveLike(ctx, resaleID, avatarID)
-	if err != nil {
-		writeResaleReviewErr(w, err)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]any{
-		"data": summary,
-	})
-}
-
 func (h *MarketHandler) listResaleComments(w http.ResponseWriter, r *http.Request, resaleID string) {
 	ctx := r.Context()
 
@@ -442,7 +340,7 @@ func (h *MarketHandler) createResaleComment(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	comment, summary, err := h.resaleReviewUC.CreateComment(
+	comment, err := h.resaleReviewUC.CreateComment(
 		ctx,
 		usecase.CreateResaleReviewCommentInput{
 			ResaleID: resaleID,
@@ -456,8 +354,7 @@ func (h *MarketHandler) createResaleComment(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"data":        comment,
-		"interaction": summary,
+		"data": comment,
 	})
 }
 
@@ -481,7 +378,7 @@ func (h *MarketHandler) deleteResaleComment(
 		return
 	}
 
-	summary, err := h.resaleReviewUC.DeleteComment(
+	err := h.resaleReviewUC.DeleteComment(
 		ctx,
 		resaleID,
 		commentID,
@@ -493,7 +390,7 @@ func (h *MarketHandler) deleteResaleComment(
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data": summary,
+		"ok": true,
 	})
 }
 
@@ -567,7 +464,6 @@ func isCursorMarketRequest(r *http.Request) bool {
 
 func buildMarketResaleFilterFromQuery(r *http.Request) resaledom.Filter {
 	qp := r.URL.Query()
-
 	filter := resaledom.Filter{}
 
 	if s := qp.Get("q"); s != "" {

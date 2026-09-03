@@ -3,28 +3,39 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
 import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
+import type { MediaGalleryItem } from "../../../../components/ui/MediaGallery";
 import { getApiBaseUrl } from "../../../../lib/apiBaseUrl";
 
 import { addSelectedCatalogItemToCart } from "../../application/catalogCartUsecase";
 import { loadCatalogPage } from "../../application/catalogPageLoader";
 import { createCatalogPageViewModel } from "../../application/catalogPageViewModelFactory";
 
+import {
+  addListLike,
+  fetchListLikeStatus,
+  removeListLike,
+} from "../../../like/infrastructure/likeApi";
+import { useAuthState } from "../../../shared/hooks/useAuthState";
 import type { CatalogResponse } from "../../../shared/types/catalog";
 import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
 
 export function useCatalogPage() {
   const navigate = useNavigate();
   const { listId } = useParams();
+  const { authResolved, isLoggedIn } = useAuthState();
 
   const [catalog, setCatalog] = useState<CatalogResponse | null>(null);
   const [reviews, setReviews] = useState<ProductBlueprintReviewPage | null>(null);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(true);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [isLiked, setIsLiked] = useState(false);
+  const [isLoadingLike, setIsLoadingLike] = useState(false);
+  const [isUpdatingLike, setIsUpdatingLike] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [reviewErrorMessage, setReviewErrorMessage] = useState("");
   const [cartErrorMessage, setCartErrorMessage] = useState("");
+  const [likeErrorMessage, setLikeErrorMessage] = useState("");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedColorKey, setSelectedColorKey] = useState("");
   const [selectedSize, setSelectedSize] = useState("");
@@ -90,7 +101,11 @@ export function useCatalogPage() {
       setSelectedModelId("");
 
       try {
-        const result = await loadCatalogPage({ apiBaseUrl, listId });
+        const result = await loadCatalogPage({
+          apiBaseUrl,
+          listId,
+        });
+
         if (cancelled) return;
 
         setCatalog(result.catalog);
@@ -108,7 +123,9 @@ export function useCatalogPage() {
             : "カタログ詳細の取得中にエラーが発生しました。",
         );
       } finally {
-        if (!cancelled) setIsLoadingCatalog(false);
+        if (!cancelled) {
+          setIsLoadingCatalog(false);
+        }
       }
     }
 
@@ -118,6 +135,66 @@ export function useCatalogPage() {
       cancelled = true;
     };
   }, [apiBaseUrl, listId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadLikeStatus() {
+      const normalizedListId = listId?.trim() ?? "";
+
+      setLikeErrorMessage("");
+      setIsUpdatingLike(false);
+
+      if (!authResolved) {
+        setIsLiked(false);
+        setIsLoadingLike(false);
+        return;
+      }
+
+      if (!isLoggedIn || !normalizedListId) {
+        setIsLiked(false);
+        setIsLoadingLike(false);
+        return;
+      }
+
+      setIsLoadingLike(true);
+
+      try {
+        const status = await fetchListLikeStatus(normalizedListId);
+
+        if (cancelled) {
+          return;
+        }
+
+        setIsLiked(status.liked);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setIsLiked(false);
+        setLikeErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "お気に入り状態の取得に失敗しました。",
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoadingLike(false);
+        }
+      }
+    }
+
+    void loadLikeStatus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    authResolved,
+    isLoggedIn,
+    listId,
+  ]);
 
   useEffect(() => {
     if (viewModel.isAlcoholCatalog) return;
@@ -133,7 +210,11 @@ export function useCatalogPage() {
     ) {
       setSelectedColorKey("");
     }
-  }, [selectedColorKey, viewModel.colorOptions, viewModel.isAlcoholCatalog]);
+  }, [
+    selectedColorKey,
+    viewModel.colorOptions,
+    viewModel.isAlcoholCatalog,
+  ]);
 
   useEffect(() => {
     if (viewModel.isAlcoholCatalog) return;
@@ -143,41 +224,64 @@ export function useCatalogPage() {
       return;
     }
 
-    if (selectedSize && !viewModel.sizeOptions.includes(selectedSize)) {
+    if (
+      selectedSize &&
+      !viewModel.sizeOptions.includes(selectedSize)
+    ) {
       setSelectedSize("");
     }
-  }, [selectedSize, viewModel.sizeOptions, viewModel.isAlcoholCatalog]);
+  }, [
+    selectedSize,
+    viewModel.sizeOptions,
+    viewModel.isAlcoholCatalog,
+  ]);
 
   useEffect(() => {
     if (!viewModel.isAlcoholCatalog) {
-      if (selectedModelId) setSelectedModelId("");
+      if (selectedModelId) {
+        setSelectedModelId("");
+      }
       return;
     }
 
-    if (viewModel.alcoholOptions.length === 1 && !selectedModelId) {
+    if (
+      viewModel.alcoholOptions.length === 1 &&
+      !selectedModelId
+    ) {
       setSelectedModelId(viewModel.alcoholOptions[0].modelId);
       return;
     }
 
     if (
       selectedModelId &&
-      !viewModel.alcoholOptions.some((option) => option.modelId === selectedModelId)
+      !viewModel.alcoholOptions.some(
+        (option) => option.modelId === selectedModelId,
+      )
     ) {
       setSelectedModelId("");
     }
-  }, [selectedModelId, viewModel.alcoholOptions, viewModel.isAlcoholCatalog]);
+  }, [
+    selectedModelId,
+    viewModel.alcoholOptions,
+    viewModel.isAlcoholCatalog,
+  ]);
 
   useEffect(() => {
     if (activeImageIndex >= galleryItems.length) {
       setActiveImageIndex(0);
     }
-  }, [activeImageIndex, galleryItems.length]);
+  }, [
+    activeImageIndex,
+    galleryItems.length,
+  ]);
 
   function handlePrevImage() {
     if (galleryItems.length === 0) return;
 
     setActiveImageIndex((current) =>
-      current === 0 ? galleryItems.length - 1 : current - 1,
+      current === 0
+        ? galleryItems.length - 1
+        : current - 1,
     );
   }
 
@@ -185,12 +289,20 @@ export function useCatalogPage() {
     if (galleryItems.length === 0) return;
 
     setActiveImageIndex((current) =>
-      current === galleryItems.length - 1 ? 0 : current + 1,
+      current === galleryItems.length - 1
+        ? 0
+        : current + 1,
     );
   }
 
   function handleSelectImage(index: number) {
-    if (index < 0 || index >= galleryItems.length) return;
+    if (
+      index < 0 ||
+      index >= galleryItems.length
+    ) {
+      return;
+    }
+
     setActiveImageIndex(index);
   }
 
@@ -211,17 +323,59 @@ export function useCatalogPage() {
   }
 
   function handleBrandClick() {
-    const brandId = catalog?.productBlueprint.brandId.trim();
+    const brandId =
+      catalog?.productBlueprint.brandId.trim();
+
     if (!brandId) return;
 
-    navigate(`/brands/${encodeURIComponent(brandId)}`);
+    navigate(
+      `/brands/${encodeURIComponent(brandId)}`,
+    );
   }
 
   function handleAvatarClick(avatarId: string) {
     const normalizedAvatarId = avatarId.trim();
+
     if (!normalizedAvatarId) return;
 
-    navigate(`/avatars/${encodeURIComponent(normalizedAvatarId)}`);
+    navigate(
+      `/avatars/${encodeURIComponent(normalizedAvatarId)}`,
+    );
+  }
+
+  async function handleToggleLike(): Promise<void> {
+    const normalizedListId = listId?.trim() ?? "";
+
+    if (
+      !authResolved ||
+      !isLoggedIn ||
+      !normalizedListId ||
+      isLoadingLike ||
+      isUpdatingLike
+    ) {
+      return;
+    }
+
+    setIsUpdatingLike(true);
+    setLikeErrorMessage("");
+
+    try {
+      const status = isLiked
+        ? await removeListLike(normalizedListId)
+        : await addListLike(normalizedListId);
+
+      setIsLiked(status.liked);
+    } catch (error) {
+      setLikeErrorMessage(
+        error instanceof Error
+          ? error.message
+          : isLiked
+            ? "お気に入りの解除に失敗しました。"
+            : "お気に入りの登録に失敗しました。",
+      );
+    } finally {
+      setIsUpdatingLike(false);
+    }
   }
 
   async function handleAddToCart() {
@@ -253,9 +407,13 @@ export function useCatalogPage() {
     catalog,
     isLoadingCatalog,
     isAddingToCart,
+    isLiked,
+    isLoadingLike,
+    isUpdatingLike,
     errorMessage,
     reviewErrorMessage,
     cartErrorMessage,
+    likeErrorMessage,
     selectedColorKey,
     selectedSize,
     selectedModelId,
@@ -271,6 +429,7 @@ export function useCatalogPage() {
     handleSelectModel,
     handleBrandClick,
     handleAvatarClick,
+    handleToggleLike,
     handleAddToCart,
   };
 }

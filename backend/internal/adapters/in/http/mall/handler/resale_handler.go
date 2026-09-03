@@ -1110,7 +1110,7 @@ func (h *ResaleHandler) createOwnedResaleComment(
 		return
 	}
 
-	comment, summary, err := h.resaleReviewUC.CreateComment(
+	comment, err := h.resaleReviewUC.CreateComment(
 		ctx,
 		usecase.CreateResaleReviewCommentInput{
 			ResaleID: resaleID,
@@ -1124,8 +1124,7 @@ func (h *ResaleHandler) createOwnedResaleComment(
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"data":        comment,
-		"interaction": summary,
+		"data": comment,
 	})
 }
 
@@ -1190,7 +1189,7 @@ func (h *ResaleHandler) deleteOwnedResaleComment(
 		return
 	}
 
-	summary, err := h.resaleReviewUC.DeleteComment(
+	err := h.resaleReviewUC.DeleteComment(
 		ctx,
 		resaleID,
 		commentID,
@@ -1202,7 +1201,7 @@ func (h *ResaleHandler) deleteOwnedResaleComment(
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"data": summary,
+		"ok": true,
 	})
 }
 

@@ -4,23 +4,16 @@ import { requestJson } from "../../../lib/http";
 import { MARKET_RESALES_PATH } from "../constants/marketPaths";
 
 import type {
-  ResaleInteractionSummary,
   ResaleReviewComment,
   ResaleReviewCommentPage,
 } from "../../shared/types/resaleReview";
 
-type ApiDataResponse<T> = {
-  data: T;
-};
-
 type CreateMarketResaleCommentResponse = {
   data: ResaleReviewComment;
-  interaction: ResaleInteractionSummary;
 };
 
 export type CreateMarketResaleCommentResult = {
   comment: ResaleReviewComment;
-  interaction: ResaleInteractionSummary;
 };
 
 export type FetchMarketResaleCommentsParams = {
@@ -59,92 +52,20 @@ function requireCommentId(commentId: string): string {
   return normalizedCommentId;
 }
 
-function buildMarketResaleReviewPath(
-  resaleId: string,
-  suffix: "interactions" | "like" | "comments",
-): string {
+function buildMarketResaleCommentsPath(resaleId: string): string {
   const normalizedResaleId = requireResaleId(resaleId);
 
-  return `${MARKET_RESALES_PATH}/${encodeURIComponent(normalizedResaleId)}/${suffix}`;
-}
-
-export async function fetchMarketResaleInteractions(
-  resaleId: string,
-): Promise<ResaleInteractionSummary> {
-  const result = await requestJson<ApiDataResponse<ResaleInteractionSummary>>(
-    buildMarketResaleReviewPath(resaleId, "interactions"),
-    {
-      method: "GET",
-      auth: "required",
-      credentials: "include",
-      messages: {
-        requestErrorMessage: "いいね情報の取得に失敗しました。",
-        nonJsonErrorMessage: "いいね情報APIがJSON以外を返しました。",
-        invalidJsonErrorMessage: "いいね情報APIのレスポンスが不正です。",
-      },
-    },
-  );
-
-  return result.data;
-}
-
-export async function addMarketResaleLike(
-  resaleId: string,
-): Promise<ResaleInteractionSummary> {
-  const result = await requestJson<ApiDataResponse<ResaleInteractionSummary>>(
-    buildMarketResaleReviewPath(resaleId, "like"),
-    {
-      method: "PUT",
-      auth: "required",
-      credentials: "include",
-      messages: {
-        requestErrorMessage: "いいねの登録に失敗しました。",
-        nonJsonErrorMessage: "いいね登録APIがJSON以外を返しました。",
-        invalidJsonErrorMessage: "いいね登録APIのレスポンスが不正です。",
-      },
-    },
-  );
-
-  return result.data;
-}
-
-export async function removeMarketResaleLike(
-  resaleId: string,
-): Promise<ResaleInteractionSummary> {
-  const result = await requestJson<ApiDataResponse<ResaleInteractionSummary>>(
-    buildMarketResaleReviewPath(resaleId, "like"),
-    {
-      method: "DELETE",
-      auth: "required",
-      credentials: "include",
-      messages: {
-        requestErrorMessage: "いいねの解除に失敗しました。",
-        nonJsonErrorMessage: "いいね解除APIがJSON以外を返しました。",
-        invalidJsonErrorMessage: "いいね解除APIのレスポンスが不正です。",
-      },
-    },
-  );
-
-  return result.data;
+  return `${MARKET_RESALES_PATH}/${encodeURIComponent(normalizedResaleId)}/comments`;
 }
 
 export async function fetchMarketResaleComments(
   params: FetchMarketResaleCommentsParams,
 ): Promise<ResaleReviewCommentPage> {
-  const page = Math.max(
-    1,
-    Math.trunc(params.page ?? 1),
-  );
-  const perPage = Math.min(
-    100,
-    Math.max(
-      1,
-      Math.trunc(params.perPage ?? 20),
-    ),
-  );
+  const page = Math.max(1, Math.trunc(params.page ?? 1));
+  const perPage = Math.min(100, Math.max(1, Math.trunc(params.perPage ?? 20)));
 
   return requestJson<ResaleReviewCommentPage>(
-    buildMarketResaleReviewPath(params.resaleId, "comments"),
+    buildMarketResaleCommentsPath(params.resaleId),
     {
       method: "GET",
       auth: "required",
@@ -172,7 +93,7 @@ export async function createMarketResaleComment(
   }
 
   const result = await requestJson<CreateMarketResaleCommentResponse>(
-    `${MARKET_RESALES_PATH}/${encodeURIComponent(resaleId)}/comments`,
+    buildMarketResaleCommentsPath(resaleId),
     {
       method: "POST",
       auth: "required",
@@ -190,18 +111,17 @@ export async function createMarketResaleComment(
 
   return {
     comment: result.data,
-    interaction: result.interaction,
   };
 }
 
 export async function deleteMarketResaleComment(
   params: DeleteMarketResaleCommentParams,
-): Promise<ResaleInteractionSummary> {
+): Promise<void> {
   const resaleId = requireResaleId(params.resaleId);
   const commentId = requireCommentId(params.commentId);
 
-  const result = await requestJson<ApiDataResponse<ResaleInteractionSummary>>(
-    `${MARKET_RESALES_PATH}/${encodeURIComponent(resaleId)}/comments/${encodeURIComponent(commentId)}`,
+  await requestJson<unknown>(
+    `${buildMarketResaleCommentsPath(resaleId)}/${encodeURIComponent(commentId)}`,
     {
       method: "DELETE",
       auth: "required",
@@ -213,6 +133,4 @@ export async function deleteMarketResaleComment(
       },
     },
   );
-
-  return result.data;
 }

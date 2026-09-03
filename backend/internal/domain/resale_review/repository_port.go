@@ -15,10 +15,9 @@ import (
 //
 // resaleReviews/{resaleId}
 //
-// Counter updates should be performed atomically with the corresponding
-// like/comment write by the Firestore repository whenever possible.
+// CommentCount updates should be performed atomically with the corresponding
+// comment write by the repository whenever possible.
 type PatchResaleReviewAggregate struct {
-	LikeCount    *int64 `json:"likeCount"`
 	CommentCount *int64 `json:"commentCount"`
 }
 
@@ -26,16 +25,7 @@ func NewPatchFromResaleReviewAggregate(
 	aggregate ResaleReviewAggregate,
 ) PatchResaleReviewAggregate {
 	return PatchResaleReviewAggregate{
-		LikeCount:    &aggregate.LikeCount,
 		CommentCount: &aggregate.CommentCount,
-	}
-}
-
-func NewLikeCountPatchFromResaleReviewAggregate(
-	aggregate ResaleReviewAggregate,
-) PatchResaleReviewAggregate {
-	return PatchResaleReviewAggregate{
-		LikeCount: &aggregate.LikeCount,
 	}
 }
 
@@ -45,22 +35,6 @@ func NewCommentCountPatchFromResaleReviewAggregate(
 	return PatchResaleReviewAggregate{
 		CommentCount: &aggregate.CommentCount,
 	}
-}
-
-// FilterLike is used for listing likes.
-//
-// ResaleID:
-// - optional when listing by AvatarID across resale reviews.
-//
-// AvatarID:
-// - optional when listing all likes for one resale.
-//
-// At least one of ResaleID / AvatarID should normally be specified by
-// application.usecase.
-type FilterLike struct {
-	common.FilterCommon `json:",inline"`
-	ResaleID            string `json:"resaleId"`
-	AvatarID            string `json:"avatarId"`
 }
 
 // FilterComment is used for listing comments.
@@ -76,9 +50,9 @@ type FilterLike struct {
 // At least one of ResaleID / AvatarID must be specified.
 //
 // Typical usages:
-// - ResaleID only           = all comments for one resale
-// - ResaleID + AvatarID     = one avatar's comments for one resale
-// - AvatarID only           = one avatar's comments across all resale reviews
+// - ResaleID only       = all comments for one resale
+// - ResaleID + AvatarID = one avatar's comments for one resale
+// - AvatarID only       = one avatar's comments across all resale reviews
 //
 // Deleted:
 // - nil   = no deleted-state filter
@@ -126,70 +100,6 @@ type AggregateRepository interface {
 	Delete(
 		ctx context.Context,
 		resaleID string,
-	) error
-}
-
-// ============================================================
-// Like repository
-// ============================================================
-
-// LikeRepository manages:
-//
-// resaleReviews/{resaleId}/likes/{avatarId}
-//
-// avatarId is the document ID.
-// Therefore one avatar can have at most one like for one resale.
-type LikeRepository interface {
-	// List lists likes by resaleId and/or avatarId.
-	//
-	// A Firestore implementation may use a collection-group query when
-	// ResaleID is empty and AvatarID is specified.
-	List(
-		ctx context.Context,
-		filter FilterLike,
-		sort common.Sort,
-		page common.Page,
-	) (common.PageResult[Like], error)
-
-	// FindByAvatar returns the like made by avatarId for resaleId.
-	//
-	// ErrNotFound should be returned when the avatar has not liked the resale.
-	FindByAvatar(
-		ctx context.Context,
-		resaleID string,
-		avatarID string,
-	) (Like, error)
-
-	// ExistsByAvatar returns whether avatarId currently likes resaleId.
-	//
-	// This is intended for viewer-specific LikedByMe resolution without
-	// forcing application.usecase to handle ErrNotFound as normal control flow.
-	ExistsByAvatar(
-		ctx context.Context,
-		resaleID string,
-		avatarID string,
-	) (bool, error)
-
-	// CreateUnderParent creates:
-	//
-	// resaleReviews/{resaleId}/likes/{avatarId}
-	//
-	// Implementations should return ErrConflict when the like already exists.
-	CreateUnderParent(
-		ctx context.Context,
-		resaleID string,
-		like Like,
-	) (Like, error)
-
-	// DeleteByAvatar physically deletes:
-	//
-	// resaleReviews/{resaleId}/likes/{avatarId}
-	//
-	// Unlike is represented by physical deletion.
-	DeleteByAvatar(
-		ctx context.Context,
-		resaleID string,
-		avatarID string,
 	) error
 }
 
@@ -254,33 +164,13 @@ type CommentRepository interface {
 
 // MutationRepository represents operations that mutate resale-review state.
 //
-// Operations that affect aggregate counters should keep the parent aggregate
-// and child documents consistent in one transaction.
+// Operations that affect CommentCount should keep the parent aggregate and
+// comment document consistent in one transaction.
 //
 // This prevents states such as:
-// - like document exists but LikeCount was not incremented
-// - like document was deleted but LikeCount was not decremented
 // - comment exists but CommentCount was not incremented
 // - comment was logically deleted but CommentCount was not decremented
 type MutationRepository interface {
-	// AddLike creates the avatar like and increments LikeCount atomically.
-	//
-	// Implementations should return ErrConflict when the like already exists.
-	AddLike(
-		ctx context.Context,
-		like Like,
-	) (ResaleReviewAggregate, Like, error)
-
-	// RemoveLike deletes the avatar like and decrements LikeCount atomically.
-	//
-	// Implementations should keep the operation idempotent where practical:
-	// when no like exists, the counter must not be decremented.
-	RemoveLike(
-		ctx context.Context,
-		resaleID string,
-		avatarID string,
-	) (ResaleReviewAggregate, error)
-
 	// AddComment creates a comment and increments CommentCount atomically.
 	AddComment(
 		ctx context.Context,
@@ -328,7 +218,6 @@ type MutationRepository interface {
 // document is deleted, so aggregate deletion alone is insufficient.
 //
 // Implementations should delete:
-// - resaleReviews/{resaleId}/likes/*
 // - resaleReviews/{resaleId}/comments/*
 // - resaleReviews/{resaleId}
 type CleanupRepository interface {
@@ -345,7 +234,6 @@ type CleanupRepository interface {
 // RepositoryPort bundles persistence ports for the resale_review domain.
 type RepositoryPort interface {
 	Aggregates() AggregateRepository
-	Likes() LikeRepository
 	Comments() CommentRepository
 	Mutations() MutationRepository
 	Cleanup() CleanupRepository

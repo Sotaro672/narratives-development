@@ -2,10 +2,17 @@
 
 import { useNavigate } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
+import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 import { formatPrice } from "../components/utils/price";
 
+import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
+import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
+import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
+import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
+
+import { useAuthState } from "../features/shared/hooks/useAuthState";
 import ProductDescription from "../features/shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
@@ -14,15 +21,8 @@ import ProductPrice from "../features/shared/presentation/components/ProductPric
 import ProductReviewSection from "../features/shared/presentation/components/ProductReviewSection";
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 
-import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
-import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
-import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
-
-import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
-import { useAuthState } from "../features/shared/hooks/useAuthState";
-
-import "../styles/catalog-page.css";
 import "../features/shared/styles/product-detail.css";
+import "../styles/catalog-page.css";
 
 export default function CatalogPage() {
   const navigate = useNavigate();
@@ -34,9 +34,13 @@ export default function CatalogPage() {
     isAlcoholCatalog,
     isLoadingCatalog,
     isAddingToCart,
+    isLiked,
+    isLoadingLike,
+    isUpdatingLike,
     errorMessage,
     reviewErrorMessage,
     cartErrorMessage,
+    likeErrorMessage,
     activeImageIndex,
     galleryItems,
     firstPrice,
@@ -64,6 +68,7 @@ export default function CatalogPage() {
     handleSelectModel,
     handleBrandClick,
     handleAvatarClick,
+    handleToggleLike,
     handleAddToCart,
   } = useCatalogPage();
 
@@ -76,9 +81,22 @@ export default function CatalogPage() {
     navigate(-1);
   };
 
+  const likeButtonLabel = isLoadingLike
+    ? "お気に入り確認中"
+    : isUpdatingLike
+      ? isLiked
+        ? "お気に入り解除中"
+        : "お気に入り追加中"
+      : isLiked
+        ? "お気に入りから解除"
+        : "お気に入りに追加";
+
   return (
     <Layout
-      title={catalog?.productBlueprint.productName || (isLoadingCatalog ? "" : "カタログ詳細")}
+      title={
+        catalog?.productBlueprint.productName ||
+        (isLoadingCatalog ? "" : "カタログ詳細")
+      }
       titleClickable={false}
       mode={isLoggedIn ? "mypage" : "landing"}
       showBackButton
@@ -97,12 +115,18 @@ export default function CatalogPage() {
             ? "追加中"
             : "カートに入れる"
       }
-      onActionButtonClick={!isLoggedIn || isMobilePortrait ? undefined : handleAddToCart}
+      onActionButtonClick={
+        !isLoggedIn || isMobilePortrait
+          ? undefined
+          : handleAddToCart
+      }
       actionButtonDisabled={!isLoggedIn || !canAddToCart}
     >
       <section className="catalog-page-section">
         {isLoadingCatalog ? (
-          <p className="catalog-page-state">カタログ詳細を読み込んでいます。</p>
+          <p className="catalog-page-state">
+            カタログ詳細を読み込んでいます。
+          </p>
         ) : null}
 
         {!isLoadingCatalog && errorMessage ? (
@@ -117,7 +141,11 @@ export default function CatalogPage() {
               <ProductMediaGallery
                 items={galleryItems}
                 activeIndex={activeImageIndex}
-                altFallback={catalog.productBlueprint.productName || catalog.list.title || "商品画像"}
+                altFallback={
+                  catalog.productBlueprint.productName ||
+                  catalog.list.title ||
+                  "商品画像"
+                }
                 placeholderText="No Image"
                 onPrev={handlePrevImage}
                 onNext={handleNextImage}
@@ -143,6 +171,26 @@ export default function CatalogPage() {
 
             <ProductDescription description={catalog.list.description} />
             <ProductPrice priceLabel={formatPrice(firstPrice?.price)} />
+
+            {isLoggedIn ? (
+              <>
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  disabled={isLoadingLike || isUpdatingLike}
+                  aria-pressed={isLiked}
+                  onClick={handleToggleLike}
+                >
+                  {likeButtonLabel}
+                </Button>
+
+                {likeErrorMessage ? (
+                  <p className="catalog-page-error" role="alert">
+                    {likeErrorMessage}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
 
             <ProductInfoCard
               productBlueprint={catalog.productBlueprint}
