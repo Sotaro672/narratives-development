@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/firestore"
+	"google.golang.org/api/iterator"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -38,14 +39,10 @@ func (r *CartRepositoryFS) col() *firestore.CollectionRef {
 }
 
 // GetByAvatarID returns (nil, nil) if not found.
-func (r *CartRepositoryFS) GetByAvatarID(
-	ctx context.Context,
-	avatarID string,
-) (*cartdom.Cart, error) {
+func (r *CartRepositoryFS) GetByAvatarID(ctx context.Context, avatarID string) (*cartdom.Cart, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("cart_repository_fs: firestore client is nil")
 	}
-
 	if avatarID == "" {
 		return nil, errors.New("cart_repository_fs: avatarID is empty")
 	}
@@ -65,15 +62,11 @@ func (r *CartRepositoryFS) GetByAvatarID(
 
 	cart := doc.toDomain()
 	cart.ID = avatarID
-
 	return cart, nil
 }
 
 // Upsert saves cart by docId=cart.ID (= avatarId).
-func (r *CartRepositoryFS) Upsert(
-	ctx context.Context,
-	cart *cartdom.Cart,
-) error {
+func (r *CartRepositoryFS) Upsert(ctx context.Context, cart *cartdom.Cart) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
@@ -81,22 +74,16 @@ func (r *CartRepositoryFS) Upsert(
 		return errors.New("cart_repository_fs: cart is nil")
 	}
 	if cart.ID == "" {
-		return errors.New(
-			"cart_repository_fs: Upsert requires cart.ID (= avatarId) as docId",
-		)
+		return errors.New("cart_repository_fs: Upsert requires cart.ID (= avatarId) as docId")
 	}
 
 	doc := cartDocFromDomain(cart)
-
 	_, err := r.col().Doc(cart.ID).Set(ctx, doc)
 	return err
 }
 
 // DeleteByAvatarID deletes carts/{avatarId}.
-func (r *CartRepositoryFS) DeleteByAvatarID(
-	ctx context.Context,
-	avatarID string,
-) error {
+func (r *CartRepositoryFS) DeleteByAvatarID(ctx context.Context, avatarID string) error {
 	if r == nil || r.Client == nil {
 		return errors.New("cart_repository_fs: firestore client is nil")
 	}
@@ -106,6 +93,178 @@ func (r *CartRepositoryFS) DeleteByAvatarID(
 
 	_, err := r.col().Doc(avatarID).Delete(ctx)
 	return err
+}
+
+// RemoveItemsByListID removes every cart item that references listID.
+//
+// carts/{avatarId}.items is a dynamic map, so every cart is inspected and
+// only matching item fields are removed.
+func (r *CartRepositoryFS) RemoveItemsByListID(ctx context.Context, listID string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("cart_repository_fs: firestore client is nil")
+	}
+	if listID == "" {
+		return errors.New("cart_repository_fs: listID is empty")
+	}
+
+	return r.removeItemsMatching(ctx, func(item cartItemDoc) bool {
+		itemType := inferCartItemType(
+			item.Type,
+			item.InventoryID,
+			item.ListID,
+			item.ModelID,
+			item.ResaleID,
+			item.ProductID,
+		)
+		return itemType == cartdom.CartItemTypeList && item.ListID == listID
+	})
+}
+
+// RemoveItemsByResaleID removes every cart item that references resaleID.
+func (r *CartRepositoryFS) RemoveItemsByResaleID(ctx context.Context, resaleID string) error {
+	if r == nil || r.Client == nil {
+		return errors.New("cart_repository_fs: firestore client is nil")
+	}
+	if resaleID == "" {
+		return errors.New("cart_repository_fs: resaleID is empty")
+	}
+
+	return r.removeItemsMatching(ctx, func(item cartItemDoc) bool {
+		itemType := inferCartItemType(
+			item.Type,
+			item.InventoryID,
+			item.ListID,
+			item.ModelID,
+			item.ResaleID,
+			item.ProductID,
+		)
+		return itemType == cartdom.CartItemTypeResale && item.ResaleID == resaleID
+	})
+}
+
+type cartItemMatchFunc func(item cartItemDoc) bool
+
+type pendingCartItemCleanup struct {
+	ref     *firestore.DocumentRef
+	updates []firestore.Update
+}
+
+func (r *CartRepositoryFS) removeItemsMatching(ctx context.Context, match cartItemMatchFunc) error {
+	if r == nil || r.Client == nil {
+		return errors.New("cart_repository_fs: firestore client is nil")
+	}
+	if match == nil {
+		return errors.New("cart_repository_fs: cart item matcher is nil")
+	}
+
+	documentIterator := r.col().Documents(ctx)
+	defer documentIterator.Stop()
+
+	now := time.Now().UTC()
+	expiresAt := now.Add(cartdom.DefaultCartTTL)
+	pending := make([]pendingCartItemCleanup, 0)
+
+	for {
+		snapshot, err := documentIterator.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if snapshot == nil || snapshot.Ref == nil {
+			return errors.New("cart_repository_fs: invalid cart document snapshot")
+		}
+
+		raw := snapshot.Data()
+		itemsValue, ok := raw["items"]
+		if !ok {
+			continue
+		}
+
+		items, ok := itemsValue.(map[string]any)
+		if !ok || len(items) == 0 {
+			continue
+		}
+
+		updates := make([]firestore.Update, 0)
+		for itemKey, rawItem := range items {
+			if itemKey == "" {
+				continue
+			}
+
+			itemMap, ok := rawItem.(map[string]any)
+			if !ok {
+				continue
+			}
+
+			item := cartItemDoc{
+				Type:        asString(itemMap["type"]),
+				InventoryID: asString(itemMap["inventoryId"]),
+				ListID:      asString(itemMap["listId"]),
+				ModelID:     asString(itemMap["modelId"]),
+				ResaleID:    asString(itemMap["resaleId"]),
+				ProductID:   asString(itemMap["productId"]),
+				Qty:         asInt(itemMap["qty"]),
+			}
+
+			normalized, valid := normalizeCartItemDoc(item)
+			if !valid || !match(normalized) {
+				continue
+			}
+
+			updates = append(updates, firestore.Update{
+				FieldPath: firestore.FieldPath{"items", itemKey},
+				Value:     firestore.Delete,
+			})
+		}
+
+		if len(updates) == 0 {
+			continue
+		}
+
+		updates = append(updates,
+			firestore.Update{Path: "updatedAt", Value: now},
+			firestore.Update{Path: "expiresAt", Value: expiresAt},
+		)
+
+		pending = append(pending, pendingCartItemCleanup{
+			ref:     snapshot.Ref,
+			updates: updates,
+		})
+	}
+
+	if len(pending) == 0 {
+		return nil
+	}
+
+	bulkWriter := r.Client.BulkWriter(ctx)
+	jobs := make([]*firestore.BulkWriterJob, 0, len(pending))
+
+	for _, cleanup := range pending {
+		job, err := bulkWriter.Update(cleanup.ref, cleanup.updates)
+		if err != nil {
+			bulkWriter.End()
+			return err
+		}
+		jobs = append(jobs, job)
+	}
+
+	bulkWriter.End()
+
+	for _, job := range jobs {
+		if job == nil {
+			return errors.New("cart_repository_fs: bulk writer job is nil")
+		}
+		if _, err := job.Results(); err != nil {
+			if status.Code(err) == codes.NotFound {
+				continue
+			}
+			return err
+		}
+	}
+
+	return nil
 }
 
 // -----------------------------------------
@@ -133,38 +292,28 @@ type cartItemDoc struct {
 	Qty int `firestore:"qty"`
 }
 
-func cartDocFromSnapshot(
-	snap *firestore.DocumentSnapshot,
-) (cartDoc, error) {
+func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 	if snap == nil {
-		return cartDoc{}, errors.New(
-			"cart_repository_fs: snapshot is nil",
-		)
+		return cartDoc{}, errors.New("cart_repository_fs: snapshot is nil")
 	}
 
 	raw := snap.Data()
 	if raw == nil {
-		return cartDoc{
-			Items: map[string]cartItemDoc{},
-		}, nil
+		return cartDoc{Items: map[string]cartItemDoc{}}, nil
 	}
 
-	out := cartDoc{
-		Items: map[string]cartItemDoc{},
-	}
+	out := cartDoc{Items: map[string]cartItemDoc{}}
 
 	if value, ok := raw["createdAt"]; ok {
 		if parsed, valid := asTime(value); valid {
 			out.CreatedAt = parsed
 		}
 	}
-
 	if value, ok := raw["updatedAt"]; ok {
 		if parsed, valid := asTime(value); valid {
 			out.UpdatedAt = parsed
 		}
 	}
-
 	if value, ok := raw["expiresAt"]; ok {
 		if parsed, valid := asTime(value); valid {
 			out.ExpiresAt = parsed
@@ -260,9 +409,7 @@ func (doc cartDoc) toDomain() *cartdom.Cart {
 	}
 }
 
-func cartItemDocFromDomain(
-	item cartdom.CartItem,
-) (cartItemDoc, bool) {
+func cartItemDocFromDomain(item cartdom.CartItem) (cartItemDoc, bool) {
 	itemType := inferCartItemType(
 		string(item.Type),
 		item.InventoryID,
@@ -274,10 +421,7 @@ func cartItemDocFromDomain(
 
 	switch itemType {
 	case cartdom.CartItemTypeList:
-		if item.Qty <= 0 ||
-			item.InventoryID == "" ||
-			item.ListID == "" ||
-			item.ModelID == "" {
+		if item.Qty <= 0 || item.InventoryID == "" || item.ListID == "" || item.ModelID == "" {
 			return cartItemDoc{}, false
 		}
 
@@ -306,9 +450,7 @@ func cartItemDocFromDomain(
 	}
 }
 
-func cartItemDomainFromDoc(
-	item cartItemDoc,
-) (cartdom.CartItem, bool) {
+func cartItemDomainFromDoc(item cartItemDoc) (cartdom.CartItem, bool) {
 	normalized, valid := normalizeCartItemDoc(item)
 	if !valid {
 		return cartdom.CartItem{}, false
@@ -346,9 +488,7 @@ func cartItemDomainFromDoc(
 	}
 }
 
-func normalizeCartItemDoc(
-	item cartItemDoc,
-) (cartItemDoc, bool) {
+func normalizeCartItemDoc(item cartItemDoc) (cartItemDoc, bool) {
 	itemType := inferCartItemType(
 		item.Type,
 		item.InventoryID,
@@ -360,10 +500,7 @@ func normalizeCartItemDoc(
 
 	switch itemType {
 	case cartdom.CartItemTypeList:
-		if item.Qty <= 0 ||
-			item.InventoryID == "" ||
-			item.ListID == "" ||
-			item.ModelID == "" {
+		if item.Qty <= 0 || item.InventoryID == "" || item.ListID == "" || item.ModelID == "" {
 			return cartItemDoc{}, false
 		}
 
@@ -403,18 +540,14 @@ func inferCartItemType(
 	itemType := cartdom.CartItemType(rawType)
 
 	switch itemType {
-	case cartdom.CartItemTypeList,
-		cartdom.CartItemTypeResale:
+	case cartdom.CartItemTypeList, cartdom.CartItemTypeResale:
 		return itemType
 	}
 
 	if resaleID != "" || productID != "" {
 		return cartdom.CartItemTypeResale
 	}
-
-	if inventoryID != "" ||
-		listID != "" ||
-		modelID != "" {
+	if inventoryID != "" || listID != "" || modelID != "" {
 		return cartdom.CartItemTypeList
 	}
 

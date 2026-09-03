@@ -19,7 +19,7 @@ import (
 	categorydom "narratives/internal/domain/productBlueprintCategory"
 )
 
-const maxModelsPerDeleteTransaction = 498
+const maxDependentDocumentsPerDeleteTransaction = 498
 
 // ProductBlueprintRepositoryFS implements pbdom.Repository using Firestore.
 //
@@ -38,6 +38,10 @@ func (r *ProductBlueprintRepositoryFS) col() *firestore.CollectionRef {
 
 func (r *ProductBlueprintRepositoryFS) modelsCol() *firestore.CollectionRef {
 	return r.Client.Collection("models")
+}
+
+func (r *ProductBlueprintRepositoryFS) productionsCol() *firestore.CollectionRef {
+	return r.Client.Collection("productions")
 }
 
 // Compile-time check: ensure this satisfies domain port.
@@ -461,10 +465,10 @@ func (r *ProductBlueprintRepositoryFS) MarkPrinted(ctx context.Context, id strin
 	return result, nil
 }
 
-// Delete physically deletes an unprinted ProductBlueprint and all of its models.
+// Delete physically deletes an unprinted ProductBlueprint and all of its models and productions.
 //
-// models collectionのproductBlueprintId == idを正として配下Modelを取得し、
-// 同一Transaction内でModelを先に削除した後、
+// models collectionとproductions collectionのproductBlueprintId == idを正として関連Documentを取得し、
+// 同一Transaction内で関連Documentを先に削除した後、
 // productBlueprintReviewAggregates/{id}とProductBlueprint本体を削除します。
 func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string, companyID string) error {
 	if r == nil || r.Client == nil {
@@ -501,8 +505,12 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string, co
 		if err != nil {
 			return err
 		}
-		if len(modelSnapshots) > maxModelsPerDeleteTransaction {
-			return pbdom.WrapConflict(nil, "too many models for one delete transaction")
+		productionSnapshots, err := r.listProductionSnapshotsInTransaction(transaction, id)
+		if err != nil {
+			return err
+		}
+		if len(modelSnapshots)+len(productionSnapshots) > maxDependentDocumentsPerDeleteTransaction {
+			return pbdom.WrapConflict(nil, "too many dependent documents for one delete transaction")
 		}
 
 		for _, modelSnapshot := range modelSnapshots {
@@ -510,6 +518,14 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string, co
 				return errors.New("invalid model document snapshot")
 			}
 			if err := transaction.Delete(modelSnapshot.Ref); err != nil {
+				return err
+			}
+		}
+		for _, productionSnapshot := range productionSnapshots {
+			if productionSnapshot == nil || productionSnapshot.Ref == nil {
+				return errors.New("invalid production document snapshot")
+			}
+			if err := transaction.Delete(productionSnapshot.Ref); err != nil {
 				return err
 			}
 		}
@@ -527,6 +543,25 @@ func (r *ProductBlueprintRepositoryFS) Delete(ctx context.Context, id string, co
 
 func (r *ProductBlueprintRepositoryFS) listModelSnapshotsInTransaction(transaction *firestore.Transaction, productBlueprintID string) ([]*firestore.DocumentSnapshot, error) {
 	documentIterator := transaction.Documents(r.modelsCol().Where("productBlueprintId", "==", productBlueprintID))
+	defer documentIterator.Stop()
+
+	snapshots := make([]*firestore.DocumentSnapshot, 0)
+	for {
+		snapshot, err := documentIterator.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		snapshots = append(snapshots, snapshot)
+	}
+
+	return snapshots, nil
+}
+
+func (r *ProductBlueprintRepositoryFS) listProductionSnapshotsInTransaction(transaction *firestore.Transaction, productBlueprintID string) ([]*firestore.DocumentSnapshot, error) {
+	documentIterator := transaction.Documents(r.productionsCol().Where("productBlueprintId", "==", productBlueprintID))
 	defer documentIterator.Stop()
 
 	snapshots := make([]*firestore.DocumentSnapshot, 0)
