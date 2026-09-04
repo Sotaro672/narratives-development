@@ -13,6 +13,7 @@ import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import Button from "../components/ui/Button";
 import ContactForm from "../features/contact/components/ContactForm";
+import ContactUploadProgressModal from "../features/contact/components/ContactUploadProgressModal";
 import { useContactAttachments } from "../features/contact/hooks/useContactAttachments";
 import { useContactSubmit } from "../features/contact/hooks/useContactSubmit";
 import { auth } from "../lib/firebase";
@@ -71,11 +72,11 @@ const companyOverviewRows = [
     label: "商号又は名称（フリガナ）",
     value: "アモル",
   },
-    {
+  {
     label: "目的",
     value: "ECサイトの企画、制作、販売、運営及び管理",
   },
-    {
+  {
     label: "従業員数",
     value: "1人",
   },
@@ -143,6 +144,11 @@ export default function LandingPage() {
     message,
     setMessage,
     submitting,
+    uploadingAttachments,
+    uploadProgress,
+    uploadFileProgress,
+    uploadFileIndex,
+    uploadFileCount,
     handleSubmit,
   } = useContactSubmit({
     currentUser,
@@ -905,6 +911,14 @@ export default function LandingPage() {
           </div>
         </section>
       </div>
+
+      <ContactUploadProgressModal
+        open={uploadingAttachments}
+        progress={uploadProgress}
+        fileProgress={uploadFileProgress}
+        fileIndex={uploadFileIndex}
+        fileCount={uploadFileCount}
+      />
 
       {!isDesktop && isContactSectionVisible ? (
         <FooterNav

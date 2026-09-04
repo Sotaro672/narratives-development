@@ -29,7 +29,9 @@ function getBackendUrl(): string {
   return backendUrl.endsWith("/") ? backendUrl.slice(0, -1) : backendUrl;
 }
 
-async function readJsonSafe(response: Response): Promise<ContactErrorResponse | null> {
+async function readJsonSafe(
+  response: Response,
+): Promise<ContactErrorResponse | null> {
   const contentType = response.headers.get("content-type") || "";
 
   if (!contentType.includes("application/json")) {
@@ -57,6 +59,19 @@ export function useContactSubmit({
   const [company, setCompany] = useState("");
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingAttachments, setUploadingAttachments] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileProgress, setUploadFileProgress] = useState(0);
+  const [uploadFileIndex, setUploadFileIndex] = useState(0);
+  const [uploadFileCount, setUploadFileCount] = useState(0);
+
+  const resetUploadProgress = () => {
+    setUploadingAttachments(false);
+    setUploadProgress(0);
+    setUploadFileProgress(0);
+    setUploadFileIndex(0);
+    setUploadFileCount(0);
+  };
 
   const resetForm = () => {
     setName("");
@@ -73,16 +88,11 @@ export function useContactSubmit({
       return;
     }
 
-    const trimmedName = name.trim();
-    const trimmedGuestEmail = guestEmail.trim();
-    const trimmedCompany = company.trim();
-    const trimmedMessage = message.trim();
-
     const contactEmail = isLoggedIn
-      ? currentUser?.email?.trim() ?? ""
-      : trimmedGuestEmail;
+      ? currentUser?.email ?? ""
+      : guestEmail;
 
-    if (trimmedName === "") {
+    if (name === "") {
       window.alert("お名前を入力してください。");
       return;
     }
@@ -92,7 +102,7 @@ export function useContactSubmit({
       return;
     }
 
-    if (trimmedMessage === "") {
+    if (message === "") {
       window.alert("お問い合わせ内容を入力してください。");
       return;
     }
@@ -100,27 +110,37 @@ export function useContactSubmit({
     submittingRef.current = true;
     setSubmitting(true);
 
+    if (attachments.length > 0) {
+      setUploadProgress(0);
+      setUploadFileProgress(0);
+      setUploadFileIndex(1);
+      setUploadFileCount(attachments.length);
+      setUploadingAttachments(true);
+    }
+
     try {
       const backendUrl = getBackendUrl();
 
       const uploadedAttachments = await uploadContactAttachments({
         attachments,
-        ownerId: currentUser?.uid ?? "guest",
+        onProgress: ({
+          fileIndex,
+          fileCount,
+          fileProgress,
+          totalProgress,
+        }) => {
+          setUploadFileIndex(fileIndex);
+          setUploadFileCount(fileCount);
+          setUploadFileProgress(fileProgress);
+          setUploadProgress(totalProgress);
+        },
       });
 
-      const attachmentText =
-        uploadedAttachments.length > 0
-          ? `\n\n--- 添付ファイル ---\n${uploadedAttachments
-              .map((item, index) =>
-                [
-                  `${index + 1}. ${item.fileName}`,
-                  `Storage Path: ${item.storagePath}`,
-                  `Content Type: ${item.contentType}`,
-                  `Size: ${item.size}`,
-                ].join("\n"),
-              )
-              .join("\n\n")}`
-          : "";
+      setUploadingAttachments(false);
+
+      const attachmentImageIds = uploadedAttachments.map(
+        (attachment) => attachment.imageId,
+      );
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -136,10 +156,11 @@ export function useContactSubmit({
         method: "POST",
         headers,
         body: JSON.stringify({
-          name: trimmedName,
+          name,
           email: contactEmail,
-          company: trimmedCompany,
-          message: `${trimmedMessage}${attachmentText}`,
+          company,
+          message,
+          attachmentImageIds,
           source: "web-amol",
         }),
       });
@@ -153,9 +174,10 @@ export function useContactSubmit({
       }
 
       resetForm();
+      resetUploadProgress();
       window.alert("お問い合わせを受け付けました。");
     } catch (error) {
-      console.error("[contact] submit failed", error);
+      resetUploadProgress();
 
       window.alert(
         error instanceof Error
@@ -165,6 +187,7 @@ export function useContactSubmit({
     } finally {
       submittingRef.current = false;
       setSubmitting(false);
+      setUploadingAttachments(false);
     }
   };
 
@@ -178,6 +201,11 @@ export function useContactSubmit({
     message,
     setMessage,
     submitting,
+    uploadingAttachments,
+    uploadProgress,
+    uploadFileProgress,
+    uploadFileIndex,
+    uploadFileCount,
     handleSubmit,
   };
 }

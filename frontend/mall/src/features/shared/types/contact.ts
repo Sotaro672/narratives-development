@@ -1,4 +1,5 @@
-// frontend\amol\src\features\shared\types\contact.ts
+// frontend/amol/src/features/shared/types/contact.ts
+
 import type { MediaUploaderItem } from "../../../components/ui/MediaUploader";
 
 export type ContactAttachmentItem = MediaUploaderItem & {
@@ -6,9 +7,5 @@ export type ContactAttachmentItem = MediaUploaderItem & {
 };
 
 export type UploadedContactAttachment = {
-  fileName: string;
-  contentType: string;
-  size: number;
-  storagePath: string;
-  downloadUrl: string;
+  imageId: string;
 };

@@ -170,7 +170,7 @@ func toAdminContactResponse(c contact.Contact) contactResponse {
 		Email:              c.Email,
 		Company:            c.Company,
 		Message:            c.Message,
-		AttachmentImageIDs: append([]string(nil), c.AttachmentImageIDs...),
+		AttachmentImageIDs: append([]string{}, c.AttachmentImageIDs...),
 		IsRead:             c.IsRead,
 		Source:             c.Source,
 		CreatedAt:          createdAt,
