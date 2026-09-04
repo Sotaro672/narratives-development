@@ -1,16 +1,13 @@
 // frontend/admin/shell/src/features/contact/hooks/useContactMessage.ts
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { ContactAttachmentImage } from "../../../shared/type/contact";
-import { parseContactMessage } from "../application/contactMessage";
 import { loadContactAttachmentImages } from "../infrastructure/contactAttachmentStorage";
 
-export function useContactMessage(message: string) {
-  const parsed = useMemo(
-    () => parseContactMessage(message),
-    [message],
-  );
-
+export function useContactMessage(
+  message: string,
+  attachmentImageIds: string[],
+) {
   const [attachmentImages, setAttachmentImages] =
     useState<ContactAttachmentImage[]>([]);
   const [attachmentsLoading, setAttachmentsLoading] = useState(false);
@@ -20,7 +17,7 @@ export function useContactMessage(message: string) {
   useEffect(() => {
     let cancelled = false;
 
-    if (parsed.attachments.length === 0) {
+    if (attachmentImageIds.length === 0) {
       setAttachmentImages([]);
       setAttachmentsLoading(false);
       setAttachmentError(null);
@@ -33,7 +30,7 @@ export function useContactMessage(message: string) {
 
       try {
         const images = await loadContactAttachmentImages(
-          parsed.attachments,
+          attachmentImageIds,
         );
 
         if (!cancelled) {
@@ -56,11 +53,10 @@ export function useContactMessage(message: string) {
     return () => {
       cancelled = true;
     };
-  }, [parsed.attachments]);
+  }, [attachmentImageIds]);
 
   return {
-    message: parsed.message,
-    attachments: parsed.attachments,
+    message,
     attachmentImages,
     attachmentsLoading,
     attachmentError,

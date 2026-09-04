@@ -20,23 +20,25 @@ func NewContactHandler(uc *contactuc.ContactUsecase) *ContactHandler {
 }
 
 type createContactRequest struct {
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Company string `json:"company"`
-	Message string `json:"message"`
-	Source  string `json:"source"`
+	Name               string   `json:"name"`
+	Email              string   `json:"email"`
+	Company            string   `json:"company"`
+	Message            string   `json:"message"`
+	AttachmentImageIDs []string `json:"attachmentImageIds"`
+	Source             string   `json:"source"`
 }
 
 type contactResponse struct {
-	ID        string  `json:"id"`
-	Name      string  `json:"name"`
-	Email     string  `json:"email"`
-	Company   string  `json:"company"`
-	Message   string  `json:"message"`
-	IsRead    bool    `json:"isRead"`
-	Source    string  `json:"source"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt *string `json:"updatedAt"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Email              string   `json:"email"`
+	Company            string   `json:"company"`
+	Message            string   `json:"message"`
+	AttachmentImageIDs []string `json:"attachmentImageIds"`
+	IsRead             bool     `json:"isRead"`
+	Source             string   `json:"source"`
+	CreatedAt          string   `json:"createdAt"`
+	UpdatedAt          *string  `json:"updatedAt"`
 }
 
 func (h *ContactHandler) Register(mux *http.ServeMux) {
@@ -58,11 +60,12 @@ func (h *ContactHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	out, err := h.uc.Create(r.Context(), contactuc.CreateInput{
-		Name:    req.Name,
-		Email:   req.Email,
-		Company: req.Company,
-		Message: req.Message,
-		Source:  req.Source,
+		Name:               req.Name,
+		Email:              req.Email,
+		Company:            req.Company,
+		Message:            req.Message,
+		AttachmentImageIDs: req.AttachmentImageIDs,
+		Source:             req.Source,
 	})
 	if err != nil {
 		if errors.Is(err, contact.ErrInvalidName) ||
@@ -87,22 +90,25 @@ func toResponse(c contact.Contact) contactResponse {
 	}
 
 	return contactResponse{
-		ID:        c.ID,
-		Name:      c.Name,
-		Email:     c.Email,
-		Company:   c.Company,
-		Message:   c.Message,
-		IsRead:    c.IsRead,
-		Source:    c.Source,
-		CreatedAt: createdAt,
-		UpdatedAt: nil,
+		ID:                 c.ID,
+		Name:               c.Name,
+		Email:              c.Email,
+		Company:            c.Company,
+		Message:            c.Message,
+		AttachmentImageIDs: c.AttachmentImageIDs,
+		IsRead:             c.IsRead,
+		Source:             c.Source,
+		CreatedAt:          createdAt,
+		UpdatedAt:          nil,
 	}
 }
 
 func decodeJSON(r *http.Request, v any) error {
 	defer r.Body.Close()
+
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
+
 	return dec.Decode(v)
 }
 

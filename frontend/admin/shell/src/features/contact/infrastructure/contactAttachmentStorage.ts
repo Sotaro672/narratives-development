@@ -1,28 +1,30 @@
 // frontend/admin/shell/src/features/contact/infrastructure/contactAttachmentStorage.ts
-
 import { getDownloadURL, ref } from "firebase/storage";
 
 import { storage } from "../../../auth/infrastructure/firebaseClient";
-import type {
-  ContactAttachment,
-  ContactAttachmentImage,
-} from "../../../shared/type/contact";
+import type { ContactAttachmentImage } from "../../../shared/type/contact";
+
+const CONTACT_ATTACHMENT_ROOT_PATH = "contact-attachments";
 
 export async function loadContactAttachmentImages(
-  attachments: ContactAttachment[],
+  imageIds: string[],
 ): Promise<ContactAttachmentImage[]> {
-  const imageAttachments = attachments.filter((attachment) =>
-    attachment.contentType.startsWith("image/"),
+  const normalizedImageIds = Array.from(
+    new Set(
+      imageIds
+        .map((imageId) => imageId.trim())
+        .filter((imageId) => imageId !== ""),
+    ),
   );
 
   return Promise.all(
-    imageAttachments.map(async (attachment) => {
+    normalizedImageIds.map(async (imageId) => {
       const imageUrl = await getDownloadURL(
-        ref(storage, attachment.storagePath),
+        ref(storage, `${CONTACT_ATTACHMENT_ROOT_PATH}/${imageId}`),
       );
 
       return {
-        ...attachment,
+        imageId,
         imageUrl,
       };
     }),

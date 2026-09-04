@@ -6,6 +6,7 @@ export type Contact = {
   email: string;
   company: string;
   message: string;
+  attachmentImageIds: string[];
   isRead: boolean;
   source: string;
   createdAt: string;
@@ -27,18 +28,7 @@ export type ContactListParams = {
   order?: "asc" | "desc";
 };
 
-export type ContactAttachment = {
-  fileName: string;
-  storagePath: string;
-  contentType: string;
-  size: number | null;
-};
-
-export type ParsedContactMessage = {
-  message: string;
-  attachments: ContactAttachment[];
-};
-
-export type ContactAttachmentImage = ContactAttachment & {
+export type ContactAttachmentImage = {
+  imageId: string;
   imageUrl: string;
 };

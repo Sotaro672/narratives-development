@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 )
+
+const contactAttachmentMarker = "--- 添付ファイル ---"
 
 var (
 	ErrInvalidName    = errors.New("invalid name")
@@ -22,10 +25,11 @@ var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 type Contact struct {
 	ID string `json:"id"`
 
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Company string `json:"company"`
-	Message string `json:"message"`
+	Name               string   `json:"name"`
+	Email              string   `json:"email"`
+	Company            string   `json:"company"`
+	Message            string   `json:"message"`
+	AttachmentImageIDs []string `json:"attachmentImageIds"`
 
 	IsRead    bool      `json:"isRead"`
 	Source    string    `json:"source"`
@@ -35,6 +39,8 @@ type Contact struct {
 // NewContact creates a Contact entity with validation.
 // - name, email, message are required.
 // - company is optional.
+// - message contains only the inquiry body.
+// - attachmentImageIds contains references to attached images.
 // - isRead is always initialized to false.
 // - createdAt should be set by the application layer or defaults to the current UTC time.
 func NewContact(
@@ -42,9 +48,12 @@ func NewContact(
 	email string,
 	company string,
 	message string,
+	attachmentImageIDs []string,
 	source string,
 	createdAt time.Time,
 ) (*Contact, error) {
+	message = stripAttachmentMessage(message)
+
 	if err := validateName(name); err != nil {
 		return nil, err
 	}
@@ -66,14 +75,26 @@ func NewContact(
 	}
 
 	return &Contact{
-		Name:      name,
-		Email:     email,
-		Company:   company,
-		Message:   message,
-		IsRead:    false,
-		Source:    source,
-		CreatedAt: createdAt,
+		Name:               name,
+		Email:              email,
+		Company:            company,
+		Message:            message,
+		AttachmentImageIDs: append([]string(nil), attachmentImageIDs...),
+		IsRead:             false,
+		Source:             source,
+		CreatedAt:          createdAt,
 	}, nil
+}
+
+func stripAttachmentMessage(message string) string {
+	message = strings.TrimSpace(message)
+
+	markerIndex := strings.Index(message, contactAttachmentMarker)
+	if markerIndex < 0 {
+		return message
+	}
+
+	return strings.TrimSpace(message[:markerIndex])
 }
 
 func validateName(name string) error {

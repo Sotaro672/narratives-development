@@ -26,7 +26,10 @@ func (r *ContactRepositoryFS) col() *firestore.CollectionRef {
 	return r.client.Collection(contact.CollectionName)
 }
 
-func (r *ContactRepositoryFS) GetByID(ctx context.Context, id string) (contact.Contact, error) {
+func (r *ContactRepositoryFS) GetByID(
+	ctx context.Context,
+	id string,
+) (contact.Contact, error) {
 	snap, err := r.col().Doc(id).Get(ctx)
 	if err != nil {
 		return contact.Contact{}, err
@@ -41,18 +44,23 @@ func (r *ContactRepositoryFS) GetByID(ctx context.Context, id string) (contact.C
 	return c, nil
 }
 
-func (r *ContactRepositoryFS) Create(ctx context.Context, entity contact.Contact) (contact.Contact, error) {
+func (r *ContactRepositoryFS) Create(
+	ctx context.Context,
+	entity contact.Contact,
+) (contact.Contact, error) {
 	now := time.Now().UTC()
+	attachmentImageIDs := append([]string{}, entity.AttachmentImageIDs...)
 
 	doc := map[string]any{
-		"name":      entity.Name,
-		"email":     entity.Email,
-		"company":   entity.Company,
-		"message":   entity.Message,
-		"isRead":    false,
-		"source":    entity.Source,
-		"createdAt": firestore.ServerTimestamp,
-		"updatedAt": (*time.Time)(nil),
+		"name":               entity.Name,
+		"email":              entity.Email,
+		"company":            entity.Company,
+		"message":            entity.Message,
+		"attachmentImageIds": attachmentImageIDs,
+		"isRead":             false,
+		"source":             entity.Source,
+		"createdAt":          firestore.ServerTimestamp,
+		"updatedAt":          (*time.Time)(nil),
 	}
 
 	ref, _, err := r.col().Add(ctx, doc)
@@ -63,6 +71,7 @@ func (r *ContactRepositoryFS) Create(ctx context.Context, entity contact.Contact
 	created, err := r.GetByID(ctx, ref.ID)
 	if err != nil {
 		entity.ID = ref.ID
+		entity.AttachmentImageIDs = attachmentImageIDs
 		entity.IsRead = false
 		entity.CreatedAt = now
 		return entity, nil
@@ -71,26 +80,48 @@ func (r *ContactRepositoryFS) Create(ctx context.Context, entity contact.Contact
 	return created, nil
 }
 
-func (r *ContactRepositoryFS) Update(ctx context.Context, id string, patch contact.Patch) (contact.Contact, error) {
+func (r *ContactRepositoryFS) Update(
+	ctx context.Context,
+	id string,
+	patch contact.Patch,
+) (contact.Contact, error) {
 	updates := make([]firestore.Update, 0, 10)
 
 	if patch.Name != nil {
-		updates = append(updates, firestore.Update{Path: "name", Value: *patch.Name})
+		updates = append(updates, firestore.Update{
+			Path:  "name",
+			Value: *patch.Name,
+		})
 	}
 	if patch.Email != nil {
-		updates = append(updates, firestore.Update{Path: "email", Value: *patch.Email})
+		updates = append(updates, firestore.Update{
+			Path:  "email",
+			Value: *patch.Email,
+		})
 	}
 	if patch.Company != nil {
-		updates = append(updates, firestore.Update{Path: "company", Value: *patch.Company})
+		updates = append(updates, firestore.Update{
+			Path:  "company",
+			Value: *patch.Company,
+		})
 	}
 	if patch.Message != nil {
-		updates = append(updates, firestore.Update{Path: "message", Value: *patch.Message})
+		updates = append(updates, firestore.Update{
+			Path:  "message",
+			Value: *patch.Message,
+		})
 	}
 	if patch.IsRead != nil {
-		updates = append(updates, firestore.Update{Path: "isRead", Value: *patch.IsRead})
+		updates = append(updates, firestore.Update{
+			Path:  "isRead",
+			Value: *patch.IsRead,
+		})
 	}
 	if patch.Source != nil {
-		updates = append(updates, firestore.Update{Path: "source", Value: *patch.Source})
+		updates = append(updates, firestore.Update{
+			Path:  "source",
+			Value: *patch.Source,
+		})
 	}
 
 	if len(updates) == 0 {
@@ -110,7 +141,10 @@ func (r *ContactRepositoryFS) Update(ctx context.Context, id string, patch conta
 	return r.GetByID(ctx, id)
 }
 
-func (r *ContactRepositoryFS) Delete(ctx context.Context, id string) error {
+func (r *ContactRepositoryFS) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	_, err := r.col().Doc(id).Delete(ctx)
 	return err
 }
@@ -168,7 +202,9 @@ func (r *ContactRepositoryFS) List(
 
 	totalPages := 0
 	if totalCount > 0 {
-		totalPages = int(math.Ceil(float64(totalCount) / float64(perPage)))
+		totalPages = int(
+			math.Ceil(float64(totalCount) / float64(perPage)),
+		)
 	}
 
 	return common.PageResult[contact.Contact]{
@@ -223,7 +259,10 @@ func (r *ContactRepositoryFS) buildQuery(
 	switch col {
 	case "createdAt", "updatedAt", "isRead", "email", "name":
 	default:
-		return firestore.Query{}, fmt.Errorf("invalid sort column: %s", col)
+		return firestore.Query{}, fmt.Errorf(
+			"invalid sort column: %s",
+			col,
+		)
 	}
 
 	dir := firestore.Desc
@@ -235,7 +274,10 @@ func (r *ContactRepositoryFS) buildQuery(
 	return q, nil
 }
 
-func (r *ContactRepositoryFS) count(ctx context.Context, q firestore.Query) (int, error) {
+func (r *ContactRepositoryFS) count(
+	ctx context.Context,
+	q firestore.Query,
+) (int, error) {
 	it := q.Documents(ctx)
 	defer it.Stop()
 

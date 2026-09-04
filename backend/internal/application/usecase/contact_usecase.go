@@ -56,21 +56,26 @@ func NewContactUsecase(
 
 // CreateInput is the input DTO for creating a contact inquiry.
 type CreateInput struct {
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Company string `json:"company"`
-	Message string `json:"message"`
-	Source  string `json:"source"`
+	Name               string   `json:"name"`
+	Email              string   `json:"email"`
+	Company            string   `json:"company"`
+	Message            string   `json:"message"`
+	AttachmentImageIDs []string `json:"attachmentImageIds"`
+	Source             string   `json:"source"`
 }
 
 // Create sends a receipt mail first, persists the inquiry if the receipt mail succeeds,
 // and then sends an admin notification mail after persistence.
-func (u *ContactUsecase) Create(ctx context.Context, in CreateInput) (contact.Contact, error) {
+func (u *ContactUsecase) Create(
+	ctx context.Context,
+	in CreateInput,
+) (contact.Contact, error) {
 	entity, err := contact.NewContact(
 		in.Name,
 		in.Email,
 		in.Company,
 		in.Message,
+		in.AttachmentImageIDs,
 		in.Source,
 		time.Now().UTC(),
 	)
@@ -79,7 +84,9 @@ func (u *ContactUsecase) Create(ctx context.Context, in CreateInput) (contact.Co
 	}
 
 	if u.receiptMailer == nil {
-		return contact.Contact{}, fmt.Errorf("receipt mailer is not configured")
+		return contact.Contact{}, fmt.Errorf(
+			"receipt mailer is not configured",
+		)
 	}
 
 	if err := u.receiptMailer.SendContactReceipt(
@@ -115,7 +122,10 @@ func (u *ContactUsecase) Create(ctx context.Context, in CreateInput) (contact.Co
 }
 
 // GetByID fetches a contact inquiry by id.
-func (u *ContactUsecase) GetByID(ctx context.Context, id string) (contact.Contact, error) {
+func (u *ContactUsecase) GetByID(
+	ctx context.Context,
+	id string,
+) (contact.Contact, error) {
 	return u.repo.GetByID(ctx, id)
 }
 
@@ -130,11 +140,18 @@ func (u *ContactUsecase) List(
 }
 
 // Update updates a contact inquiry by id.
-func (u *ContactUsecase) Update(ctx context.Context, id string, patch contact.Patch) (contact.Contact, error) {
+func (u *ContactUsecase) Update(
+	ctx context.Context,
+	id string,
+	patch contact.Patch,
+) (contact.Contact, error) {
 	return u.repo.Update(ctx, id, patch)
 }
 
 // Delete deletes a contact inquiry by id.
-func (u *ContactUsecase) Delete(ctx context.Context, id string) error {
+func (u *ContactUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	return u.repo.Delete(ctx, id)
 }

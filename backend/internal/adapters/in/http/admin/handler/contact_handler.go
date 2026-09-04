@@ -26,14 +26,15 @@ func NewContactHandler(uc *contactuc.ContactUsecase) http.Handler {
 }
 
 type contactResponse struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	Company   string `json:"company"`
-	Message   string `json:"message"`
-	IsRead    bool   `json:"isRead"`
-	Source    string `json:"source"`
-	CreatedAt string `json:"createdAt"`
+	ID                 string   `json:"id"`
+	Name               string   `json:"name"`
+	Email              string   `json:"email"`
+	Company            string   `json:"company"`
+	Message            string   `json:"message"`
+	AttachmentImageIDs []string `json:"attachmentImageIds"`
+	IsRead             bool     `json:"isRead"`
+	Source             string   `json:"source"`
+	CreatedAt          string   `json:"createdAt"`
 }
 
 type contactListResponse struct {
@@ -49,6 +50,7 @@ func (h *ContactHandler) handle(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
+
 	if h.uc == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "contact_usecase_not_initialized")
 		return
@@ -59,6 +61,7 @@ func (h *ContactHandler) handle(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, "contact_not_found")
 		return
 	}
+
 	if isDetail {
 		h.handleGetByID(w, r, contactID)
 		return
@@ -67,7 +70,11 @@ func (h *ContactHandler) handle(w http.ResponseWriter, r *http.Request) {
 	h.handleList(w, r)
 }
 
-func (h *ContactHandler) handleGetByID(w http.ResponseWriter, r *http.Request, contactID string) {
+func (h *ContactHandler) handleGetByID(
+	w http.ResponseWriter,
+	r *http.Request,
+	contactID string,
+) {
 	result, err := h.uc.GetByID(r.Context(), contactID)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -82,7 +89,10 @@ func (h *ContactHandler) handleGetByID(w http.ResponseWriter, r *http.Request, c
 	writeJSON(w, http.StatusOK, toAdminContactResponse(result))
 }
 
-func (h *ContactHandler) handleList(w http.ResponseWriter, r *http.Request) {
+func (h *ContactHandler) handleList(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
 	query := r.URL.Query()
 
 	var filter contact.Filter
@@ -92,6 +102,7 @@ func (h *ContactHandler) handleList(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, "invalid_is_read")
 			return
 		}
+
 		filter.IsRead = &isRead
 	}
 
@@ -125,15 +136,21 @@ func (h *ContactHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func resolveContactPath(requestPath string) (contactID string, isDetail bool, valid bool) {
+func resolveContactPath(
+	requestPath string,
+) (contactID string, isDetail bool, valid bool) {
 	if requestPath == adminContactsPath || requestPath == adminContactsPath+"/" {
 		return "", false, true
 	}
+
 	if !strings.HasPrefix(requestPath, adminContactsPath+"/") {
 		return "", false, false
 	}
 
-	contactID = strings.TrimSpace(strings.TrimPrefix(requestPath, adminContactsPath+"/"))
+	contactID = strings.TrimSpace(
+		strings.TrimPrefix(requestPath, adminContactsPath+"/"),
+	)
+
 	if contactID == "" || strings.Contains(contactID, "/") {
 		return "", false, false
 	}
@@ -148,14 +165,15 @@ func toAdminContactResponse(c contact.Contact) contactResponse {
 	}
 
 	return contactResponse{
-		ID:        c.ID,
-		Name:      c.Name,
-		Email:     c.Email,
-		Company:   c.Company,
-		Message:   c.Message,
-		IsRead:    c.IsRead,
-		Source:    c.Source,
-		CreatedAt: createdAt,
+		ID:                 c.ID,
+		Name:               c.Name,
+		Email:              c.Email,
+		Company:            c.Company,
+		Message:            c.Message,
+		AttachmentImageIDs: append([]string(nil), c.AttachmentImageIDs...),
+		IsRead:             c.IsRead,
+		Source:             c.Source,
+		CreatedAt:          createdAt,
 	}
 }
 
