@@ -16,7 +16,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	var authMw *middleware.AdminAuthMiddleware
-
 	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
 		authMw = &middleware.AdminAuthMiddleware{
 			FirebaseAuth: cont.Infra.FirebaseAuth,
@@ -26,19 +25,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	meHandler := adminhandler.NewMeHandler()
+	contactHandler := adminhandler.NewContactHandler(cont.contactUsecase)
 
 	router := adminhttp.NewRouter(adminhttp.RouterDeps{
-		AuthMw: authMw,
-		Me:     meHandler,
+		AuthMw:   authMw,
+		Me:       meHandler,
+		Contacts: contactHandler,
 	})
 
 	mux.Handle("/admin/", router)
-
-	mux.Handle(
-		"/admin",
-		http.RedirectHandler(
-			"/admin/",
-			http.StatusPermanentRedirect,
-		),
-	)
+	mux.Handle("/admin", http.RedirectHandler("/admin/", http.StatusPermanentRedirect))
 }
