@@ -1,5 +1,4 @@
-// frontend/amol/src/features/shared/types/shippingAddress.ts
-
+// frontend\mall\src\features\shared\types\shippingAddress.ts
 export type ShippingAddress = {
   id: string;
   userId: string;

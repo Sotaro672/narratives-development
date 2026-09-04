@@ -1,5 +1,4 @@
-// frontend/amol/src/features/wallet/types/tokenTypes.ts
-
+// frontend\mall\src\features\shared\types\tokenTypes.ts
 export type WalletStatus = "active" | "inactive";
 
 export type WalletDTO = {

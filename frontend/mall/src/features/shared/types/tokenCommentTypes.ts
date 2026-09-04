@@ -1,4 +1,4 @@
-// frontend/amol/src/features/token-commnet/types/tokenCommentTypes.ts
+// frontend\mall\src\features\shared\types\tokenCommentTypes.ts
 
 export type TokenCommentAuthorType = "avatar" | "brand" | string;
 
