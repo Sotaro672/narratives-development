@@ -18,10 +18,17 @@ function requireBackendBaseUrl(): string {
   return BACKEND_BASE_URL;
 }
 
-async function requireOk(
-  response: Response,
-  message: string,
-): Promise<void> {
+function requireContactId(contactId: string): string {
+  const trimmedContactId = contactId.trim();
+
+  if (!trimmedContactId) {
+    throw new Error("contactId is required.");
+  }
+
+  return trimmedContactId;
+}
+
+async function requireOk(response: Response, message: string): Promise<void> {
   if (response.ok) {
     return;
   }
@@ -71,23 +78,17 @@ export async function listContacts(
   });
 
   await requireOk(response, "Failed to load contacts.");
+
   return response.json() as Promise<ContactListResponse>;
 }
 
-export async function getContact(
-  contactId: string,
-): Promise<Contact> {
-  const trimmedContactId = contactId.trim();
-
-  if (!trimmedContactId) {
-    throw new Error("contactId is required.");
-  }
-
+export async function getContact(contactId: string): Promise<Contact> {
+  const normalizedContactId = requireContactId(contactId);
   const backendBaseUrl = requireBackendBaseUrl();
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(
-    `${backendBaseUrl}/admin/contacts/${encodeURIComponent(trimmedContactId)}`,
+    `${backendBaseUrl}/admin/contacts/${encodeURIComponent(normalizedContactId)}`,
     {
       method: "GET",
       headers: {
@@ -98,5 +99,31 @@ export async function getContact(
   );
 
   await requireOk(response, "Failed to load contact.");
+
+  return response.json() as Promise<Contact>;
+}
+
+export async function markContactAsRead(contactId: string): Promise<Contact> {
+  const normalizedContactId = requireContactId(contactId);
+  const backendBaseUrl = requireBackendBaseUrl();
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${backendBaseUrl}/admin/contacts/${encodeURIComponent(normalizedContactId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        isRead: true,
+      }),
+    },
+  );
+
+  await requireOk(response, "Failed to mark contact as read.");
+
   return response.json() as Promise<Contact>;
 }

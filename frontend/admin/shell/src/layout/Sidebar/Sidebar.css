@@ -1,47 +1,41 @@
-/*frontend\admin\shell\src\layout\Sidebar\Sidebar.css*/
+/* frontend/admin/shell/src/layout/Sidebar/Sidebar.css */
+
 .left-sidebar {
   position: fixed;
-
   top: var(--header-h);
   left: 0;
   bottom: 0;
-
   width: var(--sidebar-w);
-
   background: #ffffff;
   border-right: 1px solid #eaeaea;
-
   overflow-y: auto;
   overflow-x: hidden;
-
   box-sizing: border-box;
 }
 
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-
   padding: 12px 8px;
-
   gap: 4px;
 }
 
 .sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
-
+  padding: 10px 12px;
   border: 0;
   border-radius: 6px;
-
-  padding: 10px 12px;
-
+  box-sizing: border-box;
   background: transparent;
   color: #444444;
-
   font-size: 14px;
   font-weight: 500;
-
   text-align: left;
-
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -53,4 +47,29 @@
   background: #f2f2f2;
   color: #111111;
   font-weight: 600;
+}
+
+.sidebar-item__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-item__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  background: #dc2626;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }

@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,12 +46,11 @@ type contactListResponse struct {
 	PerPage    int               `json:"perPage"`
 }
 
-func (h *ContactHandler) handle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
+type contactPatchRequest struct {
+	IsRead *bool `json:"isRead"`
+}
 
+func (h *ContactHandler) handle(w http.ResponseWriter, r *http.Request) {
 	if h.uc == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "contact_usecase_not_initialized")
 		return
@@ -62,12 +62,22 @@ func (h *ContactHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isDetail {
-		h.handleGetByID(w, r, contactID)
-		return
+	switch r.Method {
+	case http.MethodGet:
+		if isDetail {
+			h.handleGetByID(w, r, contactID)
+			return
+		}
+		h.handleList(w, r)
+	case http.MethodPatch:
+		if !isDetail {
+			writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+			return
+		}
+		h.handlePatch(w, r, contactID)
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 	}
-
-	h.handleList(w, r)
 }
 
 func (h *ContactHandler) handleGetByID(
@@ -81,7 +91,6 @@ func (h *ContactHandler) handleGetByID(
 			writeJSONError(w, http.StatusNotFound, "contact_not_found")
 			return
 		}
-
 		writeJSONError(w, http.StatusInternalServerError, "contact_get_failed")
 		return
 	}
@@ -102,7 +111,6 @@ func (h *ContactHandler) handleList(
 			writeJSONError(w, http.StatusBadRequest, "invalid_is_read")
 			return
 		}
-
 		filter.IsRead = &isRead
 	}
 
@@ -134,6 +142,41 @@ func (h *ContactHandler) handleList(
 		Page:       result.Page,
 		PerPage:    result.PerPage,
 	})
+}
+
+func (h *ContactHandler) handlePatch(
+	w http.ResponseWriter,
+	r *http.Request,
+	contactID string,
+) {
+	var request contactPatchRequest
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&request); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	if request.IsRead == nil {
+		writeJSONError(w, http.StatusBadRequest, "is_read_required")
+		return
+	}
+
+	result, err := h.uc.Update(r.Context(), contactID, contact.Patch{
+		IsRead: request.IsRead,
+	})
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			writeJSONError(w, http.StatusNotFound, "contact_not_found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "contact_update_failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toAdminContactResponse(result))
 }
 
 func resolveContactPath(
