@@ -1,13 +1,10 @@
-//frontend\admin\shell\src\layout\Main\Main.tsx
-import {
-  Navigate,
-  Route,
-  Routes,
-} from "react-router-dom";
+// frontend/admin/shell/src/layout/Main/Main.tsx
+import { Navigate, Route, Routes } from "react-router-dom";
 
 import BillingPage from "../../pages/BillingPage";
 import ContractsPage from "../../pages/ContractsPage";
 import GasPage from "../../pages/GasPage";
+import InquiryDetailPage from "../../pages/InquiryDetailPage";
 import InquiriesPage from "../../pages/InquiriesPage";
 import ReportsPage from "../../pages/ReportsPage";
 
@@ -20,17 +17,17 @@ export default function Main() {
         <Routes>
           <Route
             path="/"
-            element={
-              <Navigate
-                to="/inquiries"
-                replace
-              />
-            }
+            element={<Navigate to="/inquiries" replace />}
           />
 
           <Route
             path="/inquiries"
             element={<InquiriesPage />}
+          />
+
+          <Route
+            path="/inquiries/:inquiryId"
+            element={<InquiryDetailPage />}
           />
 
           <Route
@@ -55,12 +52,7 @@ export default function Main() {
 
           <Route
             path="*"
-            element={
-              <Navigate
-                to="/inquiries"
-                replace
-              />
-            }
+            element={<Navigate to="/inquiries" replace />}
           />
         </Routes>
       </div>

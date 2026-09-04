@@ -1,11 +1,13 @@
 // frontend/admin/shell/src/pages/InquiriesPage.tsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { listContacts, type Contact } from "../features/contact/contactApi";
 import Page from "../shared/ui/Page/Page";
 import Table, { type TableColumn } from "../shared/ui/Table/Table";
 
 export default function InquiriesPage() {
+  const navigate = useNavigate();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +32,11 @@ export default function InquiriesPage() {
         }
       } catch (cause) {
         if (!cancelled) {
-          setError(cause instanceof Error ? cause.message : "問い合わせの取得に失敗しました。");
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "問い合わせの取得に失敗しました。",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -68,14 +74,10 @@ export default function InquiriesPage() {
     {
       key: "email",
       header: "メールアドレス",
-      render: (contact) => <a href={`mailto:${contact.email}`}>{contact.email}</a>,
+      render: (contact) => (
+        <a href={`mailto:${contact.email}`}>{contact.email}</a>
+      ),
       nowrap: true,
-    },
-    {
-      key: "message",
-      header: "内容",
-      render: (contact) => <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{contact.message}</span>,
-      minWidth: "320px",
     },
     {
       key: "status",
@@ -91,6 +93,12 @@ export default function InquiriesPage() {
     },
   ], []);
 
+  const handleRowClick = (contact: Contact) => {
+    navigate(`/inquiries/${encodeURIComponent(contact.id)}`, {
+      state: { contact },
+    });
+  };
+
   return (
     <Page>
       <h1>問い合わせ</h1>
@@ -98,7 +106,9 @@ export default function InquiriesPage() {
       {loading && <p>問い合わせを読み込んでいます。</p>}
 
       {!loading && error && (
-        <p role="alert">問い合わせの取得に失敗しました。{error}</p>
+        <p role="alert">
+          問い合わせの取得に失敗しました。{error}
+        </p>
       )}
 
       {!loading && !error && (
@@ -107,6 +117,7 @@ export default function InquiriesPage() {
           rows={contacts}
           getRowKey={(contact) => contact.id}
           emptyMessage="問い合わせはありません。"
+          onRowClick={handleRowClick}
         />
       )}
     </Page>
