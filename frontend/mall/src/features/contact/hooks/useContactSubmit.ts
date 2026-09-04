@@ -1,5 +1,5 @@
-// frontend/src/features/contact/hooks/useContactSubmit.ts
-import { Dispatch, SetStateAction, useState } from "react";
+// frontend/mall/src/features/contact/hooks/useContactSubmit.ts
+import { Dispatch, SetStateAction, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 
 import type { ContactAttachmentItem } from "../../shared/types/contact";
@@ -19,29 +19,28 @@ type ContactErrorResponse = {
   status?: string;
 };
 
-function getBackendUrl() {
-  const backendUrl =
-    import.meta.env.VITE_API_BASE_URL ?? "";
+function getBackendUrl(): string {
+  const backendUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
   if (!backendUrl) {
-    throw new Error(
-      "VITE_API_BASE_URLが設定されていません。"
-    );
+    throw new Error("VITE_API_BASE_URLが設定されていません。");
   }
 
   return backendUrl.endsWith("/") ? backendUrl.slice(0, -1) : backendUrl;
 }
 
-async function readJsonSafe(
-  response: Response
-): Promise<ContactErrorResponse | null> {
+async function readJsonSafe(response: Response): Promise<ContactErrorResponse | null> {
   const contentType = response.headers.get("content-type") || "";
 
   if (!contentType.includes("application/json")) {
     return null;
   }
 
-  return response.json();
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 export function useContactSubmit({
@@ -52,6 +51,7 @@ export function useContactSubmit({
   setCarouselIndex,
   revokeAllAttachmentPreviewUrls,
 }: UseContactSubmitParams) {
+  const submittingRef = useRef(false);
   const [name, setName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
   const [company, setCompany] = useState("");
@@ -69,7 +69,7 @@ export function useContactSubmit({
   };
 
   const handleSubmit = async () => {
-    if (submitting) {
+    if (submittingRef.current) {
       return;
     }
 
@@ -97,9 +97,10 @@ export function useContactSubmit({
       return;
     }
 
-    try {
-      setSubmitting(true);
+    submittingRef.current = true;
+    setSubmitting(true);
 
+    try {
       const backendUrl = getBackendUrl();
 
       const uploadedAttachments = await uploadContactAttachments({
@@ -113,10 +114,10 @@ export function useContactSubmit({
               .map((item, index) =>
                 [
                   `${index + 1}. ${item.fileName}`,
-                  `URL: ${item.downloadUrl}`,
+                  `Storage Path: ${item.storagePath}`,
                   `Content Type: ${item.contentType}`,
                   `Size: ${item.size}`,
-                ].join("\n")
+                ].join("\n"),
               )
               .join("\n\n")}`
           : "";
@@ -147,21 +148,22 @@ export function useContactSubmit({
 
       if (!response.ok) {
         throw new Error(
-          responseBody?.error || "お問い合わせの送信に失敗しました。"
+          responseBody?.error || "お問い合わせの送信に失敗しました。",
         );
       }
 
       resetForm();
       window.alert("お問い合わせを受け付けました。");
     } catch (error) {
-      console.error(error);
+      console.error("[contact] submit failed", error);
 
-      if (error instanceof Error) {
-        window.alert(error.message);
-      } else {
-        window.alert("お問い合わせの送信に失敗しました。");
-      }
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "お問い合わせの送信に失敗しました。",
+      );
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };

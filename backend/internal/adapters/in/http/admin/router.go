@@ -36,7 +36,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	if deps.Contacts != nil {
-		mux.Handle("/admin/contacts", withAuth(deps.Contacts))
+		contactsHandler := withAuth(deps.Contacts)
+		mux.Handle("/admin/contacts", contactsHandler)
+		mux.Handle("/admin/contacts/", contactsHandler)
 	}
 
 	return mux

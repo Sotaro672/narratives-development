@@ -4,19 +4,25 @@ package handler
 import (
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	contactuc "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	contact "narratives/internal/domain/contact"
 )
 
+const adminContactsPath = "/admin/contacts"
+
 type ContactHandler struct {
 	uc *contactuc.ContactUsecase
 }
 
 func NewContactHandler(uc *contactuc.ContactUsecase) http.Handler {
-	h := &ContactHandler{uc: uc}
-	return http.HandlerFunc(h.handle)
+	return http.HandlerFunc((&ContactHandler{uc: uc}).handle)
 }
 
 type contactResponse struct {
@@ -43,13 +49,37 @@ func (h *ContactHandler) handle(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
 	}
-
 	if h.uc == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "contact_usecase_not_initialized")
 		return
 	}
 
+	contactID, isDetail, valid := resolveContactPath(r.URL.Path)
+	if !valid {
+		writeJSONError(w, http.StatusNotFound, "contact_not_found")
+		return
+	}
+	if isDetail {
+		h.handleGetByID(w, r, contactID)
+		return
+	}
+
 	h.handleList(w, r)
+}
+
+func (h *ContactHandler) handleGetByID(w http.ResponseWriter, r *http.Request, contactID string) {
+	result, err := h.uc.GetByID(r.Context(), contactID)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			writeJSONError(w, http.StatusNotFound, "contact_not_found")
+			return
+		}
+
+		writeJSONError(w, http.StatusInternalServerError, "contact_get_failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toAdminContactResponse(result))
 }
 
 func (h *ContactHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -91,10 +121,26 @@ func (h *ContactHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func resolveContactPath(requestPath string) (contactID string, isDetail bool, valid bool) {
+	if requestPath == adminContactsPath || requestPath == adminContactsPath+"/" {
+		return "", false, true
+	}
+	if !strings.HasPrefix(requestPath, adminContactsPath+"/") {
+		return "", false, false
+	}
+
+	contactID = strings.TrimSpace(strings.TrimPrefix(requestPath, adminContactsPath+"/"))
+	if contactID == "" || strings.Contains(contactID, "/") {
+		return "", false, false
+	}
+
+	return contactID, true, true
+}
+
 func toAdminContactResponse(c contact.Contact) contactResponse {
 	createdAt := ""
 	if !c.CreatedAt.IsZero() {
-		createdAt = c.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")
+		createdAt = c.CreatedAt.UTC().Format(time.RFC3339Nano)
 	}
 
 	return contactResponse{

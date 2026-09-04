@@ -1,11 +1,7 @@
 // frontend/admin/shell/src/features/contact/hooks/useContactSubmit.ts
-import {
-  useCallback,
-  useState,
-} from "react";
+import { useCallback, useRef, useState } from "react";
 
-type ContactSubmitOperation<TResult> =
-  () => Promise<TResult>;
+type ContactSubmitOperation<TResult> = () => Promise<TResult>;
 
 type UseContactSubmitOptions<TResult> = {
   onSuccess?: (result: TResult) => void | Promise<void>;
@@ -15,25 +11,26 @@ type UseContactSubmitOptions<TResult> = {
 export function useContactSubmit<TResult = void>(
   options: UseContactSubmitOptions<TResult> = {},
 ) {
+  const { onSuccess, onError } = options;
+  const submittingRef = useRef(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const submit = useCallback(
-    async (
-      operation: ContactSubmitOperation<TResult>,
-    ): Promise<TResult | null> => {
-      if (submitting) {
+    async (operation: ContactSubmitOperation<TResult>): Promise<TResult | null> => {
+      if (submittingRef.current) {
         return null;
       }
 
+      submittingRef.current = true;
       setSubmitting(true);
       setSubmitError(null);
 
       try {
         const result = await operation();
 
-        if (options.onSuccess) {
-          await options.onSuccess(result);
+        if (onSuccess) {
+          await onSuccess(result);
         }
 
         return result;
@@ -41,32 +38,26 @@ export function useContactSubmit<TResult = void>(
         const error =
           cause instanceof Error
             ? cause
-            : new Error(
-                "問い合わせ処理に失敗しました。",
-              );
+            : new Error("問い合わせ処理に失敗しました。");
 
         setSubmitError(error.message);
 
-        if (options.onError) {
-          await options.onError(error);
+        if (onError) {
+          await onError(error);
         }
 
         return null;
       } finally {
+        submittingRef.current = false;
         setSubmitting(false);
       }
     },
-    [
-      submitting,
-      options.onSuccess,
-      options.onError,
-    ],
+    [onSuccess, onError],
   );
 
-  const clearSubmitError =
-    useCallback(() => {
-      setSubmitError(null);
-    }, []);
+  const clearSubmitError = useCallback(() => {
+    setSubmitError(null);
+  }, []);
 
   return {
     submitting,
