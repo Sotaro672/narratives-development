@@ -3,11 +3,21 @@ import Header from "../layout/Header/Header";
 import Sidebar from "../layout/Sidebar/Sidebar";
 import Main from "../layout/Main/Main";
 
-export default function MainPage() {
+type MainPageProps = {
+  onLogout: () => void;
+};
+
+export default function MainPage({
+  onLogout,
+}: MainPageProps) {
   return (
     <>
-      <Header />
+      <Header
+        onLogout={onLogout}
+      />
+
       <Sidebar />
+
       <Main />
     </>
   );

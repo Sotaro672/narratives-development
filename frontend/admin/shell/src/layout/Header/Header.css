@@ -27,3 +27,24 @@
 
   color: #111111;
 }
+
+.header-logout {
+  margin-left: auto;
+
+  padding: 7px 12px;
+
+  border: 1px solid #dddddd;
+  border-radius: 6px;
+
+  color: #444444;
+  background: #ffffff;
+
+  font-size: 13px;
+  font-weight: 500;
+
+  cursor: pointer;
+}
+
+.header-logout:hover {
+  background: #f6f6f6;
+}
