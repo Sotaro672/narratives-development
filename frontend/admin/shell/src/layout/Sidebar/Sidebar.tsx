@@ -1,7 +1,7 @@
 // frontend/admin/shell/src/layout/Sidebar/Sidebar.tsx
 import { NavLink } from "react-router-dom";
 
-import { useContactUnreadCount } from "../../features/contact/hooks/useContactUnreadCount";
+import { useContactUnread } from "../../features/contact/context/ContactUnreadContext";
 
 import "./Sidebar.css";
 
@@ -14,7 +14,7 @@ const menuItems = [
 ];
 
 export default function Sidebar() {
-  const { unreadCount } = useContactUnreadCount();
+  const { unreadCount } = useContactUnread();
 
   return (
     <aside className="left-sidebar">
@@ -30,7 +30,6 @@ export default function Sidebar() {
             }
           >
             <span className="sidebar-item__label">{item.label}</span>
-
             {item.showUnreadCount && unreadCount > 0 ? (
               <span
                 className="sidebar-item__badge"
