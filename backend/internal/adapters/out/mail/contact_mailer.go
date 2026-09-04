@@ -12,6 +12,7 @@ import (
 
 const (
 	envResendContactAdminTo = "RESEND_CONTACT_ADMIN_TO"
+	contactAttachmentMarker = "--- 添付ファイル ---"
 )
 
 type ContactMailerWithResend struct {
@@ -21,43 +22,25 @@ type ContactMailerWithResend struct {
 }
 
 func NewContactMailerWithResend() *ContactMailerWithResend {
-	apiKey := strings.TrimSpace(
-		os.Getenv(envResendAPIKey),
-	)
-	fromAddr := strings.TrimSpace(
-		os.Getenv(envResendFrom),
-	)
-	adminTo := strings.TrimSpace(
-		os.Getenv(envResendContactAdminTo),
-	)
+	apiKey := strings.TrimSpace(os.Getenv(envResendAPIKey))
+	fromAddr := strings.TrimSpace(os.Getenv(envResendFrom))
+	adminTo := strings.TrimSpace(os.Getenv(envResendContactAdminTo))
 
 	if adminTo == "" {
 		adminTo = fromAddr
 	}
 
 	if apiKey == "" {
-		log.Printf(
-			"[mail] WARN: RESEND_API_KEY is empty. ContactMailerWithResend will fail to send mail.",
-		)
+		log.Printf("[mail] WARN: RESEND_API_KEY is empty. ContactMailerWithResend will fail to send mail.")
 	}
-
 	if fromAddr == "" {
-		log.Printf(
-			"[mail] WARN: RESEND_FROM is empty. ContactMailerWithResend will fail to send mail.",
-		)
+		log.Printf("[mail] WARN: RESEND_FROM is empty. ContactMailerWithResend will fail to send mail.")
 	}
-
 	if adminTo == "" {
-		log.Printf(
-			"[mail] WARN: RESEND_CONTACT_ADMIN_TO and RESEND_FROM are empty. Admin notification mail will fail to send.",
-		)
+		log.Printf("[mail] WARN: RESEND_CONTACT_ADMIN_TO and RESEND_FROM are empty. Admin notification mail will fail to send.")
 	}
 
-	log.Printf(
-		"[mail] ContactMailerWithResend initialized. from=%s adminTo=%s",
-		fromAddr,
-		adminTo,
-	)
+	log.Printf("[mail] ContactMailerWithResend initialized. from=%s adminTo=%s", fromAddr, adminTo)
 
 	return &ContactMailerWithResend{
 		client:   NewResendClient(apiKey),
@@ -82,9 +65,7 @@ func (m *ContactMailerWithResend) SendContactReceipt(
 
 	email = strings.TrimSpace(email)
 	if email == "" {
-		return fmt.Errorf(
-			"contact receipt mail: recipient email is empty",
-		)
+		return fmt.Errorf("contact receipt mail: recipient email is empty")
 	}
 
 	subject := "【AMOL】お問い合わせを受け付けました"
@@ -132,24 +113,23 @@ func (m *ContactMailerWithResend) SendContactAdminNotification(
 
 	adminTo := strings.TrimSpace(m.adminTo)
 	if adminTo == "" {
-		return fmt.Errorf(
-			"contact admin notification mail: admin recipient is empty",
-		)
+		return fmt.Errorf("contact admin notification mail: admin recipient is empty")
 	}
 
 	subject := "【AMOL】新しいお問い合わせを受信しました"
+	adminMessage := stripContactAttachments(message)
 
 	plain := buildContactAdminPlain(
 		name,
 		email,
 		company,
-		message,
+		adminMessage,
 	)
 	html := buildContactAdminHTML(
 		name,
 		email,
 		company,
-		message,
+		adminMessage,
 	)
 
 	return m.sendMail(
@@ -164,21 +144,13 @@ func (m *ContactMailerWithResend) SendContactAdminNotification(
 
 func (m *ContactMailerWithResend) validateCommon() error {
 	if m == nil {
-		return fmt.Errorf(
-			"contact mailer is nil",
-		)
+		return fmt.Errorf("contact mailer is nil")
 	}
-
 	if m.client == nil {
-		return fmt.Errorf(
-			"resend client is nil",
-		)
+		return fmt.Errorf("resend client is nil")
 	}
-
 	if strings.TrimSpace(m.fromAddr) == "" {
-		return fmt.Errorf(
-			"RESEND_FROM is empty",
-		)
+		return fmt.Errorf("RESEND_FROM is empty")
 	}
 
 	return nil
@@ -202,25 +174,13 @@ func (m *ContactMailerWithResend) sendMail(
 		subject,
 		plain,
 	); err != nil {
-		log.Printf(
-			"[mail] %s resend send error: to=%s err=%v",
-			logLabel,
-			to,
-			err,
-		)
-
+		log.Printf("[mail] %s resend send error: to=%s err=%v", logLabel, to, err)
 		return err
 	}
 
-	log.Printf(
-		"[mail] %s resend send success: to=%s subject=%s",
-		logLabel,
-		to,
-		subject,
-	)
+	log.Printf("[mail] %s resend send success: to=%s subject=%s", logLabel, to, subject)
 
 	_ = html
-
 	return nil
 }
 
@@ -284,23 +244,11 @@ func buildContactReceiptHTML(
     <p>AMOL</p>
   </body>
 </html>`,
-		escapeHTML(
-			emptyFallback(name, "お客様"),
-		),
-		escapeHTML(
-			emptyFallback(name, "-"),
-		),
-		escapeHTML(
-			emptyFallback(email, "-"),
-		),
-		escapeHTML(
-			emptyFallback(company, "-"),
-		),
-		nl2br(
-			escapeHTML(
-				emptyFallback(message, "-"),
-			),
-		),
+		escapeHTML(emptyFallback(name, "お客様")),
+		escapeHTML(emptyFallback(name, "-")),
+		escapeHTML(emptyFallback(email, "-")),
+		escapeHTML(emptyFallback(company, "-")),
+		nl2br(escapeHTML(emptyFallback(message, "-"))),
 	)
 }
 
@@ -349,21 +297,22 @@ func buildContactAdminHTML(
     <p><strong>お問い合わせ内容</strong><br>%s</p>
   </body>
 </html>`,
-		escapeHTML(
-			emptyFallback(name, "-"),
-		),
-		escapeHTML(
-			emptyFallback(email, "-"),
-		),
-		escapeHTML(
-			emptyFallback(company, "-"),
-		),
-		nl2br(
-			escapeHTML(
-				emptyFallback(message, "-"),
-			),
-		),
+		escapeHTML(emptyFallback(name, "-")),
+		escapeHTML(emptyFallback(email, "-")),
+		escapeHTML(emptyFallback(company, "-")),
+		nl2br(escapeHTML(emptyFallback(message, "-"))),
 	)
+}
+
+func stripContactAttachments(message string) string {
+	message = strings.TrimSpace(message)
+
+	index := strings.Index(message, contactAttachmentMarker)
+	if index < 0 {
+		return message
+	}
+
+	return strings.TrimSpace(message[:index])
 }
 
 func emptyFallback(
