@@ -1,0 +1,10 @@
+/* frontend/admin/shell/src/shared/ui/Page/Page.css */
+
+.ui-page {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}

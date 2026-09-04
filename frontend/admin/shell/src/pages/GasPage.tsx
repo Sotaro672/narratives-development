@@ -1,9 +1,11 @@
-//frontend\admin\shell\src\pages\GasPage.tsx
+// frontend/admin/shell/src/pages/GasPage.tsx
+import Page from "../shared/ui/Page/Page";
+
 export default function GasPage() {
   return (
-    <div>
+    <Page>
       <h1>ガス</h1>
       <p>ガス関連情報を管理します。</p>
-    </div>
+    </Page>
   );
 }
