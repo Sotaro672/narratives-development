@@ -1,10 +1,7 @@
 // frontend/admin/shell/src/features/contact/hooks/useContactDetail.ts
 import { useEffect, useState } from "react";
-
-import {
-  getContact,
-  type Contact,
-} from "../infrastructure/contactApi";
+import type { Contact } from "../../../shared/type/contact";
+import { getContact } from "../infrastructure/contactApi";
 
 export function useContactDetail(contactId: string | undefined) {
   const [contact, setContact] = useState<Contact | null>(null);

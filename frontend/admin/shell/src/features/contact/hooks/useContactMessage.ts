@@ -1,11 +1,9 @@
 // frontend/admin/shell/src/features/contact/hooks/useContactMessage.ts
 import { useEffect, useMemo, useState } from "react";
 
+import type { ContactAttachmentImage } from "../../../shared/type/contact";
 import { parseContactMessage } from "../application/contactMessage";
-import {
-  loadContactAttachmentImages,
-  type ContactAttachmentImage,
-} from "../infrastructure/contactAttachmentStorage";
+import { loadContactAttachmentImages } from "../infrastructure/contactAttachmentStorage";
 
 export function useContactMessage(message: string) {
   const parsed = useMemo(

@@ -1,5 +1,6 @@
 // frontend/admin/shell/src/features/contact/presentation/ContactDetailAside.tsx
-import type { Contact } from "../infrastructure/contactApi";
+import { formatDateTime } from "../../../shared/util/dateFormat";
+import type { Contact } from "../../../shared/type/contact";
 
 type ContactDetailAsideProps = {
   contact: Contact;
@@ -11,15 +12,13 @@ export default function ContactDetailAside({
   return (
     <>
       <section className="ui-detail-section">
-        <h2 className="ui-detail-section__title">
-          管理情報
-        </h2>
+        <h2 className="ui-detail-section__title">管理情報</h2>
         <dl className="ui-detail-definition-list">
-          <dt>ステータス</dt>
-          <dd>{contact.status}</dd>
+          <dt>確認状況</dt>
+          <dd>{contact.isRead ? "既読" : "未読"}</dd>
 
           <dt>受信日時</dt>
-          <dd>{formatCreatedAt(contact.createdAt)}</dd>
+          <dd>{formatDateTime(contact.createdAt)}</dd>
 
           <dt>送信元</dt>
           <dd>{contact.source || "-"}</dd>
@@ -27,9 +26,7 @@ export default function ContactDetailAside({
       </section>
 
       <section className="ui-detail-section">
-        <h2 className="ui-detail-section__title">
-          送信者情報
-        </h2>
+        <h2 className="ui-detail-section__title">送信者情報</h2>
         <dl className="ui-detail-definition-list">
           <dt>名前</dt>
           <dd>{contact.name}</dd>
@@ -47,18 +44,4 @@ export default function ContactDetailAside({
       </section>
     </>
   );
-}
-
-function formatCreatedAt(value: string): string {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString("ja-JP");
 }

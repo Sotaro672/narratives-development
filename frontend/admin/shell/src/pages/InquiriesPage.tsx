@@ -2,9 +2,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { listContacts, type Contact } from "../features/contact/infrastructure/contactApi";
+import { listContacts } from "../features/contact/infrastructure/contactApi";
+import type { Contact } from "../shared/type/contact";
 import Page from "../shared/ui/Page/Page";
-import Table, { type TableColumn } from "../shared/ui/Table/Table";
+import Table, {
+  type TableColumn,
+} from "../shared/ui/Table/Table";
+import { formatDateTime } from "../shared/util/dateFormat";
 
 export default function InquiriesPage() {
   const navigate = useNavigate();
@@ -52,46 +56,49 @@ export default function InquiriesPage() {
     };
   }, []);
 
-  const columns = useMemo<TableColumn<Contact>[]>(() => [
-    {
-      key: "createdAt",
-      header: "受信日時",
-      render: (contact) => formatCreatedAt(contact.createdAt),
-      nowrap: true,
-    },
-    {
-      key: "name",
-      header: "名前",
-      render: (contact) => contact.name,
-      nowrap: true,
-    },
-    {
-      key: "company",
-      header: "会社名",
-      render: (contact) => contact.company || "-",
-      nowrap: true,
-    },
-    {
-      key: "email",
-      header: "メールアドレス",
-      render: (contact) => (
-        <a href={`mailto:${contact.email}`}>{contact.email}</a>
-      ),
-      nowrap: true,
-    },
-    {
-      key: "status",
-      header: "ステータス",
-      render: (contact) => contact.status,
-      nowrap: true,
-    },
-    {
-      key: "source",
-      header: "送信元",
-      render: (contact) => contact.source || "-",
-      nowrap: true,
-    },
-  ], []);
+  const columns = useMemo<TableColumn<Contact>[]>(
+    () => [
+      {
+        key: "createdAt",
+        header: "受信日時",
+        render: (contact) => formatDateTime(contact.createdAt),
+        nowrap: true,
+      },
+      {
+        key: "name",
+        header: "名前",
+        render: (contact) => contact.name,
+        nowrap: true,
+      },
+      {
+        key: "company",
+        header: "会社名",
+        render: (contact) => contact.company || "-",
+        nowrap: true,
+      },
+      {
+        key: "email",
+        header: "メールアドレス",
+        render: (contact) => (
+          <a href={`mailto:${contact.email}`}>{contact.email}</a>
+        ),
+        nowrap: true,
+      },
+      {
+        key: "isRead",
+        header: "確認状況",
+        render: (contact) => contact.isRead ? "既読" : "未読",
+        nowrap: true,
+      },
+      {
+        key: "source",
+        header: "送信元",
+        render: (contact) => contact.source || "-",
+        nowrap: true,
+      },
+    ],
+    [],
+  );
 
   const handleRowClick = (contact: Contact) => {
     navigate(`/inquiries/${encodeURIComponent(contact.id)}`, {
@@ -122,17 +129,4 @@ export default function InquiriesPage() {
       )}
     </Page>
   );
-}
-
-function formatCreatedAt(value: string): string {
-  if (!value) {
-    return "-";
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString("ja-JP");
 }

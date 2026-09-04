@@ -26,14 +26,14 @@ func NewContactHandler(uc *contactuc.ContactUsecase) http.Handler {
 }
 
 type contactResponse struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Email     string         `json:"email"`
-	Company   string         `json:"company"`
-	Message   string         `json:"message"`
-	Status    contact.Status `json:"status"`
-	Source    string         `json:"source"`
-	CreatedAt string         `json:"createdAt"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	Email     string `json:"email"`
+	Company   string `json:"company"`
+	Message   string `json:"message"`
+	IsRead    bool   `json:"isRead"`
+	Source    string `json:"source"`
+	CreatedAt string `json:"createdAt"`
 }
 
 type contactListResponse struct {
@@ -86,9 +86,13 @@ func (h *ContactHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	var filter contact.Filter
-	if value := query.Get("status"); value != "" {
-		status := contact.Status(value)
-		filter.Status = &status
+	if value := query.Get("isRead"); value != "" {
+		isRead, err := strconv.ParseBool(value)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "invalid_is_read")
+			return
+		}
+		filter.IsRead = &isRead
 	}
 
 	page := common.Page{
@@ -149,7 +153,7 @@ func toAdminContactResponse(c contact.Contact) contactResponse {
 		Email:     c.Email,
 		Company:   c.Company,
 		Message:   c.Message,
-		Status:    c.Status,
+		IsRead:    c.IsRead,
 		Source:    c.Source,
 		CreatedAt: createdAt,
 	}

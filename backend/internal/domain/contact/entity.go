@@ -17,35 +17,26 @@ var (
 
 var emailRegex = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
 
-// Status represents the lifecycle status of a contact inquiry.
-type Status string
-
-const (
-	StatusNew Status = "new"
-)
-
 // Contact is a domain entity representing an inquiry from the contact form.
 // It is expected to be stored as a document in Firestore collection: "contacts".
 type Contact struct {
-	// ID is the Firestore document id (or generated id) if you choose to set it after persistence.
 	ID string `json:"id"`
 
-	// Input fields from frontend
 	Name    string `json:"name"`
 	Email   string `json:"email"`
-	Company string `json:"company"` // optional; allow empty string
+	Company string `json:"company"`
 	Message string `json:"message"`
 
-	// Metadata
-	Status    Status    `json:"status"`
-	Source    string    `json:"source"` // e.g. "web-introduction"
+	IsRead    bool      `json:"isRead"`
+	Source    string    `json:"source"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
 // NewContact creates a Contact entity with validation.
 // - name, email, message are required.
 // - company is optional.
-// - createdAt should be set by the application layer (or replaced by server timestamp at persistence time).
+// - isRead is always initialized to false.
+// - createdAt should be set by the application layer or defaults to the current UTC time.
 func NewContact(
 	name string,
 	email string,
@@ -66,6 +57,7 @@ func NewContact(
 	if err := validateMessage(message); err != nil {
 		return nil, err
 	}
+
 	if source == "" {
 		source = "web-introduction"
 	}
@@ -78,14 +70,13 @@ func NewContact(
 		Email:     email,
 		Company:   company,
 		Message:   message,
-		Status:    StatusNew,
+		IsRead:    false,
 		Source:    source,
 		CreatedAt: createdAt,
 	}, nil
 }
 
 func validateName(name string) error {
-	// Basic checks: non-empty and reasonable length
 	if name == "" {
 		return ErrInvalidName
 	}
@@ -109,7 +100,6 @@ func validateEmail(email string) error {
 }
 
 func validateCompany(company string) error {
-	// Optional field; if provided, check length
 	if company == "" {
 		return nil
 	}

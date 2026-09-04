@@ -1,12 +1,12 @@
 // frontend/admin/shell/src/features/contact/infrastructure/contactAttachmentStorage.ts
+
 import { getDownloadURL, ref } from "firebase/storage";
 
 import { storage } from "../../../auth/infrastructure/firebaseClient";
-import type { ContactAttachment } from "../application/contactMessage";
-
-export type ContactAttachmentImage = ContactAttachment & {
-  imageUrl: string;
-};
+import type {
+  ContactAttachment,
+  ContactAttachmentImage,
+} from "../../../shared/type/contact";
 
 export async function loadContactAttachmentImages(
   attachments: ContactAttachment[],

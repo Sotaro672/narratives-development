@@ -11,32 +11,27 @@ import (
 const CollectionName = "contacts"
 
 // Filter is a domain-specific filter for listing contacts.
-// Embed common.FilterCommon and extend as needed (e.g., Status).
 type Filter struct {
 	common.FilterCommon
-	Status *Status `json:"status"` // optional filter (e.g. "new")
+	IsRead *bool `json:"isRead"`
 }
 
 // Patch is a partial update payload for Contact.
-// Keep this minimal and add fields only when you implement Update.
 type Patch struct {
 	Name    *string `json:"name"`
 	Email   *string `json:"email"`
 	Company *string `json:"company"`
 	Message *string `json:"message"`
-
-	Status *Status `json:"status"`
-
-	Source *string `json:"source"`
+	IsRead  *bool   `json:"isRead"`
+	Source  *string `json:"source"`
 }
 
-// Repository is the port (interface) for Contact persistence.
+// Repository is the port interface for Contact persistence.
 type Repository interface {
 	common.Repository[Contact, Filter, Patch]
 }
 
-// Usecase-facing minimal ports (optional):
-// - If you only need "Create" for now, you can depend on Creator instead of Repository.
+// Creator is the minimal persistence port for creating contacts.
 type Creator interface {
 	Create(ctx context.Context, entity Contact) (Contact, error)
 }

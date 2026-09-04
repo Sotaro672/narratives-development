@@ -4,7 +4,6 @@ package introduction
 import (
 	"encoding/json"
 	"errors"
-	"log"
 	"net/http"
 	"time"
 
@@ -29,15 +28,15 @@ type createContactRequest struct {
 }
 
 type contactResponse struct {
-	ID        string         `json:"id"`
-	Name      string         `json:"name"`
-	Email     string         `json:"email"`
-	Company   string         `json:"company"`
-	Message   string         `json:"message"`
-	Status    contact.Status `json:"status"`
-	Source    string         `json:"source"`
-	CreatedAt string         `json:"createdAt"`
-	UpdatedAt *string        `json:"updatedAt"`
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Email     string  `json:"email"`
+	Company   string  `json:"company"`
+	Message   string  `json:"message"`
+	IsRead    bool    `json:"isRead"`
+	Source    string  `json:"source"`
+	CreatedAt string  `json:"createdAt"`
+	UpdatedAt *string `json:"updatedAt"`
 }
 
 func (h *ContactHandler) Register(mux *http.ServeMux) {
@@ -54,12 +53,9 @@ func (h *ContactHandler) Register(mux *http.ServeMux) {
 func (h *ContactHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req createContactRequest
 	if err := decodeJSON(r, &req); err != nil {
-		log.Printf("[contact] invalid create request json: err=%v", err)
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid json"})
 		return
 	}
-
-	log.Printf("[contact] create request received: email=%s source=%s", req.Email, req.Source)
 
 	out, err := h.uc.Create(r.Context(), contactuc.CreateInput{
 		Name:    req.Name,
@@ -73,17 +69,14 @@ func (h *ContactHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, contact.ErrInvalidEmail) ||
 			errors.Is(err, contact.ErrInvalidCompany) ||
 			errors.Is(err, contact.ErrInvalidMessage) {
-			log.Printf("[contact] validation failed: email=%s err=%v", req.Email, err)
 			writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 			return
 		}
 
-		log.Printf("[contact] create failed: email=%s err=%v", req.Email, err)
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "internal error"})
 		return
 	}
 
-	log.Printf("[contact] create succeeded: id=%s email=%s", out.ID, out.Email)
 	writeJSON(w, http.StatusCreated, toResponse(out))
 }
 
@@ -99,7 +92,7 @@ func toResponse(c contact.Contact) contactResponse {
 		Email:     c.Email,
 		Company:   c.Company,
 		Message:   c.Message,
-		Status:    c.Status,
+		IsRead:    c.IsRead,
 		Source:    c.Source,
 		CreatedAt: createdAt,
 		UpdatedAt: nil,
@@ -116,6 +109,7 @@ func decodeJSON(r *http.Request, v any) error {
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
+
 	if v != nil {
 		_ = json.NewEncoder(w).Encode(v)
 	}

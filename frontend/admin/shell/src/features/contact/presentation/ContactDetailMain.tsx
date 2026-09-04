@@ -1,5 +1,5 @@
 // frontend/admin/shell/src/features/contact/presentation/ContactDetailMain.tsx
-import type { Contact } from "../infrastructure/contactApi";
+import type { Contact } from "../../../shared/type/contact";
 import { useContactMessage } from "../hooks/useContactMessage";
 
 type ContactDetailMainProps = {
