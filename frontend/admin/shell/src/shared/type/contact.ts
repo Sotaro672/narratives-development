@@ -31,4 +31,6 @@ export type ContactListParams = {
 export type ContactAttachmentImage = {
   imageId: string;
   imageUrl: string;
+  fileName: string;
+  contentType: string;
 };
