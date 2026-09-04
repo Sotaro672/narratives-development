@@ -2,7 +2,7 @@
 
 import {
   getAuthHeaders,
-} from "../../shared/http/authHeaders";
+} from "../../../shared/http/authHeaders";
 
 export type ContactStatus = "new";
 

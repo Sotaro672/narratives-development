@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { listContacts, type Contact } from "../features/contact/contactApi";
+import { listContacts, type Contact } from "../features/contact/infrastructure/contactApi";
 import Page from "../shared/ui/Page/Page";
 import Table, { type TableColumn } from "../shared/ui/Table/Table";
 
