@@ -1,0 +1,29 @@
+/*frontend\admin\shell\src\layout\Header\Header.css*/
+.app-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+
+  z-index: 40;
+
+  height: var(--header-h);
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 16px;
+
+  background: #ffffff;
+  border-bottom: 1px solid #eaeaea;
+
+  box-sizing: border-box;
+}
+
+.header-title {
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+
+  color: #111111;
+}
