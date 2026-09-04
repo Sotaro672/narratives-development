@@ -6,6 +6,7 @@ import type {
   ContactListParams,
   ContactListResponse,
 } from "../../../shared/type/contact";
+import { appendPaginationParams } from "../../../shared/util/pagination";
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
 
@@ -15,18 +16,6 @@ function requireBackendBaseUrl(): string {
   }
 
   return BACKEND_BASE_URL;
-}
-
-function appendPositiveInteger(
-  params: URLSearchParams,
-  key: string,
-  value: number | undefined,
-): void {
-  if (value === undefined || !Number.isInteger(value) || value <= 0) {
-    return;
-  }
-
-  params.set(key, String(value));
 }
 
 async function requireOk(
@@ -55,8 +44,7 @@ export async function listContacts(
   const backendBaseUrl = requireBackendBaseUrl();
   const query = new URLSearchParams();
 
-  appendPositiveInteger(query, "page", params.page);
-  appendPositiveInteger(query, "perPage", params.perPage);
+  appendPaginationParams(query, params.page, params.perPage);
 
   if (params.isRead !== undefined) {
     query.set("isRead", String(params.isRead));
