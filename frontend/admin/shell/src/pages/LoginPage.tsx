@@ -1,13 +1,7 @@
-//frontend\admin\shell\src\pages\LoginPage.tsx
-import {
-  type FormEvent,
-  useState,
-} from "react";
+// frontend/admin/shell/src/pages/LoginPage.tsx
+import { type FormEvent, useState } from "react";
 
-import {
-  authenticateAdmin,
-  createAdminSession,
-} from "../auth/adminAuth";
+import { signInAdmin } from "../auth/application/adminAuth";
 
 import "./LoginPage.css";
 
@@ -15,100 +9,72 @@ type LoginPageProps = {
   onLogin: () => void;
 };
 
-export default function LoginPage({
-  onLogin,
-}: LoginPageProps) {
+export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState("");
-  const [password, setPassword] =
-    useState("");
-  const [error, setError] = useState<
-    string | null
-  >(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const authenticated =
-      authenticateAdmin(
-        email,
-        password,
-      );
-
-    if (!authenticated) {
-      setError(
-        "メールアドレスまたはパスワードが正しくありません。",
-      );
+    if (submitting) {
       return;
     }
 
-    createAdminSession();
+    setSubmitting(true);
     setError(null);
-    onLogin();
+
+    try {
+      await signInAdmin(email, password);
+      onLogin();
+    } catch (error) {
+      console.error("[admin-login] sign in failed", error);
+      setError("メールアドレスまたはパスワードが正しくないか、Admin権限がありません。");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-brand">
-          Admin
-        </div>
+        <div className="login-brand">Admin</div>
+        <h1 className="login-title">ログイン</h1>
 
-        <h1 className="login-title">
-          ログイン
-        </h1>
-
-        <form
-          className="login-form"
-          onSubmit={handleSubmit}
-        >
+        <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
             <span>メールアドレス</span>
-
             <input
               type="email"
               value={email}
-              onChange={(event) =>
-                setEmail(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setEmail(event.target.value)}
               autoComplete="username"
+              disabled={submitting}
               required
             />
           </label>
 
           <label className="login-field">
             <span>パスワード</span>
-
             <input
               type="password"
               value={password}
-              onChange={(event) =>
-                setPassword(
-                  event.target.value,
-                )
-              }
+              onChange={(event) => setPassword(event.target.value)}
               autoComplete="current-password"
+              disabled={submitting}
               required
             />
           </label>
 
           {error && (
-            <p
-              className="login-error"
-              role="alert"
-            >
+            <p className="login-error" role="alert">
               {error}
             </p>
           )}
 
-          <button
-            type="submit"
-            className="login-submit"
-          >
-            ログイン
+          <button type="submit" className="login-submit" disabled={submitting}>
+            {submitting ? "ログイン中..." : "ログイン"}
           </button>
         </form>
       </div>
