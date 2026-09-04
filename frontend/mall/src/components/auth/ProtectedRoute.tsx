@@ -1,4 +1,4 @@
-// frontend/amol/src/components/auth/ProtectedRoute.tsx
+// frontend\mall\src\components\auth\ProtectedRoute.tsx
 
 import {
   useEffect,

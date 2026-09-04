@@ -1,6 +1,6 @@
-// frontend\amol\src\features\shared\types\orderDetailTypes.ts
+// frontend\mall\src\features\shared\types\orderDetailTypes.ts
 
-import type { WalletOrderShippingQuoteSnapshot } from "../../shared/types/orderTypes";
+import type { WalletOrderShippingQuoteSnapshot } from "./orderTypes";
 
 export type OrderDetailItemType = "list" | "resale";
 
