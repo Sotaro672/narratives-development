@@ -8,23 +8,27 @@ import (
 
 func CORS(next http.Handler) http.Handler {
 	allowedOrigins := map[string]bool{
-		"https://amol.jp":                              true, // 本番
-		"https://narratives-console-dev.web.app":       true, // 管理画面フロント dev
-		"https://narratives-development-26c2d.web.app": true, // 既存 dev / default hosting
+		"https://amol.jp":                              true,
+		"https://narratives-console-dev.web.app":       true,
+		"https://narratives-development-26c2d.web.app": true,
 
-		// ✅ Inspector app
+		// Admin
+		"https://amol-admin.web.app":         true,
+		"https://amol-admin.firebaseapp.com": true,
+
+		// Inspector
 		"https://amol-inspector.web.app":         true,
 		"https://amol-inspector.firebaseapp.com": true,
 
-		// ✅ Local dev
-		"http://localhost:5173": true, // ローカル dev (Vite)
-		"http://127.0.0.1:5173": true, // ローカル dev
+		// Local dev
+		"http://localhost:5173": true,
+		"http://127.0.0.1:5173": true,
 
-		// ✅ Introduction (buyer-facing LP)
+		// Introduction
 		"https://narratives-introduction.web.app":         true,
 		"https://narratives-introduction.firebaseapp.com": true,
 
-		// ✅ Mall (buyer-facing)
+		// Mall
 		"https://narratives-development-mall.web.app":         true,
 		"https://narratives-development-mall.firebaseapp.com": true,
 	}
@@ -35,13 +39,10 @@ func CORS(next http.Handler) http.Handler {
 		"Accept",
 		"Origin",
 		"X-Requested-With",
-
-		// custom headers
 		"X-Actor-Id",
 		"X-Icon-Content-Type",
 		"X-Icon-File-Name",
 		"Idempotency-Key",
-
 		"X-CSRF-Token",
 	}, ", ")
 
@@ -50,7 +51,7 @@ func CORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
 
-		// ブラウザ以外（Originなし）
+		// Browser以外のリクエスト
 		if origin == "" {
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
@@ -61,32 +62,28 @@ func CORS(next http.Handler) http.Handler {
 			return
 		}
 
-		// Origin が許可されていない場合
+		// 許可されていないOrigin
 		if !allowedOrigins[origin] {
-			// preflight はここで明示的に拒否（デバッグしやすくする）
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusForbidden)
 				return
 			}
 
-			// 非preflightはCORSヘッダ無しで通す（ブラウザ側でブロックされる）
+			// CORSヘッダを付与せず通し、ブラウザ側で拒否させる
 			next.ServeHTTP(w, r)
 			return
 		}
 
-		// ✅ 許可 origin の場合のみ CORS ヘッダ付与
 		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
+		w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
+		w.Header().Set("Access-Control-Max-Age", "600")
 
 		appendVary(w, "Origin")
 		appendVary(w, "Access-Control-Request-Method")
 		appendVary(w, "Access-Control-Request-Headers")
 
-		w.Header().Set("Access-Control-Allow-Methods", allowedMethods)
-		w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
-		w.Header().Set("Access-Control-Max-Age", "600")
-
-		// preflight
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -105,10 +102,9 @@ func appendVary(w http.ResponseWriter, value string) {
 		return
 	}
 
-	// すでに含まれていれば何もしない
 	parts := strings.Split(cur, ",")
-	for _, p := range parts {
-		if strings.EqualFold(strings.Trim(p, " \t\r\n"), value) {
+	for _, part := range parts {
+		if strings.EqualFold(strings.TrimSpace(part), value) {
 			return
 		}
 	}

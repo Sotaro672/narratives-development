@@ -349,19 +349,13 @@ Write-Step "Starting deploy-backend.ps1"
 $env:CLOUDSDK_CORE_DISABLE_PROMPTS = "1"
 $env:CLOUDSDK_COMPONENT_MANAGER_DISABLE_UPDATE_CHECK = "1"
 
-$GCLOUD = (
-  Get-Command gcloud.cmd -ErrorAction Stop
-).Source
+$GCLOUD = (Get-Command gcloud.cmd -ErrorAction Stop).Source
 
 Write-Step "Using gcloud.cmd: $GCLOUD"
 
-$ProjectId = (
-  & $GCLOUD config get-value project
-)
+$ProjectId = (& $GCLOUD config get-value project)
 
-$ConfiguredAccount = (
-  & $GCLOUD config get-value account
-)
+$ConfiguredAccount = (& $GCLOUD config get-value account)
 
 if ([string]::IsNullOrWhiteSpace($ProjectId)) {
   throw "gcloud config project is not set. Example: gcloud config set project <PROJECT_ID>"
@@ -374,11 +368,9 @@ if ([string]::IsNullOrWhiteSpace($ConfiguredAccount)) {
 Write-Ok "gcloud project: $ProjectId"
 Write-Ok "gcloud account: $ConfiguredAccount"
 
-$RunServiceAccount =
-  "narratives-backend-sa@$ProjectId.iam.gserviceaccount.com"
+$RunServiceAccount = "narratives-backend-sa@$ProjectId.iam.gserviceaccount.com"
 
-$ScriptDir =
-  Split-Path -Parent $MyInvocation.MyCommand.Path
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $SourceDir = $ScriptDir
 
@@ -386,8 +378,7 @@ $SourceDir = $ScriptDir
 # 1) Go build check
 # ------------------------------------------------------------
 
-$MainGo =
-  Join-Path $SourceDir "cmd\api\main.go"
+$MainGo = Join-Path $SourceDir "cmd\api\main.go"
 
 if (-not (Test-Path $MainGo)) {
   throw "Go main file not found: $MainGo"
@@ -422,8 +413,7 @@ Write-Step "Ensuring Artifact Registry repository: $RepoName"
   --location=$Region `
   --project=$ProjectId | Out-Null
 
-$RepositoryExists =
-  $LASTEXITCODE -eq 0
+$RepositoryExists = $LASTEXITCODE -eq 0
 
 if (-not $RepositoryExists) {
   Write-Warn "Artifact Registry repository '$RepoName' was not found. Creating it."
@@ -449,14 +439,11 @@ else {
 # ------------------------------------------------------------
 
 if ([string]::IsNullOrWhiteSpace($Image)) {
-  $RegistryHost =
-    "$Region-docker.pkg.dev"
+  $RegistryHost = "$Region-docker.pkg.dev"
 
-  $Tag =
-    Get-Date -Format "yyyyMMdd-HHmmss"
+  $Tag = Get-Date -Format "yyyyMMdd-HHmmss"
 
-  $Image =
-    "$RegistryHost/$ProjectId/$RepoName/${ServiceName}:$Tag"
+  $Image = "$RegistryHost/$ProjectId/$RepoName/${ServiceName}:$Tag"
 
   Write-Step "Generated image: $Image"
 }
@@ -482,6 +469,10 @@ Write-Step "Collecting application environment variables"
 $AllowedKeys = @(
   # Firebase Storage
   "FIREBASE_STORAGE_BUCKET",
+
+  # Admin Authentication
+  "AMOL_ADMIN_FIREBASE_UID",
+  "AMOL_ADMIN_EMAIL",
 
   # Resend
   "RESEND_FROM",
@@ -515,14 +506,12 @@ $AllowedKeys = @(
 
 $envMap = @{}
 
-$EnvFile =
-  Join-Path $SourceDir ".env"
+$EnvFile = Join-Path $SourceDir ".env"
 
 if (Test-Path $EnvFile) {
   Write-Ok "Found .env: $EnvFile"
 
-  $FileMap =
-    Read-EnvFile $EnvFile
+  $FileMap = Read-EnvFile $EnvFile
 
   foreach ($Key in $AllowedKeys) {
     if ($FileMap.ContainsKey($Key)) {
@@ -549,14 +538,29 @@ $envMap["FIRESTORE_PROJECT_ID"] = $ProjectId
 # 7) Required application settings
 # ------------------------------------------------------------
 
-if (
-  -not $envMap.ContainsKey("FIREBASE_STORAGE_BUCKET") -or
-  [string]::IsNullOrWhiteSpace(
-    $envMap["FIREBASE_STORAGE_BUCKET"]
-  )
-) {
+if (-not $envMap.ContainsKey("FIREBASE_STORAGE_BUCKET") -or [string]::IsNullOrWhiteSpace($envMap["FIREBASE_STORAGE_BUCKET"])) {
   throw "FIREBASE_STORAGE_BUCKET is required."
 }
+
+if (-not $envMap.ContainsKey("AMOL_ADMIN_FIREBASE_UID") -or [string]::IsNullOrWhiteSpace($envMap["AMOL_ADMIN_FIREBASE_UID"])) {
+  throw "AMOL_ADMIN_FIREBASE_UID is required."
+}
+
+$AdminFirebaseUID = $envMap["AMOL_ADMIN_FIREBASE_UID"].Trim()
+if ($AdminFirebaseUID -eq "REPLACE_WITH_FIREBASE_ADMIN_UID") {
+  throw "AMOL_ADMIN_FIREBASE_UID still contains the placeholder value. Replace it with the Firebase Authentication UID."
+}
+$envMap["AMOL_ADMIN_FIREBASE_UID"] = $AdminFirebaseUID
+
+if (-not $envMap.ContainsKey("AMOL_ADMIN_EMAIL") -or [string]::IsNullOrWhiteSpace($envMap["AMOL_ADMIN_EMAIL"])) {
+  throw "AMOL_ADMIN_EMAIL is required."
+}
+
+$AdminEmail = $envMap["AMOL_ADMIN_EMAIL"].Trim()
+if ($AdminEmail -ne "caotailangaogang@gmail.com") {
+  throw "AMOL_ADMIN_EMAIL must be caotailangaogang@gmail.com."
+}
+$envMap["AMOL_ADMIN_EMAIL"] = $AdminEmail
 
 if (
   -not $envMap.ContainsKey("SOLANA_BUBBLEGUM_SERVICE_URL") -or
@@ -589,8 +593,7 @@ if (
   throw "MALL_FRONTEND_BASE_URL is required."
 }
 
-$MallFrontendBaseURL =
-  $envMap["MALL_FRONTEND_BASE_URL"].TrimEnd("/")
+$MallFrontendBaseURL = $envMap["MALL_FRONTEND_BASE_URL"].TrimEnd("/")
 
 $MallFrontendURI = $null
 
@@ -624,8 +627,7 @@ if (-not [string]::IsNullOrWhiteSpace($MallFrontendURI.Fragment)) {
   throw "MALL_FRONTEND_BASE_URL must not contain a fragment."
 }
 
-$envMap["MALL_FRONTEND_BASE_URL"] =
-  $MallFrontendBaseURL
+$envMap["MALL_FRONTEND_BASE_URL"] = $MallFrontendBaseURL
 
 if (
   -not $envMap.ContainsKey(
@@ -651,8 +653,7 @@ if (
   throw "PAYOUT_ACCOUNT_KMS_KEY_NAME is required."
 }
 
-$PayoutAccountKMSKeyName =
-  $envMap["PAYOUT_ACCOUNT_KMS_KEY_NAME"]
+$PayoutAccountKMSKeyName = $envMap["PAYOUT_ACCOUNT_KMS_KEY_NAME"]
 
 Ensure-PayoutAccountKMSAccess `
   -KeyName $PayoutAccountKMSKeyName `
@@ -661,8 +662,7 @@ Ensure-PayoutAccountKMSAccess `
 
 # Bubblegum Cloud Run の ID Token audience は
 # service URL と同一にします。
-$envMap["SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"] =
-  $envMap["SOLANA_BUBBLEGUM_SERVICE_URL"]
+$envMap["SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"] = $envMap["SOLANA_BUBBLEGUM_SERVICE_URL"]
 
 # ------------------------------------------------------------
 # 8) Resolve backend Cloud Run URL
@@ -682,8 +682,7 @@ try {
     $LASTEXITCODE -eq 0 -and
     -not [string]::IsNullOrWhiteSpace($ExistingServiceURL)
   ) {
-    $ResolvedBackendURL =
-      $ExistingServiceURL.TrimEnd("/")
+    $ResolvedBackendURL = $ExistingServiceURL.TrimEnd("/")
 
     Write-Ok "Backend URL resolved from Cloud Run: $ResolvedBackendURL"
   }
@@ -699,8 +698,7 @@ if (
     $envMap["SELF_BASE_URL"]
   )
 ) {
-  $ResolvedBackendURL =
-    $envMap["SELF_BASE_URL"].TrimEnd("/")
+  $ResolvedBackendURL = $envMap["SELF_BASE_URL"].TrimEnd("/")
 
   Write-Ok "Backend URL resolved from SELF_BASE_URL: $ResolvedBackendURL"
 }
@@ -709,11 +707,9 @@ if ([string]::IsNullOrWhiteSpace($ResolvedBackendURL)) {
   throw "Backend Cloud Run URL could not be resolved. Set SELF_BASE_URL in .env for the first deployment."
 }
 
-$envMap["SELF_BASE_URL"] =
-  $ResolvedBackendURL
+$envMap["SELF_BASE_URL"] = $ResolvedBackendURL
 
-$envMap["INTERNAL_BASE_URL"] =
-  $ResolvedBackendURL
+$envMap["INTERNAL_BASE_URL"] = $ResolvedBackendURL
 
 # ------------------------------------------------------------
 # 9) Cloud Tasks
@@ -734,23 +730,17 @@ if ($BrandFeeSettlementCloudTasksQueueID -eq $CloudTasksQueueID) {
   throw "BrandFeeSettlementCloudTasksQueueID must be different from CloudTasksQueueID."
 }
 
-$envMap["CLOUD_TASKS_PROJECT_ID"] =
-  $ProjectId
+$envMap["CLOUD_TASKS_PROJECT_ID"] = $ProjectId
 
-$envMap["CLOUD_TASKS_LOCATION"] =
-  $Region
+$envMap["CLOUD_TASKS_LOCATION"] = $Region
 
-$envMap["CLOUD_TASKS_QUEUE_ID"] =
-  $CloudTasksQueueID
+$envMap["CLOUD_TASKS_QUEUE_ID"] = $CloudTasksQueueID
 
-$envMap["CLOUD_TASKS_SERVICE_ACCOUNT"] =
-  $RunServiceAccount
+$envMap["CLOUD_TASKS_SERVICE_ACCOUNT"] = $RunServiceAccount
 
-$envMap["CLOUD_TASKS_AUDIENCE"] =
-  $ResolvedBackendURL
+$envMap["CLOUD_TASKS_AUDIENCE"] = $ResolvedBackendURL
 
-$envMap["BRAND_FEE_SETTLEMENT_CLOUD_TASKS_QUEUE_ID"] =
-  $BrandFeeSettlementCloudTasksQueueID
+$envMap["BRAND_FEE_SETTLEMENT_CLOUD_TASKS_QUEUE_ID"] = $BrandFeeSettlementCloudTasksQueueID
 
 # Brand fee Settlementはprimary/mint系queueとは分離する。
 # 初回のみ専用queueを作成し、既存queueはそのまま利用する。
@@ -769,25 +759,17 @@ Ensure-CloudTasksQueueExists `
 # .env に重複設定は持たせません。
 # ------------------------------------------------------------
 
-$envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"] =
-  $ProjectId
+$envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"] = $ProjectId
 
-$envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"] =
-  $Region
+$envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"] = $Region
 
-$envMap["LIST_SAVE_OPERATION_QUEUE_ID"] =
-  $CloudTasksQueueID
+$envMap["LIST_SAVE_OPERATION_QUEUE_ID"] = $CloudTasksQueueID
 
-$envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"] =
-  $ResolvedBackendURL
+$envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"] = $ResolvedBackendURL
 
-$envMap[
-  "LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"
-] =
-  $RunServiceAccount
+$envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $RunServiceAccount
 
-$envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] =
-  $ResolvedBackendURL
+$envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $ResolvedBackendURL
 
 # ------------------------------------------------------------
 # 11) Token Blueprint Create Operation
@@ -796,25 +778,17 @@ $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] =
 # .env に重複設定は持たせません。
 # ------------------------------------------------------------
 
-$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_PROJECT_ID"] =
-  $ProjectId
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_PROJECT_ID"] = $ProjectId
 
-$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_LOCATION"] =
-  $Region
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_LOCATION"] = $Region
 
-$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_ID"] =
-  $CloudTasksQueueID
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_ID"] = $CloudTasksQueueID
 
-$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_TARGET_BASE_URL"] =
-  $ResolvedBackendURL
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_TARGET_BASE_URL"] = $ResolvedBackendURL
 
-$envMap[
-  "TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"
-] =
-  $RunServiceAccount
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $RunServiceAccount
 
-$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_OIDC_AUDIENCE"] =
-  $ResolvedBackendURL
+$envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $ResolvedBackendURL
 
 # ------------------------------------------------------------
 # 12) Build Cloud Run env argument
@@ -832,17 +806,9 @@ foreach ($Key in $envMap.Keys) {
   $envPairs += "$Key=$Value"
 }
 
-$envArg =
-  [string]::Join(
-    ",",
-    $envPairs
-  )
+$envArg = [string]::Join(",", $envPairs)
 
-$envKeysForLog =
-  [string]::Join(
-    ",",
-    ($envMap.Keys | Sort-Object)
-  )
+$envKeysForLog = [string]::Join(",", ($envMap.Keys | Sort-Object))
 
 Write-Step "Env vars to update: $envKeysForLog"
 

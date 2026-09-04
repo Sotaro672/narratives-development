@@ -10,9 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	httpin "narratives/internal/adapters/in/http/console"
+	consoleHTTP "narratives/internal/adapters/in/http/console"
 	"narratives/internal/adapters/in/http/middleware"
 
+	adminDI "narratives/internal/platform/di/admin"
 	consoleDI "narratives/internal/platform/di/console"
 	introductionDI "narratives/internal/platform/di/introduction"
 	mallDI "narratives/internal/platform/di/mall"
@@ -67,14 +68,14 @@ func main() {
 	}
 	defer closeIfPossible("console container", consoleCont)
 
-	deps := consoleCont.RouterDeps()
+	consoleDeps := consoleCont.RouterDeps()
 
 	// ------------------------------------------------------------
-	// Build full mux BEFORE ListenAndServe
+	// Build full mux
 	// ------------------------------------------------------------
 	fullMux := http.NewServeMux()
 
-	fullMux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	fullMux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
@@ -97,24 +98,42 @@ func main() {
 	if projectID == "" {
 		log.Printf("[boot] WARN: FIRESTORE_PROJECT_ID is empty (introduction routes disabled)")
 	} else {
-		if c, err := introductionDI.NewContainer(initCtx, projectID); err != nil {
+		introCont, err = introductionDI.NewContainer(initCtx, projectID)
+		if err != nil {
 			log.Printf("[boot] WARN: introduction di init failed: %v (introduction routes disabled)", err)
+			introCont = nil
 		} else {
-			introCont = c
 			introCont.Register(fullMux)
 		}
 	}
 	defer closeIfPossible("introduction container", introCont)
 
 	// ------------------------------------------------------------
+	// Admin routes
+	// ------------------------------------------------------------
+	adminCont, err := adminDI.NewContainer(initCtx, infra)
+	if err != nil {
+		log.Printf("[boot] WARN: admin di init failed: %v (admin routes disabled)", err)
+	} else {
+		adminDI.Register(fullMux, adminCont)
+	}
+
+	// ------------------------------------------------------------
 	// Console routes
 	// ------------------------------------------------------------
-	router := httpin.NewRouter(deps)
+	consoleRouter := consoleHTTP.NewRouter(consoleDeps)
 
-	fullMux.Handle("/console/", router)
+	fullMux.Handle("/console/", consoleRouter)
 	fullMux.Handle("/console", http.RedirectHandler("/console/", http.StatusPermanentRedirect))
-	fullMux.Handle("/", router)
 
+	// Console frontend currently calls APIs without the /console prefix.
+	// Keep this root fallback until all Console API calls have migrated
+	// to explicit /console/* paths.
+	fullMux.Handle("/", consoleRouter)
+
+	// ------------------------------------------------------------
+	// HTTP server
+	// ------------------------------------------------------------
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      middleware.CORS(fullMux),
