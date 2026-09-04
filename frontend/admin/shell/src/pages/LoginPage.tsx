@@ -9,6 +9,17 @@ type LoginPageProps = {
   onLogin: () => void;
 };
 
+const EMAIL_VERIFICATION_MESSAGE =
+  "メールアドレスが未認証です。認証メールを送信しました。メール内のリンクから認証してください。";
+
+function resolveLoginErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message === EMAIL_VERIFICATION_MESSAGE) {
+    return error.message;
+  }
+
+  return "メールアドレスまたはパスワードが正しくないか、Admin権限がありません。";
+}
+
 export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,7 +41,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       onLogin();
     } catch (error) {
       console.error("[admin-login] sign in failed", error);
-      setError("メールアドレスまたはパスワードが正しくないか、Admin権限がありません。");
+      setError(resolveLoginErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
