@@ -3,11 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { listContacts } from "../features/contact/infrastructure/contactApi";
+import { getContactSourceLabel } from "../features/contact/presentation/model/contactSourcePresentation";
 import type { Contact } from "../shared/type/contact";
 import Page from "../shared/ui/Page/Page";
-import Table, {
-  type TableColumn,
-} from "../shared/ui/Table/Table";
+import Table, { type TableColumn } from "../shared/ui/Table/Table";
 import { formatDateTime } from "../shared/util/dateFormat";
 
 export default function InquiriesPage() {
@@ -92,8 +91,8 @@ export default function InquiriesPage() {
       },
       {
         key: "source",
-        header: "送信元",
-        render: (contact) => contact.source || "-",
+        header: "種別",
+        render: (contact) => getContactSourceLabel(contact.source),
         nowrap: true,
       },
     ],

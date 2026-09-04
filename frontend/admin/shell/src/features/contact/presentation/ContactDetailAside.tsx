@@ -14,14 +14,8 @@ export default function ContactDetailAside({
       <section className="ui-detail-section">
         <h2 className="ui-detail-section__title">管理情報</h2>
         <dl className="ui-detail-definition-list">
-          <dt>確認状況</dt>
-          <dd>{contact.isRead ? "既読" : "未読"}</dd>
-
           <dt>受信日時</dt>
           <dd>{formatDateTime(contact.createdAt)}</dd>
-
-          <dt>送信元</dt>
-          <dd>{contact.source || "-"}</dd>
         </dl>
       </section>
 
@@ -36,9 +30,7 @@ export default function ContactDetailAside({
 
           <dt>メールアドレス</dt>
           <dd>
-            <a href={`mailto:${contact.email}`}>
-              {contact.email}
-            </a>
+            <a href={`mailto:${contact.email}`}>{contact.email}</a>
           </dd>
         </dl>
       </section>
