@@ -1,0 +1,58 @@
+/* frontend/admin/shell/src/shared/ui/Table/Table.css */
+
+.ui-table__container {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.ui-table {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.ui-table__head {
+  background: #fafafa;
+}
+
+.ui-table__header-cell,
+.ui-table__body-cell {
+  padding: 12px 16px;
+  vertical-align: top;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.ui-table__header-cell {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ui-table__body-cell {
+  font-size: 14px;
+}
+
+.ui-table__row:hover {
+  background: #fafafa;
+}
+
+.ui-table__cell--left {
+  text-align: left;
+}
+
+.ui-table__cell--center {
+  text-align: center;
+}
+
+.ui-table__cell--right {
+  text-align: right;
+}
+
+.ui-table__cell--nowrap {
+  white-space: nowrap;
+}
+
+.ui-table__empty {
+  padding: 24px 0;
+}

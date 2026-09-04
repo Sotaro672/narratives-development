@@ -1,11 +1,9 @@
 // frontend/admin/shell/src/pages/InquiriesPage.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import {
-  listContacts,
-  type Contact,
-} from "../features/contact/contactApi";
+import { listContacts, type Contact } from "../features/contact/contactApi";
 import Page from "../shared/ui/Page/Page";
+import Table, { type TableColumn } from "../shared/ui/Table/Table";
 
 export default function InquiriesPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -32,11 +30,7 @@ export default function InquiriesPage() {
         }
       } catch (cause) {
         if (!cancelled) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "問い合わせの取得に失敗しました。",
-          );
+          setError(cause instanceof Error ? cause.message : "問い合わせの取得に失敗しました。");
         }
       } finally {
         if (!cancelled) {
@@ -52,6 +46,51 @@ export default function InquiriesPage() {
     };
   }, []);
 
+  const columns = useMemo<TableColumn<Contact>[]>(() => [
+    {
+      key: "createdAt",
+      header: "受信日時",
+      render: (contact) => formatCreatedAt(contact.createdAt),
+      nowrap: true,
+    },
+    {
+      key: "name",
+      header: "名前",
+      render: (contact) => contact.name,
+      nowrap: true,
+    },
+    {
+      key: "company",
+      header: "会社名",
+      render: (contact) => contact.company || "-",
+      nowrap: true,
+    },
+    {
+      key: "email",
+      header: "メールアドレス",
+      render: (contact) => <a href={`mailto:${contact.email}`}>{contact.email}</a>,
+      nowrap: true,
+    },
+    {
+      key: "message",
+      header: "内容",
+      render: (contact) => <span style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{contact.message}</span>,
+      minWidth: "320px",
+    },
+    {
+      key: "status",
+      header: "ステータス",
+      render: (contact) => contact.status,
+      nowrap: true,
+    },
+    {
+      key: "source",
+      header: "送信元",
+      render: (contact) => contact.source || "-",
+      nowrap: true,
+    },
+  ], []);
+
   return (
     <Page>
       <h1>問い合わせ</h1>
@@ -59,49 +98,16 @@ export default function InquiriesPage() {
       {loading && <p>問い合わせを読み込んでいます。</p>}
 
       {!loading && error && (
-        <p role="alert">
-          問い合わせの取得に失敗しました。{error}
-        </p>
+        <p role="alert">問い合わせの取得に失敗しました。{error}</p>
       )}
 
-      {!loading && !error && contacts.length === 0 && (
-        <p>問い合わせはありません。</p>
-      )}
-
-      {!loading && !error && contacts.length > 0 && (
-        <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <thead>
-              <tr>
-                <th style={headerCellStyle}>受信日時</th>
-                <th style={headerCellStyle}>名前</th>
-                <th style={headerCellStyle}>会社名</th>
-                <th style={headerCellStyle}>メールアドレス</th>
-                <th style={headerCellStyle}>内容</th>
-                <th style={headerCellStyle}>ステータス</th>
-                <th style={headerCellStyle}>送信元</th>
-              </tr>
-            </thead>
-
-            <tbody>
-              {contacts.map((contact) => (
-                <tr key={contact.id}>
-                  <td style={bodyCellStyle}>{formatCreatedAt(contact.createdAt)}</td>
-                  <td style={bodyCellStyle}>{contact.name}</td>
-                  <td style={bodyCellStyle}>{contact.company || "-"}</td>
-                  <td style={bodyCellStyle}>
-                    <a href={`mailto:${contact.email}`}>{contact.email}</a>
-                  </td>
-                  <td style={{ ...bodyCellStyle, whiteSpace: "pre-wrap", minWidth: "320px" }}>
-                    {contact.message}
-                  </td>
-                  <td style={bodyCellStyle}>{contact.status}</td>
-                  <td style={bodyCellStyle}>{contact.source || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {!loading && !error && (
+        <Table
+          columns={columns}
+          rows={contacts}
+          getRowKey={(contact) => contact.id}
+          emptyMessage="問い合わせはありません。"
+        />
       )}
     </Page>
   );
@@ -119,18 +125,3 @@ function formatCreatedAt(value: string): string {
 
   return date.toLocaleString("ja-JP");
 }
-
-const headerCellStyle = {
-  padding: "12px",
-  borderBottom: "1px solid #d9d9d9",
-  textAlign: "left",
-  verticalAlign: "top",
-  whiteSpace: "nowrap",
-} as const;
-
-const bodyCellStyle = {
-  padding: "12px",
-  borderBottom: "1px solid #e5e5e5",
-  textAlign: "left",
-  verticalAlign: "top",
-} as const;
