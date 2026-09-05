@@ -1,0 +1,15 @@
+[
+  {
+    "origin": [
+      "http://localhost:5173",
+      "https://amol-admin.web.app",
+      "https://amol-admin.firebaseapp.com"
+    ],
+    "method": ["GET"],
+    "responseHeader": [
+      "Content-Type",
+      "Content-Disposition"
+    ],
+    "maxAgeSeconds": 3600
+  }
+]

@@ -2,6 +2,7 @@
 
 import { useGasBalance } from "../features/gas/hooks/useGasBalance";
 import CopyButton from "../shared/ui/CopyButton/CopyButton";
+import ExternalLinkButton from "../shared/ui/ExternalLinkButton/ExternalLinkButton";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 
@@ -21,10 +22,9 @@ export default function GasPage() {
           />
         }
       />
+
       <section>
-        {loading && !balance ? (
-          <p>ガス残高を取得しています...</p>
-        ) : null}
+        {loading && !balance ? <p>ガス残高を取得しています...</p> : null}
 
         {error ? (
           <div>
@@ -46,11 +46,6 @@ export default function GasPage() {
             </div>
 
             <div>
-              <dt>Lamports</dt>
-              <dd>{balance.balanceLamports}</dd>
-            </div>
-
-            <div>
               <dt>ネットワーク</dt>
               <dd>{balance.cluster}</dd>
             </div>
@@ -64,6 +59,16 @@ export default function GasPage() {
             </div>
           </dl>
         ) : null}
+      </section>
+
+      <section>
+        <ExternalLinkButton
+          href="https://faucet.solana.com/"
+          title="Solana Faucetを開く"
+          ariaLabel="Solana Faucetを開く"
+        >
+          Faucet
+        </ExternalLinkButton>
       </section>
     </Page>
   );
