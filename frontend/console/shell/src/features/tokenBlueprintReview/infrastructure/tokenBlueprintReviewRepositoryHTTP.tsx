@@ -5,6 +5,14 @@ import type {
   Comment,
   ReactionType,
 } from "../../../shared/types/tokenBlueprintReview";
+import type {
+  ReportTokenBlueprintCommentInput,
+  ReviewReportRequest,
+  ReviewReportResponse,
+} from "../../../shared/types/reviewReport";
+import {
+  requiresReviewReportDetail,
+} from "../../../shared/types/reviewReport";
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
@@ -157,12 +165,14 @@ export async function listTokenBlueprintReviewAggregates(): Promise<
 export async function listTokenBlueprintCommentsByTokenBlueprintId(
   tokenBlueprintId: string,
 ): Promise<ListTokenBlueprintCommentsResponse> {
-  if (!tokenBlueprintId) {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+
+  if (!normalizedTokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
 
   return apiGetJson<ListTokenBlueprintCommentsResponse>(
-    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments`,
+    `/token-blueprint-reviews/${encodeURIComponent(normalizedTokenBlueprintId)}/comments`,
   );
 }
 
@@ -177,24 +187,29 @@ export async function createBrandComment(
     parentCommentId?: string;
   },
 ): Promise<Comment> {
-  if (!tokenBlueprintId) {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedBody = body.trim();
+
+  if (!normalizedTokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
 
-  if (!body) {
+  if (!normalizedBody) {
     throw new Error("body is required");
   }
 
   const request: CreateBrandCommentRequest = {
-    body,
-    ...(options?.commentId ? { commentId: options.commentId } : {}),
-    ...(options?.parentCommentId
-      ? { parentCommentId: options.parentCommentId }
+    body: normalizedBody,
+    ...(options?.commentId?.trim()
+      ? { commentId: options.commentId.trim() }
+      : {}),
+    ...(options?.parentCommentId?.trim()
+      ? { parentCommentId: options.parentCommentId.trim() }
       : {}),
   };
 
   const response = await apiPostJson<CommentResponse>(
-    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments`,
+    `/token-blueprint-reviews/${encodeURIComponent(normalizedTokenBlueprintId)}/comments`,
     request,
   );
 
@@ -212,25 +227,31 @@ export async function createBrandReply(
     commentId?: string;
   },
 ): Promise<Comment> {
-  if (!tokenBlueprintId) {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedParentCommentId = parentCommentId.trim();
+  const normalizedBody = body.trim();
+
+  if (!normalizedTokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
 
-  if (!parentCommentId) {
+  if (!normalizedParentCommentId) {
     throw new Error("parentCommentId is required");
   }
 
-  if (!body) {
+  if (!normalizedBody) {
     throw new Error("body is required");
   }
 
   const request: CreateBrandCommentRequest = {
-    body,
-    ...(options?.commentId ? { commentId: options.commentId } : {}),
+    body: normalizedBody,
+    ...(options?.commentId?.trim()
+      ? { commentId: options.commentId.trim() }
+      : {}),
   };
 
   const response = await apiPostJson<CommentResponse>(
-    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(parentCommentId)}/replies`,
+    `/token-blueprint-reviews/${encodeURIComponent(normalizedTokenBlueprintId)}/comments/${encodeURIComponent(normalizedParentCommentId)}/replies`,
     request,
   );
 
@@ -244,16 +265,19 @@ export async function deleteBrandComment(
   tokenBlueprintId: string,
   commentId: string,
 ): Promise<void> {
-  if (!tokenBlueprintId) {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedCommentId = commentId.trim();
+
+  if (!normalizedTokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
 
-  if (!commentId) {
+  if (!normalizedCommentId) {
     throw new Error("commentId is required");
   }
 
   await apiDelete(
-    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}`,
+    `/token-blueprint-reviews/${encodeURIComponent(normalizedTokenBlueprintId)}/comments/${encodeURIComponent(normalizedCommentId)}`,
   );
 }
 
@@ -269,6 +293,44 @@ export async function reactToCommentAsBrand(
   commentId: string,
   type: ReactionType,
 ): Promise<Comment> {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedCommentId = commentId.trim();
+
+  if (!normalizedTokenBlueprintId) {
+    throw new Error("tokenBlueprintId is required");
+  }
+
+  if (!normalizedCommentId) {
+    throw new Error("commentId is required");
+  }
+
+  const request: ReactAsBrandRequest = { type };
+
+  const response = await apiPostJson<CommentResponse>(
+    `/token-blueprint-reviews/${encodeURIComponent(normalizedTokenBlueprintId)}/comments/${encodeURIComponent(normalizedCommentId)}/reactions`,
+    request,
+  );
+
+  return response.item;
+}
+
+// ============================================================
+// Comment reports
+// ============================================================
+
+/**
+ * backend: POST /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/reports
+ *
+ * companyId / brandId は backend の認証 context から解決する。
+ * 同一ブランドによる重複通報は backend 側で冪等に扱う。
+ */
+export async function reportTokenBlueprintCommentAsBrand(
+  input: ReportTokenBlueprintCommentInput,
+): Promise<ReviewReportResponse> {
+  const tokenBlueprintId = input.tokenBlueprintId.trim();
+  const commentId = input.commentId.trim();
+  const detail = input.detail?.trim() ?? "";
+
   if (!tokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
@@ -277,12 +339,17 @@ export async function reactToCommentAsBrand(
     throw new Error("commentId is required");
   }
 
-  const request: ReactAsBrandRequest = { type };
+  if (requiresReviewReportDetail(input.reason) && !detail) {
+    throw new Error("「その他」を選択した場合は詳細を入力してください。");
+  }
 
-  const response = await apiPostJson<CommentResponse>(
-    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}/reactions`,
+  const request: ReviewReportRequest = {
+    reason: input.reason,
+    ...(detail ? { detail } : {}),
+  };
+
+  return apiPostJson<ReviewReportResponse>(
+    `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}/reports`,
     request,
   );
-
-  return response.item;
 }

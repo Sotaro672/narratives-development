@@ -24,6 +24,9 @@ type ReviewCardProps = {
     commentId: string,
     type: ReactionType,
   ) => Promise<void> | void;
+  onReport?: (
+    commentId: string,
+  ) => void;
 };
 
 export default function ReviewCard({
@@ -33,6 +36,7 @@ export default function ReviewCard({
   onReply,
   onDelete,
   onReact,
+  onReport,
 }: ReviewCardProps) {
   const [isReplyFormOpen, setIsReplyFormOpen] = useState(false);
   const [isRepliesOpen, setIsRepliesOpen] = useState(false);
@@ -58,6 +62,7 @@ export default function ReviewCard({
     isOwnerComment,
   } = item;
 
+  const normalizedCommentId = commentId.trim();
   const createdAtLabel = safeDateTimeLabelJa(createdAt, "-");
 
   const authorPrimary =
@@ -83,6 +88,12 @@ export default function ReviewCard({
     authorType === "brand" &&
     isOwnerComment &&
     onDelete !== undefined;
+
+  const canReport =
+    canInteract &&
+    Boolean(normalizedCommentId) &&
+    !(authorType === "brand" && isOwnerComment) &&
+    onReport !== undefined;
 
   const replies = useMemo(() => {
     if (!repliesByParentId) {
@@ -135,14 +146,15 @@ export default function ReviewCard({
       !content ||
       !onReply ||
       !canInteract ||
-      disabled
+      disabled ||
+      !normalizedCommentId
     ) {
       return;
     }
 
     try {
       setIsSubmittingReply(true);
-      await onReply(commentId, content);
+      await onReply(normalizedCommentId, content);
       setReplyBody("");
       setIsReplyFormOpen(false);
       setIsRepliesOpen(true);
@@ -152,7 +164,12 @@ export default function ReviewCard({
   };
 
   const handleDelete = async () => {
-    if (!onDelete || !canDelete || disabled) {
+    if (
+      !onDelete ||
+      !canDelete ||
+      disabled ||
+      !normalizedCommentId
+    ) {
       return;
     }
 
@@ -166,7 +183,7 @@ export default function ReviewCard({
 
     try {
       setIsSubmittingDelete(true);
-      await onDelete(commentId);
+      await onDelete(normalizedCommentId);
     } finally {
       setIsSubmittingDelete(false);
     }
@@ -178,17 +195,31 @@ export default function ReviewCard({
     if (
       !onReact ||
       !canInteract ||
-      disabled
+      disabled ||
+      !normalizedCommentId
     ) {
       return;
     }
 
     try {
       setIsSubmittingReaction(true);
-      await onReact(commentId, type);
+      await onReact(normalizedCommentId, type);
     } finally {
       setIsSubmittingReaction(false);
     }
+  };
+
+  const handleReport = () => {
+    if (
+      !onReport ||
+      !canReport ||
+      disabled ||
+      !normalizedCommentId
+    ) {
+      return;
+    }
+
+    onReport(normalizedCommentId);
   };
 
   return (
@@ -216,10 +247,16 @@ export default function ReviewCard({
       </div>
 
       <div className="tbrd-body">
-        {body || (
+        {deleted ? (
           <span className="tbrd-body-empty">
-            （本文なし）
+            このコメントは削除されました
           </span>
+        ) : (
+          body || (
+            <span className="tbrd-body-empty">
+              （本文なし）
+            </span>
+          )
         )}
       </div>
 
@@ -275,6 +312,19 @@ export default function ReviewCard({
             {isRepliesOpen
               ? `返信を隠す (${childCount})`
               : `返信を表示 (${childCount})`}
+          </Button>
+        ) : null}
+
+        {canReport ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+            disabled={disabled}
+            onClick={handleReport}
+          >
+            通報
           </Button>
         ) : null}
 
@@ -364,6 +414,7 @@ export default function ReviewCard({
                     onReply={onReply}
                     onDelete={onDelete}
                     onReact={onReact}
+                    onReport={onReport}
                   />
                 </div>
               ))}

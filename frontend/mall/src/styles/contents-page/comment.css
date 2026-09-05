@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/contents-page/comment.css */
+/* frontend/mall/src/styles/contents-page/comment.css */
 
 .token-comment-card {
   box-sizing: border-box;
@@ -271,11 +271,40 @@
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.token-comment-item__action:hover:not(:disabled) {
+  border-color: #d1d5db;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.token-comment-item__action:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
 }
 
 .token-comment-item__action:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.token-comment-item__action--report {
+  color: #b42318;
+}
+
+.token-comment-item__action--report:hover:not(:disabled) {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.token-comment-item__action--report:focus-visible {
+  outline-color: #fca5a5;
 }
 
 .token-comment-item__reply-count {

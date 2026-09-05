@@ -1,6 +1,6 @@
 // frontend/mall/src/features/review-report/components/ReviewReportModal.tsx
 
-import { useEffect } from "react";
+import { type MouseEvent, useEffect } from "react";
 import { createPortal } from "react-dom";
 
 import type {
@@ -83,9 +83,7 @@ export default function ReviewReportModal({
   const submitted = result !== null;
   const alreadyReported = result !== null && !result.reportCreated;
 
-  const handleBackdropClick = (
-    event: React.MouseEvent<HTMLDivElement>,
-  ) => {
+  const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget || submitting) {
       return;
     }
@@ -224,9 +222,7 @@ export default function ReviewReportModal({
                 <label className="review-report-modal__detail-field">
                   <span className="review-report-modal__label">
                     詳細
-                    <span className="review-report-modal__required">
-                      必須
-                    </span>
+                    <span className="review-report-modal__required">必須</span>
                   </span>
 
                   <textarea
@@ -235,9 +231,7 @@ export default function ReviewReportModal({
                     rows={5}
                     disabled={submitting}
                     placeholder="通報する理由を具体的に入力してください。"
-                    onChange={(event) =>
-                      onDetailChange(event.target.value)
-                    }
+                    onChange={(event) => onDetailChange(event.target.value)}
                   />
                 </label>
               ) : null}

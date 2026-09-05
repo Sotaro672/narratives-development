@@ -6,6 +6,10 @@ import type {
   TokenBlueprintReviewAggregate,
   ReactionType,
 } from "../../../shared/types/tokenBlueprintReview";
+import type {
+  ReviewReportReason,
+  ReviewReportResponse,
+} from "../../../shared/types/reviewReport";
 
 import {
   listTokenBlueprintCommentsByTokenBlueprintId,
@@ -14,6 +18,7 @@ import {
   createBrandReply,
   deleteBrandComment,
   reactToCommentAsBrand,
+  reportTokenBlueprintCommentAsBrand,
 } from "../infrastructure/tokenBlueprintReviewRepositoryHTTP";
 
 import { fetchTokenBlueprintById } from "../../tokenBlueprint/infrastructure/repository/tokenBlueprintRepositoryHTTP";
@@ -22,12 +27,16 @@ import { fetchTokenBlueprintById } from "../../tokenBlueprint/infrastructure/rep
  * 詳細取得。
  * tokenBlueprintReviewId = tokenBlueprintId を前提とする。
  */
-export async function fetchTokenBlueprintReviewDetail(id: string): Promise<TokenBlueprint> {
-  if (!id) {
+export async function fetchTokenBlueprintReviewDetail(
+  id: string,
+): Promise<TokenBlueprint> {
+  const normalizedId = id.trim();
+
+  if (!normalizedId) {
     throw new Error("id is required");
   }
 
-  return fetchTokenBlueprintById(id);
+  return fetchTokenBlueprintById(normalizedId);
 }
 
 /**
@@ -44,11 +53,15 @@ export async function fetchTokenBlueprintCommentsForDetail(
   perPage?: number;
   totalCount?: number;
 }> {
-  if (!tokenBlueprintId) {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+
+  if (!normalizedTokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
 
-  return listTokenBlueprintCommentsByTokenBlueprintId(tokenBlueprintId);
+  return listTokenBlueprintCommentsByTokenBlueprintId(
+    normalizedTokenBlueprintId,
+  );
 }
 
 /**
@@ -58,12 +71,20 @@ export async function fetchTokenBlueprintCommentsForDetail(
 export async function fetchTokenBlueprintAggregateForDetail(
   tokenBlueprintId: string,
 ): Promise<TokenBlueprintReviewAggregate | null> {
-  if (!tokenBlueprintId) {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+
+  if (!normalizedTokenBlueprintId) {
     throw new Error("tokenBlueprintId is required");
   }
 
   const rows = await listTokenBlueprintReviewAggregates();
-  return rows.find((row) => row.tokenBlueprintId === tokenBlueprintId) ?? null;
+
+  return (
+    rows.find(
+      (row) =>
+        row.tokenBlueprintId === normalizedTokenBlueprintId,
+    ) ?? null
+  );
 }
 
 /**
@@ -77,7 +98,11 @@ export async function postBrandComment(
     parentCommentId?: string;
   },
 ): Promise<Comment> {
-  return createBrandComment(tokenBlueprintId, body, options);
+  return createBrandComment(
+    tokenBlueprintId,
+    body,
+    options,
+  );
 }
 
 /**
@@ -91,7 +116,12 @@ export async function postBrandReply(
     commentId?: string;
   },
 ): Promise<Comment> {
-  return createBrandReply(tokenBlueprintId, parentCommentId, body, options);
+  return createBrandReply(
+    tokenBlueprintId,
+    parentCommentId,
+    body,
+    options,
+  );
 }
 
 /**
@@ -101,7 +131,10 @@ export async function removeBrandComment(
   tokenBlueprintId: string,
   commentId: string,
 ): Promise<void> {
-  return deleteBrandComment(tokenBlueprintId, commentId);
+  return deleteBrandComment(
+    tokenBlueprintId,
+    commentId,
+  );
 }
 
 /**
@@ -112,5 +145,51 @@ export async function reactBrandToComment(
   commentId: string,
   type: ReactionType,
 ): Promise<Comment> {
-  return reactToCommentAsBrand(tokenBlueprintId, commentId, type);
+  return reactToCommentAsBrand(
+    tokenBlueprintId,
+    commentId,
+    type,
+  );
+}
+
+/**
+ * brand 側 comment 通報。
+ */
+export async function reportBrandTokenBlueprintComment(
+  tokenBlueprintId: string,
+  commentId: string,
+  reason: ReviewReportReason,
+  detail?: string,
+): Promise<ReviewReportResponse> {
+  const normalizedTokenBlueprintId =
+    tokenBlueprintId.trim();
+
+  const normalizedCommentId =
+    commentId.trim();
+
+  const normalizedDetail =
+    detail?.trim() ?? "";
+
+  if (!normalizedTokenBlueprintId) {
+    throw new Error(
+      "tokenBlueprintId is required",
+    );
+  }
+
+  if (!normalizedCommentId) {
+    throw new Error(
+      "commentId is required",
+    );
+  }
+
+  return reportTokenBlueprintCommentAsBrand({
+    tokenBlueprintId:
+      normalizedTokenBlueprintId,
+    commentId:
+      normalizedCommentId,
+    reason,
+    ...(normalizedDetail
+      ? { detail: normalizedDetail }
+      : {}),
+  });
 }
