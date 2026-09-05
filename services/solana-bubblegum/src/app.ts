@@ -34,49 +34,31 @@ import {
   MintOperationStateConflictError,
 } from "./application/ports/mint-operation-registry-port.js";
 import { isMintV2TransactionError } from "./application/ports/mint-v2-transaction-port.js";
-import { env } from "./config/env.js";
 import {
   getBubblegumRuntime,
   getMintFundingEstimateUsecase,
   getMintV2Usecase,
 } from "./bootstrap/container.js";
-
-type MintRequestBody = {
-  productId?: unknown;
-  tokenBlueprintId?: unknown;
-  brandId?: unknown;
-  toAddress?: unknown;
-  name?: unknown;
-  symbol?: unknown;
-  metadataUri?: unknown;
-};
-
-type MintEstimateRequestBody = {
-  tokenBlueprintId?: unknown;
-  mintQuantity?: unknown;
-  toAddress?: unknown;
-  name?: unknown;
-  symbol?: unknown;
-};
-
-type OwnedAssetsRequestBody = {
-  assetStandard?: unknown;
-  walletAddress?: unknown;
-};
-
-type TransferRequestBody = {
-  productId?: unknown;
-  assetStandard?: unknown;
-  assetId?: unknown;
-  fromAvatarId?: unknown;
-  fromBrandId?: unknown;
-  toAvatarId?: unknown;
-  brandId?: unknown;
-  modelId?: unknown;
-  tokenBlueprintId?: unknown;
-  fromWalletAddress?: unknown;
-  toWalletAddress?: unknown;
-};
+import { env } from "./config/env.js";
+import {
+  HttpRequestValidationError,
+  MintEstimateExecutionError,
+  OwnedAssetsExecutionError,
+  TransferExecutionError,
+  TransferOwnershipConflictError,
+  TransferSignerMismatchError,
+} from "./http/errors.js";
+import {
+  optionalString,
+  parseSolanaPublicKey,
+  readMintEstimateRequestBody,
+  readMintRequestBody,
+  readOwnedAssetsRequestBody,
+  readTransferRequestBody,
+  requiredPositiveInteger,
+  requiredString,
+  stringValue,
+} from "./http/request-validation.js";
 
 type TransferExecutionInput = {
   productId: string;
@@ -160,174 +142,7 @@ type BubblegumTransferAssetWithProof = {
   asset: DasTransferAsset;
 };
 
-class HttpRequestValidationError extends Error {
-  readonly name = "HttpRequestValidationError";
-
-  constructor(
-    readonly field: string,
-    message: string,
-  ) {
-    super(["http: invalid request", `field=${field}`, message].join(" "));
-  }
-}
-
-class MintEstimateExecutionError extends Error {
-  readonly name = "MintEstimateExecutionError";
-
-  constructor(readonly cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause));
-  }
-}
-
-class OwnedAssetsExecutionError extends Error {
-  readonly name = "OwnedAssetsExecutionError";
-
-  constructor(readonly cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause));
-  }
-}
-
-class TransferExecutionError extends Error {
-  readonly name = "TransferExecutionError";
-
-  constructor(readonly cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause));
-  }
-}
-
-class TransferOwnershipConflictError extends Error {
-  readonly name = "TransferOwnershipConflictError";
-
-  constructor(
-    readonly expectedOwner: string,
-    readonly actualOwner: string,
-  ) {
-    super(
-      [
-        "transfer: asset owner mismatch",
-        `expectedOwner=${expectedOwner}`,
-        `actualOwner=${actualOwner}`,
-      ].join(" "),
-    );
-  }
-}
-
-class TransferSignerMismatchError extends Error {
-  readonly name = "TransferSignerMismatchError";
-
-  constructor(
-    readonly expectedAddress: string,
-    readonly signerAddress: string,
-  ) {
-    super(
-      [
-        "transfer: sender signer address mismatch",
-        `expectedAddress=${expectedAddress}`,
-        `signerAddress=${signerAddress}`,
-      ].join(" "),
-    );
-  }
-}
-
 const secretManagerClient = new SecretManagerServiceClient();
-
-function readMintRequestBody(value: unknown): MintRequestBody {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new HttpRequestValidationError("body", "JSON object is required");
-  }
-
-  return value as MintRequestBody;
-}
-
-function readMintEstimateRequestBody(
-  value: unknown,
-): MintEstimateRequestBody {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new HttpRequestValidationError("body", "JSON object is required");
-  }
-
-  return value as MintEstimateRequestBody;
-}
-
-function readOwnedAssetsRequestBody(
-  value: unknown,
-): OwnedAssetsRequestBody {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new HttpRequestValidationError("body", "JSON object is required");
-  }
-
-  return value as OwnedAssetsRequestBody;
-}
-
-function readTransferRequestBody(value: unknown): TransferRequestBody {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    throw new HttpRequestValidationError("body", "JSON object is required");
-  }
-
-  return value as TransferRequestBody;
-}
-
-function requiredString(field: string, value: unknown): string {
-  if (typeof value !== "string" || value.length === 0) {
-    throw new HttpRequestValidationError(field, "value is required");
-  }
-
-  return value;
-}
-
-function optionalString(field: string, value: unknown): string {
-  if (value === undefined || value === null) {
-    return "";
-  }
-
-  if (typeof value !== "string") {
-    throw new HttpRequestValidationError(field, "value must be string");
-  }
-
-  return value;
-}
-
-function stringValue(field: string, value: unknown): string {
-  if (typeof value !== "string") {
-    throw new HttpRequestValidationError(field, "value must be string");
-  }
-
-  return value;
-}
-
-function requiredPositiveInteger(field: string, value: unknown): number {
-  if (
-    typeof value !== "number" ||
-    !Number.isSafeInteger(value) ||
-    value <= 0
-  ) {
-    throw new HttpRequestValidationError(
-      field,
-      "value must be a positive integer",
-    );
-  }
-
-  return value;
-}
-
-function parseSolanaPublicKey(
-  field: string,
-  value: string,
-): PublicKey {
-  try {
-    return publicKey(value);
-  } catch (error) {
-    const detail =
-      error instanceof Error
-        ? error.message
-        : String(error);
-
-    throw new HttpRequestValidationError(
-      field,
-      `value must be a valid Solana public key detail=${detail}`,
-    );
-  }
-}
 
 function isRecord(
   value: unknown,
