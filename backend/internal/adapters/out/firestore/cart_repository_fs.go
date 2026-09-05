@@ -302,22 +302,26 @@ func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 		return cartDoc{Items: map[string]cartItemDoc{}}, nil
 	}
 
-	out := cartDoc{Items: map[string]cartItemDoc{}}
+	createdAt, err := firestoreRequiredTime(raw, "createdAt")
+	if err != nil {
+		return cartDoc{}, err
+	}
 
-	if value, ok := raw["createdAt"]; ok {
-		if parsed, valid := asTime(value); valid {
-			out.CreatedAt = parsed
-		}
+	updatedAt, err := firestoreRequiredTime(raw, "updatedAt")
+	if err != nil {
+		return cartDoc{}, err
 	}
-	if value, ok := raw["updatedAt"]; ok {
-		if parsed, valid := asTime(value); valid {
-			out.UpdatedAt = parsed
-		}
+
+	expiresAt, err := firestoreRequiredTime(raw, "expiresAt")
+	if err != nil {
+		return cartDoc{}, err
 	}
-	if value, ok := raw["expiresAt"]; ok {
-		if parsed, valid := asTime(value); valid {
-			out.ExpiresAt = parsed
-		}
+
+	out := cartDoc{
+		Items:     map[string]cartItemDoc{},
+		CreatedAt: createdAt,
+		UpdatedAt: updatedAt,
+		ExpiresAt: expiresAt,
 	}
 
 	itemsValue, _ := raw["items"]

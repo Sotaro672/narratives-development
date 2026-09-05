@@ -409,14 +409,14 @@ func docToModelVariation(document *firestore.DocumentSnapshot) (modeldom.ModelVa
 		return nil, err
 	}
 
-	createdAt, err := requiredModelTime(data, "createdAt")
+	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
-		return nil, err
+		return nil, modeldom.ErrInvalid
 	}
 
-	updatedAt, err := requiredModelTime(data, "updatedAt")
+	updatedAt, err := firestoreRequiredTime(data, "updatedAt")
 	if err != nil {
-		return nil, err
+		return nil, modeldom.ErrInvalid
 	}
 
 	createdBy, err := optionalModelString(data, "createdBy")
@@ -593,14 +593,6 @@ func requiredModelString(data map[string]any, key string) (string, error) {
 	value, ok := data[key].(string)
 	if !ok || value == "" {
 		return "", modeldom.ErrInvalid
-	}
-	return value, nil
-}
-
-func requiredModelTime(data map[string]any, key string) (time.Time, error) {
-	value, ok := data[key].(time.Time)
-	if !ok || value.IsZero() {
-		return time.Time{}, modeldom.ErrInvalid
 	}
 	return value, nil
 }

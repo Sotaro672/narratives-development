@@ -45,20 +45,6 @@ func asBool(v any) bool {
 	return value
 }
 
-// asTime returns (time, ok).
-func asTime(v any) (time.Time, bool) {
-	if v == nil {
-		return time.Time{}, false
-	}
-
-	value, ok := v.(time.Time)
-	if !ok {
-		return time.Time{}, false
-	}
-
-	return value, true
-}
-
 func containsString(xs []string, v string) bool {
 	if v == "" || len(xs) == 0 {
 		return false
@@ -136,21 +122,6 @@ func ptrStringFromMap(m map[string]any, key string) *string {
 	}
 
 	return &s
-}
-
-func timeFromMap(m map[string]any, key string) time.Time {
-	t, _ := asTime(m[key])
-	return t.UTC()
-}
-
-func ptrTimeFromMap(m map[string]any, key string) *time.Time {
-	t, ok := asTime(m[key])
-	if !ok || t.IsZero() {
-		return nil
-	}
-
-	utc := t.UTC()
-	return &utc
 }
 
 func ptrOrEmpty(p *string) string {

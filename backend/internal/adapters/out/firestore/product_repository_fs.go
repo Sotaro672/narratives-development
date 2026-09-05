@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
@@ -38,7 +37,6 @@ func (r *ProductRepositoryFS) GetByID(ctx context.Context, id string) (productdo
 	if r.Client == nil {
 		return productdom.Product{}, errors.New("firestore client is nil")
 	}
-
 	if id == "" {
 		return productdom.Product{}, productdom.ErrNotFound
 	}
@@ -71,7 +69,6 @@ func (r *ProductRepositoryFS) Create(ctx context.Context, v productdom.Product) 
 	}
 
 	data := productToDoc(v)
-
 	_, err := docRef.Create(ctx, data)
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
@@ -93,7 +90,6 @@ func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, production
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
 	if productionID == "" {
 		return []productdom.Product{}, nil
 	}
@@ -116,7 +112,6 @@ func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, production
 		if err != nil {
 			return nil, err
 		}
-
 		items = append(items, p)
 	}
 
@@ -129,14 +124,10 @@ func (r *ProductRepositoryFS) ListByProductionID(ctx context.Context, production
 
 // GetModelIDByProductID returns modelId for a product.
 // This method implements usecase.ProductModelResolver without importing the usecase package.
-func (r *ProductRepositoryFS) GetModelIDByProductID(
-	ctx context.Context,
-	productID string,
-) (string, error) {
+func (r *ProductRepositoryFS) GetModelIDByProductID(ctx context.Context, productID string) (string, error) {
 	if r == nil || r.Client == nil {
 		return "", errors.New("product repository/firestore client is nil")
 	}
-
 	if productID == "" {
 		return "", productdom.ErrNotFound
 	}
@@ -145,7 +136,6 @@ func (r *ProductRepositoryFS) GetModelIDByProductID(
 	if err != nil {
 		return "", err
 	}
-
 	if product.ModelID == "" {
 		return "", errors.New("product modelId is empty")
 	}
@@ -161,11 +151,7 @@ func (r *ProductRepositoryFS) GetModelIDByProductID(
 //
 // inspections テーブルの更新にあわせて、products/{productId} の
 // inspectionResult を部分更新します。
-func (r *ProductRepositoryFS) UpdateInspectionResult(
-	ctx context.Context,
-	productID string,
-	result inspectiondom.InspectionResult,
-) error {
+func (r *ProductRepositoryFS) UpdateInspectionResult(ctx context.Context, productID string, result inspectiondom.InspectionResult) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
@@ -176,7 +162,6 @@ func (r *ProductRepositoryFS) UpdateInspectionResult(
 	}
 
 	docRef := r.col().Doc(id)
-
 	if _, err := docRef.Get(ctx); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return productdom.ErrNotFound
@@ -184,10 +169,7 @@ func (r *ProductRepositoryFS) UpdateInspectionResult(
 		return err
 	}
 
-	updates := map[string]any{
-		"inspectionResult": string(result),
-	}
-
+	updates := map[string]any{"inspectionResult": string(result)}
 	_, err := docRef.Set(ctx, updates, firestore.MergeAll)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
@@ -220,24 +202,22 @@ func docToProduct(doc *firestore.DocumentSnapshot) (productdom.Product, error) {
 
 	getStrPtr := func(keys ...string) *string {
 		for _, k := range keys {
-			if v, ok := data[k].(string); ok {
-				if v != "" {
-					s := v
-					return &s
-				}
+			if v, ok := data[k].(string); ok && v != "" {
+				s := v
+				return &s
 			}
 		}
 		return nil
 	}
 
-	getTimePtr := func(keys ...string) *time.Time {
-		for _, k := range keys {
-			if v, ok := data[k].(time.Time); ok && !v.IsZero() {
-				t := v.UTC()
-				return &t
-			}
-		}
-		return nil
+	printedAt, err := firestoreOptionalTime(data, "printedAt")
+	if err != nil {
+		return productdom.Product{}, err
+	}
+
+	inspectedAt, err := firestoreOptionalTime(data, "inspectedAt")
+	if err != nil {
+		return productdom.Product{}, err
 	}
 
 	return productdom.Product{
@@ -245,8 +225,8 @@ func docToProduct(doc *firestore.DocumentSnapshot) (productdom.Product, error) {
 		ModelID:          getStr("modelId"),
 		ProductionID:     getStr("productionId"),
 		InspectionResult: productdom.InspectionResult(getStr("inspectionResult")),
-		PrintedAt:        getTimePtr("printedAt"),
-		InspectedAt:      getTimePtr("inspectedAt"),
+		PrintedAt:        printedAt,
+		InspectedAt:      inspectedAt,
 		InspectedBy:      getStrPtr("inspectedBy"),
 	}, nil
 }
@@ -260,15 +240,12 @@ func productToDoc(v productdom.Product) map[string]any {
 	if ir := string(v.InspectionResult); ir != "" {
 		m["inspectionResult"] = ir
 	}
-
 	if v.PrintedAt != nil && !v.PrintedAt.IsZero() {
 		m["printedAt"] = v.PrintedAt.UTC()
 	}
-
 	if v.InspectedAt != nil && !v.InspectedAt.IsZero() {
 		m["inspectedAt"] = v.InspectedAt.UTC()
 	}
-
 	if v.InspectedBy != nil && *v.InspectedBy != "" {
 		m["inspectedBy"] = *v.InspectedBy
 	}

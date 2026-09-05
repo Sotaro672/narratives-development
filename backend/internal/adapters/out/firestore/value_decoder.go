@@ -1,4 +1,4 @@
-// backend\internal\adapters\out\firestore\value_decoder.go
+// backend/internal/adapters/out/firestore/value_decoder.go
 package firestore
 
 import (
@@ -6,6 +6,16 @@ import (
 	"time"
 )
 
+// firestoreRequiredTime decodes a required Firestore timestamp.
+//
+// Contract:
+//   - missing field is invalid
+//   - nil field is invalid
+//   - only time.Time is accepted
+//   - zero time is invalid
+//   - returned time is always normalized to UTC
+//
+// Firestore timestamp decoding must not silently fall back to time.Time{}.
 func firestoreRequiredTime(values map[string]any, key string) (time.Time, error) {
 	value, ok := values[key]
 	if !ok || value == nil {
@@ -23,6 +33,16 @@ func firestoreRequiredTime(values map[string]any, key string) (time.Time, error)
 	return timestamp.UTC(), nil
 }
 
+// firestoreOptionalTime decodes an optional Firestore timestamp.
+//
+// Contract:
+//   - missing field returns nil
+//   - nil field returns nil
+//   - if present, only time.Time is accepted
+//   - if present, zero time is invalid
+//   - returned time is always normalized to UTC
+//
+// A present but malformed timestamp must not be treated as an absent value.
 func firestoreOptionalTime(values map[string]any, key string) (*time.Time, error) {
 	value, ok := values[key]
 	if !ok || value == nil {

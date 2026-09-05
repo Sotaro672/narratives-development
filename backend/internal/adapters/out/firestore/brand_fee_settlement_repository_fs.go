@@ -59,10 +59,7 @@ func (r *BrandFeeSettlementRepositoryFS) doc(brandFeeSettlementID string) *fires
 // Read
 // ============================================================
 
-func (r *BrandFeeSettlementRepositoryFS) GetByID(
-	ctx context.Context,
-	brandFeeSettlementID string,
-) (brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) GetByID(ctx context.Context, brandFeeSettlementID string) (brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, errors.New("brandFeeSettlement: firestore client is nil")
 	}
@@ -81,73 +78,53 @@ func (r *BrandFeeSettlementRepositoryFS) GetByID(
 	return docToBrandFeeSettlement(snapshot)
 }
 
-func (r *BrandFeeSettlementRepositoryFS) ListByPaymentID(
-	ctx context.Context,
-	paymentID string,
-) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) ListByPaymentID(ctx context.Context, paymentID string) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("brandFeeSettlement: firestore client is nil")
 	}
 	if paymentID == "" {
 		return nil, brandfeesettlementdom.ErrInvalidPaymentID
 	}
-
 	return r.listByField(ctx, "paymentId", paymentID)
 }
 
-func (r *BrandFeeSettlementRepositoryFS) ListByOrderID(
-	ctx context.Context,
-	orderID string,
-) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) ListByOrderID(ctx context.Context, orderID string) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("brandFeeSettlement: firestore client is nil")
 	}
 	if orderID == "" {
 		return nil, brandfeesettlementdom.ErrInvalidOrderID
 	}
-
 	return r.listByField(ctx, "orderId", orderID)
 }
 
-func (r *BrandFeeSettlementRepositoryFS) ListByBrandID(
-	ctx context.Context,
-	brandID string,
-) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) ListByBrandID(ctx context.Context, brandID string) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("brandFeeSettlement: firestore client is nil")
 	}
 	if brandID == "" {
 		return nil, brandfeesettlementdom.ErrInvalidBrandID
 	}
-
 	return r.listByField(ctx, "brandId", brandID)
 }
 
-func (r *BrandFeeSettlementRepositoryFS) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) ListByCompanyID(ctx context.Context, companyID string) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("brandFeeSettlement: firestore client is nil")
 	}
 	if companyID == "" {
 		return nil, brandfeesettlementdom.ErrInvalidCompanyID
 	}
-
 	return r.listByField(ctx, "companyId", companyID)
 }
 
-func (r *BrandFeeSettlementRepositoryFS) ListByAccountID(
-	ctx context.Context,
-	accountID string,
-) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) ListByAccountID(ctx context.Context, accountID string) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("brandFeeSettlement: firestore client is nil")
 	}
 	if accountID == "" {
 		return nil, brandfeesettlementdom.ErrInvalidAccountID
 	}
-
 	return r.listByField(ctx, "accountId", accountID)
 }
 
@@ -163,10 +140,7 @@ func (r *BrandFeeSettlementRepositoryFS) ListByAccountID(
 // Firestore is queried by one status at a time. Stale filtering, deduplication,
 // deterministic ordering, and Limit are applied in memory to avoid additional
 // composite indexes.
-func (r *BrandFeeSettlementRepositoryFS) ListTransferCandidates(
-	ctx context.Context,
-	in brandfeesettlementdom.ListTransferCandidatesInput,
-) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) ListTransferCandidates(ctx context.Context, in brandfeesettlementdom.ListTransferCandidatesInput) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("brandFeeSettlement: firestore client is nil")
 	}
@@ -194,8 +168,7 @@ func (r *BrandFeeSettlementRepositoryFS) ListTransferCandidates(
 		}
 
 		for _, settlement := range settlements {
-			if settlement.Status == brandfeesettlementdom.StatusTransferring &&
-				settlement.UpdatedAt.After(staleBefore) {
+			if settlement.Status == brandfeesettlementdom.StatusTransferring && settlement.UpdatedAt.After(staleBefore) {
 				continue
 			}
 			if _, exists := seen[settlement.ID]; exists {
@@ -221,16 +194,11 @@ func (r *BrandFeeSettlementRepositoryFS) ListTransferCandidates(
 	return result, nil
 }
 
-func (r *BrandFeeSettlementRepositoryFS) listByField(
-	ctx context.Context,
-	field string,
-	value string,
-) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) listByField(ctx context.Context, field string, value string) ([]brandfeesettlementdom.BrandFeeSettlement, error) {
 	iter := r.col().Where(field, "==", value).Documents(ctx)
 	defer iter.Stop()
 
 	result := make([]brandfeesettlementdom.BrandFeeSettlement, 0)
-
 	for {
 		snapshot, err := iter.Next()
 		if err == iterator.Done {
@@ -244,7 +212,6 @@ func (r *BrandFeeSettlementRepositoryFS) listByField(
 		if err != nil {
 			return nil, err
 		}
-
 		result = append(result, settlement)
 	}
 
@@ -269,10 +236,7 @@ func (r *BrandFeeSettlementRepositoryFS) listByField(
 //
 // Existing deterministic IDs are never overwritten. ErrConflict is returned so
 // payment-success processing can safely retry and resolve the existing record.
-func (r *BrandFeeSettlementRepositoryFS) Create(
-	ctx context.Context,
-	in brandfeesettlementdom.CreateBrandFeeSettlementInput,
-) (brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) Create(ctx context.Context, in brandfeesettlementdom.CreateBrandFeeSettlementInput) (brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, errors.New("brandFeeSettlement: firestore client is nil")
 	}
@@ -335,11 +299,7 @@ func (r *BrandFeeSettlementRepositoryFS) Create(
 //
 // The current entity is read inside a Firestore transaction. Financial state is
 // never changed by blindly patching raw Firestore fields.
-func (r *BrandFeeSettlementRepositoryFS) UpdateByID(
-	ctx context.Context,
-	brandFeeSettlementID string,
-	patch brandfeesettlementdom.UpdateBrandFeeSettlementInput,
-) (brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) UpdateByID(ctx context.Context, brandFeeSettlementID string, patch brandfeesettlementdom.UpdateBrandFeeSettlementInput) (brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, errors.New("brandFeeSettlement: firestore client is nil")
 	}
@@ -407,12 +367,7 @@ func (r *BrandFeeSettlementRepositoryFS) UpdateByID(
 //
 // The Stripe caller must use a deterministic idempotency key so reclaiming a
 // stale record cannot intentionally create a second transfer.
-func (r *BrandFeeSettlementRepositoryFS) ClaimForTransfer(
-	ctx context.Context,
-	brandFeeSettlementID string,
-	now time.Time,
-	staleBefore time.Time,
-) (brandfeesettlementdom.BrandFeeSettlement, bool, error) {
+func (r *BrandFeeSettlementRepositoryFS) ClaimForTransfer(ctx context.Context, brandFeeSettlementID string, now time.Time, staleBefore time.Time) (brandfeesettlementdom.BrandFeeSettlement, bool, error) {
 	if r == nil || r.Client == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, false, errors.New("brandFeeSettlement: firestore client is nil")
 	}
@@ -448,7 +403,6 @@ func (r *BrandFeeSettlementRepositoryFS) ClaimForTransfer(
 		}
 
 		next := current
-
 		switch current.Status {
 		case brandfeesettlementdom.StatusReady, brandfeesettlementdom.StatusFailedRetryable:
 			if err := next.StartTransfer(now); err != nil {
@@ -493,12 +447,7 @@ func (r *BrandFeeSettlementRepositoryFS) ClaimForTransfer(
 //
 // Repeating the same completion with the same StripeTransferID is an idempotent
 // no-op.
-func (r *BrandFeeSettlementRepositoryFS) CompleteTransfer(
-	ctx context.Context,
-	brandFeeSettlementID string,
-	stripeTransferID string,
-	now time.Time,
-) (brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) CompleteTransfer(ctx context.Context, brandFeeSettlementID string, stripeTransferID string, now time.Time) (brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, errors.New("brandFeeSettlement: firestore client is nil")
 	}
@@ -566,23 +515,14 @@ func (r *BrandFeeSettlementRepositoryFS) CompleteTransfer(
 // failure.
 //
 // Repeating an identical already-recorded failure is an idempotent no-op.
-func (r *BrandFeeSettlementRepositoryFS) FailTransfer(
-	ctx context.Context,
-	brandFeeSettlementID string,
-	nextStatus brandfeesettlementdom.Status,
-	errorType *string,
-	errorCode *string,
-	errorMsg *string,
-	now time.Time,
-) (brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) FailTransfer(ctx context.Context, brandFeeSettlementID string, nextStatus brandfeesettlementdom.Status, errorType *string, errorCode *string, errorMsg *string, now time.Time) (brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, errors.New("brandFeeSettlement: firestore client is nil")
 	}
 	if brandFeeSettlementID == "" {
 		return brandfeesettlementdom.BrandFeeSettlement{}, brandfeesettlementdom.ErrInvalidID
 	}
-	if nextStatus != brandfeesettlementdom.StatusFailedRetryable &&
-		nextStatus != brandfeesettlementdom.StatusFailed {
+	if nextStatus != brandfeesettlementdom.StatusFailedRetryable && nextStatus != brandfeesettlementdom.StatusFailed {
 		return brandfeesettlementdom.BrandFeeSettlement{}, brandfeesettlementdom.ErrInvalidStatusTransition
 	}
 
@@ -656,12 +596,7 @@ func (r *BrandFeeSettlementRepositoryFS) FailTransfer(
 // ReverseTransfer atomically records a completed Stripe Transfer reversal.
 //
 // Repeating the same reversal ID is an idempotent no-op.
-func (r *BrandFeeSettlementRepositoryFS) ReverseTransfer(
-	ctx context.Context,
-	brandFeeSettlementID string,
-	stripeTransferReversalID string,
-	now time.Time,
-) (brandfeesettlementdom.BrandFeeSettlement, error) {
+func (r *BrandFeeSettlementRepositoryFS) ReverseTransfer(ctx context.Context, brandFeeSettlementID string, stripeTransferReversalID string, now time.Time) (brandfeesettlementdom.BrandFeeSettlement, error) {
 	if r == nil || r.Client == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, errors.New("brandFeeSettlement: firestore client is nil")
 	}
@@ -729,11 +664,7 @@ func (r *BrandFeeSettlementRepositoryFS) ReverseTransfer(
 // Update patch
 // ============================================================
 
-func applyBrandFeeSettlementPatch(
-	current brandfeesettlementdom.BrandFeeSettlement,
-	patch brandfeesettlementdom.UpdateBrandFeeSettlementInput,
-	now time.Time,
-) (brandfeesettlementdom.BrandFeeSettlement, bool, error) {
+func applyBrandFeeSettlementPatch(current brandfeesettlementdom.BrandFeeSettlement, patch brandfeesettlementdom.UpdateBrandFeeSettlementInput, now time.Time) (brandfeesettlementdom.BrandFeeSettlement, bool, error) {
 	if patch.Status == nil {
 		if patch.StripeTransferID != nil ||
 			patch.StripeTransferReversalID != nil ||
@@ -860,14 +791,12 @@ func applyBrandFeeSettlementPatch(
 		return brandfeesettlementdom.BrandFeeSettlement{}, false, brandfeesettlementdom.ErrInvalidStatus
 	}
 
-	if patch.StripeTransferID != nil &&
-		nextStatus != brandfeesettlementdom.StatusTransferred {
+	if patch.StripeTransferID != nil && nextStatus != brandfeesettlementdom.StatusTransferred {
 		if *patch.StripeTransferID != next.StripeTransferID {
 			return brandfeesettlementdom.BrandFeeSettlement{}, false, brandfeesettlementdom.ErrInvalidStripeTransferID
 		}
 	}
-	if patch.StripeTransferReversalID != nil &&
-		nextStatus != brandfeesettlementdom.StatusReversed {
+	if patch.StripeTransferReversalID != nil && nextStatus != brandfeesettlementdom.StatusReversed {
 		if *patch.StripeTransferReversalID != next.StripeTransferReversalID {
 			return brandfeesettlementdom.BrandFeeSettlement{}, false, brandfeesettlementdom.ErrInvalidStripeTransferReversalID
 		}
@@ -880,10 +809,7 @@ func applyBrandFeeSettlementPatch(
 	return next, true, nil
 }
 
-func validateBrandFeeSettlementImmutableFields(
-	current brandfeesettlementdom.BrandFeeSettlement,
-	next brandfeesettlementdom.BrandFeeSettlement,
-) error {
+func validateBrandFeeSettlementImmutableFields(current brandfeesettlementdom.BrandFeeSettlement, next brandfeesettlementdom.BrandFeeSettlement) error {
 	if current.ID != next.ID ||
 		current.OrderID != next.OrderID ||
 		current.PaymentID != next.PaymentID ||
@@ -909,9 +835,7 @@ func validateBrandFeeSettlementImmutableFields(
 // Firestore conversion
 // ============================================================
 
-func brandFeeSettlementToData(
-	settlement brandfeesettlementdom.BrandFeeSettlement,
-) map[string]any {
+func brandFeeSettlementToData(settlement brandfeesettlementdom.BrandFeeSettlement) map[string]any {
 	data := map[string]any{
 		"orderId":               settlement.OrderID,
 		"paymentId":             settlement.PaymentID,
@@ -956,9 +880,7 @@ func brandFeeSettlementToData(
 	return data
 }
 
-func docToBrandFeeSettlement(
-	document *firestore.DocumentSnapshot,
-) (brandfeesettlementdom.BrandFeeSettlement, error) {
+func docToBrandFeeSettlement(document *firestore.DocumentSnapshot) (brandfeesettlementdom.BrandFeeSettlement, error) {
 	if document == nil || document.Ref == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, errors.New("brandFeeSettlement: document snapshot is nil")
 	}
@@ -1024,11 +946,12 @@ func docToBrandFeeSettlement(
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	createdAt, err := brandFeeSettlementRequiredTime(data, "createdAt")
+
+	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	updatedAt, err := brandFeeSettlementRequiredTime(data, "updatedAt")
+	updatedAt, err := firestoreRequiredTime(data, "updatedAt")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
@@ -1053,11 +976,11 @@ func docToBrandFeeSettlement(
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	transferredAt, err := brandFeeSettlementOptionalTime(data, "transferredAt")
+	transferredAt, err := firestoreOptionalTime(data, "transferredAt")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	reversedAt, err := brandFeeSettlementOptionalTime(data, "reversedAt")
+	reversedAt, err := firestoreOptionalTime(data, "reversedAt")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
@@ -1100,10 +1023,7 @@ func docToBrandFeeSettlement(
 // Firestore field helpers
 // ============================================================
 
-func brandFeeSettlementRequiredString(
-	values map[string]any,
-	key string,
-) (string, error) {
+func brandFeeSettlementRequiredString(values map[string]any, key string) (string, error) {
 	value, exists := values[key]
 	if !exists || value == nil {
 		return "", fmt.Errorf("brandFeeSettlement: missing %s", key)
@@ -1117,10 +1037,7 @@ func brandFeeSettlementRequiredString(
 	return text, nil
 }
 
-func brandFeeSettlementOptionalString(
-	values map[string]any,
-	key string,
-) (*string, error) {
+func brandFeeSettlementOptionalString(values map[string]any, key string) (*string, error) {
 	value, exists := values[key]
 	if !exists || value == nil {
 		return nil, nil
@@ -1134,10 +1051,7 @@ func brandFeeSettlementOptionalString(
 	return &text, nil
 }
 
-func brandFeeSettlementOptionalStringValue(
-	values map[string]any,
-	key string,
-) (string, error) {
+func brandFeeSettlementOptionalStringValue(values map[string]any, key string) (string, error) {
 	value, err := brandFeeSettlementOptionalString(values, key)
 	if err != nil {
 		return "", err
@@ -1153,14 +1067,10 @@ func normalizeBrandFeeSettlementOptionalString(value *string) *string {
 	if value == nil || *value == "" {
 		return nil
 	}
-
 	return value
 }
 
-func brandFeeSettlementOptionalStringEqual(
-	left *string,
-	right *string,
-) bool {
+func brandFeeSettlementOptionalStringEqual(left *string, right *string) bool {
 	left = normalizeBrandFeeSettlementOptionalString(left)
 	right = normalizeBrandFeeSettlementOptionalString(right)
 
@@ -1171,10 +1081,7 @@ func brandFeeSettlementOptionalStringEqual(
 	return *left == *right
 }
 
-func brandFeeSettlementRequiredInt(
-	values map[string]any,
-	key string,
-) (int, error) {
+func brandFeeSettlementRequiredInt(values map[string]any, key string) (int, error) {
 	value, exists := values[key]
 	if !exists || value == nil {
 		return 0, fmt.Errorf("brandFeeSettlement: missing %s", key)
@@ -1183,7 +1090,6 @@ func brandFeeSettlementRequiredInt(
 	switch number := value.(type) {
 	case int:
 		return number, nil
-
 	case int64:
 		maxInt := int64(int(^uint(0) >> 1))
 		minInt := -maxInt - 1
@@ -1191,43 +1097,7 @@ func brandFeeSettlementRequiredInt(
 			return 0, fmt.Errorf("brandFeeSettlement: invalid %s", key)
 		}
 		return int(number), nil
-
 	default:
 		return 0, fmt.Errorf("brandFeeSettlement: invalid %s", key)
 	}
-}
-
-func brandFeeSettlementRequiredTime(
-	values map[string]any,
-	key string,
-) (time.Time, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return time.Time{}, fmt.Errorf("brandFeeSettlement: missing %s", key)
-	}
-
-	timestamp, ok := value.(time.Time)
-	if !ok || timestamp.IsZero() {
-		return time.Time{}, fmt.Errorf("brandFeeSettlement: invalid %s", key)
-	}
-
-	return timestamp.UTC(), nil
-}
-
-func brandFeeSettlementOptionalTime(
-	values map[string]any,
-	key string,
-) (*time.Time, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return nil, nil
-	}
-
-	timestamp, ok := value.(time.Time)
-	if !ok || timestamp.IsZero() {
-		return nil, fmt.Errorf("brandFeeSettlement: invalid %s", key)
-	}
-
-	timestamp = timestamp.UTC()
-	return &timestamp, nil
 }

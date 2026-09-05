@@ -880,8 +880,9 @@ func orderTransferItemFromSnapshot(snap *firestore.DocumentSnapshot) (orderTrans
 	if !ok {
 		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
 	}
-	createdAt, ok := requiredOrderTransferItemTime(raw, "createdAt")
-	if !ok || createdAt.IsZero() {
+
+	createdAt, err := firestoreRequiredTime(raw, "createdAt")
+	if err != nil {
 		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
 	}
 
@@ -900,7 +901,7 @@ func orderTransferItemFromSnapshot(snap *firestore.DocumentSnapshot) (orderTrans
 		IsReturnRequested:  isReturnRequested,
 		IsReturnCompleted:  isReturnCompleted,
 		Transferred:        transferred,
-		CreatedAt:          createdAt.UTC(),
+		CreatedAt:          createdAt,
 		ModelID:            optionalOrderTransferItemString(raw, "modelId"),
 		InventoryID:        optionalOrderTransferItemString(raw, "inventoryId"),
 		ListID:             optionalOrderTransferItemString(raw, "listId"),
@@ -911,24 +912,20 @@ func orderTransferItemFromSnapshot(snap *firestore.DocumentSnapshot) (orderTrans
 		BrandID:            optionalOrderTransferItemString(raw, "brandId"),
 	}
 
-	tokenTransferVerifiedAt, tokenTransferVerifiedAtExists, err := optionalOrderTransferItemTime(raw, "tokenTransferVerifiedAt")
+	tokenTransferVerifiedAt, err := firestoreOptionalTime(raw, "tokenTransferVerifiedAt")
 	if err != nil {
-		return orderTransferItemProjection{}, err
-	}
-	if tokenTransferVerifiedAtExists {
-		projection.TokenTransferVerifiedAt = &tokenTransferVerifiedAt
-	}
-
-	transferredAt, transferredAtExists, err := optionalOrderTransferItemTime(raw, "transferredAt")
-	if err != nil {
-		return orderTransferItemProjection{}, err
-	}
-	if projection.Transferred != transferredAtExists {
 		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
 	}
-	if transferredAtExists {
-		projection.TransferredAt = &transferredAt
+	projection.TokenTransferVerifiedAt = tokenTransferVerifiedAt
+
+	transferredAt, err := firestoreOptionalTime(raw, "transferredAt")
+	if err != nil {
+		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
 	}
+	if projection.Transferred != (transferredAt != nil) {
+		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
+	}
+	projection.TransferredAt = transferredAt
 
 	if projection.IsReturnCompleted && !projection.IsReturnRequested {
 		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
@@ -941,21 +938,19 @@ func orderTransferItemFromSnapshot(snap *firestore.DocumentSnapshot) (orderTrans
 		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
 	}
 
-	lockedAt, lockedAtExists, err := optionalOrderTransferItemTime(raw, "transferLockedAt")
+	lockedAt, err := firestoreOptionalTime(raw, "transferLockedAt")
 	if err != nil {
-		return orderTransferItemProjection{}, err
-	}
-	lockExpiresAt, lockExpiresAtExists, err := optionalOrderTransferItemTime(raw, "transferLockExpiresAt")
-	if err != nil {
-		return orderTransferItemProjection{}, err
-	}
-	if lockedAtExists != lockExpiresAtExists {
 		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
 	}
-	if lockedAtExists {
-		projection.TransferLockedAt = &lockedAt
-		projection.TransferLockExpiresAt = &lockExpiresAt
+	lockExpiresAt, err := firestoreOptionalTime(raw, "transferLockExpiresAt")
+	if err != nil {
+		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
 	}
+	if (lockedAt != nil) != (lockExpiresAt != nil) {
+		return orderTransferItemProjection{}, ErrInvalidOrderTransferItemData
+	}
+	projection.TransferLockedAt = lockedAt
+	projection.TransferLockExpiresAt = lockExpiresAt
 
 	item := projection.toEligibleTransferItem()
 	if err := item.Validate(); err != nil {
@@ -1073,27 +1068,6 @@ func requiredOrderTransferItemInt(raw map[string]any, field string) (int, bool) 
 	default:
 		return 0, false
 	}
-}
-
-func requiredOrderTransferItemTime(raw map[string]any, field string) (time.Time, bool) {
-	value, exists := raw[field]
-	if !exists || value == nil {
-		return time.Time{}, false
-	}
-	result, ok := value.(time.Time)
-	return result, ok && !result.IsZero()
-}
-
-func optionalOrderTransferItemTime(raw map[string]any, field string) (time.Time, bool, error) {
-	value, exists := raw[field]
-	if !exists || value == nil {
-		return time.Time{}, false, nil
-	}
-	result, ok := value.(time.Time)
-	if !ok || result.IsZero() {
-		return time.Time{}, false, ErrInvalidOrderTransferItemData
-	}
-	return result.UTC(), true, nil
 }
 
 func mapOrderTransferItemNotFound(err error) error {

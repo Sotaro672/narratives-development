@@ -87,7 +87,6 @@ func (r *SettlementRepositoryFS) ListByPaymentID(ctx context.Context, paymentID 
 	if paymentID == "" {
 		return nil, settlementdom.ErrInvalidPaymentID
 	}
-
 	return r.listByField(ctx, "paymentId", paymentID)
 }
 
@@ -98,7 +97,6 @@ func (r *SettlementRepositoryFS) ListByOrderID(ctx context.Context, orderID stri
 	if orderID == "" {
 		return nil, settlementdom.ErrInvalidOrderID
 	}
-
 	return r.listByField(ctx, "orderId", orderID)
 }
 
@@ -109,7 +107,6 @@ func (r *SettlementRepositoryFS) ListByCompanyID(ctx context.Context, companyID 
 	if companyID == "" {
 		return nil, settlementdom.ErrInvalidCompanyID
 	}
-
 	return r.listByField(ctx, "companyId", companyID)
 }
 
@@ -120,7 +117,6 @@ func (r *SettlementRepositoryFS) ListByAccountID(ctx context.Context, accountID 
 	if accountID == "" {
 		return nil, settlementdom.ErrInvalidAccountID
 	}
-
 	return r.listByField(ctx, "accountId", accountID)
 }
 
@@ -136,10 +132,7 @@ func (r *SettlementRepositoryFS) ListByAccountID(ctx context.Context, accountID 
 // Firestore queries only by status here to avoid requiring an additional
 // composite index. Stale filtering, deterministic ordering, deduplication,
 // and Limit are applied in application memory.
-func (r *SettlementRepositoryFS) ListTransferCandidates(
-	ctx context.Context,
-	in settlementdom.ListTransferCandidatesInput,
-) ([]settlementdom.Settlement, error) {
+func (r *SettlementRepositoryFS) ListTransferCandidates(ctx context.Context, in settlementdom.ListTransferCandidatesInput) ([]settlementdom.Settlement, error) {
 	if r == nil || r.Client == nil {
 		return nil, errors.New("settlement: firestore client is nil")
 	}
@@ -193,16 +186,11 @@ func (r *SettlementRepositoryFS) ListTransferCandidates(
 	return result, nil
 }
 
-func (r *SettlementRepositoryFS) listByField(
-	ctx context.Context,
-	field string,
-	value string,
-) ([]settlementdom.Settlement, error) {
+func (r *SettlementRepositoryFS) listByField(ctx context.Context, field string, value string) ([]settlementdom.Settlement, error) {
 	iter := r.col().Where(field, "==", value).Documents(ctx)
 	defer iter.Stop()
 
 	result := make([]settlementdom.Settlement, 0)
-
 	for {
 		snapshot, err := iter.Next()
 		if err == iterator.Done {
@@ -216,7 +204,6 @@ func (r *SettlementRepositoryFS) listByField(
 		if err != nil {
 			return nil, err
 		}
-
 		result = append(result, settlement)
 	}
 
@@ -241,16 +228,12 @@ func (r *SettlementRepositoryFS) listByField(
 //
 // ready is reached exclusively through UpdateByID -> MarkReady after the
 // corresponding seller's Order items have crossed the dispatch boundary.
-func (r *SettlementRepositoryFS) Create(
-	ctx context.Context,
-	in settlementdom.CreateSettlementInput,
-) (settlementdom.Settlement, error) {
+func (r *SettlementRepositoryFS) Create(ctx context.Context, in settlementdom.CreateSettlementInput) (settlementdom.Settlement, error) {
 	if r == nil || r.Client == nil {
 		return settlementdom.Settlement{}, errors.New("settlement: firestore client is nil")
 	}
 
 	in.Currency = strings.ToUpper(in.Currency)
-
 	if in.SettlementID == "" {
 		return settlementdom.Settlement{}, settlementdom.ErrInvalidID
 	}
@@ -310,11 +293,7 @@ func (r *SettlementRepositoryFS) Create(
 // - FailTransfer
 //
 // directly.
-func (r *SettlementRepositoryFS) UpdateByID(
-	ctx context.Context,
-	settlementID string,
-	patch settlementdom.UpdateSettlementInput,
-) (settlementdom.Settlement, error) {
+func (r *SettlementRepositoryFS) UpdateByID(ctx context.Context, settlementID string, patch settlementdom.UpdateSettlementInput) (settlementdom.Settlement, error) {
 	if r == nil || r.Client == nil {
 		return settlementdom.Settlement{}, errors.New("settlement: firestore client is nil")
 	}
@@ -386,12 +365,7 @@ func (r *SettlementRepositoryFS) UpdateByID(
 // If another worker still owns a non-stale transferring claim, or the
 // Settlement is already completed/terminal, Claimed=false is returned and
 // Stripe must not be called by this invocation.
-func (r *SettlementRepositoryFS) ClaimForTransfer(
-	ctx context.Context,
-	settlementID string,
-	now time.Time,
-	staleBefore time.Time,
-) (usecase.ClaimSettlementTransferResult, error) {
+func (r *SettlementRepositoryFS) ClaimForTransfer(ctx context.Context, settlementID string, now time.Time, staleBefore time.Time) (usecase.ClaimSettlementTransferResult, error) {
 	if r == nil || r.Client == nil {
 		return usecase.ClaimSettlementTransferResult{}, errors.New("settlement: firestore client is nil")
 	}
@@ -404,7 +378,6 @@ func (r *SettlementRepositoryFS) ClaimForTransfer(
 
 	now = now.UTC()
 	staleBefore = staleBefore.UTC()
-
 	if !staleBefore.Before(now) {
 		return usecase.ClaimSettlementTransferResult{}, settlementdom.ErrInvalidUpdatedAt
 	}
@@ -427,7 +400,6 @@ func (r *SettlementRepositoryFS) ClaimForTransfer(
 		}
 
 		next := current
-
 		switch current.Status {
 		case settlementdom.StatusReady, settlementdom.StatusFailedRetryable:
 			if err := next.StartTransfer(now); err != nil {
@@ -436,22 +408,15 @@ func (r *SettlementRepositoryFS) ClaimForTransfer(
 
 		case settlementdom.StatusTransferring:
 			if current.UpdatedAt.After(staleBefore) {
-				result = usecase.ClaimSettlementTransferResult{
-					Settlement: current,
-					Claimed:    false,
-				}
+				result = usecase.ClaimSettlementTransferResult{Settlement: current, Claimed: false}
 				return nil
 			}
-
 			if err := next.ReclaimTransfer(now); err != nil {
 				return err
 			}
 
 		default:
-			result = usecase.ClaimSettlementTransferResult{
-				Settlement: current,
-				Claimed:    false,
-			}
+			result = usecase.ClaimSettlementTransferResult{Settlement: current, Claimed: false}
 			return nil
 		}
 
@@ -459,10 +424,7 @@ func (r *SettlementRepositoryFS) ClaimForTransfer(
 			return err
 		}
 
-		result = usecase.ClaimSettlementTransferResult{
-			Settlement: next,
-			Claimed:    true,
-		}
+		result = usecase.ClaimSettlementTransferResult{Settlement: next, Claimed: true}
 		return nil
 	})
 	if err != nil {
@@ -478,12 +440,7 @@ func (r *SettlementRepositoryFS) ClaimForTransfer(
 //
 // If the Settlement is already transferred with the same StripeTransferID,
 // the current Settlement is returned as a successful no-op.
-func (r *SettlementRepositoryFS) CompleteTransfer(
-	ctx context.Context,
-	settlementID string,
-	stripeTransferID string,
-	now time.Time,
-) (settlementdom.Settlement, error) {
+func (r *SettlementRepositoryFS) CompleteTransfer(ctx context.Context, settlementID string, stripeTransferID string, now time.Time) (settlementdom.Settlement, error) {
 	if r == nil || r.Client == nil {
 		return settlementdom.Settlement{}, errors.New("settlement: firestore client is nil")
 	}
@@ -555,15 +512,7 @@ func (r *SettlementRepositoryFS) CompleteTransfer(
 //
 // Repeated persistence of an already-recorded identical failure state is
 // treated as a successful no-op.
-func (r *SettlementRepositoryFS) FailTransfer(
-	ctx context.Context,
-	settlementID string,
-	nextStatus settlementdom.SettlementStatus,
-	errorType *string,
-	errorCode *string,
-	errorMsg *string,
-	now time.Time,
-) (settlementdom.Settlement, error) {
+func (r *SettlementRepositoryFS) FailTransfer(ctx context.Context, settlementID string, nextStatus settlementdom.SettlementStatus, errorType *string, errorCode *string, errorMsg *string, now time.Time) (settlementdom.Settlement, error) {
 	if r == nil || r.Client == nil {
 		return settlementdom.Settlement{}, errors.New("settlement: firestore client is nil")
 	}
@@ -577,7 +526,6 @@ func (r *SettlementRepositoryFS) FailTransfer(
 	errorType = normalizeSettlementOptionalString(errorType)
 	errorCode = normalizeSettlementOptionalString(errorCode)
 	errorMsg = normalizeSettlementOptionalString(errorMsg)
-
 	if errorType == nil && errorCode == nil && errorMsg == nil {
 		return settlementdom.Settlement{}, settlementdom.ErrFailureReasonRequired
 	}
@@ -643,11 +591,7 @@ func (r *SettlementRepositoryFS) FailTransfer(
 // Update patch
 // ============================================================
 
-func applySettlementPatch(
-	current settlementdom.Settlement,
-	patch settlementdom.UpdateSettlementInput,
-	now time.Time,
-) (settlementdom.Settlement, bool, error) {
+func applySettlementPatch(current settlementdom.Settlement, patch settlementdom.UpdateSettlementInput, now time.Time) (settlementdom.Settlement, bool, error) {
 	if patch.Status == nil {
 		if patch.StripeTransferID != nil ||
 			patch.StripeTransferReversalID != nil ||
@@ -656,7 +600,6 @@ func applySettlementPatch(
 			patch.ErrorMsg != nil {
 			return settlementdom.Settlement{}, false, settlementdom.ErrInvalidStatusTransition
 		}
-
 		return current, false, nil
 	}
 	if now.IsZero() {
@@ -901,12 +844,12 @@ func docToSettlement(document *firestore.DocumentSnapshot) (settlementdom.Settle
 		return settlementdom.Settlement{}, err
 	}
 
-	createdAt, err := settlementRequiredTime(data, "createdAt")
+	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
 
-	updatedAt, err := settlementRequiredTime(data, "updatedAt")
+	updatedAt, err := firestoreRequiredTime(data, "updatedAt")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
@@ -917,12 +860,12 @@ func docToSettlement(document *firestore.DocumentSnapshot) (settlementdom.Settle
 	errorCode := settlementOptionalString(data, "errorCode")
 	errorMsg := settlementOptionalString(data, "errorMsg")
 
-	transferredAt, err := settlementOptionalTime(data, "transferredAt")
+	transferredAt, err := firestoreOptionalTime(data, "transferredAt")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
 
-	reversedAt, err := settlementOptionalTime(data, "reversedAt")
+	reversedAt, err := firestoreOptionalTime(data, "reversedAt")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
@@ -1045,11 +988,9 @@ func normalizeSettlementOptionalString(value *string) *string {
 func optionalStringEqual(left *string, right *string) bool {
 	left = normalizeSettlementOptionalString(left)
 	right = normalizeSettlementOptionalString(right)
-
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-
 	return *left == *right
 }
 
@@ -1066,40 +1007,9 @@ func settlementRequiredInt(values map[string]any, key string) (int, error) {
 			return 0, fmt.Errorf("settlement: invalid %s", key)
 		}
 		return int(number), nil
-
 	case int:
 		return number, nil
-
 	default:
 		return 0, fmt.Errorf("settlement: invalid %s", key)
 	}
-}
-
-func settlementRequiredTime(values map[string]any, key string) (time.Time, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return time.Time{}, fmt.Errorf("settlement: missing %s", key)
-	}
-
-	timestamp, ok := value.(time.Time)
-	if !ok || timestamp.IsZero() {
-		return time.Time{}, fmt.Errorf("settlement: invalid %s", key)
-	}
-
-	return timestamp.UTC(), nil
-}
-
-func settlementOptionalTime(values map[string]any, key string) (*time.Time, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return nil, nil
-	}
-
-	timestamp, ok := value.(time.Time)
-	if !ok || timestamp.IsZero() {
-		return nil, fmt.Errorf("settlement: invalid %s", key)
-	}
-
-	timestamp = timestamp.UTC()
-	return &timestamp, nil
 }
