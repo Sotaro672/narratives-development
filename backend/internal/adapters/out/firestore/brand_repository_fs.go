@@ -29,11 +29,7 @@ func (r *BrandRepositoryFS) col() *firestore.CollectionRef {
 
 var _ branddom.Repository = (*BrandRepositoryFS)(nil)
 
-func (r *BrandRepositoryFS) ListByCompanyID(
-	ctx context.Context,
-	companyID string,
-	page branddom.Page,
-) (branddom.PageResult[branddom.Brand], error) {
+func (r *BrandRepositoryFS) ListByCompanyID(ctx context.Context, companyID string, page branddom.Page) (branddom.PageResult[branddom.Brand], error) {
 	if companyID == "" {
 		return branddom.PageResult[branddom.Brand]{}, branddom.ErrInvalidID
 	}
@@ -51,9 +47,7 @@ func (r *BrandRepositoryFS) ListByCompanyID(
 		number = 1
 	}
 
-	baseQuery := r.col().
-		Query.
-		Where("companyId", "==", companyID)
+	baseQuery := r.col().Query.Where("companyId", "==", companyID)
 
 	countIter := baseQuery.Documents(ctx)
 	totalCount := 0
@@ -71,9 +65,7 @@ func (r *BrandRepositoryFS) ListByCompanyID(
 	countIter.Stop()
 
 	offset := (number - 1) * perPage
-
 	q := baseQuery.OrderBy("createdAt", firestore.Desc)
-
 	if offset > 0 {
 		q = q.Offset(offset)
 	}
@@ -96,7 +88,6 @@ func (r *BrandRepositoryFS) ListByCompanyID(
 		if err != nil {
 			return branddom.PageResult[branddom.Brand]{}, err
 		}
-
 		items = append(items, b)
 	}
 
@@ -114,10 +105,7 @@ func (r *BrandRepositoryFS) ListByCompanyID(
 	}, nil
 }
 
-func (r *BrandRepositoryFS) GetByID(
-	ctx context.Context,
-	id string,
-) (branddom.Brand, error) {
+func (r *BrandRepositoryFS) GetByID(ctx context.Context, id string) (branddom.Brand, error) {
 	if id == "" {
 		return branddom.Brand{}, branddom.ErrNotFound
 	}
@@ -133,10 +121,7 @@ func (r *BrandRepositoryFS) GetByID(
 	return r.docToDomain(snap)
 }
 
-func (r *BrandRepositoryFS) Create(
-	ctx context.Context,
-	b branddom.Brand,
-) (branddom.Brand, error) {
+func (r *BrandRepositoryFS) Create(ctx context.Context, b branddom.Brand) (branddom.Brand, error) {
 	now := time.Now().UTC()
 
 	if b.CreatedAt.IsZero() {
@@ -171,11 +156,7 @@ func (r *BrandRepositoryFS) Create(
 	return r.docToDomain(snap)
 }
 
-func (r *BrandRepositoryFS) Update(
-	ctx context.Context,
-	id string,
-	patch branddom.BrandPatch,
-) (branddom.Brand, error) {
+func (r *BrandRepositoryFS) Update(ctx context.Context, id string, patch branddom.BrandPatch) (branddom.Brand, error) {
 	if id == "" {
 		return branddom.Brand{}, branddom.ErrNotFound
 	}
@@ -191,89 +172,47 @@ func (r *BrandRepositoryFS) Update(
 	var updates []firestore.Update
 
 	if patch.CompanyID != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "companyId",
-			Value: *patch.CompanyID,
-		})
+		updates = append(updates, firestore.Update{Path: "companyId", Value: *patch.CompanyID})
 	}
 	if patch.AccountID != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "accountId",
-			Value: *patch.AccountID,
-		})
+		updates = append(updates, firestore.Update{Path: "accountId", Value: *patch.AccountID})
 	}
 	if patch.Name != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "name",
-			Value: *patch.Name,
-		})
+		updates = append(updates, firestore.Update{Path: "name", Value: *patch.Name})
 	}
 	if patch.Description != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "description",
-			Value: optionalStringValue(patch.Description),
-		})
+		updates = appendOptionalStringUpdate(updates, "description", patch.Description)
 	}
 	if patch.URL != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "websiteUrl",
-			Value: optionalStringValue(patch.URL),
-		})
+		updates = appendOptionalStringUpdate(updates, "websiteUrl", patch.URL)
 	}
 	if patch.BrandIcon != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "brandIcon",
-			Value: optionalStringValue(patch.BrandIcon),
-		})
+		updates = appendOptionalStringUpdate(updates, "brandIcon", patch.BrandIcon)
 	}
 	if patch.BrandBackgroundImage != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "brandBackgroundImage",
-			Value: optionalStringValue(patch.BrandBackgroundImage),
-		})
+		updates = appendOptionalStringUpdate(updates, "brandBackgroundImage", patch.BrandBackgroundImage)
 	}
 	if patch.IsActive != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "isActive",
-			Value: *patch.IsActive,
-		})
+		updates = append(updates, firestore.Update{Path: "isActive", Value: *patch.IsActive})
 	}
 	if patch.ManagerID != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "manager",
-			Value: optionalStringValue(patch.ManagerID),
-		})
+		updates = appendOptionalStringUpdate(updates, "manager", patch.ManagerID)
 	}
 	if patch.WalletAddress != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "walletAddress",
-			Value: optionalStringValue(patch.WalletAddress),
-		})
+		updates = appendOptionalStringUpdate(updates, "walletAddress", patch.WalletAddress)
 	}
 	if patch.CreatedBy != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "createdBy",
-			Value: optionalStringValue(patch.CreatedBy),
-		})
+		updates = appendOptionalStringUpdate(updates, "createdBy", patch.CreatedBy)
 	}
 	if patch.UpdatedAt != nil {
 		if patch.UpdatedAt.IsZero() {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: nil,
-			})
+			updates = append(updates, firestore.Update{Path: "updatedAt", Value: nil})
 		} else {
-			updates = append(updates, firestore.Update{
-				Path:  "updatedAt",
-				Value: patch.UpdatedAt.UTC(),
-			})
+			updates = append(updates, firestore.Update{Path: "updatedAt", Value: patch.UpdatedAt.UTC()})
 		}
 	}
 	if patch.UpdatedBy != nil {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedBy",
-			Value: optionalStringValue(patch.UpdatedBy),
-		})
+		updates = appendOptionalStringUpdate(updates, "updatedBy", patch.UpdatedBy)
 	}
 
 	if len(updates) == 0 {
@@ -284,7 +223,6 @@ func (r *BrandRepositoryFS) Update(
 			}
 			return branddom.Brand{}, err
 		}
-
 		return r.docToDomain(snap)
 	}
 
@@ -297,17 +235,13 @@ func (r *BrandRepositoryFS) Update(
 	}
 
 	if !hasUpdatedAt {
-		updates = append(updates, firestore.Update{
-			Path:  "updatedAt",
-			Value: time.Now().UTC(),
-		})
+		updates = append(updates, firestore.Update{Path: "updatedAt", Value: time.Now().UTC()})
 	}
 
 	if _, err := ref.Update(ctx, updates); err != nil {
 		if status.Code(err) == codes.NotFound {
 			return branddom.Brand{}, branddom.ErrNotFound
 		}
-
 		return branddom.Brand{}, err
 	}
 
@@ -338,9 +272,7 @@ func (r *BrandRepositoryFS) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-func (r *BrandRepositoryFS) docToDomain(
-	doc *firestore.DocumentSnapshot,
-) (branddom.Brand, error) {
+func (r *BrandRepositoryFS) docToDomain(doc *firestore.DocumentSnapshot) (branddom.Brand, error) {
 	var raw struct {
 		CompanyID            string     `firestore:"companyId"`
 		AccountID            string     `firestore:"accountId"`
@@ -374,11 +306,11 @@ func (r *BrandRepositoryFS) docToDomain(
 		BrandIcon:            raw.BrandIcon,
 		BrandBackgroundImage: raw.BrandBackgroundImage,
 		IsActive:             raw.IsActive,
-		ManagerID:            raw.ManagerID,
+		ManagerID:            normalizeOptionalString(raw.ManagerID),
 		WalletAddress:        raw.WalletAddress,
 		CreatedAt:            raw.CreatedAt.UTC(),
-		CreatedBy:            raw.CreatedBy,
-		UpdatedBy:            raw.UpdatedBy,
+		CreatedBy:            normalizeOptionalString(raw.CreatedBy),
+		UpdatedBy:            normalizeOptionalString(raw.UpdatedBy),
 	}
 
 	if raw.UpdatedAt != nil && !raw.UpdatedAt.IsZero() {
@@ -389,9 +321,7 @@ func (r *BrandRepositoryFS) docToDomain(
 	return b, nil
 }
 
-func (r *BrandRepositoryFS) domainToDocData(
-	b branddom.Brand,
-) map[string]any {
+func (r *BrandRepositoryFS) domainToDocData(b branddom.Brand) map[string]any {
 	data := map[string]any{
 		"companyId":            b.CompanyID,
 		"accountId":            b.AccountID,
@@ -405,33 +335,14 @@ func (r *BrandRepositoryFS) domainToDocData(
 		"createdAt":            b.CreatedAt.UTC(),
 	}
 
-	if b.ManagerID != nil && *b.ManagerID != "" {
-		data["manager"] = *b.ManagerID
-	}
-	if b.CreatedBy != nil && *b.CreatedBy != "" {
-		data["createdBy"] = *b.CreatedBy
-	}
+	setOptionalString(data, "manager", b.ManagerID)
+	setOptionalString(data, "createdBy", b.CreatedBy)
 	if b.UpdatedAt != nil && !b.UpdatedAt.IsZero() {
 		data["updatedAt"] = b.UpdatedAt.UTC()
 	}
-	if b.UpdatedBy != nil && *b.UpdatedBy != "" {
-		data["updatedBy"] = *b.UpdatedBy
-	}
+	setOptionalString(data, "updatedBy", b.UpdatedBy)
 
 	return data
-}
-
-func optionalStringValue(p *string) any {
-	if p == nil {
-		return nil
-	}
-
-	s := *p
-	if s == "" {
-		return nil
-	}
-
-	return s
 }
 
 func ptrTime(t time.Time) *time.Time {

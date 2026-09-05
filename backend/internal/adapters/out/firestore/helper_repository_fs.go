@@ -4,6 +4,8 @@ package firestore
 import (
 	"reflect"
 	"time"
+
+	"cloud.google.com/go/firestore"
 )
 
 func asString(v any) string {
@@ -85,10 +87,40 @@ func getStringField(obj any, field string) string {
 	return ""
 }
 
-func setOptionalString(m map[string]any, key string, value *string) {
-	if value != nil && *value != "" {
-		m[key] = *value
+func normalizeOptionalString(value *string) *string {
+	if value == nil || *value == "" {
+		return nil
 	}
+
+	normalized := *value
+	return &normalized
+}
+
+func setOptionalString(m map[string]any, key string, value *string) {
+	normalized := normalizeOptionalString(value)
+	if normalized != nil {
+		m[key] = *normalized
+	}
+}
+
+func appendOptionalStringUpdate(updates []firestore.Update, path string, value *string) []firestore.Update {
+	normalized := normalizeOptionalString(value)
+	if normalized == nil {
+		return append(updates, firestore.Update{Path: path, Value: firestore.Delete})
+	}
+
+	return append(updates, firestore.Update{Path: path, Value: *normalized})
+}
+
+func optionalStringEqual(left *string, right *string) bool {
+	left = normalizeOptionalString(left)
+	right = normalizeOptionalString(right)
+
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+
+	return *left == *right
 }
 
 func setOptionalTime(m map[string]any, key string, value *time.Time) {
@@ -98,12 +130,7 @@ func setOptionalTime(m map[string]any, key string, value *time.Time) {
 }
 
 func optionalStringFromPatch(value *string) *string {
-	if value == nil || *value == "" {
-		return nil
-	}
-
-	v := *value
-	return &v
+	return normalizeOptionalString(value)
 }
 
 func optionalTimeFromPatch(value *time.Time) *time.Time {
@@ -115,6 +142,8 @@ func optionalTimeFromPatch(value *time.Time) *time.Time {
 	return &utc
 }
 
+// ptrStringFromMap is retained temporarily while Firestore string reads
+// migrate to firestoreOptionalString.
 func ptrStringFromMap(m map[string]any, key string) *string {
 	s := asString(m[key])
 	if s == "" {

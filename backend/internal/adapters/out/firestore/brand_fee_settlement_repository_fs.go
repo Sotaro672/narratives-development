@@ -526,9 +526,9 @@ func (r *BrandFeeSettlementRepositoryFS) FailTransfer(ctx context.Context, brand
 		return brandfeesettlementdom.BrandFeeSettlement{}, brandfeesettlementdom.ErrInvalidStatusTransition
 	}
 
-	errorType = normalizeBrandFeeSettlementOptionalString(errorType)
-	errorCode = normalizeBrandFeeSettlementOptionalString(errorCode)
-	errorMsg = normalizeBrandFeeSettlementOptionalString(errorMsg)
+	errorType = normalizeOptionalString(errorType)
+	errorCode = normalizeOptionalString(errorCode)
+	errorMsg = normalizeOptionalString(errorMsg)
 
 	if errorType == nil && errorCode == nil && errorMsg == nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, brandfeesettlementdom.ErrFailureReasonRequired
@@ -556,9 +556,9 @@ func (r *BrandFeeSettlementRepositoryFS) FailTransfer(ctx context.Context, brand
 		}
 
 		if current.Status == nextStatus &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorType, errorType) &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorCode, errorCode) &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorMsg, errorMsg) {
+			optionalStringEqual(current.ErrorType, errorType) &&
+			optionalStringEqual(current.ErrorCode, errorCode) &&
+			optionalStringEqual(current.ErrorMsg, errorMsg) {
 			result = current
 			return nil
 		}
@@ -731,14 +731,14 @@ func applyBrandFeeSettlementPatch(current brandfeesettlementdom.BrandFeeSettleme
 		}
 
 	case brandfeesettlementdom.StatusFailedRetryable:
-		errorType := normalizeBrandFeeSettlementOptionalString(patch.ErrorType)
-		errorCode := normalizeBrandFeeSettlementOptionalString(patch.ErrorCode)
-		errorMsg := normalizeBrandFeeSettlementOptionalString(patch.ErrorMsg)
+		errorType := normalizeOptionalString(patch.ErrorType)
+		errorCode := normalizeOptionalString(patch.ErrorCode)
+		errorMsg := normalizeOptionalString(patch.ErrorMsg)
 
 		if current.Status == brandfeesettlementdom.StatusFailedRetryable &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorType, errorType) &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorCode, errorCode) &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorMsg, errorMsg) {
+			optionalStringEqual(current.ErrorType, errorType) &&
+			optionalStringEqual(current.ErrorCode, errorCode) &&
+			optionalStringEqual(current.ErrorMsg, errorMsg) {
 			return current, false, nil
 		}
 
@@ -747,14 +747,14 @@ func applyBrandFeeSettlementPatch(current brandfeesettlementdom.BrandFeeSettleme
 		}
 
 	case brandfeesettlementdom.StatusFailed:
-		errorType := normalizeBrandFeeSettlementOptionalString(patch.ErrorType)
-		errorCode := normalizeBrandFeeSettlementOptionalString(patch.ErrorCode)
-		errorMsg := normalizeBrandFeeSettlementOptionalString(patch.ErrorMsg)
+		errorType := normalizeOptionalString(patch.ErrorType)
+		errorCode := normalizeOptionalString(patch.ErrorCode)
+		errorMsg := normalizeOptionalString(patch.ErrorMsg)
 
 		if current.Status == brandfeesettlementdom.StatusFailed &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorType, errorType) &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorCode, errorCode) &&
-			brandFeeSettlementOptionalStringEqual(current.ErrorMsg, errorMsg) {
+			optionalStringEqual(current.ErrorType, errorType) &&
+			optionalStringEqual(current.ErrorCode, errorCode) &&
+			optionalStringEqual(current.ErrorMsg, errorMsg) {
 			return current, false, nil
 		}
 
@@ -861,15 +861,9 @@ func brandFeeSettlementToData(settlement brandfeesettlementdom.BrandFeeSettlemen
 	if settlement.StripeTransferReversalID != "" {
 		data["stripeTransferReversalId"] = settlement.StripeTransferReversalID
 	}
-	if settlement.ErrorType != nil {
-		data["errorType"] = *settlement.ErrorType
-	}
-	if settlement.ErrorCode != nil {
-		data["errorCode"] = *settlement.ErrorCode
-	}
-	if settlement.ErrorMsg != nil {
-		data["errorMsg"] = *settlement.ErrorMsg
-	}
+	setOptionalString(data, "errorType", settlement.ErrorType)
+	setOptionalString(data, "errorCode", settlement.ErrorCode)
+	setOptionalString(data, "errorMsg", settlement.ErrorMsg)
 	if settlement.TransferredAt != nil {
 		data["transferredAt"] = settlement.TransferredAt.UTC()
 	}
@@ -956,26 +950,36 @@ func docToBrandFeeSettlement(document *firestore.DocumentSnapshot) (brandfeesett
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
 
-	stripeTransferID, err := brandFeeSettlementOptionalStringValue(data, "stripeTransferId")
+	stripeTransferIDValue, err := firestoreOptionalString(data, "stripeTransferId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	stripeTransferReversalID, err := brandFeeSettlementOptionalStringValue(data, "stripeTransferReversalId")
+	stripeTransferReversalIDValue, err := firestoreOptionalString(data, "stripeTransferReversalId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	errorType, err := brandFeeSettlementOptionalString(data, "errorType")
+	errorType, err := firestoreOptionalString(data, "errorType")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	errorCode, err := brandFeeSettlementOptionalString(data, "errorCode")
+	errorCode, err := firestoreOptionalString(data, "errorCode")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	errorMsg, err := brandFeeSettlementOptionalString(data, "errorMsg")
+	errorMsg, err := firestoreOptionalString(data, "errorMsg")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
+
+	stripeTransferID := ""
+	if stripeTransferIDValue != nil {
+		stripeTransferID = *stripeTransferIDValue
+	}
+	stripeTransferReversalID := ""
+	if stripeTransferReversalIDValue != nil {
+		stripeTransferReversalID = *stripeTransferReversalIDValue
+	}
+
 	transferredAt, err := firestoreOptionalTime(data, "transferredAt")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
@@ -1035,50 +1039,6 @@ func brandFeeSettlementRequiredString(values map[string]any, key string) (string
 	}
 
 	return text, nil
-}
-
-func brandFeeSettlementOptionalString(values map[string]any, key string) (*string, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return nil, nil
-	}
-
-	text, ok := value.(string)
-	if !ok || text == "" {
-		return nil, fmt.Errorf("brandFeeSettlement: invalid %s", key)
-	}
-
-	return &text, nil
-}
-
-func brandFeeSettlementOptionalStringValue(values map[string]any, key string) (string, error) {
-	value, err := brandFeeSettlementOptionalString(values, key)
-	if err != nil {
-		return "", err
-	}
-	if value == nil {
-		return "", nil
-	}
-
-	return *value, nil
-}
-
-func normalizeBrandFeeSettlementOptionalString(value *string) *string {
-	if value == nil || *value == "" {
-		return nil
-	}
-	return value
-}
-
-func brandFeeSettlementOptionalStringEqual(left *string, right *string) bool {
-	left = normalizeBrandFeeSettlementOptionalString(left)
-	right = normalizeBrandFeeSettlementOptionalString(right)
-
-	if left == nil || right == nil {
-		return left == nil && right == nil
-	}
-
-	return *left == *right
 }
 
 func brandFeeSettlementRequiredInt(values map[string]any, key string) (int, error) {

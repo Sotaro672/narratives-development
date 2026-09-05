@@ -666,6 +666,7 @@ func productBlueprintModelRefsFromDoc(stored []productBlueprintModelRefDoc) ([]p
 		}
 		modelRefs = append(modelRefs, pbdom.ModelRef{ModelID: item.ModelID, DisplayOrder: displayOrder})
 	}
+
 	return modelRefs, nil
 }
 
@@ -704,12 +705,9 @@ func productBlueprintToDoc(productBlueprint pbdom.ProductBlueprint) (map[string]
 	if productBlueprint.ModelRefs != nil {
 		document["modelRefs"] = modelRefsToDoc(productBlueprint.ModelRefs)
 	}
-	if productBlueprint.CreatedBy != nil && *productBlueprint.CreatedBy != "" {
-		document["createdBy"] = *productBlueprint.CreatedBy
-	}
-	if productBlueprint.UpdatedBy != nil && *productBlueprint.UpdatedBy != "" {
-		document["updatedBy"] = *productBlueprint.UpdatedBy
-	}
+
+	setOptionalString(document, "createdBy", productBlueprint.CreatedBy)
+	setOptionalString(document, "updatedBy", productBlueprint.UpdatedBy)
 
 	return document, nil
 }
@@ -721,13 +719,6 @@ func mapFirestoreNotFound(err error) error {
 	return err
 }
 
-func appendOptionalStringUpdate(updates []firestore.Update, path string, value *string) []firestore.Update {
-	if value == nil || *value == "" {
-		return append(updates, firestore.Update{Path: path, Value: firestore.Delete})
-	}
-	return append(updates, firestore.Update{Path: path, Value: *value})
-}
-
 func modelRefsToDoc(modelRefs []pbdom.ModelRef) []map[string]any {
 	documents := make([]map[string]any, 0, len(modelRefs))
 	for _, modelRef := range modelRefs {
@@ -736,6 +727,7 @@ func modelRefsToDoc(modelRefs []pbdom.ModelRef) []map[string]any {
 			"displayOrder": modelRef.DisplayOrder,
 		})
 	}
+
 	return documents
 }
 
@@ -918,13 +910,17 @@ func sanitizeModelRefs(input []pbdom.ModelRef) ([]pbdom.ModelRef, error) {
 		if _, exists := seen[modelID]; exists {
 			continue
 		}
+
 		seen[modelID] = struct{}{}
 		modelIDs = append(modelIDs, modelID)
 	}
 
 	normalized := make([]pbdom.ModelRef, 0, len(modelIDs))
 	for index, modelID := range modelIDs {
-		normalized = append(normalized, pbdom.ModelRef{ModelID: modelID, DisplayOrder: index + 1})
+		normalized = append(normalized, pbdom.ModelRef{
+			ModelID:      modelID,
+			DisplayOrder: index + 1,
+		})
 	}
 
 	return normalized, nil
@@ -934,6 +930,7 @@ func cloneModelRefs(input []pbdom.ModelRef) []pbdom.ModelRef {
 	if input == nil {
 		return nil
 	}
+
 	output := make([]pbdom.ModelRef, len(input))
 	copy(output, input)
 	return output

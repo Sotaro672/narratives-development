@@ -122,9 +122,9 @@ func (r *PaymentRepositoryFS) Create(ctx context.Context, in paymentdom.CreatePa
 		in.TransferGroup,
 		in.Amount,
 		in.Status,
-		normalizePaymentOptionalString(in.ErrorType),
-		normalizePaymentOptionalString(in.ErrorCode),
-		normalizePaymentOptionalString(in.ErrorMsg),
+		normalizeOptionalString(in.ErrorType),
+		normalizeOptionalString(in.ErrorCode),
+		normalizeOptionalString(in.ErrorMsg),
 		createdAt,
 	)
 	if err != nil {
@@ -238,13 +238,13 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 	}
 
 	if patch.ErrorType != nil {
-		updates = appendPaymentOptionalStringUpdate(updates, "errorType", patch.ErrorType)
+		updates = appendOptionalStringUpdate(updates, "errorType", patch.ErrorType)
 	}
 	if patch.ErrorCode != nil {
-		updates = appendPaymentOptionalStringUpdate(updates, "errorCode", patch.ErrorCode)
+		updates = appendOptionalStringUpdate(updates, "errorCode", patch.ErrorCode)
 	}
 	if patch.ErrorMsg != nil {
-		updates = appendPaymentOptionalStringUpdate(updates, "errorMsg", patch.ErrorMsg)
+		updates = appendOptionalStringUpdate(updates, "errorMsg", patch.ErrorMsg)
 	}
 
 	if len(updates) == 0 {
@@ -387,9 +387,9 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(ctx context.Context, in us
 	}
 
 	in.OccurredAt = in.OccurredAt.UTC()
-	in.ErrorType = normalizePaymentOptionalString(in.ErrorType)
-	in.ErrorCode = normalizePaymentOptionalString(in.ErrorCode)
-	in.ErrorMsg = normalizePaymentOptionalString(in.ErrorMsg)
+	in.ErrorType = normalizeOptionalString(in.ErrorType)
+	in.ErrorCode = normalizeOptionalString(in.ErrorCode)
+	in.ErrorMsg = normalizeOptionalString(in.ErrorMsg)
 
 	paymentReference := r.col().Doc(in.PaymentID)
 	eventReference := r.stripeEventCol().Doc(in.EventID)
@@ -509,9 +509,9 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(ctx context.Context, in us
 				firestore.Update{Path: "updatedAt", Value: processedAt},
 			)
 
-			updates = appendPaymentOptionalStringUpdate(updates, "errorType", next.ErrorType)
-			updates = appendPaymentOptionalStringUpdate(updates, "errorCode", next.ErrorCode)
-			updates = appendPaymentOptionalStringUpdate(updates, "errorMsg", next.ErrorMsg)
+			updates = appendOptionalStringUpdate(updates, "errorType", next.ErrorType)
+			updates = appendOptionalStringUpdate(updates, "errorCode", next.ErrorCode)
+			updates = appendOptionalStringUpdate(updates, "errorMsg", next.ErrorMsg)
 
 			if stripeChargeChanged {
 				updates = append(updates, firestore.Update{Path: "stripeChargeId", Value: next.StripeChargeID})
@@ -544,15 +544,9 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(ctx context.Context, in us
 		if in.StripeChargeID != "" {
 			eventData["stripeChargeId"] = in.StripeChargeID
 		}
-		if in.ErrorType != nil {
-			eventData["errorType"] = *in.ErrorType
-		}
-		if in.ErrorCode != nil {
-			eventData["errorCode"] = *in.ErrorCode
-		}
-		if in.ErrorMsg != nil {
-			eventData["errorMsg"] = *in.ErrorMsg
-		}
+		setOptionalString(eventData, "errorType", in.ErrorType)
+		setOptionalString(eventData, "errorCode", in.ErrorCode)
+		setOptionalString(eventData, "errorMsg", in.ErrorMsg)
 
 		if createErr := transaction.Create(eventReference, eventData); createErr != nil {
 			return createErr
@@ -675,15 +669,10 @@ func paymentToCreateData(payment paymentdom.Payment) map[string]any {
 	if payment.RefundedAt != nil {
 		data["refundedAt"] = payment.RefundedAt.UTC()
 	}
-	if payment.ErrorType != nil {
-		data["errorType"] = *payment.ErrorType
-	}
-	if payment.ErrorCode != nil {
-		data["errorCode"] = *payment.ErrorCode
-	}
-	if payment.ErrorMsg != nil {
-		data["errorMsg"] = *payment.ErrorMsg
-	}
+
+	setOptionalString(data, "errorType", payment.ErrorType)
+	setOptionalString(data, "errorCode", payment.ErrorCode)
+	setOptionalString(data, "errorMsg", payment.ErrorMsg)
 
 	return data
 }
@@ -720,9 +709,13 @@ func docToPayment(document *firestore.DocumentSnapshot) (paymentdom.Payment, err
 		return paymentdom.Payment{}, err
 	}
 
+	stripeChargeIDValue, err := firestoreOptionalString(data, "stripeChargeId")
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
 	stripeChargeID := ""
-	if value := paymentOptionalString(data, "stripeChargeId"); value != nil {
-		stripeChargeID = *value
+	if stripeChargeIDValue != nil {
+		stripeChargeID = *stripeChargeIDValue
 	}
 
 	transferGroup, err := paymentRequiredString(data, "transferGroup")
@@ -745,9 +738,18 @@ func docToPayment(document *firestore.DocumentSnapshot) (paymentdom.Payment, err
 		return paymentdom.Payment{}, err
 	}
 
-	errorType := paymentOptionalString(data, "errorType")
-	errorCode := paymentOptionalString(data, "errorCode")
-	errorMsg := paymentOptionalString(data, "errorMsg")
+	errorType, err := firestoreOptionalString(data, "errorType")
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+	errorCode, err := firestoreOptionalString(data, "errorCode")
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
+	errorMsg, err := firestoreOptionalString(data, "errorMsg")
+	if err != nil {
+		return paymentdom.Payment{}, err
+	}
 
 	payment, err := paymentdom.New(
 		paymentID,
@@ -768,9 +770,13 @@ func docToPayment(document *firestore.DocumentSnapshot) (paymentdom.Payment, err
 		return paymentdom.Payment{}, err
 	}
 
-	stripeRefundID, err := paymentRefundString(data, "stripeRefundId")
+	stripeRefundIDValue, err := firestoreOptionalString(data, "stripeRefundId")
 	if err != nil {
 		return paymentdom.Payment{}, err
+	}
+	stripeRefundID := ""
+	if stripeRefundIDValue != nil {
+		stripeRefundID = *stripeRefundIDValue
 	}
 
 	refundStatus, err := paymentRefundStatus(data, "refundStatus")
@@ -799,32 +805,16 @@ func docToPayment(document *firestore.DocumentSnapshot) (paymentdom.Payment, err
 // Firestore field helpers
 // ============================================================
 
-func paymentRefundString(values map[string]any, key string) (string, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return "", nil
-	}
-
-	text, ok := value.(string)
-	if !ok {
-		return "", fmt.Errorf("payment: invalid %s", key)
-	}
-
-	return strings.TrimSpace(text), nil
-}
-
 func paymentRefundStatus(values map[string]any, key string) (paymentdom.RefundStatus, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
+	text, err := firestoreOptionalString(values, key)
+	if err != nil {
+		return "", err
+	}
+	if text == nil {
 		return paymentdom.DefaultRefundStatus, nil
 	}
 
-	text, ok := value.(string)
-	if !ok {
-		return "", fmt.Errorf("payment: invalid %s", key)
-	}
-
-	refundStatus := paymentdom.RefundStatus(strings.TrimSpace(text))
+	refundStatus := paymentdom.RefundStatus(*text)
 	if !paymentdom.IsValidRefundStatus(refundStatus) {
 		return "", paymentdom.ErrInvalidRefundStatus
 	}
@@ -859,46 +849,6 @@ func paymentRequiredString(values map[string]any, key string) (string, error) {
 	}
 
 	return text, nil
-}
-
-func paymentOptionalString(values map[string]any, key string) *string {
-	value, ok := values[key]
-	if !ok || value == nil {
-		return nil
-	}
-
-	text, ok := value.(string)
-	if !ok {
-		return nil
-	}
-
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
-	}
-
-	return &text
-}
-
-func normalizePaymentOptionalString(value *string) *string {
-	if value == nil {
-		return nil
-	}
-
-	normalized := strings.TrimSpace(*value)
-	if normalized == "" {
-		return nil
-	}
-
-	return &normalized
-}
-
-func appendPaymentOptionalStringUpdate(updates []firestore.Update, path string, value *string) []firestore.Update {
-	normalized := normalizePaymentOptionalString(value)
-	if normalized == nil {
-		return append(updates, firestore.Update{Path: path, Value: firestore.Delete})
-	}
-	return append(updates, firestore.Update{Path: path, Value: *normalized})
 }
 
 func paymentRequiredInt(values map[string]any, key string) (int, error) {

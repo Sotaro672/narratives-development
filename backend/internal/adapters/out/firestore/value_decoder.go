@@ -60,3 +60,30 @@ func firestoreOptionalTime(values map[string]any, key string) (*time.Time, error
 	timestamp = timestamp.UTC()
 	return &timestamp, nil
 }
+
+// firestoreOptionalString decodes an optional Firestore string.
+//
+// Contract:
+//   - missing field returns nil
+//   - nil field returns nil
+//   - if present, only string is accepted
+//   - if present, empty string is invalid
+//   - string content is returned unchanged
+//
+// A present but malformed or empty string must not be treated as an absent value.
+func firestoreOptionalString(values map[string]any, key string) (*string, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return nil, nil
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return nil, fmt.Errorf("firestore: %s must be string, got %T", key, value)
+	}
+	if text == "" {
+		return nil, fmt.Errorf("firestore: %s must not be empty", key)
+	}
+
+	return &text, nil
+}
