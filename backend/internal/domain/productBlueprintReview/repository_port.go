@@ -70,9 +70,28 @@ var AllowedSortColumns = map[string]struct{}{
 // ======================================
 
 // Repository は productBlueprintReview ドメインのリポジトリポート。
-// 共通の CRUD + List に加えて、口コミ特有の取得/集計/投票操作を追加で定義。
+// 共通の CRUD + List に加えて、口コミ特有の取得・更新・集計・投票操作を定義。
 type Repository interface {
 	domcommon.Repository[Review, Filter, Patch]
+
+	// ProductBlueprint 配下の review を親IDとreviewIDで取得する。
+	// Firestore の階層構造上、reviewID 単体では親ドキュメントを特定できないため、
+	// 通報・モデレーション等ではこのメソッドを使用する。
+	GetByProductBlueprintID(
+		ctx context.Context,
+		productBlueprintID string,
+		reviewID string,
+	) (Review, error)
+
+	// ProductBlueprint 配下の review を親IDとreviewIDで部分更新する。
+	// Admin モデレーションによる Status / ModerationReason / UpdatedAt / UpdatedBy
+	// の更新などで使用する。
+	UpdateByProductBlueprintID(
+		ctx context.Context,
+		productBlueprintID string,
+		reviewID string,
+		patch Patch,
+	) (Review, error)
 
 	// 商品単位での新着レビュー（Amazonの「新しい順」相当を作りやすい）
 	ListByProductBlueprintID(

@@ -18,9 +18,17 @@ import (
 // Application-specific external ports
 // ============================================================
 
-// TokenQuery (assetId -> productId/docId, brandId, metadataUri)
+// TokenQuery provides token read operations required by WalletUsecase.
 type TokenQuery interface {
-	ResolveTokenByAssetID(ctx context.Context, assetID string) (tokendom.ResolveTokenByAssetIDResult, error)
+	ResolveTokenByAssetID(
+		ctx context.Context,
+		assetID string,
+	) (tokendom.ResolveTokenByAssetIDResult, error)
+
+	ListAssetIDsByTokenBlueprintID(
+		ctx context.Context,
+		tokenBlueprintID string,
+	) (tokendom.ListAssetIDsByTokenBlueprintIDResult, error)
 }
 
 // ModelProductBlueprintIDResolver (modelId -> productBlueprintId + modelRefs)
@@ -29,7 +37,10 @@ type TokenQuery interface {
 // - productBlueprintID が必要な caller は第1戻り値を使う
 // - displayOrder / modelRefs が必要な caller は第2戻り値を使う
 type ModelProductBlueprintIDResolver interface {
-	GetIDByModelID(ctx context.Context, modelID string) (string, []productbpdom.ModelRef, error)
+	GetIDByModelID(
+		ctx context.Context,
+		modelID string,
+	) (string, []productbpdom.ModelRef, error)
 }
 
 // WalletUsecase は Wallet 同期ユースケースです。
@@ -74,6 +85,7 @@ func NewWalletUsecase(
 }
 
 var _ applicationport.OwnedProductResolver = (*WalletUsecase)(nil)
+var _ applicationport.ReviewReportTokenAccessResolver = (*WalletUsecase)(nil)
 
 var (
 	ErrWalletUsecaseNotConfigured     = errors.New("wallet usecase: not configured")
@@ -189,6 +201,84 @@ func (uc *WalletUsecase) HasOwnedProductBlueprint(
 		}
 
 		if resolvedProductBlueprintID == productBlueprintID {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// CanReportTokenBlueprintComment は avatar が指定 TokenBlueprint 配下の
+// コメントを通報できるか判定します.
+//
+// 現在の判定ルール:
+// - avatar の wallet が on-chain 上で現在保有している assetId を正とする。
+// - tokenBlueprintId に紐づく assetId 一覧を token query から取得する。
+// - 両者に1件でも共通 assetId があれば true。
+//
+// Firestore wallet.assetIds は同期用 read model / cache であり、
+// この権限判定では使用しません。
+func (uc *WalletUsecase) CanReportTokenBlueprintComment(
+	ctx context.Context,
+	avatarID string,
+	tokenBlueprintID string,
+) (bool, error) {
+	if uc == nil || uc.walletRepo == nil {
+		return false, ErrWalletUsecaseNotConfigured
+	}
+	if uc.onchainReader == nil {
+		return false, ErrWalletSyncOnchainNotConfigured
+	}
+	if uc.tokenQuery == nil {
+		return false, ErrWalletTokenQueryNotConfigured
+	}
+	if avatarID == "" {
+		return false, ErrWalletSyncAvatarIDEmpty
+	}
+	if tokenBlueprintID == "" {
+		return false, tokendom.ErrInvalidTokenBlueprintID
+	}
+
+	w, err := uc.walletRepo.GetByAvatarID(ctx, avatarID)
+	if err != nil {
+		return false, err
+	}
+	if w.WalletAddress == "" {
+		return false, ErrWalletSyncWalletAddressEmpty
+	}
+
+	ownedAssetIDs, err := uc.onchainReader.ListOwnedAssetIDs(ctx, w.WalletAddress)
+	if err != nil {
+		return false, err
+	}
+	if len(ownedAssetIDs) == 0 {
+		return false, nil
+	}
+
+	target, err := uc.tokenQuery.ListAssetIDsByTokenBlueprintID(
+		ctx,
+		tokenBlueprintID,
+	)
+	if err != nil {
+		return false, err
+	}
+	if len(target.AssetIDs) == 0 {
+		return false, nil
+	}
+
+	targetAssetIDs := make(map[string]struct{}, len(target.AssetIDs))
+	for _, assetID := range target.AssetIDs {
+		if assetID == "" {
+			continue
+		}
+		targetAssetIDs[assetID] = struct{}{}
+	}
+
+	for _, assetID := range ownedAssetIDs {
+		if assetID == "" {
+			continue
+		}
+		if _, ok := targetAssetIDs[assetID]; ok {
 			return true, nil
 		}
 	}
@@ -368,7 +458,6 @@ func (uc *WalletUsecase) EnsureAvatarOwnsAssetID(
 	if uc == nil || uc.walletRepo == nil {
 		return ErrWalletUsecaseNotConfigured
 	}
-
 	if uc.onchainReader == nil {
 		return ErrWalletSyncOnchainNotConfigured
 	}

@@ -22,12 +22,13 @@ const (
 type Container struct {
 	Infra *shared.Infra
 
-	adminFirebaseUID string
-	adminEmail       string
-	contactUsecase   *usecase.ContactUsecase
-	companyRepo      *fsrepo.CompanyRepositoryFS
-	memberRepo       *fsrepo.MemberRepositoryFS
-	gasBalanceQuery  *adminquery.GasBalanceQuery
+	adminFirebaseUID    string
+	adminEmail          string
+	contactUsecase      *usecase.ContactUsecase
+	reviewReportUsecase *usecase.ReviewReportUsecase
+	companyRepo         *fsrepo.CompanyRepositoryFS
+	memberRepo          *fsrepo.MemberRepositoryFS
+	gasBalanceQuery     *adminquery.GasBalanceQuery
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -64,6 +65,55 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	companyRepo := fsrepo.NewCompanyRepositoryFS(infra.Firestore)
 	memberRepo := fsrepo.NewMemberRepositoryFS(infra.Firestore)
 
+	reviewReportRepo := fsrepo.NewReviewReportRepositoryFS(infra.Firestore)
+	if reviewReportRepo == nil {
+		return nil, errors.New("di.admin: review report repository is nil")
+	}
+
+	productBlueprintReviewRepo := fsrepo.NewProductBlueprintReviewRepositoryFS(infra.Firestore)
+	if productBlueprintReviewRepo == nil {
+		return nil, errors.New("di.admin: product blueprint review repository is nil")
+	}
+
+	productBlueprintReviewUsecase := usecase.NewProductBlueprintReviewUsecase(
+		productBlueprintReviewRepo,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	if productBlueprintReviewUsecase == nil {
+		return nil, errors.New("di.admin: product blueprint review usecase is nil")
+	}
+
+	tokenBlueprintReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(infra.Firestore)
+	if tokenBlueprintReviewRepo == nil {
+		return nil, errors.New("di.admin: token blueprint review repository is nil")
+	}
+
+	tokenBlueprintReviewUsecase := usecase.NewTokenBlueprintReviewUsecase(
+		tokenBlueprintReviewRepo,
+		nil,
+		nil,
+		nil,
+	)
+	if tokenBlueprintReviewUsecase == nil {
+		return nil, errors.New("di.admin: token blueprint review usecase is nil")
+	}
+
+	reviewReportUsecase := usecase.NewReviewReportUsecase(
+		usecase.ReviewReportUsecaseDeps{
+			ReportRepo:             reviewReportRepo,
+			ProductReviewModerator: productBlueprintReviewUsecase,
+			TokenCommentModerator:  tokenBlueprintReviewUsecase,
+		},
+	)
+	if reviewReportUsecase == nil {
+		return nil, errors.New("di.admin: review report usecase is nil")
+	}
+
 	solanaClient, err := solanainfra.NewMintClient(ctx)
 	if err != nil {
 		return nil, err
@@ -87,12 +137,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	})
 
 	return &Container{
-		Infra:            infra,
-		adminFirebaseUID: adminFirebaseUID,
-		adminEmail:       adminEmail,
-		contactUsecase:   contactUsecase,
-		companyRepo:      companyRepo,
-		memberRepo:       memberRepo,
-		gasBalanceQuery:  gasBalanceQuery,
+		Infra:               infra,
+		adminFirebaseUID:    adminFirebaseUID,
+		adminEmail:          adminEmail,
+		contactUsecase:      contactUsecase,
+		reviewReportUsecase: reviewReportUsecase,
+		companyRepo:         companyRepo,
+		memberRepo:          memberRepo,
+		gasBalanceQuery:     gasBalanceQuery,
 	}, nil
 }

@@ -15,6 +15,7 @@ type RouterDeps struct {
 	Contacts  http.Handler
 	Companies http.Handler
 	Gas       http.Handler
+	Reports   http.Handler
 }
 
 // NewRouter creates the Admin router.
@@ -51,6 +52,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	if deps.Gas != nil {
 		mux.Handle("/admin/gas", withAuth(deps.Gas))
+	}
+
+	if deps.Reports != nil {
+		reportsHandler := withAuth(deps.Reports)
+		mux.Handle("/admin/reports", reportsHandler)
+		mux.Handle("/admin/reports/", reportsHandler)
 	}
 
 	return mux

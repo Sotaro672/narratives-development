@@ -60,6 +60,7 @@ type Container struct {
 
 	ProductBlueprintReviewUC *usecase.ProductBlueprintReviewUsecase
 	TokenBlueprintReviewUC   *usecase.TokenBlueprintReviewUsecase
+	ReviewReportUC           *usecase.ReviewReportUsecase
 
 	TransferUC    *usecase.TransferUsecase
 	PaymentFlowUC *usecase.PaymentFlowUsecase

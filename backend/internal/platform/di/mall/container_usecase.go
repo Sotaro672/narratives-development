@@ -61,6 +61,7 @@ type mallUsecases struct {
 	likeUC                         *usecase.LikeUsecase
 	productBlueprintReviewUC       *usecase.ProductBlueprintReviewUsecase
 	tokenBlueprintReviewUC         *usecase.TokenBlueprintReviewUsecase
+	reviewReportUC                 *usecase.ReviewReportUsecase
 	paymentFlowUC                  *usecase.PaymentFlowUsecase
 
 	// TransferUsecaseの構築時にも利用するためContainerには公開しない。
@@ -96,6 +97,9 @@ func buildMallUsecases(
 	}
 	if r.tradeMessageRepo == nil {
 		return nil, errors.New("di.mall: trade message repository is nil")
+	}
+	if r.reviewReportRepo == nil {
+		return nil, errors.New("di.mall: review report repository is nil")
 	}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
@@ -240,6 +244,23 @@ func buildMallUsecases(
 		r.tokenBlueprintRepo,
 		r.brandRepo,
 	)
+
+	reviewReportUC := usecase.NewReviewReportUsecase(
+		usecase.ReviewReportUsecaseDeps{
+			ReportRepo:              r.reviewReportRepo,
+			ProductReviewRepo:       r.productBlueprintReviewRepo,
+			ProductBlueprintRepo:    r.productBlueprintRepoFS,
+			ProductPurchaseResolver: walletUC,
+			ProductReviewModerator:  productBlueprintReviewUC,
+			TokenCommentRepo:        r.tokenBlueprintReviewRepo.Comments(),
+			TokenBlueprintRepo:      r.tokenBlueprintRepo,
+			TokenAccessResolver:     walletUC,
+			TokenCommentModerator:   tokenBlueprintReviewUC,
+		},
+	)
+	if reviewReportUC == nil {
+		return nil, errors.New("di.mall: review report usecase is nil")
+	}
 
 	cartUC := usecase.NewCartUsecase(r.cartRepo)
 
@@ -685,6 +706,7 @@ func buildMallUsecases(
 		likeUC:                         likeUC,
 		productBlueprintReviewUC:       productBlueprintReviewUC,
 		tokenBlueprintReviewUC:         tokenBlueprintReviewUC,
+		reviewReportUC:                 reviewReportUC,
 		paymentFlowUC:                  paymentFlowUC,
 		inventoryUC:                    inventoryUC,
 	}, nil
@@ -729,6 +751,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.LikeUC = u.likeUC
 	c.ProductBlueprintReviewUC = u.productBlueprintReviewUC
 	c.TokenBlueprintReviewUC = u.tokenBlueprintReviewUC
+	c.ReviewReportUC = u.reviewReportUC
 	c.PaymentFlowUC = u.paymentFlowUC
 }
 

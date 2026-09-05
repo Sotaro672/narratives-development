@@ -58,6 +58,7 @@ type usecases struct {
 	tokenBlueprintCreateOperationUC *uc.TokenBlueprintCreateOperationUsecase
 	tokenBlueprintReviewUC          *uc.TokenBlueprintReviewUsecase
 	productBlueprintReviewUC        *uc.ProductBlueprintReviewUsecase
+	reviewReportUC                  *uc.ReviewReportUsecase
 	userUC                          *uc.UserUsecase
 	walletUC                        *uc.WalletUsecase
 	cartUC                          *uc.CartUsecase
@@ -568,6 +569,48 @@ func buildUsecases(
 		r.productBlueprintRepo,
 	)
 
+	if r.productBlueprintReviewRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: product blueprint review repository is nil"))
+	}
+	if r.productBlueprintRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: product blueprint repository is nil"))
+	}
+
+	productBlueprintReviewUC := uc.NewProductBlueprintReviewUsecase(
+		r.productBlueprintReviewRepo,
+		r.productBlueprintRepo,
+		r.brandRepo,
+		r.memberRepo,
+		walletUC,
+		r.avatarRepo,
+		nil,
+	)
+	if productBlueprintReviewUC == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: product blueprint review usecase is nil"))
+	}
+
+	reviewReportRepo := fsrepo.NewReviewReportRepositoryFS(c.fsClient)
+	if reviewReportRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: review report repository is nil"))
+	}
+
+	reviewReportUC := uc.NewReviewReportUsecase(
+		uc.ReviewReportUsecaseDeps{
+			ReportRepo:              reviewReportRepo,
+			ProductReviewRepo:       r.productBlueprintReviewRepo,
+			ProductBlueprintRepo:    r.productBlueprintRepo,
+			ProductPurchaseResolver: walletUC,
+			ProductReviewModerator:  productBlueprintReviewUC,
+			TokenCommentRepo:        tbReviewRepo.Comments(),
+			TokenBlueprintRepo:      r.tokenBlueprintRepo,
+			TokenAccessResolver:     walletUC,
+			TokenCommentModerator:   tokenBlueprintReviewUC,
+		},
+	)
+	if reviewReportUC == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: review report usecase is nil"))
+	}
+
 	cartUC := uc.NewCartUsecase(r.cartRepo)
 
 	invitationDeliveryQueue, err := cloudtasksadp.NewInvitationDeliveryQueueFromEnv(ctx)
@@ -714,28 +757,13 @@ func buildUsecases(
 		tokenBlueprintUC:                tokenBlueprintUC,
 		tokenBlueprintCreateOperationUC: tokenBlueprintCreateOperationUC,
 		tokenBlueprintReviewUC:          tokenBlueprintReviewUC,
-		productBlueprintReviewUC: func() *uc.ProductBlueprintReviewUsecase {
-			if r.productBlueprintReviewRepo == nil ||
-				r.productBlueprintRepo == nil ||
-				r.walletRepo == nil {
-				return nil
-			}
-
-			return uc.NewProductBlueprintReviewUsecase(
-				r.productBlueprintReviewRepo,
-				r.productBlueprintRepo,
-				r.brandRepo,
-				r.memberRepo,
-				walletUC,
-				r.avatarRepo,
-				nil,
-			)
-		}(),
-		userUC:               userUC,
-		walletUC:             walletUC,
-		cartUC:               cartUC,
-		invitationUC:         invitationUC,
-		invitationDeliveryUC: invitationDeliveryUC,
-		authBootstrapSvc:     authBootstrapSvc,
+		productBlueprintReviewUC:        productBlueprintReviewUC,
+		reviewReportUC:                  reviewReportUC,
+		userUC:                          userUC,
+		walletUC:                        walletUC,
+		cartUC:                          cartUC,
+		invitationUC:                    invitationUC,
+		invitationDeliveryUC:            invitationDeliveryUC,
+		authBootstrapSvc:                authBootstrapSvc,
 	}, nil
 }

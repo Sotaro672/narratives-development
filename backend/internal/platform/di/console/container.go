@@ -62,11 +62,14 @@ type Container struct {
 	ProductionUC                    *uc.ProductionUsecase
 	ProductBlueprintUC              *uc.ProductBlueprintUsecase
 	ProductBlueprintCategoryUC      *uc.ProductBlueprintCategoryUsecase
+	ProductBlueprintReviewUC        *uc.ProductBlueprintReviewUsecase
+	ReviewReportUC                  *uc.ReviewReportUsecase
 	ShippingAddressUC               *uc.ShippingAddressUsecase
 	TransportationUC                *uc.TransportationUsecase
 	TokenUC                         *uc.TokenUsecase
 	TokenBlueprintUC                *uc.TokenBlueprintUsecase
 	TokenBlueprintCreateOperationUC *uc.TokenBlueprintCreateOperationUsecase
+	TokenBlueprintReviewUC          *uc.TokenBlueprintReviewUsecase
 	UserUC                          *uc.UserUsecase
 	WalletUC                        *uc.WalletUsecase
 	CartUC                          *uc.CartUsecase
@@ -116,6 +119,7 @@ func NewContainer(
 	if err != nil {
 		return nil, err
 	}
+
 	if clients == nil || clients.infra == nil {
 		return nil, errors.New("di.console: clients/infra is nil")
 	}
@@ -140,6 +144,7 @@ func NewContainer(
 	if u.resources == nil {
 		return nil, errors.New("di.console: container resources is nil")
 	}
+
 	resources := u.resources
 
 	settlementQueue, err := listcloudtasksadp.NewSettlementQueueFromEnv(ctx)
@@ -151,6 +156,7 @@ func NewContainer(
 			errors.New("di.console: settlement queue is nil"),
 		)
 	}
+
 	resources.Add("settlement queue", settlementQueue)
 
 	q := buildQueries(
@@ -235,11 +241,14 @@ func NewContainer(
 		ProductionUC:                    u.productionUC,
 		ProductBlueprintUC:              u.productBlueprintUC,
 		ProductBlueprintCategoryUC:      u.productBlueprintCategoryUC,
+		ProductBlueprintReviewUC:        u.productBlueprintReviewUC,
+		ReviewReportUC:                  u.reviewReportUC,
 		ShippingAddressUC:               u.shippingAddressUC,
 		TransportationUC:                u.transportationUC,
 		TokenUC:                         u.tokenUC,
 		TokenBlueprintUC:                u.tokenBlueprintUC,
 		TokenBlueprintCreateOperationUC: u.tokenBlueprintCreateOperationUC,
+		TokenBlueprintReviewUC:          u.tokenBlueprintReviewUC,
 		UserUC:                          u.userUC,
 		WalletUC:                        u.walletUC,
 		CartUC:                          u.cartUC,
