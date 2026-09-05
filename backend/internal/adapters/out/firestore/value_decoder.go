@@ -87,3 +87,28 @@ func firestoreOptionalString(values map[string]any, key string) (*string, error)
 
 	return &text, nil
 }
+
+// firestoreRequiredString decodes a required Firestore string.
+//
+// Contract:
+//   - missing field is invalid
+//   - nil field is invalid
+//   - only string is accepted
+//   - empty string is invalid
+//   - string content is returned unchanged
+func firestoreRequiredString(values map[string]any, key string) (string, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return "", fmt.Errorf("firestore: missing %s", key)
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("firestore: %s must be string, got %T", key, value)
+	}
+	if text == "" {
+		return "", fmt.Errorf("firestore: %s must not be empty", key)
+	}
+
+	return text, nil
+}

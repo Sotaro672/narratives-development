@@ -72,7 +72,6 @@ func (r *PaymentRepositoryFS) GetByPaymentID(ctx context.Context, paymentID stri
 		return nil, errors.New("firestore client is nil")
 	}
 
-	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil, paymentdom.ErrNotFound
 	}
@@ -96,14 +95,6 @@ func (r *PaymentRepositoryFS) Create(ctx context.Context, in paymentdom.CreatePa
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
-	in.PaymentID = strings.TrimSpace(in.PaymentID)
-	in.PaymentMethodID = strings.TrimSpace(in.PaymentMethodID)
-	in.StripeCustomerID = strings.TrimSpace(in.StripeCustomerID)
-	in.StripePaymentMethodID = strings.TrimSpace(in.StripePaymentMethodID)
-	in.StripePaymentIntentID = strings.TrimSpace(in.StripePaymentIntentID)
-	in.StripeChargeID = strings.TrimSpace(in.StripeChargeID)
-	in.TransferGroup = strings.TrimSpace(in.TransferGroup)
 
 	if in.PaymentID == "" {
 		return nil, paymentdom.ErrInvalidPaymentID
@@ -160,7 +151,6 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 		return nil, errors.New("firestore client is nil")
 	}
 
-	paymentID = strings.TrimSpace(paymentID)
 	if paymentID == "" {
 		return nil, paymentdom.ErrNotFound
 	}
@@ -183,7 +173,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 	updates := make([]firestore.Update, 0, 10)
 
 	if patch.PaymentMethodID != nil {
-		value := strings.TrimSpace(*patch.PaymentMethodID)
+		value := *patch.PaymentMethodID
 		if value == "" {
 			return nil, paymentdom.ErrInvalidPaymentMethodID
 		}
@@ -191,7 +181,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 	}
 
 	if patch.StripeCustomerID != nil {
-		value := strings.TrimSpace(*patch.StripeCustomerID)
+		value := *patch.StripeCustomerID
 		if value == "" {
 			return nil, paymentdom.ErrInvalidStripeCustomerID
 		}
@@ -199,7 +189,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 	}
 
 	if patch.StripePaymentMethodID != nil {
-		value := strings.TrimSpace(*patch.StripePaymentMethodID)
+		value := *patch.StripePaymentMethodID
 		if value == "" {
 			return nil, paymentdom.ErrInvalidStripePaymentMethod
 		}
@@ -207,7 +197,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 	}
 
 	if patch.StripePaymentIntentID != nil {
-		value := strings.TrimSpace(*patch.StripePaymentIntentID)
+		value := *patch.StripePaymentIntentID
 		if value == "" {
 			return nil, paymentdom.ErrInvalidStripePaymentIntent
 		}
@@ -215,7 +205,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 	}
 
 	if patch.StripeChargeID != nil {
-		value := strings.TrimSpace(*patch.StripeChargeID)
+		value := *patch.StripeChargeID
 		if value == "" {
 			return nil, paymentdom.ErrInvalidStripeChargeID
 		}
@@ -223,7 +213,7 @@ func (r *PaymentRepositoryFS) UpdateByPaymentID(ctx context.Context, paymentID s
 	}
 
 	if patch.TransferGroup != nil {
-		value := strings.TrimSpace(*patch.TransferGroup)
+		value := *patch.TransferGroup
 		if value == "" {
 			return nil, paymentdom.ErrInvalidTransferGroup
 		}
@@ -286,7 +276,7 @@ func (r *PaymentRepositoryFS) updateRefundStateByPaymentID(ctx context.Context, 
 		return nil, paymentdom.ErrInvalidRefundState
 	}
 
-	stripeRefundID := strings.TrimSpace(*patch.StripeRefundID)
+	stripeRefundID := *patch.StripeRefundID
 	if stripeRefundID == "" {
 		return nil, paymentdom.ErrInvalidStripeRefundID
 	}
@@ -361,11 +351,6 @@ func (r *PaymentRepositoryFS) ApplyStripePaymentEvent(ctx context.Context, in us
 	if r == nil || r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
-
-	in.EventID = strings.TrimSpace(in.EventID)
-	in.PaymentID = strings.TrimSpace(in.PaymentID)
-	in.StripePaymentIntentID = strings.TrimSpace(in.StripePaymentIntentID)
-	in.StripeChargeID = strings.TrimSpace(in.StripeChargeID)
 
 	if in.EventID == "" {
 		return nil, usecase.ErrPaymentStripeEventIDEmpty
@@ -689,22 +674,22 @@ func docToPayment(document *firestore.DocumentSnapshot) (paymentdom.Payment, err
 
 	paymentID := document.Ref.ID
 
-	paymentMethodID, err := paymentRequiredString(data, "paymentMethodId")
+	paymentMethodID, err := firestoreRequiredString(data, "paymentMethodId")
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	stripeCustomerID, err := paymentRequiredString(data, "stripeCustomerId")
+	stripeCustomerID, err := firestoreRequiredString(data, "stripeCustomerId")
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	stripePaymentMethodID, err := paymentRequiredString(data, "stripePaymentMethodId")
+	stripePaymentMethodID, err := firestoreRequiredString(data, "stripePaymentMethodId")
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
 
-	stripePaymentIntentID, err := paymentRequiredString(data, "stripePaymentIntentId")
+	stripePaymentIntentID, err := firestoreRequiredString(data, "stripePaymentIntentId")
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
@@ -718,7 +703,7 @@ func docToPayment(document *firestore.DocumentSnapshot) (paymentdom.Payment, err
 		stripeChargeID = *stripeChargeIDValue
 	}
 
-	transferGroup, err := paymentRequiredString(data, "transferGroup")
+	transferGroup, err := firestoreRequiredString(data, "transferGroup")
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
@@ -728,7 +713,7 @@ func docToPayment(document *firestore.DocumentSnapshot) (paymentdom.Payment, err
 		return paymentdom.Payment{}, err
 	}
 
-	statusText, err := paymentRequiredString(data, "status")
+	statusText, err := firestoreRequiredString(data, "status")
 	if err != nil {
 		return paymentdom.Payment{}, err
 	}
@@ -834,21 +819,6 @@ func paymentRefundedAmount(values map[string]any, key string) (int, error) {
 	}
 
 	return int(number), nil
-}
-
-func paymentRequiredString(values map[string]any, key string) (string, error) {
-	value, ok := values[key]
-	if !ok || value == nil {
-		return "", fmt.Errorf("payment: missing %s", key)
-	}
-
-	text, ok := value.(string)
-	text = strings.TrimSpace(text)
-	if !ok || text == "" {
-		return "", fmt.Errorf("payment: invalid %s", key)
-	}
-
-	return text, nil
 }
 
 func paymentRequiredInt(values map[string]any, key string) (int, error) {

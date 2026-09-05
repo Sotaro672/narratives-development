@@ -884,11 +884,11 @@ func docToBrandFeeSettlement(document *firestore.DocumentSnapshot) (brandfeesett
 		return brandfeesettlementdom.BrandFeeSettlement{}, fmt.Errorf("brandFeeSettlement: empty document %s", document.Ref.ID)
 	}
 
-	orderID, err := brandFeeSettlementRequiredString(data, "orderId")
+	orderID, err := firestoreRequiredString(data, "orderId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	paymentID, err := brandFeeSettlementRequiredString(data, "paymentId")
+	paymentID, err := firestoreRequiredString(data, "paymentId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
@@ -896,35 +896,35 @@ func docToBrandFeeSettlement(document *firestore.DocumentSnapshot) (brandfeesett
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	resaleID, err := brandFeeSettlementRequiredString(data, "resaleId")
+	resaleID, err := firestoreRequiredString(data, "resaleId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	brandID, err := brandFeeSettlementRequiredString(data, "brandId")
+	brandID, err := firestoreRequiredString(data, "brandId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	companyID, err := brandFeeSettlementRequiredString(data, "companyId")
+	companyID, err := firestoreRequiredString(data, "companyId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	accountID, err := brandFeeSettlementRequiredString(data, "accountId")
+	accountID, err := firestoreRequiredString(data, "accountId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	stripeAccountID, err := brandFeeSettlementRequiredString(data, "stripeAccountId")
+	stripeAccountID, err := firestoreRequiredString(data, "stripeAccountId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	stripePaymentIntentID, err := brandFeeSettlementRequiredString(data, "stripePaymentIntentId")
+	stripePaymentIntentID, err := firestoreRequiredString(data, "stripePaymentIntentId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	stripeChargeID, err := brandFeeSettlementRequiredString(data, "stripeChargeId")
+	stripeChargeID, err := firestoreRequiredString(data, "stripeChargeId")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	transferGroup, err := brandFeeSettlementRequiredString(data, "transferGroup")
+	transferGroup, err := firestoreRequiredString(data, "transferGroup")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
@@ -932,11 +932,11 @@ func docToBrandFeeSettlement(document *firestore.DocumentSnapshot) (brandfeesett
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	currency, err := brandFeeSettlementRequiredString(data, "currency")
+	currency, err := firestoreRequiredString(data, "currency")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
-	statusText, err := brandFeeSettlementRequiredString(data, "status")
+	statusText, err := firestoreRequiredString(data, "status")
 	if err != nil {
 		return brandfeesettlementdom.BrandFeeSettlement{}, err
 	}
@@ -1026,20 +1026,6 @@ func docToBrandFeeSettlement(document *firestore.DocumentSnapshot) (brandfeesett
 // ============================================================
 // Firestore field helpers
 // ============================================================
-
-func brandFeeSettlementRequiredString(values map[string]any, key string) (string, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return "", fmt.Errorf("brandFeeSettlement: missing %s", key)
-	}
-
-	text, ok := value.(string)
-	if !ok || text == "" {
-		return "", fmt.Errorf("brandFeeSettlement: invalid %s", key)
-	}
-
-	return text, nil
-}
 
 func brandFeeSettlementRequiredInt(values map[string]any, key string) (int, error) {
 	value, exists := values[key]

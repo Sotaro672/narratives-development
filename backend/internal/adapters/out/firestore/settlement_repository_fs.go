@@ -782,11 +782,11 @@ func docToSettlement(document *firestore.DocumentSnapshot) (settlementdom.Settle
 
 	id := document.Ref.ID
 
-	orderID, err := settlementRequiredString(data, "orderId")
+	orderID, err := firestoreRequiredString(data, "orderId")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
-	paymentID, err := settlementRequiredString(data, "paymentId")
+	paymentID, err := firestoreRequiredString(data, "paymentId")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
@@ -794,15 +794,15 @@ func docToSettlement(document *firestore.DocumentSnapshot) (settlementdom.Settle
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
-	stripePaymentIntentID, err := settlementRequiredString(data, "stripePaymentIntentId")
+	stripePaymentIntentID, err := firestoreRequiredString(data, "stripePaymentIntentId")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
-	stripeChargeID, err := settlementRequiredString(data, "stripeChargeId")
+	stripeChargeID, err := firestoreRequiredString(data, "stripeChargeId")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
-	transferGroup, err := settlementRequiredString(data, "transferGroup")
+	transferGroup, err := firestoreRequiredString(data, "transferGroup")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
@@ -818,11 +818,11 @@ func docToSettlement(document *firestore.DocumentSnapshot) (settlementdom.Settle
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
-	currency, err := settlementRequiredString(data, "currency")
+	currency, err := firestoreRequiredString(data, "currency")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
-	statusText, err := settlementRequiredString(data, "status")
+	statusText, err := firestoreRequiredString(data, "status")
 	if err != nil {
 		return settlementdom.Settlement{}, err
 	}
@@ -910,19 +910,19 @@ func docToSettlement(document *firestore.DocumentSnapshot) (settlementdom.Settle
 }
 
 func settlementSellerIdentityFromData(data map[string]any) (settlementdom.SellerIdentity, error) {
-	sellerTypeText, err := settlementRequiredString(data, "sellerType")
+	sellerTypeText, err := firestoreRequiredString(data, "sellerType")
 	if err != nil {
 		return settlementdom.SellerIdentity{}, err
 	}
-	companyID, err := settlementRequiredString(data, "companyId")
+	companyID, err := firestoreRequiredString(data, "companyId")
 	if err != nil {
 		return settlementdom.SellerIdentity{}, err
 	}
-	accountID, err := settlementRequiredString(data, "accountId")
+	accountID, err := firestoreRequiredString(data, "accountId")
 	if err != nil {
 		return settlementdom.SellerIdentity{}, err
 	}
-	stripeAccountID, err := settlementRequiredString(data, "stripeAccountId")
+	stripeAccountID, err := firestoreRequiredString(data, "stripeAccountId")
 	if err != nil {
 		return settlementdom.SellerIdentity{}, err
 	}
@@ -943,20 +943,6 @@ func settlementSellerIdentityFromData(data map[string]any) (settlementdom.Seller
 // ============================================================
 // Firestore field helpers
 // ============================================================
-
-func settlementRequiredString(values map[string]any, key string) (string, error) {
-	value, exists := values[key]
-	if !exists || value == nil {
-		return "", fmt.Errorf("settlement: missing %s", key)
-	}
-
-	text, ok := value.(string)
-	if !ok || text == "" {
-		return "", fmt.Errorf("settlement: invalid %s", key)
-	}
-
-	return text, nil
-}
 
 func settlementRequiredInt(values map[string]any, key string) (int, error) {
 	value, exists := values[key]
