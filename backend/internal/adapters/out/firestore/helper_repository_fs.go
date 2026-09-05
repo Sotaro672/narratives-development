@@ -8,36 +8,6 @@ import (
 	"cloud.google.com/go/firestore"
 )
 
-// asString is retained temporarily while Firestore string reads
-// migrate to dedicated value decoders.
-func asString(v any) string {
-	if v == nil {
-		return ""
-	}
-
-	value, ok := v.(string)
-	if !ok {
-		return ""
-	}
-
-	return value
-}
-
-// asInt is retained temporarily while Firestore integer reads
-// migrate to dedicated value decoders.
-func asInt(v any) int {
-	if v == nil {
-		return 0
-	}
-
-	value, ok := v.(int64)
-	if !ok {
-		return 0
-	}
-
-	return int(value)
-}
-
 func containsString(xs []string, v string) bool {
 	if v == "" || len(xs) == 0 {
 		return false

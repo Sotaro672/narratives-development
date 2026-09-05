@@ -487,6 +487,11 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		return idom.Inquiry{}, err
 	}
 
+	rawOrderItemIndex, err := firestoreOptionalInt64(data, "orderItemIndex")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+
 	in := idom.Inquiry{
 		ID:          ptrOrEmpty(id),
 		ProductID:   productID,
@@ -508,8 +513,11 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		UpdatedAt:   updatedAt,
 	}
 
-	if rawOrderItemIndex, ok := data["orderItemIndex"]; ok && rawOrderItemIndex != nil {
-		orderItemIndex := asInt(rawOrderItemIndex)
+	if rawOrderItemIndex != nil {
+		orderItemIndex := int(*rawOrderItemIndex)
+		if int64(orderItemIndex) != *rawOrderItemIndex {
+			return idom.Inquiry{}, fmt.Errorf("firestore: orderItemIndex is out of int range")
+		}
 		in.OrderItemIndex = &orderItemIndex
 	}
 	if in.ID == "" {
@@ -551,6 +559,10 @@ func docToReplyWithFallbackInquiryID(doc *firestore.DocumentSnapshot, fallbackIn
 	if err != nil {
 		return idom.Reply{}, err
 	}
+	content, err := firestoreString(data, "content")
+	if err != nil {
+		return idom.Reply{}, err
+	}
 	createdBy, err := firestoreRequiredString(data, "createdBy")
 	if err != nil {
 		return idom.Reply{}, err
@@ -586,7 +598,7 @@ func docToReplyWithFallbackInquiryID(doc *firestore.DocumentSnapshot, fallbackIn
 		InquiryID:  ptrOrEmpty(inquiryID),
 		SenderType: idom.ReplySenderType(senderTypeText),
 		SenderID:   senderID,
-		Content:    asString(data["content"]),
+		Content:    content,
 		IsRead:     isRead,
 		CreatedAt:  createdAt,
 		CreatedBy:  createdBy,
@@ -683,6 +695,10 @@ func docImageMapToDomain(m map[string]any, fallbackInquiryID string) (idom.Image
 	if err != nil {
 		return idom.ImageFile{}, err
 	}
+	fileSize, err := firestoreRequiredInt64(m, "fileSize")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
 	mimeType, err := firestoreRequiredString(m, "mimeType")
 	if err != nil {
 		return idom.ImageFile{}, err
@@ -718,7 +734,7 @@ func docImageMapToDomain(m map[string]any, fallbackInquiryID string) (idom.Image
 		FileName:   fileName,
 		FileURL:    fileURL,
 		ObjectPath: objectPath,
-		FileSize:   int64(asInt(m["fileSize"])),
+		FileSize:   fileSize,
 		MimeType:   mimeType,
 		CreatedAt:  createdAt,
 		CreatedBy:  createdBy,

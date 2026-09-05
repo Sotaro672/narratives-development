@@ -4,6 +4,7 @@ package firestore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"cloud.google.com/go/firestore"
@@ -198,14 +199,9 @@ func (r *CartRepositoryFS) removeItemsMatching(ctx context.Context, match cartIt
 				continue
 			}
 
-			item := cartItemDoc{
-				Type:        asString(itemMap["type"]),
-				InventoryID: asString(itemMap["inventoryId"]),
-				ListID:      asString(itemMap["listId"]),
-				ModelID:     asString(itemMap["modelId"]),
-				ResaleID:    asString(itemMap["resaleId"]),
-				ProductID:   asString(itemMap["productId"]),
-				Qty:         asInt(itemMap["qty"]),
+			item, err := decodeCartItemDoc(itemMap)
+			if err != nil {
+				return err
 			}
 
 			normalized, valid := normalizeCartItemDoc(item)
@@ -292,6 +288,55 @@ type cartItemDoc struct {
 	Qty int `firestore:"qty"`
 }
 
+func decodeCartItemDoc(values map[string]any) (cartItemDoc, error) {
+	itemType, err := firestoreOptionalString(values, "type")
+	if err != nil {
+		return cartItemDoc{}, err
+	}
+	inventoryID, err := firestoreOptionalString(values, "inventoryId")
+	if err != nil {
+		return cartItemDoc{}, err
+	}
+	listID, err := firestoreOptionalString(values, "listId")
+	if err != nil {
+		return cartItemDoc{}, err
+	}
+	modelID, err := firestoreOptionalString(values, "modelId")
+	if err != nil {
+		return cartItemDoc{}, err
+	}
+	resaleID, err := firestoreOptionalString(values, "resaleId")
+	if err != nil {
+		return cartItemDoc{}, err
+	}
+	productID, err := firestoreOptionalString(values, "productId")
+	if err != nil {
+		return cartItemDoc{}, err
+	}
+	rawQty, err := firestoreOptionalInt64(values, "qty")
+	if err != nil {
+		return cartItemDoc{}, err
+	}
+
+	qty := 0
+	if rawQty != nil {
+		qty = int(*rawQty)
+		if int64(qty) != *rawQty {
+			return cartItemDoc{}, fmt.Errorf("cart_repository_fs: qty is out of int range")
+		}
+	}
+
+	return cartItemDoc{
+		Type:        ptrOrEmpty(itemType),
+		InventoryID: ptrOrEmpty(inventoryID),
+		ListID:      ptrOrEmpty(listID),
+		ModelID:     ptrOrEmpty(modelID),
+		ResaleID:    ptrOrEmpty(resaleID),
+		ProductID:   ptrOrEmpty(productID),
+		Qty:         qty,
+	}, nil
+}
+
 func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 	if snap == nil {
 		return cartDoc{}, errors.New("cart_repository_fs: snapshot is nil")
@@ -340,14 +385,9 @@ func cartDocFromSnapshot(snap *firestore.DocumentSnapshot) (cartDoc, error) {
 			continue
 		}
 
-		item := cartItemDoc{
-			Type:        asString(itemMap["type"]),
-			InventoryID: asString(itemMap["inventoryId"]),
-			ListID:      asString(itemMap["listId"]),
-			ModelID:     asString(itemMap["modelId"]),
-			ResaleID:    asString(itemMap["resaleId"]),
-			ProductID:   asString(itemMap["productId"]),
-			Qty:         asInt(itemMap["qty"]),
+		item, err := decodeCartItemDoc(itemMap)
+		if err != nil {
+			return cartDoc{}, err
 		}
 
 		normalized, valid := normalizeCartItemDoc(item)

@@ -44,10 +44,7 @@ func (q *MintTaskProgressQueryFS) productsCol(mintID string) *firestore.Collecti
 //
 // status は domain/mint.MintProductTaskStatus を正として扱います。
 // status 未設定または未知値は、処理未完了として Pending に含めます。
-func (q *MintTaskProgressQueryFS) GetMintTaskProgress(
-	ctx context.Context,
-	mintID string,
-) (*querydto.MintTaskProgressDTO, error) {
+func (q *MintTaskProgressQueryFS) GetMintTaskProgress(ctx context.Context, mintID string) (*querydto.MintTaskProgressDTO, error) {
 	if q == nil || q.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -74,8 +71,10 @@ func (q *MintTaskProgressQueryFS) GetMintTaskProgress(
 
 		progress.Total++
 
-		data := doc.Data()
-		status := mintdom.MintProductTaskStatus(asString(data["status"]))
+		status, err := taskStatusFromRaw(doc.Data())
+		if err != nil {
+			return nil, fmt.Errorf("decode mint product task status mintID=%s productID=%s: %w", mintID, doc.Ref.ID, err)
+		}
 
 		switch status {
 		case mintdom.MintProductTaskStatusPending:

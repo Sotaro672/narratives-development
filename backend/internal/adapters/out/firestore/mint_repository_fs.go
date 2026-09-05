@@ -81,32 +81,46 @@ func decodeStringSlice(v any) []string {
 	}
 }
 
-func mintStatusFromRaw(raw map[string]any) mintdom.MintStatus {
-	statusText := ""
-	if raw != nil {
-		statusText = asString(raw["status"])
+func mintStatusFromRaw(raw map[string]any) (mintdom.MintStatus, error) {
+	if raw == nil {
+		return mintdom.MintStatusCreated, nil
 	}
 
-	status := mintdom.MintStatus(statusText)
+	statusText, err := firestoreOptionalString(raw, "status")
+	if err != nil {
+		return "", err
+	}
+	if statusText == nil {
+		return mintdom.MintStatusCreated, nil
+	}
+
+	status := mintdom.MintStatus(*statusText)
 	if status.IsValid() {
-		return status
+		return status, nil
 	}
 
-	return mintdom.MintStatusCreated
+	return mintdom.MintStatusCreated, nil
 }
 
-func taskStatusFromRaw(raw map[string]any) mintdom.MintProductTaskStatus {
-	statusText := ""
-	if raw != nil {
-		statusText = asString(raw["status"])
+func taskStatusFromRaw(raw map[string]any) (mintdom.MintProductTaskStatus, error) {
+	if raw == nil {
+		return mintdom.MintProductTaskStatusPending, nil
 	}
 
-	status := mintdom.MintProductTaskStatus(statusText)
+	statusText, err := firestoreOptionalString(raw, "status")
+	if err != nil {
+		return "", err
+	}
+	if statusText == nil {
+		return mintdom.MintProductTaskStatusPending, nil
+	}
+
+	status := mintdom.MintProductTaskStatus(*statusText)
 	if status.IsValid() {
-		return status
+		return status, nil
 	}
 
-	return mintdom.MintProductTaskStatusPending
+	return mintdom.MintProductTaskStatusPending, nil
 }
 
 type tokenBlueprintDoc struct {
@@ -129,6 +143,30 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 		return mintdom.Mint{}, errors.New("mint document data is nil")
 	}
 
+	brandID, err := firestoreRequiredString(data, "brandId")
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
+	tokenBlueprintID, err := firestoreRequiredString(data, "tokenBlueprintId")
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
+	createdBy, err := firestoreRequiredString(data, "createdBy")
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
+	requestedBy, err := firestoreOptionalString(data, "requestedBy")
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
+	onChainTxSignature, err := firestoreOptionalString(data, "onChainTxSignature")
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
+	mintStatus, err := mintStatusFromRaw(data)
+	if err != nil {
+		return mintdom.Mint{}, err
+	}
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
 		return mintdom.Mint{}, err
@@ -144,16 +182,16 @@ func decodeMintFromDoc(doc *firestore.DocumentSnapshot) (mintdom.Mint, error) {
 
 	m := mintdom.Mint{
 		ID:                 doc.Ref.ID,
-		BrandID:            asString(data["brandId"]),
-		TokenBlueprintID:   asString(data["tokenBlueprintId"]),
+		BrandID:            brandID,
+		TokenBlueprintID:   tokenBlueprintID,
 		Products:           decodeStringSlice(data["products"]),
-		Status:             mintStatusFromRaw(data),
-		CreatedBy:          asString(data["createdBy"]),
-		RequestedBy:        asString(data["requestedBy"]),
+		Status:             mintStatus,
+		CreatedBy:          createdBy,
+		RequestedBy:        ptrOrEmpty(requestedBy),
 		CreatedAt:          createdAt,
 		MintedAt:           mintedAt,
 		ScheduledBurnDate:  scheduledBurnDate,
-		OnChainTxSignature: asString(data["onChainTxSignature"]),
+		OnChainTxSignature: ptrOrEmpty(onChainTxSignature),
 	}
 
 	if err := m.Validate(); err != nil {
@@ -198,17 +236,67 @@ func decodeMintProductTaskFromDoc(mintID string, doc *firestore.DocumentSnapshot
 	}
 
 	data := doc.Data()
+	if data == nil {
+		return mintdom.MintProductTask{}, errors.New("mint product task document data is nil")
+	}
 
-	productID := asString(data["productId"])
+	productIDValue, err := firestoreOptionalString(data, "productId")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	productID := ptrOrEmpty(productIDValue)
 	if productID == "" {
 		productID = doc.Ref.ID
 	}
 
-	taskMintID := asString(data["mintId"])
+	taskMintIDValue, err := firestoreOptionalString(data, "mintId")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	taskMintID := ptrOrEmpty(taskMintIDValue)
 	if taskMintID == "" {
 		taskMintID = mintID
 	}
 
+	taskStatus, err := taskStatusFromRaw(data)
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	rawAttemptCount, err := firestoreRequiredInt64(data, "attemptCount")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	attemptCount := int(rawAttemptCount)
+	if int64(attemptCount) != rawAttemptCount {
+		return mintdom.MintProductTask{}, fmt.Errorf("firestore: attemptCount is out of int range")
+	}
+	assetID, err := firestoreOptionalString(data, "assetId")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	treeAddress, err := firestoreOptionalString(data, "treeAddress")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	rawLeafIndex, err := firestoreOptionalInt64(data, "leafIndex")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	leafIndex := uint64(0)
+	if rawLeafIndex != nil {
+		if *rawLeafIndex < 0 {
+			return mintdom.MintProductTask{}, fmt.Errorf("firestore: leafIndex must not be negative")
+		}
+		leafIndex = uint64(*rawLeafIndex)
+	}
+	signature, err := firestoreOptionalString(data, "signature")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
+	errorMessage, err := firestoreOptionalString(data, "errorMessage")
+	if err != nil {
+		return mintdom.MintProductTask{}, err
+	}
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
 		return mintdom.MintProductTask{}, err
@@ -233,13 +321,13 @@ func decodeMintProductTaskFromDoc(mintID string, doc *firestore.DocumentSnapshot
 	t := mintdom.MintProductTask{
 		MintID:           taskMintID,
 		ProductID:        productID,
-		Status:           taskStatusFromRaw(data),
-		AttemptCount:     asInt(data["attemptCount"]),
-		AssetID:          asString(data["assetId"]),
-		TreeAddress:      asString(data["treeAddress"]),
-		LeafIndex:        uint64(asInt(data["leafIndex"])),
-		Signature:        asString(data["signature"]),
-		ErrorMessage:     asString(data["errorMessage"]),
+		Status:           taskStatus,
+		AttemptCount:     attemptCount,
+		AssetID:          ptrOrEmpty(assetID),
+		TreeAddress:      ptrOrEmpty(treeAddress),
+		LeafIndex:        leafIndex,
+		Signature:        ptrOrEmpty(signature),
+		ErrorMessage:     ptrOrEmpty(errorMessage),
 		CreatedAt:        createdAt,
 		UpdatedAt:        updatedAt,
 		MintingStartedAt: mintingStartedAt,
@@ -298,18 +386,28 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 
 	if exists && existingSnap != nil && existingSnap.Exists() {
 		edata := existingSnap.Data()
-		existingStatus := mintStatusFromRaw(edata)
+		existingStatus, err := mintStatusFromRaw(edata)
+		if err != nil {
+			return mintdom.Mint{}, err
+		}
 
 		data["status"] = string(existingStatus)
 		m.Status = existingStatus
 
-		if createdBy := asString(edata["createdBy"]); createdBy != "" {
-			data["createdBy"] = createdBy
-			m.CreatedBy = createdBy
+		createdBy, err := firestoreRequiredString(edata, "createdBy")
+		if err != nil {
+			return mintdom.Mint{}, err
 		}
-		if requestedBy := asString(edata["requestedBy"]); requestedBy != "" {
-			data["requestedBy"] = requestedBy
-			m.RequestedBy = requestedBy
+		data["createdBy"] = createdBy
+		m.CreatedBy = createdBy
+
+		requestedBy, err := firestoreOptionalString(edata, "requestedBy")
+		if err != nil {
+			return mintdom.Mint{}, err
+		}
+		if requestedBy != nil {
+			data["requestedBy"] = *requestedBy
+			m.RequestedBy = *requestedBy
 		}
 
 		createdAt, err := firestoreRequiredTime(edata, "createdAt")
@@ -337,9 +435,13 @@ func (r *MintRepositoryFS) Create(ctx context.Context, m mintdom.Mint) (mintdom.
 			data["scheduledBurnDate"] = scheduledBurnDate.UTC()
 		}
 
-		if onChainTxSignature := asString(edata["onChainTxSignature"]); onChainTxSignature != "" {
-			data["onChainTxSignature"] = onChainTxSignature
-			m.OnChainTxSignature = onChainTxSignature
+		onChainTxSignature, err := firestoreOptionalString(edata, "onChainTxSignature")
+		if err != nil {
+			return mintdom.Mint{}, err
+		}
+		if onChainTxSignature != nil {
+			data["onChainTxSignature"] = *onChainTxSignature
+			m.OnChainTxSignature = *onChainTxSignature
 		}
 	} else {
 		data["createdAt"] = m.CreatedAt.UTC()
@@ -868,24 +970,25 @@ func (r *MintRepositoryFS) LoadForMinting(ctx context.Context, id string) (*usec
 	}
 
 	raw := mintSnap.Data()
-	mintStatus := mintStatusFromRaw(raw)
+	mintStatus, err := mintStatusFromRaw(raw)
+	if err != nil {
+		return nil, fmt.Errorf("decode mint %s status: %w", mintID, err)
+	}
 	if mintStatus == mintdom.MintStatusMinted {
 		return nil, fmt.Errorf("mint %s is already minted", mintID)
 	}
 
-	brandID := asString(raw["brandId"])
-	if brandID == "" {
-		return nil, fmt.Errorf("mint %s has empty brandId", mintID)
+	brandID, err := firestoreRequiredString(raw, "brandId")
+	if err != nil {
+		return nil, fmt.Errorf("decode mint %s brandId: %w", mintID, err)
 	}
-
-	tbID := asString(raw["tokenBlueprintId"])
-	if tbID == "" {
-		return nil, fmt.Errorf("mint %s has empty tokenBlueprintId", mintID)
+	tbID, err := firestoreRequiredString(raw, "tokenBlueprintId")
+	if err != nil {
+		return nil, fmt.Errorf("decode mint %s tokenBlueprintId: %w", mintID, err)
 	}
-
-	actorID := asString(raw["requestedBy"])
-	if actorID == "" {
-		return nil, fmt.Errorf("mint %s has empty requestedBy", mintID)
+	actorID, err := firestoreRequiredString(raw, "requestedBy")
+	if err != nil {
+		return nil, fmt.Errorf("decode mint %s requestedBy: %w", mintID, err)
 	}
 
 	productIDs := decodeStringSlice(raw["products"])
@@ -992,14 +1095,13 @@ func (r *MintRepositoryFS) RecordProductAsMinted(ctx context.Context, id string,
 
 	raw := mintSnap.Data()
 
-	brandID := asString(raw["brandId"])
-	if brandID == "" {
-		return fmt.Errorf("mint %s has empty brandId in RecordProductAsMinted", mintID)
+	brandID, err := firestoreRequiredString(raw, "brandId")
+	if err != nil {
+		return fmt.Errorf("decode mint %s brandId in RecordProductAsMinted: %w", mintID, err)
 	}
-
-	tbID := asString(raw["tokenBlueprintId"])
-	if tbID == "" {
-		return fmt.Errorf("mint %s has empty tokenBlueprintId in RecordProductAsMinted", mintID)
+	tbID, err := firestoreRequiredString(raw, "tokenBlueprintId")
+	if err != nil {
+		return fmt.Errorf("decode mint %s tokenBlueprintId in RecordProductAsMinted: %w", mintID, err)
 	}
 
 	brandSnap, err := r.brandsCol().Doc(brandID).Get(ctx)
