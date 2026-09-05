@@ -1,26 +1,26 @@
 // frontend/admin/shell/src/pages/GasPage.tsx
 
 import { useGasBalance } from "../features/gas/hooks/useGasBalance";
-import Page from "../shared/ui/Page/Page";
+import Page, { PageHeader } from "../shared/ui/Page/Page";
+import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 
 export default function GasPage() {
   const { balance, loading, error, reload } = useGasBalance();
 
   return (
     <Page>
-      <div>
-        <h1>ガス</h1>
-        <p>マスターウォレットのガス残高を確認します。</p>
-      </div>
-
+      <PageHeader
+        title="ガス"
+        actions={
+          <RefreshButton
+            onClick={reload}
+            loading={loading}
+            title="リフレッシュ"
+            ariaLabel="リフレッシュ"
+          />
+        }
+      />
       <section>
-        <div>
-          <h2>マスターウォレット</h2>
-          <button type="button" onClick={() => void reload()} disabled={loading}>
-            {loading ? "更新中..." : "更新"}
-          </button>
-        </div>
-
         {loading && !balance ? <p>ガス残高を取得しています...</p> : null}
 
         {error ? (
@@ -34,16 +34,24 @@ export default function GasPage() {
           <dl>
             <div>
               <dt>残高</dt>
-              <dd>{balance.balanceSol.toLocaleString(undefined, { maximumFractionDigits: 9 })} SOL</dd>
+              <dd>
+                {balance.balanceSol.toLocaleString(undefined, {
+                  maximumFractionDigits: 9,
+                })}{" "}
+                SOL
+              </dd>
             </div>
+
             <div>
               <dt>Lamports</dt>
               <dd>{balance.balanceLamports}</dd>
             </div>
+
             <div>
               <dt>ネットワーク</dt>
               <dd>{balance.cluster}</dd>
             </div>
+
             <div>
               <dt>ウォレットアドレス</dt>
               <dd>{balance.address}</dd>
