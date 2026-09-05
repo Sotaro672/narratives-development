@@ -6,6 +6,7 @@ import ContactDetailAside from "../features/contact/presentation/ContactDetailAs
 import ContactDetailMain from "../features/contact/presentation/ContactDetailMain";
 import { getContactSourceLabel } from "../features/contact/presentation/model/contactSourcePresentation";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+import { formatDateTime } from "../shared/util/dateFormat";
 
 export default function InquiryDetailPage() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function InquiryDetailPage() {
     <Page>
       <PageHeader
         title={pageTitle}
+        meta={contact ? formatDateTime(contact.createdAt) : undefined}
         leading={
           <button
             type="button"
