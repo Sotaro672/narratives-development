@@ -33,7 +33,7 @@ func NewProductBlueprintReviewHandler(
 // Supported:
 // - GET  /product-blueprint-reviews/aggregates
 // - GET  /product-blueprint-reviews?ProductBlueprintID=...
-// - POST /product-blueprint-reviews/{productBlueprintId}/reviews/{reviewId}/reports
+// - POST /product-blueprints/{productBlueprintId}/reviews/{reviewId}/reports
 //
 // Query Params:
 // - Status: PUBLISHED | HIDDEN | REMOVED（default: PUBLISHED）
@@ -48,6 +48,7 @@ func (h *ProductBlueprintReviewHandler) ServeHTTP(
 			methodNotAllowed(w)
 			return
 		}
+
 		h.ReportReviewAsBrand(w, r, productBlueprintID, reviewID)
 		return
 	}
@@ -55,14 +56,24 @@ func (h *ProductBlueprintReviewHandler) ServeHTTP(
 	switch r.Method {
 	case http.MethodGet:
 		trimmedPath := strings.TrimRight(r.URL.Path, "/")
-		if strings.HasSuffix(trimmedPath, "/product-blueprint-reviews/aggregates") {
+
+		if strings.HasSuffix(
+			trimmedPath,
+			"/product-blueprint-reviews/aggregates",
+		) {
 			h.ListCompanyReviewAggregates(w, r)
 			return
 		}
 
-		productBlueprintID := trimWS(r.URL.Query().Get("ProductBlueprintID"))
+		productBlueprintID := trimWS(
+			r.URL.Query().Get("ProductBlueprintID"),
+		)
 		if productBlueprintID != "" {
-			h.ListReviewsByProductBlueprintID(w, r, productBlueprintID)
+			h.ListReviewsByProductBlueprintID(
+				w,
+				r,
+				productBlueprintID,
+			)
 			return
 		}
 
@@ -139,6 +150,7 @@ func parseReviewStatus(
 		revdomain.ReviewStatusHidden,
 		revdomain.ReviewStatusRemoved:
 		return revdomain.ReviewStatus(status), true
+
 	default:
 		return "", false
 	}
@@ -169,21 +181,39 @@ func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
 	reviewID string,
 ) {
 	if h == nil || h.ReviewReportUC == nil {
-		writeError(w, http.StatusServiceUnavailable, "ReviewReportHandlerNotInitialized")
+		writeError(
+			w,
+			http.StatusServiceUnavailable,
+			"ReviewReportHandlerNotInitialized",
+		)
 		return
 	}
+
 	if trimWS(productBlueprintID) == "" {
-		writeError(w, http.StatusBadRequest, "ProductBlueprintIDRequired")
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"ProductBlueprintIDRequired",
+		)
 		return
 	}
+
 	if trimWS(reviewID) == "" {
-		writeError(w, http.StatusBadRequest, "ReviewIDRequired")
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"ReviewIDRequired",
+		)
 		return
 	}
 
 	companyID, ok := h.resolveCompanyID(r)
 	if !ok || companyID == "" {
-		writeError(w, http.StatusForbidden, "CompanyIDNotResolved")
+		writeError(
+			w,
+			http.StatusForbidden,
+			"CompanyIDNotResolved",
+		)
 		return
 	}
 
@@ -200,22 +230,38 @@ func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
 	var request reportProductBlueprintReviewRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
+
 	if err := decoder.Decode(&request); err != nil {
-		writeError(w, http.StatusBadRequest, "InvalidRequest")
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"InvalidRequest",
+		)
 		return
 	}
 
 	reason := reviewreport.ReportReason(
-		strings.ToUpper(trimWS(request.Reason)),
+		strings.ToUpper(
+			trimWS(request.Reason),
+		),
 	)
 	if err := reason.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, "InvalidReportReason")
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"InvalidReportReason",
+		)
 		return
 	}
 
 	detail := trimWS(request.Detail)
-	if reason == reviewreport.ReportReasonOther && detail == "" {
-		writeError(w, http.StatusBadRequest, "ReportDetailRequired")
+	if reason == reviewreport.ReportReasonOther &&
+		detail == "" {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"ReportDetailRequired",
+		)
 		return
 	}
 
@@ -256,7 +302,11 @@ func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
 
 func parseProductBlueprintReviewReportPath(
 	path string,
-) (productBlueprintID string, reviewID string, ok bool) {
+) (
+	productBlueprintID string,
+	reviewID string,
+	ok bool,
+) {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
 		return "", "", false
@@ -266,7 +316,8 @@ func parseProductBlueprintReviewReportPath(
 	if len(parts) != 5 {
 		return "", "", false
 	}
-	if parts[0] != "product-blueprint-reviews" ||
+
+	if parts[0] != "product-blueprints" ||
 		parts[1] == "" ||
 		parts[2] != "reviews" ||
 		parts[3] == "" ||
@@ -282,38 +333,109 @@ func writeProductBlueprintReviewReportError(
 	err error,
 ) {
 	switch {
-	case errors.Is(err, uc.ErrReviewReportUsecaseNotConfigured):
-		writeError(w, http.StatusServiceUnavailable, "ReviewReportUsecaseNotConfigured")
+	case errors.Is(
+		err,
+		uc.ErrReviewReportUsecaseNotConfigured,
+	):
+		writeError(
+			w,
+			http.StatusServiceUnavailable,
+			"ReviewReportUsecaseNotConfigured",
+		)
 
-	case errors.Is(err, uc.ErrReviewReportForbidden):
-		writeError(w, http.StatusForbidden, "ReviewReportForbidden")
+	case errors.Is(
+		err,
+		uc.ErrReviewReportForbidden,
+	):
+		writeError(
+			w,
+			http.StatusForbidden,
+			"ReviewReportForbidden",
+		)
 
-	case errors.Is(err, uc.ErrReviewReportSelfReport):
-		writeError(w, http.StatusForbidden, "ReviewReportSelfReportNotAllowed")
+	case errors.Is(
+		err,
+		uc.ErrReviewReportSelfReport,
+	):
+		writeError(
+			w,
+			http.StatusForbidden,
+			"ReviewReportSelfReportNotAllowed",
+		)
 
-	case errors.Is(err, reviewreport.ErrCannotReportRemovedTarget):
-		writeError(w, http.StatusConflict, "CannotReportRemovedTarget")
+	case errors.Is(
+		err,
+		reviewreport.ErrCannotReportRemovedTarget,
+	):
+		writeError(
+			w,
+			http.StatusConflict,
+			"CannotReportRemovedTarget",
+		)
 
 	case reviewreport.IsInvalid(err):
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(
+			w,
+			http.StatusBadRequest,
+			err.Error(),
+		)
 
-	case errors.Is(err, revdomain.ErrNotFound):
-		writeError(w, http.StatusNotFound, err.Error())
+	case errors.Is(
+		err,
+		revdomain.ErrNotFound,
+	):
+		writeError(
+			w,
+			http.StatusNotFound,
+			err.Error(),
+		)
 
-	case errors.Is(err, revdomain.ErrConflict):
-		writeError(w, http.StatusConflict, err.Error())
+	case errors.Is(
+		err,
+		revdomain.ErrConflict,
+	):
+		writeError(
+			w,
+			http.StatusConflict,
+			err.Error(),
+		)
 
-	case errors.Is(err, revdomain.ErrInvalid):
-		writeError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(
+		err,
+		revdomain.ErrInvalid,
+	):
+		writeError(
+			w,
+			http.StatusBadRequest,
+			err.Error(),
+		)
 
-	case errors.Is(err, revdomain.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(
+		err,
+		revdomain.ErrUnauthorized,
+	):
+		writeError(
+			w,
+			http.StatusUnauthorized,
+			err.Error(),
+		)
 
-	case errors.Is(err, revdomain.ErrForbidden):
-		writeError(w, http.StatusForbidden, err.Error())
+	case errors.Is(
+		err,
+		revdomain.ErrForbidden,
+	):
+		writeError(
+			w,
+			http.StatusForbidden,
+			err.Error(),
+		)
 
 	default:
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeError(
+			w,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
 	}
 }
 
@@ -357,7 +479,9 @@ func (h *ProductBlueprintReviewHandler) ListReviewsByProductBlueprintID(
 
 	query := r.URL.Query()
 
-	status, ok := parseReviewStatus(query.Get("Status"))
+	status, ok := parseReviewStatus(
+		query.Get("Status"),
+	)
 	if !ok {
 		writeError(
 			w,
@@ -432,7 +556,8 @@ func (h *ProductBlueprintReviewHandler) ListCompanyReviewAggregates(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if h == nil || h.ProductBlueprintReviewUC == nil {
+	if h == nil ||
+		h.ProductBlueprintReviewUC == nil {
 		writeError(
 			w,
 			http.StatusServiceUnavailable,
@@ -442,7 +567,8 @@ func (h *ProductBlueprintReviewHandler) ListCompanyReviewAggregates(
 	}
 
 	companyID, ok := h.resolveCompanyID(r)
-	if !ok || companyID == "" {
+	if !ok ||
+		companyID == "" {
 		writeError(
 			w,
 			http.StatusForbidden,
@@ -453,7 +579,9 @@ func (h *ProductBlueprintReviewHandler) ListCompanyReviewAggregates(
 
 	query := r.URL.Query()
 
-	status, ok := parseReviewStatus(query.Get("Status"))
+	status, ok := parseReviewStatus(
+		query.Get("Status"),
+	)
 	if !ok {
 		writeError(
 			w,

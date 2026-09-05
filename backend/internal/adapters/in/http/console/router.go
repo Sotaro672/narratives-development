@@ -3,6 +3,7 @@ package httpin
 
 import (
 	"net/http"
+	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
 )
@@ -119,6 +120,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.AuthMw == nil {
 			return h
 		}
+
 		return deps.AuthMw.Handler(h)
 	}
 
@@ -127,6 +129,7 @@ func NewRouter(deps RouterDeps) http.Handler {
 		if deps.BootstrapMw == nil {
 			return h
 		}
+
 		return deps.BootstrapMw.Handler(h)
 	}
 
@@ -222,8 +225,27 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/products/", h)
 	}
 
-	if deps.ProductBP != nil {
-		h := withAuth(deps.ProductBP)
+	if deps.ProductBP != nil || deps.ProductBPReview != nil {
+		productBPHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if isProductBlueprintReviewReportPath(r.URL.Path) {
+				if deps.ProductBPReview == nil {
+					http.NotFound(w, r)
+					return
+				}
+
+				deps.ProductBPReview.ServeHTTP(w, r)
+				return
+			}
+
+			if deps.ProductBP == nil {
+				http.NotFound(w, r)
+				return
+			}
+
+			deps.ProductBP.ServeHTTP(w, r)
+		})
+
+		h := withAuth(productBPHandler)
 		mux.Handle("/product-blueprints", h)
 		mux.Handle("/product-blueprints/", h)
 	}
@@ -385,4 +407,22 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	return mux
+}
+
+func isProductBlueprintReviewReportPath(path string) bool {
+	trimmed := strings.Trim(path, "/")
+	if trimmed == "" {
+		return false
+	}
+
+	parts := strings.Split(trimmed, "/")
+	if len(parts) != 5 {
+		return false
+	}
+
+	return parts[0] == "product-blueprints" &&
+		parts[1] != "" &&
+		parts[2] == "reviews" &&
+		parts[3] != "" &&
+		parts[4] == "reports"
 }

@@ -1,4 +1,5 @@
 // frontend/admin/shell/src/layout/Main/MainRoutes.tsx
+
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import BillingPage from "../../pages/BillingPage";
@@ -6,6 +7,7 @@ import ContractsPage from "../../pages/ContractsPage";
 import GasPage from "../../pages/GasPage";
 import InquiryDetailPage from "../../pages/InquiryDetailPage";
 import InquiriesPage from "../../pages/InquiriesPage";
+import ReportDetailPage from "../../pages/ReportDetailPage";
 import ReportsPage from "../../pages/ReportsPage";
 
 export default function MainRoutes() {
@@ -17,6 +19,7 @@ export default function MainRoutes() {
       <Route path="/gas" element={<GasPage />} />
       <Route path="/contracts" element={<ContractsPage />} />
       <Route path="/reports" element={<ReportsPage />} />
+      <Route path="/reports/:reportId" element={<ReportDetailPage />} />
       <Route path="/billing" element={<BillingPage />} />
       <Route path="*" element={<Navigate to="/inquiries" replace />} />
     </Routes>
