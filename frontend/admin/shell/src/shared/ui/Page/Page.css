@@ -135,9 +135,27 @@
   gap: 24px;
 }
 
+.ui-detail-page__aside {
+  position: sticky;
+  top: 77px;
+  align-self: start;
+}
+
+.ui-detail-definition-list dt {
+  font-weight: 600;
+}
+
+.ui-detail-definition-list dd {
+  font-weight: 400;
+}
+
 @media (max-width: 960px) {
   .ui-detail-page {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ui-detail-page__aside {
+    position: static;
   }
 
   .ui-page-header {
