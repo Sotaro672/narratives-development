@@ -26,11 +26,16 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	meHandler := adminhandler.NewMeHandler()
 	contactHandler := adminhandler.NewContactHandler(cont.contactUsecase)
+	companyHandler := adminhandler.NewCompanyHandler(
+		cont.companyRepo,
+		cont.memberRepo,
+	)
 
 	router := adminhttp.NewRouter(adminhttp.RouterDeps{
-		AuthMw:   authMw,
-		Me:       meHandler,
-		Contacts: contactHandler,
+		AuthMw:    authMw,
+		Me:        meHandler,
+		Contacts:  contactHandler,
+		Companies: companyHandler,
 	})
 
 	mux.Handle("/admin/", router)

@@ -63,6 +63,33 @@ func (r *CompanyRepositoryFS) GetByID(ctx context.Context, id string) (compdom.C
 	return docToCompany(snap)
 }
 
+func (r *CompanyRepositoryFS) ListAll(ctx context.Context) ([]compdom.Company, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("company repository: client is nil")
+	}
+
+	snapshots, err := r.col().
+		OrderBy("createdAt", firestore.Desc).
+		Documents(ctx).
+		GetAll()
+	if err != nil {
+		return nil, err
+	}
+
+	companies := make([]compdom.Company, 0, len(snapshots))
+
+	for _, snapshot := range snapshots {
+		company, err := docToCompany(snapshot)
+		if err != nil {
+			return nil, err
+		}
+
+		companies = append(companies, company)
+	}
+
+	return companies, nil
+}
+
 // ==============================
 // Mutations
 // ==============================
@@ -213,6 +240,7 @@ func (r *CompanyRepositoryFS) Delete(ctx context.Context, id string) error {
 	}
 
 	docRef := r.col().Doc(id)
+
 	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		if _, err := tx.Get(docRef); err != nil {
 			if status.Code(err) == codes.NotFound {
@@ -220,6 +248,7 @@ func (r *CompanyRepositoryFS) Delete(ctx context.Context, id string) error {
 			}
 			return err
 		}
+
 		return tx.Delete(docRef)
 	})
 }

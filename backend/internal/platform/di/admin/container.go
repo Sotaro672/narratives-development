@@ -23,6 +23,8 @@ type Container struct {
 	adminFirebaseUID string
 	adminEmail       string
 	contactUsecase   *usecase.ContactUsecase
+	companyRepo      *fsrepo.CompanyRepositoryFS
+	memberRepo       *fsrepo.MemberRepositoryFS
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -56,11 +58,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	contactRepo := fsrepo.NewContactRepositoryFS(infra.Firestore)
 	contactUsecase := usecase.NewContactUsecase(contactRepo, nil, nil)
+	companyRepo := fsrepo.NewCompanyRepositoryFS(infra.Firestore)
+	memberRepo := fsrepo.NewMemberRepositoryFS(infra.Firestore)
 
 	return &Container{
 		Infra:            infra,
 		adminFirebaseUID: adminFirebaseUID,
 		adminEmail:       adminEmail,
 		contactUsecase:   contactUsecase,
+		companyRepo:      companyRepo,
+		memberRepo:       memberRepo,
 	}, nil
 }
