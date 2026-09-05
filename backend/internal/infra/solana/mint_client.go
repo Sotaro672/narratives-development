@@ -24,8 +24,9 @@ const (
 	envBubblegumServiceAudience        = "SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"
 	envBubblegumMintAuthorityPublicKey = "SOLANA_BUBBLEGUM_MINT_AUTHORITY_PUBLIC_KEY"
 
-	bubblegumMintPath     = "/mint"
-	bubblegumEstimatePath = "/estimate"
+	bubblegumMintPath           = "/mint"
+	bubblegumEstimatePath       = "/estimate"
+	bubblegumReserveBalancePath = "/reserve-balance"
 
 	bubblegumRequestTimeout             = 45 * time.Second
 	maxBubblegumResponseBodyBytes int64 = 256 * 1024
@@ -143,6 +144,13 @@ type bubblegumMintFundingEstimateRequest struct {
 	Symbol           string `json:"symbol"`
 }
 
+type ReserveBalanceResult struct {
+	Cluster         string  `json:"cluster"`
+	Address         string  `json:"address"`
+	BalanceLamports string  `json:"balanceLamports"`
+	BalanceSOL      float64 `json:"balanceSol"`
+}
+
 type MintFundingEstimateReserve struct {
 	Address         string  `json:"address"`
 	BalanceLamports string  `json:"balanceLamports"`
@@ -197,6 +205,65 @@ type MintFundingEstimateResult struct {
 type bubblegumErrorResponse struct {
 	Error   string `json:"error"`
 	Message string `json:"message"`
+}
+
+// GetReserveBalance は Bubblegum V2 internal service の /reserve-balance を呼び、Reserve Wallet の現在残高を取得します。
+//
+// IMPORTANT:
+//   - read-only です。
+//   - Reserve から SOL を送金しません。
+//   - Fee Payer を補充しません。
+//   - Mint / Merkle Tree / Core Collection の作成を行いません。
+func (c *MintClient) GetReserveBalance(ctx context.Context) (*ReserveBalanceResult, error) {
+	if c == nil {
+		return nil, errors.New("bubblegum mint client is nil")
+	}
+	if c.httpClient == nil {
+		return nil, errors.New("bubblegum mint http client is nil")
+	}
+	if c.serviceURL == "" {
+		return nil, errors.New("bubblegum mint service URL is empty")
+	}
+
+	endpoint := c.serviceURL + bubblegumReserveBalancePath
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create bubblegum reserve balance request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	response, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("call bubblegum reserve balance service: %w", err)
+	}
+	defer response.Body.Close()
+
+	responseBody, err := io.ReadAll(io.LimitReader(response.Body, maxBubblegumResponseBodyBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read bubblegum reserve balance response: %w", err)
+	}
+	if int64(len(responseBody)) > maxBubblegumResponseBodyBytes {
+		return nil, errors.New("bubblegum reserve balance response body is too large")
+	}
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		return nil, decodeBubblegumServiceError(response.StatusCode, responseBody)
+	}
+
+	var result ReserveBalanceResult
+	if err := json.Unmarshal(responseBody, &result); err != nil {
+		return nil, fmt.Errorf("decode bubblegum reserve balance response: %w", err)
+	}
+	if result.Cluster == "" {
+		return nil, errors.New("bubblegum reserve balance response cluster is empty")
+	}
+	if result.Address == "" {
+		return nil, errors.New("bubblegum reserve balance response address is empty")
+	}
+	if result.BalanceLamports == "" {
+		return nil, errors.New("bubblegum reserve balance response balanceLamports is empty")
+	}
+
+	return &result, nil
 }
 
 // EstimateMintFunding は Bubblegum V2 internal service の /estimate を呼び、

@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	fsrepo "narratives/internal/adapters/out/firestore"
+	adminquery "narratives/internal/application/query/admin"
 	usecase "narratives/internal/application/usecase"
+	solanainfra "narratives/internal/infra/solana"
 	shared "narratives/internal/platform/di/shared"
 )
 
@@ -25,6 +27,7 @@ type Container struct {
 	contactUsecase   *usecase.ContactUsecase
 	companyRepo      *fsrepo.CompanyRepositoryFS
 	memberRepo       *fsrepo.MemberRepositoryFS
+	gasBalanceQuery  *adminquery.GasBalanceQuery
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -61,6 +64,28 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	companyRepo := fsrepo.NewCompanyRepositoryFS(infra.Firestore)
 	memberRepo := fsrepo.NewMemberRepositoryFS(infra.Firestore)
 
+	solanaClient, err := solanainfra.NewMintClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	gasBalanceQuery := adminquery.NewGasBalanceQuery(func(ctx context.Context) (*adminquery.GasBalanceResult, error) {
+		result, err := solanaClient.GetReserveBalance(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return nil, errors.New("di.admin: reserve balance result is nil")
+		}
+
+		return &adminquery.GasBalanceResult{
+			Cluster:         result.Cluster,
+			Address:         result.Address,
+			BalanceLamports: result.BalanceLamports,
+			BalanceSOL:      result.BalanceSOL,
+		}, nil
+	})
+
 	return &Container{
 		Infra:            infra,
 		adminFirebaseUID: adminFirebaseUID,
@@ -68,5 +93,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		contactUsecase:   contactUsecase,
 		companyRepo:      companyRepo,
 		memberRepo:       memberRepo,
+		gasBalanceQuery:  gasBalanceQuery,
 	}, nil
 }
