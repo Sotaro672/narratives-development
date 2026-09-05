@@ -2,6 +2,7 @@
 package mallHandler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	appquery "narratives/internal/application/query/mall"
 	appusecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
+	reviewreport "narratives/internal/domain/reviewReport"
 	tokenBlueprintReview "narratives/internal/domain/tokenBlueprint_review"
 )
 
@@ -45,17 +47,28 @@ import (
 // - DELETE /mall/me/token-blueprints/{id}/comments/{commentId}
 // - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/reactions
 // - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/replies
+// - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/reports
+type TokenBlueprintCommentReportService interface {
+	ReportTokenBlueprintCommentByAvatar(
+		ctx context.Context,
+		input appusecase.ReportTokenBlueprintCommentByAvatarInput,
+	) (reviewreport.AddReportResult, error)
+}
+
 type TokenBlueprintReviewHandler struct {
-	uc    *appusecase.TokenBlueprintReviewUsecase
-	query *appquery.TokenBlueprintReviewMallQuery
+	uc        *appusecase.TokenBlueprintReviewUsecase
+	query     *appquery.TokenBlueprintReviewMallQuery
+	reportSvc TokenBlueprintCommentReportService
 }
 
 func NewTokenBlueprintReviewHandler(
 	uc *appusecase.TokenBlueprintReviewUsecase,
+	reportSvc TokenBlueprintCommentReportService,
 ) *TokenBlueprintReviewHandler {
 	return &TokenBlueprintReviewHandler{
-		uc:    uc,
-		query: appquery.NewTokenBlueprintReviewMallQuery(uc),
+		uc:        uc,
+		query:     appquery.NewTokenBlueprintReviewMallQuery(uc),
+		reportSvc: reportSvc,
 	}
 }
 
@@ -283,6 +296,22 @@ func (h *TokenBlueprintReviewHandler) dispatchComments(
 		return
 	}
 
+	// /mall/me/token-blueprints/{id}/comments/{commentId}/reports
+	if path == base+"/"+commentID+"/reports" {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.reportComment(
+			w,
+			r,
+			tokenBlueprintID,
+			commentID,
+		)
+		return
+	}
+
 	// /mall/me/token-blueprints/{id}/comments/{commentId}/replies
 	if path == base+"/"+commentID+"/replies" {
 		if r.Method != http.MethodPost {
@@ -314,6 +343,11 @@ type createCommentRequest struct {
 	CommentID       *string `json:"commentId,omitempty"`
 	ParentCommentID *string `json:"parentCommentId,omitempty"`
 	Body            string  `json:"body"`
+}
+
+type reportTokenBlueprintCommentRequest struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
 }
 
 // ============================================================
@@ -721,6 +755,145 @@ func (h *TokenBlueprintReviewHandler) deleteComment(
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// ============================================================
+// Comment report command handler
+// ============================================================
+
+func (h *TokenBlueprintReviewHandler) reportComment(
+	w http.ResponseWriter,
+	r *http.Request,
+	tokenBlueprintID string,
+	commentID string,
+) {
+	if h.reportSvc == nil {
+		writeJSON(
+			w,
+			http.StatusServiceUnavailable,
+			map[string]string{
+				"error": "review report service not configured",
+			},
+		)
+		return
+	}
+
+	avatarID, ok := mw.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
+		return
+	}
+
+	var request reportTokenBlueprintCommentRequest
+	if err := readJSON(r, &request); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+
+	reason := reviewreport.ReportReason(
+		strings.ToUpper(strings.TrimSpace(request.Reason)),
+	)
+	if err := reason.Validate(); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+
+	detail := strings.TrimSpace(request.Detail)
+	if reason == reviewreport.ReportReasonOther && detail == "" {
+		badRequest(w, reviewreport.ErrReportDetailRequired.Error())
+		return
+	}
+
+	result, err := h.reportSvc.ReportTokenBlueprintCommentByAvatar(
+		r.Context(),
+		appusecase.ReportTokenBlueprintCommentByAvatarInput{
+			TokenBlueprintID: tokenBlueprintID,
+			CommentID:        commentID,
+			AvatarID:         avatarID,
+			Reason:           reason,
+			Detail:           detail,
+		},
+	)
+	if err != nil {
+		writeTokenBlueprintCommentReportError(w, err)
+		return
+	}
+
+	statusCode := http.StatusCreated
+	if !result.ReportCreated {
+		statusCode = http.StatusOK
+	}
+
+	writeJSON(
+		w,
+		statusCode,
+		map[string]any{
+			"caseId":        string(result.Case.ID),
+			"reportId":      string(result.Report.ID),
+			"reportCount":   result.Case.ReportCount,
+			"status":        result.Case.Status,
+			"caseCreated":   result.CaseCreated,
+			"reportCreated": result.ReportCreated,
+		},
+	)
+}
+
+func writeTokenBlueprintCommentReportError(
+	w http.ResponseWriter,
+	err error,
+) {
+	switch {
+	case errors.Is(err, appusecase.ErrReviewReportUsecaseNotConfigured):
+		writeJSON(
+			w,
+			http.StatusServiceUnavailable,
+			map[string]string{
+				"error": "review report service not configured",
+			},
+		)
+
+	case errors.Is(err, appusecase.ErrReviewReportForbidden):
+		writeJSON(
+			w,
+			http.StatusForbidden,
+			map[string]string{
+				"error": "review report forbidden",
+			},
+		)
+
+	case errors.Is(err, appusecase.ErrReviewReportSelfReport):
+		writeJSON(
+			w,
+			http.StatusForbidden,
+			map[string]string{
+				"error": "self report is not allowed",
+			},
+		)
+
+	case errors.Is(err, reviewreport.ErrCannotReportRemovedTarget):
+		writeJSON(
+			w,
+			http.StatusConflict,
+			map[string]string{
+				"error": "cannot report removed target",
+			},
+		)
+
+	case reviewreport.IsInvalid(err):
+		badRequest(w, err.Error())
+
+	case isNotFound(err):
+		notFound(w)
+
+	default:
+		internalError(w, err.Error())
+	}
 }
 
 // ============================================================

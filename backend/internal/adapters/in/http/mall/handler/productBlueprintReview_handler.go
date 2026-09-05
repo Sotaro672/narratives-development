@@ -13,6 +13,7 @@ import (
 	uc "narratives/internal/application/usecase"
 	domcommon "narratives/internal/domain/common"
 	pbr "narratives/internal/domain/productBlueprintReview"
+	reviewreport "narratives/internal/domain/reviewReport"
 )
 
 // ============================================================
@@ -20,9 +21,7 @@ import (
 // ============================================================
 
 // ProductBlueprintReviewService is the application port used by this HTTP handler.
-// NOTE: この interface を満たす実装（usecase）を DI してください。
 type ProductBlueprintReviewService interface {
-	// List (閲覧) + AvatarName/Icon
 	ListByProductBlueprintID(
 		ctx context.Context,
 		productBlueprintID string,
@@ -30,19 +29,25 @@ type ProductBlueprintReviewService interface {
 		page domcommon.Page,
 	) (domcommon.PageResult[uc.ProductBlueprintReviewListItem], error)
 
-	// VerifiedPurchase 判定（投稿可否の事前チェック用）
 	IsVerifiedPurchase(
 		ctx context.Context,
 		avatarID string,
 		productBlueprintID string,
 	) (bool, error)
 
-	// Create (投稿)
-	// usecase 側の Input 型を使う（型不一致の解消）
 	CreateProductBlueprintReview(
 		ctx context.Context,
 		in uc.CreateProductBlueprintReviewInput,
 	) (pbr.Review, error)
+}
+
+// ProductBlueprintReviewReportService owns purchaser-side reporting of
+// ProductBlueprint reviews.
+type ProductBlueprintReviewReportService interface {
+	ReportProductBlueprintReviewByAvatar(
+		ctx context.Context,
+		input uc.ReportProductBlueprintReviewByAvatarInput,
+	) (reviewreport.AddReportResult, error)
 }
 
 // ============================================================
@@ -50,14 +55,19 @@ type ProductBlueprintReviewService interface {
 // ============================================================
 
 type ProductBlueprintReviewHandler struct {
-	svc ProductBlueprintReviewService
-	now func() time.Time
+	svc       ProductBlueprintReviewService
+	reportSvc ProductBlueprintReviewReportService
+	now       func() time.Time
 }
 
-func NewProductBlueprintReviewHandler(svc ProductBlueprintReviewService) *ProductBlueprintReviewHandler {
+func NewProductBlueprintReviewHandler(
+	svc ProductBlueprintReviewService,
+	reportSvc ProductBlueprintReviewReportService,
+) *ProductBlueprintReviewHandler {
 	return &ProductBlueprintReviewHandler{
-		svc: svc,
-		now: time.Now,
+		svc:       svc,
+		reportSvc: reportSvc,
+		now:       time.Now,
 	}
 }
 
@@ -67,11 +77,7 @@ func (h *ProductBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http
 		return
 	}
 
-	// Router:
-	// - /mall/catalog/**  (public) : GET only
-	// - /mall/me/catalog/** (auth+avatar) : GET + POST(verified only)
 	path := r.URL.Path
-
 	isMe := strings.HasPrefix(path, "/mall/me/catalog")
 	isPublic := strings.HasPrefix(path, "/mall/catalog")
 
@@ -80,70 +86,110 @@ func (h *ProductBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http
 		return
 	}
 
-	// We handle review endpoints under catalog:
-	// GET  /mall/catalog/product-blueprints/{productBlueprintId}/reviews
-	// GET  /mall/me/catalog/product-blueprints/{productBlueprintId}/reviews
-	// POST /mall/me/catalog/product-blueprints/{productBlueprintId}/reviews  (verified only)
-	pbID, ok := extractProductBlueprintID(path, isMe)
-	if !ok || pbID == "" {
+	route, ok := parseProductBlueprintReviewRoute(path, isMe)
+	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 
+	switch route.Kind {
+	case productBlueprintReviewRouteCollection:
+		h.handleReviewCollection(w, r, route.ProductBlueprintID, isMe)
+	case productBlueprintReviewRouteReport:
+		h.handleReviewReport(w, r, route.ProductBlueprintID, route.ReviewID, isMe)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (h *ProductBlueprintReviewHandler) handleReviewCollection(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+	isMe bool,
+) {
 	switch r.Method {
 	case http.MethodGet:
-		h.handleList(w, r, pbID)
-
+		h.handleList(w, r, productBlueprintID)
 	case http.MethodPost:
 		if !isMe {
-			// mall/catalog は閲覧のみ
 			writeJSONError(w, http.StatusMethodNotAllowed, "POST not allowed on public catalog")
 			return
 		}
-		h.handleCreateMe(w, r, pbID)
-
+		h.handleCreateMe(w, r, productBlueprintID)
 	default:
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-func (h *ProductBlueprintReviewHandler) handleList(w http.ResponseWriter, r *http.Request, productBlueprintID string) {
-	ctx := r.Context()
+func (h *ProductBlueprintReviewHandler) handleReviewReport(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+	reviewID string,
+	isMe bool,
+) {
+	if !isMe {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if h.reportSvc == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "review report service not configured")
+		return
+	}
 
+	h.handleReportMe(w, r, productBlueprintID, reviewID)
+}
+
+func (h *ProductBlueprintReviewHandler) handleList(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+) {
 	page := parsePage(r)
 	status := pbr.ReviewStatusPublished
 
-	// AvatarName/Icon 付きで返す
-	res, err := h.svc.ListByProductBlueprintID(ctx, productBlueprintID, status, page)
+	res, err := h.svc.ListByProductBlueprintID(
+		r.Context(),
+		productBlueprintID,
+		status,
+		page,
+	)
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
 
-	out := toCatalogReviewPageDTOWithAvatar(res)
-	writeJSON(w, http.StatusOK, out)
+	writeJSON(w, http.StatusOK, toCatalogReviewPageDTOWithAvatar(res))
 }
 
-func (h *ProductBlueprintReviewHandler) handleCreateMe(w http.ResponseWriter, r *http.Request, productBlueprintID string) {
+func (h *ProductBlueprintReviewHandler) handleCreateMe(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+) {
 	ctx := r.Context()
 
-	// IMPORTANT:
-	// avatarId は middleware が request context に積む前提。
-	// ctx.Value("avatarId") のようなキー直読みは middleware 実装差分で壊れやすいので、
-	// wallet handler と同様に middleware getter を正とする。
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
 		writeJSONError(w, http.StatusUnauthorized, "missing avatarId")
 		return
 	}
 
-	// VerifiedPurchase:true のみ投稿可（事前チェック）
-	ok2, err := h.svc.IsVerifiedPurchase(ctx, avatarID, productBlueprintID)
+	verified, err := h.svc.IsVerifiedPurchase(
+		ctx,
+		avatarID,
+		productBlueprintID,
+	)
 	if err != nil {
 		writeDomainError(w, err)
 		return
 	}
-	if !ok2 {
+	if !verified {
 		writeJSONError(w, http.StatusForbidden, "verified purchase required")
 		return
 	}
@@ -160,12 +206,12 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(w http.ResponseWriter, r 
 	if createdAt.IsZero() {
 		createdAt = now
 	}
+
 	reviewedAt := req.ReviewedAt
 	if reviewedAt.IsZero() {
 		reviewedAt = now
 	}
 
-	// usecase.Input 型で作る（entity.go を正としてフィールドを合わせる）
 	in := uc.CreateProductBlueprintReviewInput{
 		ProductBlueprintID: productBlueprintID,
 		AvatarID:           avatarID,
@@ -187,8 +233,65 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(w http.ResponseWriter, r 
 	writeJSON(w, http.StatusCreated, toCatalogReviewDTO(created))
 }
 
+func (h *ProductBlueprintReviewHandler) handleReportMe(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+	reviewID string,
+) {
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		writeJSONError(w, http.StatusUnauthorized, "missing avatarId")
+		return
+	}
+
+	var req reportProductBlueprintReviewRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	reason := reviewreport.ReportReason(
+		strings.ToUpper(strings.TrimSpace(req.Reason)),
+	)
+	if err := reason.Validate(); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid report reason")
+		return
+	}
+
+	if reason == reviewreport.ReportReasonOther && strings.TrimSpace(req.Detail) == "" {
+		writeJSONError(w, http.StatusBadRequest, "report detail required")
+		return
+	}
+
+	result, err := h.reportSvc.ReportProductBlueprintReviewByAvatar(
+		r.Context(),
+		uc.ReportProductBlueprintReviewByAvatarInput{
+			ProductBlueprintID: productBlueprintID,
+			ReviewID:           reviewID,
+			AvatarID:           avatarID,
+			Reason:             reason,
+			Detail:             req.Detail,
+		},
+	)
+	if err != nil {
+		writeReviewReportError(w, err)
+		return
+	}
+
+	statusCode := http.StatusCreated
+	if !result.ReportCreated {
+		statusCode = http.StatusOK
+	}
+
+	writeJSON(w, statusCode, toProductBlueprintReviewReportResponse(result))
+}
+
 // ============================================================
-// Response DTO (名揺れ排除: lowerCamelCase 固定)
+// Response DTO
 // ============================================================
 
 type catalogReviewPageDTO struct {
@@ -208,24 +311,34 @@ type catalogReviewDTO struct {
 	Body             string `json:"body"`
 	HelpfulVotes     int    `json:"helpfulVotes"`
 	TotalVotes       int    `json:"totalVotes"`
-	ReviewedAt       string `json:"reviewedAt"` // RFC3339
+	ReviewedAt       string `json:"reviewedAt"`
 	Status           string `json:"status"`
-
-	// 画面に渡す
-	AvatarName string `json:"avatarName"`
-	AvatarIcon string `json:"avatarIcon"`
+	AvatarName       string `json:"avatarName"`
+	AvatarIcon       string `json:"avatarIcon"`
 }
 
-func toCatalogReviewPageDTOWithAvatar(res domcommon.PageResult[uc.ProductBlueprintReviewListItem]) catalogReviewPageDTO {
+type productBlueprintReviewReportResponse struct {
+	CaseID        string                  `json:"caseId"`
+	ReportID      string                  `json:"reportId"`
+	ReportCount   int                     `json:"reportCount"`
+	Status        reviewreport.CaseStatus `json:"status"`
+	CaseCreated   bool                    `json:"caseCreated"`
+	ReportCreated bool                    `json:"reportCreated"`
+}
+
+func toCatalogReviewPageDTOWithAvatar(
+	res domcommon.PageResult[uc.ProductBlueprintReviewListItem],
+) catalogReviewPageDTO {
 	items := make([]catalogReviewDTO, 0, len(res.Items))
-	for _, it := range res.Items {
-		items = append(items, toCatalogReviewDTOWithAvatar(it))
+	for _, item := range res.Items {
+		items = append(items, toCatalogReviewDTOWithAvatar(item))
 	}
 
 	page := res.Page
 	if page <= 0 {
 		page = 1
 	}
+
 	perPage := res.PerPage
 	if perPage <= 0 {
 		perPage = 20
@@ -236,7 +349,6 @@ func toCatalogReviewPageDTOWithAvatar(res domcommon.PageResult[uc.ProductBluepri
 	if res.TotalPages > 0 {
 		hasNext = page < res.TotalPages
 	} else {
-		// 念のためのフォールバック
 		hasNext = len(items) >= perPage
 	}
 
@@ -249,7 +361,9 @@ func toCatalogReviewPageDTOWithAvatar(res domcommon.PageResult[uc.ProductBluepri
 	}
 }
 
-func toCatalogReviewDTOWithAvatar(v uc.ProductBlueprintReviewListItem) catalogReviewDTO {
+func toCatalogReviewDTOWithAvatar(
+	v uc.ProductBlueprintReviewListItem,
+) catalogReviewDTO {
 	reviewedAt := ""
 	if !v.ReviewedAt.IsZero() {
 		reviewedAt = v.ReviewedAt.UTC().Format(time.RFC3339Nano)
@@ -266,13 +380,11 @@ func toCatalogReviewDTOWithAvatar(v uc.ProductBlueprintReviewListItem) catalogRe
 		TotalVotes:       v.TotalVotes,
 		ReviewedAt:       reviewedAt,
 		Status:           string(v.Status),
-
-		AvatarName: v.AvatarName,
-		AvatarIcon: v.AvatarIcon,
+		AvatarName:       v.AvatarName,
+		AvatarIcon:       v.AvatarIcon,
 	}
 }
 
-// 既存 Create のレスポンスはそのまま（必要ならここにも付けられるが、Create は avatarID=me なので今は不要）
 func toCatalogReviewDTO(v pbr.Review) catalogReviewDTO {
 	reviewedAt := ""
 	if !v.ReviewedAt.IsZero() {
@@ -290,9 +402,21 @@ func toCatalogReviewDTO(v pbr.Review) catalogReviewDTO {
 		TotalVotes:       v.TotalVotes,
 		ReviewedAt:       reviewedAt,
 		Status:           string(v.Status),
+		AvatarName:       "",
+		AvatarIcon:       "",
+	}
+}
 
-		AvatarName: "",
-		AvatarIcon: "",
+func toProductBlueprintReviewReportResponse(
+	result reviewreport.AddReportResult,
+) productBlueprintReviewReportResponse {
+	return productBlueprintReviewReportResponse{
+		CaseID:        string(result.Case.ID),
+		ReportID:      string(result.Report.ID),
+		ReportCount:   result.Case.ReportCount,
+		Status:        result.Case.Status,
+		CaseCreated:   result.CaseCreated,
+		ReportCreated: result.ReportCreated,
 	}
 }
 
@@ -301,45 +425,74 @@ func toCatalogReviewDTO(v pbr.Review) catalogReviewDTO {
 // ============================================================
 
 type createProductBlueprintReviewRequest struct {
-	Rating     int       `json:"rating"` // 1..5
+	Rating     int       `json:"rating"`
 	Title      string    `json:"title"`
 	Body       string    `json:"body"`
 	ReviewedAt time.Time `json:"reviewedAt"`
 	CreatedAt  time.Time `json:"createdAt"`
 }
 
+type reportProductBlueprintReviewRequest struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
+}
+
 // ============================================================
 // Path parsing
 // ============================================================
 
-// extractProductBlueprintID parses:
-// /mall/catalog/product-blueprints/{id}/reviews
-// /mall/me/catalog/product-blueprints/{id}/reviews
-func extractProductBlueprintID(path string, isMe bool) (string, bool) {
+type productBlueprintReviewRouteKind int
+
+const (
+	productBlueprintReviewRouteCollection productBlueprintReviewRouteKind = iota
+	productBlueprintReviewRouteReport
+)
+
+type productBlueprintReviewRoute struct {
+	Kind               productBlueprintReviewRouteKind
+	ProductBlueprintID string
+	ReviewID           string
+}
+
+func parseProductBlueprintReviewRoute(
+	path string,
+	isMe bool,
+) (productBlueprintReviewRoute, bool) {
 	base := "/mall/catalog/"
 	if isMe {
 		base = "/mall/me/catalog/"
 	}
 
 	if !strings.HasPrefix(path, base) {
-		return "", false
+		return productBlueprintReviewRoute{}, false
 	}
 
-	rest := path[len(base):]
-	parts := splitPath(rest)
-	if len(parts) < 3 {
-		return "", false
+	parts := splitPath(path[len(base):])
+
+	if len(parts) == 3 &&
+		parts[0] == "product-blueprints" &&
+		parts[1] != "" &&
+		parts[2] == "reviews" {
+		return productBlueprintReviewRoute{
+			Kind:               productBlueprintReviewRouteCollection,
+			ProductBlueprintID: parts[1],
+		}, true
 	}
 
-	if parts[0] != "product-blueprints" {
-		return "", false
+	if len(parts) == 5 &&
+		parts[0] == "product-blueprints" &&
+		parts[1] != "" &&
+		parts[2] == "reviews" &&
+		parts[3] != "" &&
+		parts[4] == "reports" {
+		return productBlueprintReviewRoute{
+			Kind:               productBlueprintReviewRouteReport,
+			ProductBlueprintID: parts[1],
+			ReviewID:           parts[3],
+		}, true
 	}
 
-	if parts[2] != "reviews" {
-		return "", false
-	}
-
-	return parts[1], true
+	return productBlueprintReviewRoute{}, false
 }
 
 func splitPath(p string) []string {
@@ -389,6 +542,38 @@ func writeDomainError(w http.ResponseWriter, err error) {
 	}
 
 	switch {
+	case errors.Is(err, pbr.ErrNotFound):
+		writeJSONError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, pbr.ErrConflict):
+		writeJSONError(w, http.StatusConflict, err.Error())
+	case errors.Is(err, pbr.ErrInvalid):
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, pbr.ErrUnauthorized):
+		writeJSONError(w, http.StatusUnauthorized, err.Error())
+	case errors.Is(err, pbr.ErrForbidden):
+		writeJSONError(w, http.StatusForbidden, err.Error())
+	default:
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+	}
+}
+
+func writeReviewReportError(w http.ResponseWriter, err error) {
+	if err == nil {
+		writeJSONError(w, http.StatusInternalServerError, "unknown error")
+		return
+	}
+
+	switch {
+	case errors.Is(err, uc.ErrReviewReportUsecaseNotConfigured):
+		writeJSONError(w, http.StatusServiceUnavailable, "review report service not configured")
+	case errors.Is(err, uc.ErrReviewReportForbidden):
+		writeJSONError(w, http.StatusForbidden, "review report forbidden")
+	case errors.Is(err, uc.ErrReviewReportSelfReport):
+		writeJSONError(w, http.StatusForbidden, "self report is not allowed")
+	case errors.Is(err, reviewreport.ErrCannotReportRemovedTarget):
+		writeJSONError(w, http.StatusConflict, "cannot report removed target")
+	case reviewreport.IsInvalid(err):
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, pbr.ErrNotFound):
 		writeJSONError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, pbr.ErrConflict):

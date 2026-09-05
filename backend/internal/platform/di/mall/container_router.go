@@ -97,7 +97,10 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// ProductBlueprintReview
 	if cont.ProductBlueprintReviewUC != nil {
-		pbReviewH = mallhandler.NewProductBlueprintReviewHandler(cont.ProductBlueprintReviewUC)
+		pbReviewH = mallhandler.NewProductBlueprintReviewHandler(
+			cont.ProductBlueprintReviewUC,
+			cont.ReviewReportUC,
+		)
 	}
 
 	// Brand
@@ -115,7 +118,10 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// TokenBlueprintReview
 	if cont.TokenBlueprintReviewUC != nil {
-		tbReviewH := mallhandler.NewTokenBlueprintReviewHandler(cont.TokenBlueprintReviewUC)
+		tbReviewH := mallhandler.NewTokenBlueprintReviewHandler(
+			cont.TokenBlueprintReviewUC,
+			cont.ReviewReportUC,
+		)
 		tbH = mallhandler.NewTokenBlueprintCompositeHandler(tbH, tbReviewH)
 	}
 
