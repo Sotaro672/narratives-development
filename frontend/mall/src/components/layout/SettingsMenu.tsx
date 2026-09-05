@@ -135,6 +135,11 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
         onClick={() => handleNavigate("/settings/shipping-address")}
       />
 
+      <Item
+        label="問い合わせ"
+        onClick={() => handleNavigate("/settings/inquiry")}
+      />
+
       <Item label="ログアウト" onClick={handleLogout} />
 
       <Item

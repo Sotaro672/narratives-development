@@ -37,7 +37,8 @@ import OrderConfirmedPage from "../pages/OrderConfirmedPage";
 import OrderDetail from "../pages/OrderDetail";
 import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
-import InquiryPage from "../pages/InquiryCreatePage";
+import InquiryCreatePage from "../pages/InquiryCreatePage";
+import InquiryPage from "../pages/InquiryPage";
 import ChatListPage from "../pages/ChatListPage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import TradeChatRedirectPage from "../pages/TradeChatRedirectPage";
@@ -331,7 +332,7 @@ export const router = createBrowserRouter([
     path: "/inquiries/new",
     element: (
       <ProtectedRoute>
-        <InquiryPage />
+        <InquiryCreatePage />
       </ProtectedRoute>
     ),
   },
@@ -410,6 +411,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <ShippingAddressPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/settings/inquiry",
+    element: (
+      <ProtectedRoute>
+        <InquiryPage />
       </ProtectedRoute>
     ),
   },

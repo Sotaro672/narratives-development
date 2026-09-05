@@ -1,4 +1,5 @@
 // frontend/mall/src/features/contact/hooks/useContactSubmit.ts
+
 import { Dispatch, SetStateAction, useRef, useState } from "react";
 import type { User } from "firebase/auth";
 
@@ -12,6 +13,9 @@ type UseContactSubmitParams = {
   setAttachments: Dispatch<SetStateAction<ContactAttachmentItem[]>>;
   setCarouselIndex: Dispatch<SetStateAction<number>>;
   revokeAllAttachmentPreviewUrls: () => void;
+  source?: string;
+  nameOverride?: string;
+  companyOverride?: string;
 };
 
 type ContactErrorResponse = {
@@ -52,6 +56,9 @@ export function useContactSubmit({
   setAttachments,
   setCarouselIndex,
   revokeAllAttachmentPreviewUrls,
+  source = "web-amol",
+  nameOverride,
+  companyOverride,
 }: UseContactSubmitParams) {
   const submittingRef = useRef(false);
   const [name, setName] = useState("");
@@ -88,12 +95,19 @@ export function useContactSubmit({
       return;
     }
 
+    const contactName = (nameOverride ?? name).trim();
+    const contactCompany = (companyOverride ?? company).trim();
     const contactEmail = isLoggedIn
-      ? currentUser?.email ?? ""
-      : guestEmail;
+      ? currentUser?.email?.trim() ?? ""
+      : guestEmail.trim();
+    const contactMessage = message.trim();
 
-    if (name === "") {
-      window.alert("お名前を入力してください。");
+    if (contactName === "") {
+      window.alert(
+        nameOverride !== undefined
+          ? "お名前を確認できませんでした。"
+          : "お名前を入力してください。",
+      );
       return;
     }
 
@@ -102,7 +116,7 @@ export function useContactSubmit({
       return;
     }
 
-    if (message === "") {
+    if (contactMessage === "") {
       window.alert("お問い合わせ内容を入力してください。");
       return;
     }
@@ -156,12 +170,12 @@ export function useContactSubmit({
         method: "POST",
         headers,
         body: JSON.stringify({
-          name,
+          name: contactName,
           email: contactEmail,
-          company,
-          message,
+          company: contactCompany,
+          message: contactMessage,
           attachmentImageIds,
-          source: "web-amol",
+          source,
         }),
       });
 
