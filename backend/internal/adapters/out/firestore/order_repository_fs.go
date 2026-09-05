@@ -415,13 +415,24 @@ func docToOrder(snap *firestore.DocumentSnapshot) (orderdom.Order, error) {
 		return orderdom.Order{}, orderdom.ErrNotFound
 	}
 
-	if err := validateOrderDocumentShape(snap.Data()); err != nil {
+	raw := snap.Data()
+	if err := validateOrderDocumentShape(raw); err != nil {
 		return orderdom.Order{}, fmt.Errorf("order %s: %w", snap.Ref.ID, err)
+	}
+
+	createdAt, err := firestoreRequiredTime(raw, "createdAt")
+	if err != nil {
+		return orderdom.Order{}, fmt.Errorf("order %s: %w", snap.Ref.ID, ErrInvalidOrderDocumentData)
 	}
 
 	var doc orderDoc
 	if err := snap.DataTo(&doc); err != nil {
 		return orderdom.Order{}, err
+	}
+
+	rawItems, ok := raw["items"].([]any)
+	if !ok || len(rawItems) != len(doc.Items) {
+		return orderdom.Order{}, fmt.Errorf("order %s: %w", snap.Ref.ID, ErrInvalidOrderDocumentData)
 	}
 
 	items := make([]orderdom.OrderItemSnapshot, 0, len(doc.Items))
@@ -450,29 +461,27 @@ func docToOrder(snap *firestore.DocumentSnapshot) (orderdom.Order, error) {
 		})
 	}
 
-	for _, item := range doc.Items {
-		var returnRequestedAt *time.Time
-		if item.ReturnRequestedAt != nil {
-			value := item.ReturnRequestedAt.UTC()
-			returnRequestedAt = &value
+	for itemIndex, item := range doc.Items {
+		rawItem, ok := rawItems[itemIndex].(map[string]any)
+		if !ok || rawItem == nil {
+			return orderdom.Order{}, fmt.Errorf("order %s: %w", snap.Ref.ID, ErrInvalidOrderDocumentData)
 		}
 
-		var returnCompletedAt *time.Time
-		if item.ReturnCompletedAt != nil {
-			value := item.ReturnCompletedAt.UTC()
-			returnCompletedAt = &value
+		returnRequestedAt, err := firestoreOptionalTime(rawItem, "returnRequestedAt")
+		if err != nil {
+			return orderdom.Order{}, fmt.Errorf("order %s item %d: %w", snap.Ref.ID, itemIndex, ErrInvalidOrderDocumentData)
 		}
-
-		var tokenTransferVerifiedAt *time.Time
-		if item.TokenTransferVerifiedAt != nil {
-			value := item.TokenTransferVerifiedAt.UTC()
-			tokenTransferVerifiedAt = &value
+		returnCompletedAt, err := firestoreOptionalTime(rawItem, "returnCompletedAt")
+		if err != nil {
+			return orderdom.Order{}, fmt.Errorf("order %s item %d: %w", snap.Ref.ID, itemIndex, ErrInvalidOrderDocumentData)
 		}
-
-		var transferredAt *time.Time
-		if item.TransferredAt != nil {
-			value := item.TransferredAt.UTC()
-			transferredAt = &value
+		tokenTransferVerifiedAt, err := firestoreOptionalTime(rawItem, "tokenTransferVerifiedAt")
+		if err != nil {
+			return orderdom.Order{}, fmt.Errorf("order %s item %d: %w", snap.Ref.ID, itemIndex, ErrInvalidOrderDocumentData)
+		}
+		transferredAt, err := firestoreOptionalTime(rawItem, "transferredAt")
+		if err != nil {
+			return orderdom.Order{}, fmt.Errorf("order %s item %d: %w", snap.Ref.ID, itemIndex, ErrInvalidOrderDocumentData)
 		}
 
 		brandRevenueSnapshot := orderdom.BrandRevenueSnapshot{}
@@ -567,7 +576,7 @@ func docToOrder(snap *firestore.DocumentSnapshot) (orderdom.Order, error) {
 
 		Paid:      doc.Paid,
 		Items:     items,
-		CreatedAt: doc.CreatedAt.UTC(),
+		CreatedAt: createdAt,
 	}
 
 	if err := order.Validate(); err != nil {
@@ -828,8 +837,7 @@ func validateOrderDocumentShape(raw map[string]any) error {
 		return ErrInvalidOrderDocumentData
 	}
 
-	createdAt, ok := requiredOrderTime(raw, "createdAt")
-	if !ok || createdAt.IsZero() {
+	if _, err := firestoreRequiredTime(raw, "createdAt"); err != nil {
 		return ErrInvalidOrderDocumentData
 	}
 
@@ -1226,11 +1234,11 @@ func validateOrderItemDocumentShape(raw map[string]any) error {
 		return ErrInvalidOrderDocumentData
 	}
 
-	_, returnRequestedAtExists, err :=
-		optionalOrderTime(raw, "returnRequestedAt")
+	returnRequestedAt, err := firestoreOptionalTime(raw, "returnRequestedAt")
 	if err != nil {
 		return ErrInvalidOrderDocumentData
 	}
+	returnRequestedAtExists := returnRequestedAt != nil
 
 	if isReturnRequested {
 		returnRequestKind, ok :=
@@ -1259,16 +1267,14 @@ func validateOrderItemDocumentShape(raw map[string]any) error {
 		isReturnCompleted = result
 	}
 
-	_, returnCompletedAtExists, err :=
-		optionalOrderTime(raw, "returnCompletedAt")
+	returnCompletedAt, err := firestoreOptionalTime(raw, "returnCompletedAt")
 	if err != nil ||
-		isReturnCompleted != returnCompletedAtExists ||
+		isReturnCompleted != (returnCompletedAt != nil) ||
 		(isReturnCompleted && !isReturnRequested) {
 		return ErrInvalidOrderDocumentData
 	}
 
-	_, _, err = optionalOrderTime(raw, "tokenTransferVerifiedAt")
-	if err != nil {
+	if _, err := firestoreOptionalTime(raw, "tokenTransferVerifiedAt"); err != nil {
 		return ErrInvalidOrderDocumentData
 	}
 
@@ -1277,8 +1283,8 @@ func validateOrderItemDocumentShape(raw map[string]any) error {
 		return ErrInvalidOrderDocumentData
 	}
 
-	_, transferredAtExists, err := optionalOrderTime(raw, "transferredAt")
-	if err != nil || transferred != transferredAtExists {
+	transferredAt, err := firestoreOptionalTime(raw, "transferredAt")
+	if err != nil || transferred != (transferredAt != nil) {
 		return ErrInvalidOrderDocumentData
 	}
 
@@ -1415,33 +1421,6 @@ func requiredOrderInt(raw map[string]any, field string) (int, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func requiredOrderTime(raw map[string]any, field string) (time.Time, bool) {
-	value, exists := raw[field]
-	if !exists || value == nil {
-		return time.Time{}, false
-	}
-
-	result, ok := value.(time.Time)
-	return result, ok && !result.IsZero()
-}
-
-func optionalOrderTime(
-	raw map[string]any,
-	field string,
-) (time.Time, bool, error) {
-	value, exists := raw[field]
-	if !exists || value == nil {
-		return time.Time{}, false, nil
-	}
-
-	result, ok := value.(time.Time)
-	if !ok || result.IsZero() {
-		return time.Time{}, false, ErrInvalidOrderDocumentData
-	}
-
-	return result.UTC(), true, nil
 }
 
 const orderCountAlias = "total"
