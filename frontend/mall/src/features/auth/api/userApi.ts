@@ -1,8 +1,19 @@
-// frontend/amol/src/features/auth/api/userApi.ts
+// frontend/mall/src/features/auth/api/userApi.ts
 
 import type { User } from "firebase/auth";
 
 import { buildApiUrl } from "../../../lib/apiBaseUrl";
+import { requestJson } from "../../../lib/http";
+
+export type MallUserProfile = {
+  id: string;
+  first_name: string;
+  first_name_kana: string;
+  last_name: string;
+  last_name_kana: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type SaveUserResult =
   | {
@@ -63,6 +74,20 @@ async function readErrorMessage(
   return (
     text ||
     `保存に失敗しました (${response.status})`
+  );
+}
+
+export async function fetchCurrentUserProfile(): Promise<MallUserProfile> {
+  return requestJson<MallUserProfile>(
+    "/mall/me/users",
+    {
+      method: "GET",
+      auth: "required",
+      messages: {
+        requestErrorMessage:
+          "ユーザー情報の取得に失敗しました。",
+      },
+    },
   );
 }
 
