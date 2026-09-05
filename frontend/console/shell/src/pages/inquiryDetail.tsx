@@ -1,12 +1,7 @@
 // frontend/console/shell/src/pages/inquiryDetail.tsx
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../../shell/src/shared/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../shell/src/shared/ui/card";
 
 import InquiryContentCard from "../features/inquiry/presentation/components/inquiryContentCard";
 import InquiryInfoCard from "../features/inquiry/presentation/components/inquiryInfoCard";
@@ -16,17 +11,13 @@ import ReplyModal from "../features/inquiry/presentation/components/replyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import { useInquiryReply } from "../features/inquiry/presentation/hooks/useInquiryReply";
 import { useOpenedReturnRefund } from "../features/inquiry/presentation/hooks/useOpenedReturnRefund";
-import {
-  textOrDash,
-} from "../features/inquiry/presentation/utils/inquiryDetailView";
+import { textOrDash } from "../features/inquiry/presentation/utils/inquiryDetailView";
 import {
   getInquiryStatusButtonVariant,
   getInquiryStatusLabel,
   isClosedStatus,
 } from "../features/inquiry/presentation/utils/inquiryStatus";
-import {
-  getInquiryTypeLabel,
-} from "../shared/types/inquiry";
+import { getInquiryTypeLabel } from "../shared/types/inquiry";
 
 import "../styles/inquiry-page.css";
 
@@ -85,18 +76,10 @@ export default function InquiryDetail() {
       ? textOrDash(inquiry.subject)
       : "";
 
-  const status =
-    getInquiryStatusLabel(inquiry?.status);
-
-  const isUnopenedReturn =
-    inquiry?.inquiryType === "return_unopened";
-
-  const isOpenedReturn =
-    inquiry?.inquiryType === "return_opened";
-
-  const isResolved =
-    inquiry?.status === "resolved";
-
+  const status = getInquiryStatusLabel(inquiry?.status);
+  const isUnopenedReturn = inquiry?.inquiryType === "return_unopened";
+  const isOpenedReturn = inquiry?.inquiryType === "return_opened";
+  const isResolved = inquiry?.status === "resolved";
   const isOpenOrInProgress =
     inquiry?.status === "open" ||
     inquiry?.status === "in_progress";
@@ -107,14 +90,10 @@ export default function InquiryDetail() {
 
   const pageTitle = (
     <div className="inq-detail__page-title">
-      <span className="inq__chip">
-        {inquiryType}
-      </span>
+      <span className="inq__chip">{inquiryType}</span>
 
       {title ? (
-        <span className="inq-detail__page-title-text">
-          {title}
-        </span>
+        <span className="inq-detail__page-title-text">{title}</span>
       ) : null}
     </div>
   );
@@ -123,9 +102,7 @@ export default function InquiryDetail() {
     <span
       className={[
         "inq-status-tab",
-        inquiry?.status
-          ? `inq-status-tab--${inquiry.status}`
-          : "",
+        inquiry?.status ? `inq-status-tab--${inquiry.status}` : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -139,26 +116,20 @@ export default function InquiryDetail() {
 
   const hideStatusButton =
     isClosedStatus(inquiry?.status) ||
-    (
-      isOpenedReturn &&
-      isOpenOrInProgress
-    );
+    (isOpenedReturn && isOpenOrInProgress);
 
-  const statusButtonLabel =
-    hideStatusButton
-      ? undefined
-      : isResolved
-        ? "再対応する"
-        : isUnopenedReturn &&
-            isOpenOrInProgress
-          ? "返品受領"
-          : isOpenOrInProgress
-            ? "対応済みにする"
-            : undefined;
+  const statusButtonLabel = hideStatusButton
+    ? undefined
+    : isResolved
+      ? "再対応する"
+      : isUnopenedReturn && isOpenOrInProgress
+        ? "返品受領"
+        : isOpenOrInProgress
+          ? "対応済みにする"
+          : undefined;
 
   const statusButtonBusyLabel =
-    isUnopenedReturn &&
-    isOpenOrInProgress
+    isUnopenedReturn && isOpenOrInProgress
       ? "返品処理中"
       : "更新中";
 
@@ -177,9 +148,7 @@ export default function InquiryDetail() {
       >
         <Card>
           <CardHeader>
-            <CardTitle>
-              問い合わせ内容
-            </CardTitle>
+            <CardTitle>問い合わせ内容</CardTitle>
           </CardHeader>
 
           <CardContent>
@@ -192,9 +161,7 @@ export default function InquiryDetail() {
         <div>
           <Card>
             <CardHeader>
-              <CardTitle>
-                問い合わせ情報
-              </CardTitle>
+              <CardTitle>問い合わせ情報</CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -206,9 +173,7 @@ export default function InquiryDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>
-                商品・注文情報
-              </CardTitle>
+              <CardTitle>商品・注文情報</CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -232,24 +197,18 @@ export default function InquiryDetail() {
       >
         <Card>
           <CardHeader>
-            <CardTitle>
-              問い合わせ内容
-            </CardTitle>
+            <CardTitle>問い合わせ内容</CardTitle>
           </CardHeader>
 
           <CardContent>
-            <div className="inq__empty">
-              {errorMessage}
-            </div>
+            <div className="inq__empty">{errorMessage}</div>
           </CardContent>
         </Card>
 
         <div>
           <Card>
             <CardHeader>
-              <CardTitle>
-                問い合わせ情報
-              </CardTitle>
+              <CardTitle>問い合わせ情報</CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -261,9 +220,7 @@ export default function InquiryDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle>
-                商品・注文情報
-              </CardTitle>
+              <CardTitle>商品・注文情報</CardTitle>
             </CardHeader>
 
             <CardContent>
@@ -288,11 +245,7 @@ export default function InquiryDetail() {
         statusButtonLabel={statusButtonLabel}
         statusButtonBusyLabel={statusButtonBusyLabel}
         statusButtonVariant={statusButtonVariant}
-        onStatusButtonClick={
-          statusButtonLabel
-            ? onToggleStatus
-            : undefined
-        }
+        onStatusButtonClick={statusButtonLabel ? onToggleStatus : undefined}
         isStatusButtonLoading={statusUpdating}
         statusButtonDisabled={
           !detail ||
@@ -301,7 +254,6 @@ export default function InquiryDetail() {
       >
         <div>
           <InquiryContentCard
-            userName={detail?.userName}
             content={inquiry?.content}
             images={inquiry?.images}
             errorMessage={errorMessage}

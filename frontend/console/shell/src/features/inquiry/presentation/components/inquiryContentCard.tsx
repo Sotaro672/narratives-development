@@ -1,12 +1,7 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/inquiryContentCard.tsx
 
 import { Button } from "../../../../shared/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../../../shared/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
 
 import {
   getOpenedReturnRefundPolicyLabel,
@@ -21,7 +16,6 @@ import type {
 import InquiryImageGrid from "./inquiryImageGrid";
 
 export type InquiryContentCardProps = {
-  userName?: string | null;
   content?: string | null;
   images?: InquiryImageFile[];
   errorMessage?: string | null;
@@ -36,15 +30,12 @@ export type InquiryContentCardProps = {
   onSubmitOpenedReturnRefund?: () => unknown;
 };
 
-function textOrDash(
-  value: string | null | undefined,
-): string {
+function textOrDash(value: string | null | undefined): string {
   const normalized = String(value ?? "").trim();
   return normalized || "-";
 }
 
 export default function InquiryContentCard({
-  userName,
   content,
   images,
   errorMessage,
@@ -57,94 +48,50 @@ export default function InquiryContentCard({
   onChangeOpenedReturnPolicy,
   onSubmitOpenedReturnRefund,
 }: InquiryContentCardProps) {
-  const userNameLabel = textOrDash(userName);
   const body = textOrDash(content);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          問い合わせ内容
-        </CardTitle>
+        <CardTitle>問い合わせ内容</CardTitle>
       </CardHeader>
 
       <CardContent>
         <div className="inq-detail">
           {errorMessage ? (
-            <div className="inq__empty">
-              {errorMessage}
-            </div>
+            <div className="inq__empty">{errorMessage}</div>
           ) : null}
 
           <div className="inq-detail__body">
-            <div className="inq-detail__label">
-              ユーザー名
-            </div>
-
-            <div className="inq-detail__value">
-              {userNameLabel}
-            </div>
-          </div>
-
-          <div className="inq-detail__body">
-            <div className="inq-detail__label">
-              問い合わせ本文
-            </div>
-
-            <p className="inq-detail__text">
-              {body}
-            </p>
+            <p className="inq-detail__text">{body}</p>
           </div>
 
           {images && images.length > 0 ? (
             <div className="inq-detail__body">
-              <div className="inq-detail__label">
-                添付画像
-              </div>
-
-              <InquiryImageGrid
-                images={images}
-              />
+              <div className="inq-detail__label">添付画像</div>
+              <InquiryImageGrid images={images} />
             </div>
           ) : null}
 
           {showOpenedReturnRefund ? (
             <div className="inq-detail__body">
-              <div className="inq-detail__label">
-                開封後返品の返金方法
-              </div>
+              <div className="inq-detail__label">開封後返品の返金方法</div>
 
               <div className="flex flex-col gap-3">
                 <select
                   value={openedReturnPolicy}
-                  onChange={(event) =>
-                    onChangeOpenedReturnPolicy?.(
-                      event.target.value,
-                    )
-                  }
-                  disabled={
-                    openedReturnSubmitting ||
-                    openedReturnPolicyLocked
-                  }
+                  onChange={(event) => onChangeOpenedReturnPolicy?.(event.target.value)}
+                  disabled={openedReturnSubmitting || openedReturnPolicyLocked}
                   aria-label="開封後返品の返金方法"
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">
-                    返金方法を選択してください
-                  </option>
+                  <option value="">返金方法を選択してください</option>
 
-                  {OPENED_RETURN_REFUND_POLICIES.map(
-                    (policy) => (
-                      <option
-                        key={policy}
-                        value={policy}
-                      >
-                        {getOpenedReturnRefundPolicyLabel(
-                          policy,
-                        )}
-                      </option>
-                    ),
-                  )}
+                  {OPENED_RETURN_REFUND_POLICIES.map((policy) => (
+                    <option key={policy} value={policy}>
+                      {getOpenedReturnRefundPolicyLabel(policy)}
+                    </option>
+                  ))}
                 </select>
 
                 {openedReturnPolicy === "half_merchandise" ? (
@@ -159,17 +106,14 @@ export default function InquiryContentCard({
                   </div>
                 ) : null}
 
-                {openedReturnPolicy ===
-                "merchandise_round_trip_shipping" ? (
+                {openedReturnPolicy === "merchandise_round_trip_shipping" ? (
                   <div className="inq-detail__text">
                     商品代金・対象商品の消費税・購入時の配送料を返金し、返品時の配送料もブランド側が負担します。
                   </div>
                 ) : null}
 
                 {openedReturnErrorMessage ? (
-                  <div className="inq__empty">
-                    {openedReturnErrorMessage}
-                  </div>
+                  <div className="inq__empty">{openedReturnErrorMessage}</div>
                 ) : null}
 
                 {openedReturnPolicyLocked ? (
@@ -181,9 +125,7 @@ export default function InquiryContentCard({
                 <div>
                   <Button
                     type="button"
-                    onClick={() =>
-                      void onSubmitOpenedReturnRefund?.()
-                    }
+                    onClick={() => void onSubmitOpenedReturnRefund?.()}
                     disabled={
                       !openedReturnCanSubmit ||
                       openedReturnSubmitting ||
@@ -191,9 +133,7 @@ export default function InquiryContentCard({
                     }
                     aria-busy={openedReturnSubmitting}
                   >
-                    {openedReturnSubmitting
-                      ? "返品処理中"
-                      : "返品受領"}
+                    {openedReturnSubmitting ? "返品処理中" : "返品受領"}
                   </Button>
                 </div>
               </div>
