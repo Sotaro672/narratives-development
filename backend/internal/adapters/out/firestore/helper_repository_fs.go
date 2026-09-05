@@ -8,6 +8,8 @@ import (
 	"cloud.google.com/go/firestore"
 )
 
+// asString is retained temporarily while Firestore string reads
+// migrate to dedicated value decoders.
 func asString(v any) string {
 	if v == nil {
 		return ""
@@ -21,6 +23,8 @@ func asString(v any) string {
 	return value
 }
 
+// asInt is retained temporarily while Firestore integer reads
+// migrate to dedicated value decoders.
 func asInt(v any) int {
 	if v == nil {
 		return 0
@@ -32,19 +36,6 @@ func asInt(v any) int {
 	}
 
 	return int(value)
-}
-
-func asBool(v any) bool {
-	if v == nil {
-		return false
-	}
-
-	value, ok := v.(bool)
-	if !ok {
-		return false
-	}
-
-	return value
 }
 
 func containsString(xs []string, v string) bool {
@@ -140,17 +131,6 @@ func optionalTimeFromPatch(value *time.Time) *time.Time {
 
 	utc := value.UTC()
 	return &utc
-}
-
-// ptrStringFromMap is retained temporarily while Firestore string reads
-// migrate to firestoreOptionalString.
-func ptrStringFromMap(m map[string]any, key string) *string {
-	s := asString(m[key])
-	if s == "" {
-		return nil
-	}
-
-	return &s
 }
 
 func ptrOrEmpty(p *string) string {

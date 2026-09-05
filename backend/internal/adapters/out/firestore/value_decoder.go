@@ -61,6 +61,28 @@ func firestoreOptionalTime(values map[string]any, key string) (*time.Time, error
 	return &timestamp, nil
 }
 
+// firestoreString decodes a Firestore string that may be empty.
+//
+// Contract:
+//   - missing field is invalid
+//   - nil field is invalid
+//   - only string is accepted
+//   - empty string is accepted
+//   - string content is returned unchanged
+func firestoreString(values map[string]any, key string) (string, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return "", fmt.Errorf("firestore: missing %s", key)
+	}
+
+	text, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("firestore: %s must be string, got %T", key, value)
+	}
+
+	return text, nil
+}
+
 // firestoreOptionalString decodes an optional Firestore string.
 //
 // Contract:
@@ -111,4 +133,64 @@ func firestoreRequiredString(values map[string]any, key string) (string, error) 
 	}
 
 	return text, nil
+}
+
+// firestoreRequiredBool decodes a required Firestore boolean.
+//
+// Contract:
+//   - missing field is invalid
+//   - nil field is invalid
+//   - only bool is accepted
+func firestoreRequiredBool(values map[string]any, key string) (bool, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return false, fmt.Errorf("firestore: missing %s", key)
+	}
+
+	boolean, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("firestore: %s must be bool, got %T", key, value)
+	}
+
+	return boolean, nil
+}
+
+// firestoreRequiredInt64 decodes a required Firestore integer.
+//
+// Contract:
+//   - missing field is invalid
+//   - nil field is invalid
+//   - only int64 is accepted
+func firestoreRequiredInt64(values map[string]any, key string) (int64, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return 0, fmt.Errorf("firestore: missing %s", key)
+	}
+
+	number, ok := value.(int64)
+	if !ok {
+		return 0, fmt.Errorf("firestore: %s must be int64, got %T", key, value)
+	}
+
+	return number, nil
+}
+
+// firestoreOptionalInt64 decodes an optional Firestore integer.
+//
+// Contract:
+//   - missing field returns nil
+//   - nil field returns nil
+//   - if present, only int64 is accepted
+func firestoreOptionalInt64(values map[string]any, key string) (*int64, error) {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return nil, nil
+	}
+
+	number, ok := value.(int64)
+	if !ok {
+		return nil, fmt.Errorf("firestore: %s must be int64, got %T", key, value)
+	}
+
+	return &number, nil
 }

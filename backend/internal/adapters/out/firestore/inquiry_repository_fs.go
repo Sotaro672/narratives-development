@@ -413,6 +413,59 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		return idom.Inquiry{}, fmt.Errorf("empty inquiry document: %s", doc.Ref.ID)
 	}
 
+	id, err := firestoreOptionalString(data, "id")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	productID, err := firestoreRequiredString(data, "productId")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	orderID, err := firestoreOptionalString(data, "orderId")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	avatarID, err := firestoreRequiredString(data, "avatarId")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	subject, err := firestoreOptionalString(data, "subject")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	content, err := firestoreRequiredString(data, "content")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	statusText, err := firestoreRequiredString(data, "status")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	inquiryTypeText, err := firestoreRequiredString(data, "inquiryType")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	resolvedBy, err := firestoreOptionalString(data, "resolvedBy")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	closedBy, err := firestoreOptionalString(data, "closedBy")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	updatedBy, err := firestoreOptionalString(data, "updatedBy")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	deletedBy, err := firestoreOptionalString(data, "deletedBy")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	isRead, err := firestoreRequiredBool(data, "isRead")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
 		return idom.Inquiry{}, err
@@ -435,22 +488,22 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 	}
 
 	in := idom.Inquiry{
-		ID:          asString(data["id"]),
-		ProductID:   asString(data["productId"]),
-		OrderID:     asString(data["orderId"]),
-		AvatarID:    asString(data["avatarId"]),
-		Subject:     asString(data["subject"]),
-		Content:     asString(data["content"]),
-		Status:      idom.InquiryStatus(asString(data["status"])),
-		InquiryType: idom.InquiryType(asString(data["inquiryType"])),
-		IsRead:      asBool(data["isRead"]),
+		ID:          ptrOrEmpty(id),
+		ProductID:   productID,
+		OrderID:     ptrOrEmpty(orderID),
+		AvatarID:    avatarID,
+		Subject:     ptrOrEmpty(subject),
+		Content:     content,
+		Status:      idom.InquiryStatus(statusText),
+		InquiryType: idom.InquiryType(inquiryTypeText),
+		IsRead:      isRead,
 		ResolvedAt:  resolvedAt,
-		ResolvedBy:  ptrStringFromMap(data, "resolvedBy"),
+		ResolvedBy:  resolvedBy,
 		ClosedAt:    closedAt,
-		ClosedBy:    ptrStringFromMap(data, "closedBy"),
-		UpdatedBy:   ptrStringFromMap(data, "updatedBy"),
+		ClosedBy:    closedBy,
+		UpdatedBy:   updatedBy,
 		DeletedAt:   deletedAt,
-		DeletedBy:   ptrStringFromMap(data, "deletedBy"),
+		DeletedBy:   deletedBy,
 		CreatedAt:   createdAt,
 		UpdatedAt:   updatedAt,
 	}
@@ -482,6 +535,39 @@ func docToReplyWithFallbackInquiryID(doc *firestore.DocumentSnapshot, fallbackIn
 		return idom.Reply{}, fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
 	}
 
+	id, err := firestoreOptionalString(data, "id")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+	inquiryID, err := firestoreOptionalString(data, "inquiryId")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+	senderTypeText, err := firestoreRequiredString(data, "senderType")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+	senderID, err := firestoreRequiredString(data, "senderId")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+	createdBy, err := firestoreRequiredString(data, "createdBy")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+	updatedBy, err := firestoreOptionalString(data, "updatedBy")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+	deletedBy, err := firestoreOptionalString(data, "deletedBy")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+	isRead, err := firestoreRequiredBool(data, "isRead")
+	if err != nil {
+		return idom.Reply{}, err
+	}
+
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
 		return idom.Reply{}, err
@@ -496,18 +582,18 @@ func docToReplyWithFallbackInquiryID(doc *firestore.DocumentSnapshot, fallbackIn
 	}
 
 	reply := idom.Reply{
-		ID:         asString(data["id"]),
-		InquiryID:  asString(data["inquiryId"]),
-		SenderType: idom.ReplySenderType(asString(data["senderType"])),
-		SenderID:   asString(data["senderId"]),
+		ID:         ptrOrEmpty(id),
+		InquiryID:  ptrOrEmpty(inquiryID),
+		SenderType: idom.ReplySenderType(senderTypeText),
+		SenderID:   senderID,
 		Content:    asString(data["content"]),
-		IsRead:     asBool(data["isRead"]),
+		IsRead:     isRead,
 		CreatedAt:  createdAt,
-		CreatedBy:  asString(data["createdBy"]),
+		CreatedBy:  createdBy,
 		UpdatedAt:  updatedAt,
-		UpdatedBy:  ptrStringFromMap(data, "updatedBy"),
+		UpdatedBy:  updatedBy,
 		DeletedAt:  deletedAt,
-		DeletedBy:  ptrStringFromMap(data, "deletedBy"),
+		DeletedBy:  deletedBy,
 	}
 
 	if reply.ID == "" {
@@ -581,6 +667,39 @@ func docImageItemToDomain(item any, fallbackInquiryID string) (idom.ImageFile, b
 }
 
 func docImageMapToDomain(m map[string]any, fallbackInquiryID string) (idom.ImageFile, error) {
+	inquiryID, err := firestoreOptionalString(m, "inquiryId")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+	fileName, err := firestoreRequiredString(m, "fileName")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+	fileURL, err := firestoreRequiredString(m, "fileUrl")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+	objectPath, err := firestoreOptionalString(m, "objectPath")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+	mimeType, err := firestoreRequiredString(m, "mimeType")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+	createdBy, err := firestoreRequiredString(m, "createdBy")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+	updatedBy, err := firestoreOptionalString(m, "updatedBy")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+	deletedBy, err := firestoreOptionalString(m, "deletedBy")
+	if err != nil {
+		return idom.ImageFile{}, err
+	}
+
 	createdAt, err := firestoreRequiredTime(m, "createdAt")
 	if err != nil {
 		return idom.ImageFile{}, err
@@ -595,18 +714,18 @@ func docImageMapToDomain(m map[string]any, fallbackInquiryID string) (idom.Image
 	}
 
 	img := idom.ImageFile{
-		InquiryID:  asString(m["inquiryId"]),
-		FileName:   asString(m["fileName"]),
-		FileURL:    asString(m["fileUrl"]),
-		ObjectPath: ptrStringFromMap(m, "objectPath"),
+		InquiryID:  ptrOrEmpty(inquiryID),
+		FileName:   fileName,
+		FileURL:    fileURL,
+		ObjectPath: objectPath,
 		FileSize:   int64(asInt(m["fileSize"])),
-		MimeType:   asString(m["mimeType"]),
+		MimeType:   mimeType,
 		CreatedAt:  createdAt,
-		CreatedBy:  asString(m["createdBy"]),
+		CreatedBy:  createdBy,
 		UpdatedAt:  updatedAt,
-		UpdatedBy:  ptrStringFromMap(m, "updatedBy"),
+		UpdatedBy:  updatedBy,
 		DeletedAt:  deletedAt,
-		DeletedBy:  ptrStringFromMap(m, "deletedBy"),
+		DeletedBy:  deletedBy,
 	}
 
 	if img.InquiryID == "" {

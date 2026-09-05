@@ -38,20 +38,15 @@ func (r *InquiryReplyRepositoryFS) col(inquiryID string) *firestore.CollectionRe
 		Collection("replies")
 }
 
-func (r *InquiryReplyRepositoryFS) Create(
-	ctx context.Context,
-	reply idom.Reply,
-) (idom.Reply, error) {
+func (r *InquiryReplyRepositoryFS) Create(ctx context.Context, reply idom.Reply) (idom.Reply, error) {
 	if r.Client == nil {
 		return idom.Reply{}, errors.New("firestore client is nil")
 	}
-
 	if err := reply.Validate(); err != nil {
 		return idom.Reply{}, err
 	}
 
 	docRef := r.col(reply.InquiryID).Doc(reply.ID)
-
 	_, err := docRef.Create(ctx, replyToDocData(reply))
 	if err != nil {
 		if status.Code(err) == codes.AlreadyExists {
@@ -68,11 +63,7 @@ func (r *InquiryReplyRepositoryFS) Create(
 	return docToReplyWithFallbackInquiryID(snap, reply.InquiryID)
 }
 
-func (r *InquiryReplyRepositoryFS) GetByID(
-	ctx context.Context,
-	inquiryID string,
-	replyID string,
-) (idom.Reply, error) {
+func (r *InquiryReplyRepositoryFS) GetByID(ctx context.Context, inquiryID string, replyID string) (idom.Reply, error) {
 	if r.Client == nil {
 		return idom.Reply{}, errors.New("firestore client is nil")
 	}
@@ -95,7 +86,6 @@ func (r *InquiryReplyRepositoryFS) GetByID(
 	if err != nil {
 		return idom.Reply{}, err
 	}
-
 	if reply.ID != replyID || reply.InquiryID != inquiryID {
 		return idom.Reply{}, idom.ErrNotFound
 	}
@@ -103,10 +93,7 @@ func (r *InquiryReplyRepositoryFS) GetByID(
 	return reply, nil
 }
 
-func (r *InquiryReplyRepositoryFS) ListByInquiryID(
-	ctx context.Context,
-	inquiryID string,
-) ([]idom.Reply, error) {
+func (r *InquiryReplyRepositoryFS) ListByInquiryID(ctx context.Context, inquiryID string) ([]idom.Reply, error) {
 	if r.Client == nil {
 		return nil, errors.New("firestore client is nil")
 	}
@@ -121,7 +108,6 @@ func (r *InquiryReplyRepositoryFS) ListByInquiryID(
 	defer it.Stop()
 
 	replies := make([]idom.Reply, 0)
-
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
@@ -135,18 +121,13 @@ func (r *InquiryReplyRepositoryFS) ListByInquiryID(
 		if err != nil {
 			return nil, err
 		}
-
 		replies = append(replies, reply)
 	}
 
 	return replies, nil
 }
 
-func (r *InquiryReplyRepositoryFS) CountUnreadByAvatarID(
-	ctx context.Context,
-	avatarID string,
-	filter idom.Filter,
-) (int, error) {
+func (r *InquiryReplyRepositoryFS) CountUnreadByAvatarID(ctx context.Context, avatarID string, filter idom.Filter) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
 	}
@@ -163,7 +144,6 @@ func (r *InquiryReplyRepositoryFS) CountUnreadByAvatarID(
 	defer inquiryIt.Stop()
 
 	count := 0
-
 	for {
 		inquiryDoc, err := inquiryIt.Next()
 		if err == iterator.Done {
@@ -177,7 +157,6 @@ func (r *InquiryReplyRepositoryFS) CountUnreadByAvatarID(
 		if err != nil {
 			return 0, err
 		}
-
 		if !matchInquiryFilter(in, filter) {
 			continue
 		}
@@ -198,13 +177,7 @@ func (r *InquiryReplyRepositoryFS) CountUnreadByAvatarID(
 	return count, nil
 }
 
-func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
-	ctx context.Context,
-	inquiryID string,
-	readerSenderType idom.ReplySenderType,
-	readerSenderID string,
-	readAt time.Time,
-) error {
+func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(ctx context.Context, inquiryID string, readerSenderType idom.ReplySenderType, readerSenderID string, readAt time.Time) error {
 	if r.Client == nil {
 		return errors.New("firestore client is nil")
 	}
@@ -243,14 +216,23 @@ func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
 			return fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
 		}
 
-		senderType := idom.ReplySenderType(asString(data["senderType"]))
-		senderID := asString(data["senderId"])
-		isRead := asBool(data["isRead"])
+		senderTypeText, err := firestoreRequiredString(data, "senderType")
+		if err != nil {
+			return err
+		}
+		senderID, err := firestoreRequiredString(data, "senderId")
+		if err != nil {
+			return err
+		}
+		isRead, err := firestoreRequiredBool(data, "isRead")
+		if err != nil {
+			return err
+		}
 
+		senderType := idom.ReplySenderType(senderTypeText)
 		if senderType == readerSenderType && senderID == readerSenderID {
 			continue
 		}
-
 		if isRead {
 			continue
 		}
@@ -277,12 +259,7 @@ func (r *InquiryReplyRepositoryFS) MarkAsReadByInquiryID(
 // usecase 側では member / avatar どちらもこの考え方で集計できます.
 // 現在の usecase interface では必須メソッドではありませんが、
 // repository 側の任意拡張として用意しています.
-func (r *InquiryReplyRepositoryFS) CountUnreadByInquiryIDExcludingSender(
-	ctx context.Context,
-	inquiryID string,
-	excludedSenderType idom.ReplySenderType,
-	excludedSenderID string,
-) (int, error) {
+func (r *InquiryReplyRepositoryFS) CountUnreadByInquiryIDExcludingSender(ctx context.Context, inquiryID string, excludedSenderType idom.ReplySenderType, excludedSenderID string) (int, error) {
 	if r.Client == nil {
 		return 0, errors.New("firestore client is nil")
 	}
@@ -300,7 +277,6 @@ func (r *InquiryReplyRepositoryFS) CountUnreadByInquiryIDExcludingSender(
 	defer it.Stop()
 
 	count := 0
-
 	for {
 		doc, err := it.Next()
 		if err == iterator.Done {
@@ -315,14 +291,24 @@ func (r *InquiryReplyRepositoryFS) CountUnreadByInquiryIDExcludingSender(
 			return 0, fmt.Errorf("empty inquiry reply document: %s", doc.Ref.ID)
 		}
 
-		senderType := idom.ReplySenderType(asString(data["senderType"]))
-		senderID := asString(data["senderId"])
-		isRead := asBool(data["isRead"])
+		senderTypeText, err := firestoreRequiredString(data, "senderType")
+		if err != nil {
+			return 0, err
+		}
+		senderID, err := firestoreRequiredString(data, "senderId")
+		if err != nil {
+			return 0, err
+		}
+		isRead, err := firestoreRequiredBool(data, "isRead")
+		if err != nil {
+			return 0, err
+		}
 
 		if isRead {
 			continue
 		}
 
+		senderType := idom.ReplySenderType(senderTypeText)
 		if senderType == excludedSenderType && senderID == excludedSenderID {
 			continue
 		}
