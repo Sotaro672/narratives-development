@@ -8,7 +8,6 @@ import (
 	"time"
 
 	accountdom "narratives/internal/domain/account"
-	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 	permdom "narratives/internal/domain/permission"
@@ -57,9 +56,6 @@ type BootstrapService struct {
 
 // MemberCompanyIDReader は、Firebase Auth UID から companyID だけを取得するための
 // adapter 側の任意拡張です。
-//
-// member.Repository 本体は GetByID / ListByCompanyID に統一しているため、
-// uid から companyID を逆引きする処理は repository port 本体には含めません。
 type MemberCompanyIDReader interface {
 	GetCompanyIDByFirebaseUID(ctx context.Context, uid string) (string, error)
 }
@@ -70,7 +66,8 @@ type MemberCompanyIDReader interface {
 // 方針:
 // - Firestore document ID と Firebase Auth UID は分離する
 // - members/{autoDocID}.uid = Firebase Auth UID として保存する
-// - uid から companyID を解決できる adapter の場合のみ、ListByCompanyID + Filter.UID により冪等確認する
+// - Company.admin には Firebase Auth UID ではなく members document ID を保存する
+// - 既存データで Company.admin に Firebase Auth UID が残っている場合は bootstrap 時に自動補正する
 // - 新規作成時のみ firstName / lastName を必須にする
 // - 開発環境では Company に口座が存在しない場合のみテスト口座を自動登録する
 // -------------------------------------------------------
@@ -91,7 +88,10 @@ func (s *BootstrapService) Bootstrap(
 	}
 
 	// ---------------------------------------------------------
-	// 0) 既に member がいるなら（冪等）基本は何もしない
+	// 0) 既に member がいる場合は冪等処理
+	//
+	// 過去データで Company.admin に Firebase UID が保存されている場合、
+	// 現在の members document ID へ自動補正する。
 	//
 	// 開発環境でテスト口座の作成だけが失敗していた場合に備え、
 	// Account が1件も存在しない場合はここでも補完する。
@@ -100,26 +100,20 @@ func (s *BootstrapService) Bootstrap(
 		companyID, err := r.GetCompanyIDByFirebaseUID(ctx, uid)
 		if err == nil {
 			if companyID != "" {
-				res, listErr := s.Members.ListByCompanyID(
-					ctx,
-					companyID,
-					memberdom.Filter{
-						UID: uid,
-					},
-					common.Page{
-						Number:  1,
-						PerPage: 1,
-					},
-				)
-				if listErr != nil && !isAuthNotFoundLike(listErr) {
-					return listErr
-				}
+				existingMember, memberErr := s.Members.GetByUID(ctx, uid)
+				if memberErr != nil {
+					if !isAuthNotFoundLike(memberErr) {
+						return memberErr
+					}
+				} else if existingMember.DocID != "" {
+					if err := s.ensureCompanyAdminMemberID(ctx, companyID, existingMember.DocID); err != nil {
+						return err
+					}
 
-				if len(res.Items) > 0 {
 					if err := s.ensureDefaultTestAccount(
 						ctx,
 						companyID,
-						res.Items[0].DocID,
+						existingMember.DocID,
 						"",
 						email,
 					); err != nil {
@@ -137,6 +131,7 @@ func (s *BootstrapService) Bootstrap(
 	// ---------------------------------------------------------
 	// 1) profile 取り出し（nil-safe）
 	// ---------------------------------------------------------
+
 	var p SignUpProfile
 	if profile != nil {
 		p = *profile
@@ -170,13 +165,18 @@ func (s *BootstrapService) Bootstrap(
 	// ---------------------------------------------------------
 	// 2) 新規作成時は名前必須
 	// ---------------------------------------------------------
+
 	if firstName == "" || lastName == "" {
 		return errors.New("member: invalid firstName")
 	}
 
 	// ---------------------------------------------------------
-	// 3) companyName がある場合は先に Company を作る
+	// 3) companyName がある場合は Company ID を確保して Company を作る
+	//
+	// Member document ID はまだ発行されていないため、admin には一時的に
+	// Firebase UID を設定する。Member 作成直後に members document ID へ補正する。
 	// ---------------------------------------------------------
+
 	companyID := ""
 	if companyName != "" {
 		issuedID, err := s.Companies.NewID(ctx)
@@ -187,9 +187,9 @@ func (s *BootstrapService) Bootstrap(
 		companyEntity, err := companydom.NewCompany(
 			issuedID,
 			companyName,
-			uid, // admin
-			uid, // createdBy
-			uid, // updatedBy
+			uid,
+			uid,
+			uid,
 			now,
 			now,
 			true,
@@ -216,6 +216,7 @@ func (s *BootstrapService) Bootstrap(
 	//    Firestore docID は repository 側の自動ID
 	//    Firebase Auth UID は member.uid フィールドに保存する
 	// ---------------------------------------------------------
+
 	allPermNames := permdom.AllPermissionNames()
 
 	memberEntity, err := memberdom.New(
@@ -241,12 +242,23 @@ func (s *BootstrapService) Bootstrap(
 	}
 
 	// ---------------------------------------------------------
-	// 5) 開発環境ではテスト口座を自動登録
+	// 5) Company.admin を members document ID に統一
+	// ---------------------------------------------------------
+
+	if companyID != "" {
+		if err := s.ensureCompanyAdminMemberID(ctx, companyID, createdMember.DocID); err != nil {
+			return err
+		}
+	}
+
+	// ---------------------------------------------------------
+	// 6) 開発環境ではテスト口座を自動登録
 	//
 	// UIには口座入力を表示せず、Bootstrap 内で自動登録する。
 	// Stripe Connected Account 自体も既存 AccountUsecase の
 	// createStripeAccount を通して作成する。
 	// ---------------------------------------------------------
+
 	if companyID != "" {
 		if err := s.ensureDefaultTestAccount(
 			ctx,
@@ -260,6 +272,47 @@ func (s *BootstrapService) Bootstrap(
 	}
 
 	return nil
+}
+
+// -------------------------------------------------------
+// Company admin member ID 補正
+// -------------------------------------------------------
+
+func (s *BootstrapService) ensureCompanyAdminMemberID(
+	ctx context.Context,
+	companyID string,
+	memberID string,
+) error {
+	if companyID == "" {
+		return errors.New("bootstrap: companyID is empty")
+	}
+	if memberID == "" {
+		return errors.New("bootstrap: memberID is empty")
+	}
+
+	company, err := s.Companies.GetByID(ctx, companyID)
+	if err != nil {
+		return err
+	}
+
+	if company.Admin == memberID {
+		return nil
+	}
+
+	now := time.Now().UTC()
+	updatedBy := memberID
+
+	_, err = s.Companies.Update(
+		ctx,
+		companyID,
+		companydom.CompanyPatch{
+			Admin:     &memberID,
+			UpdatedAt: &now,
+			UpdatedBy: &updatedBy,
+		},
+	)
+
+	return err
 }
 
 // -------------------------------------------------------
@@ -280,9 +333,7 @@ func (s *BootstrapService) ensureDefaultTestAccount(
 	if s.Accounts == nil ||
 		s.Accounts.repo == nil ||
 		s.Accounts.accountGateway == nil {
-		return errors.New(
-			"bootstrap: account service not initialized",
-		)
+		return errors.New("bootstrap: account service not initialized")
 	}
 
 	if companyID == "" {
@@ -293,14 +344,9 @@ func (s *BootstrapService) ensureDefaultTestAccount(
 		return accountdom.ErrInvalidMemberID
 	}
 
-	accountID := defaultTestAccountID(
-		companyID,
-	)
+	accountID := defaultTestAccountID(companyID)
 
-	accounts, err := s.Accounts.repo.ListByCompanyID(
-		ctx,
-		companyID,
-	)
+	accounts, err := s.Accounts.repo.ListByCompanyID(ctx, companyID)
 	if err != nil {
 		return err
 	}
@@ -314,11 +360,7 @@ func (s *BootstrapService) ensureDefaultTestAccount(
 				return nil
 			}
 
-			return s.applyDefaultTestAccountValues(
-				ctx,
-				accountID,
-				memberID,
-			)
+			return s.applyDefaultTestAccountValues(ctx, accountID, memberID)
 		}
 
 		if account.Status != accountdom.StatusDeleted {
@@ -345,11 +387,7 @@ func (s *BootstrapService) ensureDefaultTestAccount(
 		return err
 	}
 
-	return s.applyDefaultTestAccountValues(
-		ctx,
-		accountID,
-		memberID,
-	)
+	return s.applyDefaultTestAccountValues(ctx, accountID, memberID)
 }
 
 func (s *BootstrapService) applyDefaultTestAccountValues(
@@ -380,12 +418,8 @@ func (s *BootstrapService) applyDefaultTestAccountValues(
 	return err
 }
 
-func defaultTestAccountID(
-	companyID string,
-) string {
-	return accountdom.AccountIDPrefix +
-		"default_" +
-		companyID
+func defaultTestAccountID(companyID string) string {
+	return accountdom.AccountIDPrefix + "default_" + companyID
 }
 
 // -------------------------------------------------------
