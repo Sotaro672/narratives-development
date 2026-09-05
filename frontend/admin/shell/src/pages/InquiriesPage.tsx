@@ -1,11 +1,13 @@
 // frontend/admin/shell/src/pages/InquiriesPage.tsx
-import { useEffect, useMemo, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { listContacts } from "../features/contact/infrastructure/contactApi";
 import { getContactSourceLabel } from "../features/contact/presentation/model/contactSourcePresentation";
 import type { Contact } from "../shared/type/contact";
-import Page from "../shared/ui/Page/Page";
+import Page, { PageHeader } from "../shared/ui/Page/Page";
+import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 import Table, { type TableColumn } from "../shared/ui/Table/Table";
 import { formatDateTime } from "../shared/util/dateFormat";
 
@@ -15,13 +17,13 @@ export default function InquiriesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadContacts = async () => {
+  const loadContacts = useCallback(
+    async (isCancelled: () => boolean = () => false): Promise<void> => {
       try {
-        setLoading(true);
-        setError(null);
+        if (!isCancelled()) {
+          setLoading(true);
+          setError(null);
+        }
 
         const result = await listContacts({
           page: 1,
@@ -30,11 +32,11 @@ export default function InquiriesPage() {
           order: "desc",
         });
 
-        if (!cancelled) {
+        if (!isCancelled()) {
           setContacts(result.items);
         }
       } catch (cause) {
-        if (!cancelled) {
+        if (!isCancelled()) {
           setError(
             cause instanceof Error
               ? cause.message
@@ -42,18 +44,23 @@ export default function InquiriesPage() {
           );
         }
       } finally {
-        if (!cancelled) {
+        if (!isCancelled()) {
           setLoading(false);
         }
       }
-    };
+    },
+    [],
+  );
 
-    void loadContacts();
+  useEffect(() => {
+    let cancelled = false;
+
+    void loadContacts(() => cancelled);
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadContacts]);
 
   const columns = useMemo<TableColumn<Contact>[]>(
     () => [
@@ -87,9 +94,9 @@ export default function InquiriesPage() {
       {
         key: "isRead",
         header: "確認状況",
-        render: (contact) => contact.isRead ? "既読" : "未読",
+        render: (contact) => (contact.isRead ? "既読" : "未読"),
         filter: {
-          getValue: (contact) => contact.isRead ? "既読" : "未読",
+          getValue: (contact) => (contact.isRead ? "既読" : "未読"),
           options: [
             { value: "未読", label: "未読" },
             { value: "既読", label: "既読" },
@@ -124,7 +131,17 @@ export default function InquiriesPage() {
 
   return (
     <Page>
-      <h1>問い合わせ</h1>
+      <PageHeader
+        title="問い合わせ"
+        actions={
+          <RefreshButton
+            onClick={loadContacts}
+            loading={loading}
+            title="リフレッシュ"
+            ariaLabel="問い合わせをリフレッシュ"
+          />
+        }
+      />
 
       {loading && <p>問い合わせを読み込んでいます。</p>}
 

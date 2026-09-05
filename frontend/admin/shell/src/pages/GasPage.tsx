@@ -1,6 +1,7 @@
 // frontend/admin/shell/src/pages/GasPage.tsx
 
 import { useGasBalance } from "../features/gas/hooks/useGasBalance";
+import CopyButton from "../shared/ui/CopyButton/CopyButton";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 
@@ -21,7 +22,9 @@ export default function GasPage() {
         }
       />
       <section>
-        {loading && !balance ? <p>ガス残高を取得しています...</p> : null}
+        {loading && !balance ? (
+          <p>ガス残高を取得しています...</p>
+        ) : null}
 
         {error ? (
           <div>
@@ -54,7 +57,10 @@ export default function GasPage() {
 
             <div>
               <dt>ウォレットアドレス</dt>
-              <dd>{balance.address}</dd>
+              <dd>
+                {balance.address}
+                <CopyButton value={balance.address} />
+              </dd>
             </div>
           </dl>
         ) : null}
