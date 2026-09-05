@@ -245,7 +245,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.BrandRepo,
 		)
 
-		tokenBPReviewH = consoleHandler.NewTokenBlueprintReviewHandler(tbReviewUC)
+		tokenBPReviewH = consoleHandler.NewTokenBlueprintReviewHandler(
+			tbReviewUC,
+			c.ReviewReportUC,
+		)
 	}
 
 	if c.ProductBlueprintRepo != nil &&
@@ -262,7 +265,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			nil,
 		)
 
-		productBPReviewH = consoleHandler.NewProductBlueprintReviewHandler(pbReviewUC)
+		productBPReviewH = consoleHandler.NewProductBlueprintReviewHandler(
+			pbReviewUC,
+			c.ReviewReportUC,
+		)
 	}
 
 	if c.OrderUC != nil &&

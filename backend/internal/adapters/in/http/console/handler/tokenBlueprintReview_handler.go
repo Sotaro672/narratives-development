@@ -10,6 +10,7 @@ import (
 	appquery "narratives/internal/application/query/console"
 	"narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
+	reviewreport "narratives/internal/domain/reviewReport"
 	tbReview "narratives/internal/domain/tokenBlueprint_review"
 )
 
@@ -18,16 +19,19 @@ var (
 )
 
 type TokenBlueprintReviewHandler struct {
-	uc    *usecase.TokenBlueprintReviewUsecase
-	query *appquery.TokenBlueprintReviewConsoleQuery
+	uc             *usecase.TokenBlueprintReviewUsecase
+	query          *appquery.TokenBlueprintReviewConsoleQuery
+	reviewReportUC *usecase.ReviewReportUsecase
 }
 
 func NewTokenBlueprintReviewHandler(
 	uc *usecase.TokenBlueprintReviewUsecase,
+	reviewReportUC *usecase.ReviewReportUsecase,
 ) *TokenBlueprintReviewHandler {
 	return &TokenBlueprintReviewHandler{
-		uc:    uc,
-		query: appquery.NewTokenBlueprintReviewConsoleQuery(uc),
+		uc:             uc,
+		query:          appquery.NewTokenBlueprintReviewConsoleQuery(uc),
+		reviewReportUC: reviewReportUC,
 	}
 }
 
@@ -42,8 +46,9 @@ func NewTokenBlueprintReviewHandler(
 // - DELETE /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}
 // - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/reactions
 // - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/replies
+// - POST   /token-blueprint-reviews/{tokenBlueprintId}/comments/{commentId}/reports
 //
-// console handler では brand 側からのみ comment / reply / comment reaction を許可する。
+// console handler では brand 側からのみ comment / reply / comment reaction / report を許可する。
 func (h *TokenBlueprintReviewHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -57,7 +62,7 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(
 		r.URL.Path,
 		"/token-blueprint-reviews",
 	)
-	rest = strings.TrimPrefix(rest, "/")
+	rest = strings.Trim(rest, "/")
 
 	if rest == "" {
 		if r.Method != http.MethodGet {
@@ -169,6 +174,22 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(
 			return
 		}
 
+		if len(parts) == 4 &&
+			parts[3] == "reports" {
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w)
+				return
+			}
+
+			h.ReportCommentAsBrand(
+				w,
+				r,
+				tbID,
+				commentID,
+			)
+			return
+		}
+
 		writeNotFound(w)
 		return
 
@@ -192,8 +213,22 @@ type reactAsBrandRequest struct {
 	Type tbReview.ReactionType `json:"type"`
 }
 
+type reportCommentAsBrandRequest struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
+}
+
 type createBrandCommentResponse struct {
 	Item appquery.ConsoleTokenBlueprintCommentReadModel `json:"item"`
+}
+
+type reportCommentAsBrandResponse struct {
+	CaseID        string                  `json:"caseId"`
+	ReportID      string                  `json:"reportId"`
+	ReportCount   int                     `json:"reportCount"`
+	Status        reviewreport.CaseStatus `json:"status"`
+	CaseCreated   bool                    `json:"caseCreated"`
+	ReportCreated bool                    `json:"reportCreated"`
 }
 
 // ================================
@@ -680,4 +715,176 @@ func (h *TokenBlueprintReviewHandler) ReactToCommentAsBrand(
 			},
 		},
 	)
+}
+
+func (h *TokenBlueprintReviewHandler) ReportCommentAsBrand(
+	w http.ResponseWriter,
+	r *http.Request,
+	tokenBlueprintID string,
+	commentID string,
+) {
+	if h == nil || h.reviewReportUC == nil {
+		writeError(
+			w,
+			http.StatusServiceUnavailable,
+			"review_report_usecase_not_configured",
+		)
+		return
+	}
+
+	companyID, ok := middleware.CompanyID(r)
+	if !ok || companyID == "" {
+		writeError(
+			w,
+			http.StatusUnauthorized,
+			errUnauthorized.Error(),
+		)
+		return
+	}
+
+	actor, err := h.query.ResolveBrandActor(
+		r.Context(),
+		tokenBlueprintID,
+	)
+	if err != nil {
+		writeError(
+			w,
+			http.StatusForbidden,
+			err.Error(),
+		)
+		return
+	}
+
+	var request reportCommentAsBrandRequest
+	if err := decodeStrictJSON(r, &request); err != nil {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid_json",
+		)
+		return
+	}
+
+	reason := reviewreport.ReportReason(
+		strings.ToUpper(
+			strings.TrimSpace(request.Reason),
+		),
+	)
+	if err := reason.Validate(); err != nil {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"invalid_report_reason",
+		)
+		return
+	}
+
+	detail := strings.TrimSpace(request.Detail)
+	if reason == reviewreport.ReportReasonOther &&
+		detail == "" {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"report_detail_required",
+		)
+		return
+	}
+
+	result, err := h.reviewReportUC.ReportTokenBlueprintCommentByBrand(
+		r.Context(),
+		usecase.ReportTokenBlueprintCommentByBrandInput{
+			TokenBlueprintID: tokenBlueprintID,
+			CommentID:        commentID,
+			BrandID:          actor.BrandID,
+			CompanyID:        companyID,
+			Reason:           reason,
+			Detail:           detail,
+		},
+	)
+	if err != nil {
+		writeTokenBlueprintReviewReportError(
+			w,
+			err,
+		)
+		return
+	}
+
+	statusCode := http.StatusCreated
+	if !result.ReportCreated {
+		statusCode = http.StatusOK
+	}
+
+	writeJSON(
+		w,
+		statusCode,
+		reportCommentAsBrandResponse{
+			CaseID:        string(result.Case.ID),
+			ReportID:      string(result.Report.ID),
+			ReportCount:   result.Case.ReportCount,
+			Status:        result.Case.Status,
+			CaseCreated:   result.CaseCreated,
+			ReportCreated: result.ReportCreated,
+		},
+	)
+}
+
+func writeTokenBlueprintReviewReportError(
+	w http.ResponseWriter,
+	err error,
+) {
+	switch {
+	case errors.Is(
+		err,
+		usecase.ErrReviewReportUsecaseNotConfigured,
+	):
+		writeError(
+			w,
+			http.StatusServiceUnavailable,
+			"review_report_usecase_not_configured",
+		)
+
+	case errors.Is(
+		err,
+		usecase.ErrReviewReportForbidden,
+	):
+		writeError(
+			w,
+			http.StatusForbidden,
+			"review_report_forbidden",
+		)
+
+	case errors.Is(
+		err,
+		usecase.ErrReviewReportSelfReport,
+	):
+		writeError(
+			w,
+			http.StatusForbidden,
+			"self_report_not_allowed",
+		)
+
+	case errors.Is(
+		err,
+		reviewreport.ErrCannotReportRemovedTarget,
+	):
+		writeError(
+			w,
+			http.StatusConflict,
+			"cannot_report_removed_target",
+		)
+
+	case reviewreport.IsInvalid(err):
+		writeError(
+			w,
+			http.StatusBadRequest,
+			err.Error(),
+		)
+
+	default:
+		writeError(
+			w,
+			http.StatusInternalServerError,
+			err.Error(),
+		)
+	}
 }
