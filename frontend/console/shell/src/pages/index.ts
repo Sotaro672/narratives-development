@@ -4,6 +4,7 @@ export { default as AuthPage } from "./AuthPage";
 export { default as InvitationPage } from "./InvitationPage";
 
 export { default as InquiryManagement } from "./inquiryManagement";
+export { default as InquiryCreate } from "./inquiryCreate";
 export { default as InquiryDetail } from "./inquiryDetail";
 
 export { default as ProductBlueprintManagement } from "./productBlueprintManagement";

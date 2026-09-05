@@ -6,6 +6,7 @@ import {
   AuthPage,
   InvitationPage,
   InquiryManagement,
+  InquiryCreate,
   InquiryDetail,
   ProductBlueprintManagement,
   ProductBlueprintDetail,
@@ -78,6 +79,7 @@ export const routes: RouteObject[] = [
     path: "/inquiry",
     children: [
       { path: "", element: <InquiryManagement /> },
+      { path: "create", element: <InquiryCreate /> },
       { path: ":inquiryId", element: <InquiryDetail /> },
     ],
   },
