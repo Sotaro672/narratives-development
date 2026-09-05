@@ -61,6 +61,7 @@ export default function InquiriesPage() {
         key: "createdAt",
         header: "受信日時",
         render: (contact) => formatDateTime(contact.createdAt),
+        sortValue: (contact) => new Date(contact.createdAt).getTime(),
         nowrap: true,
       },
       {
@@ -87,12 +88,28 @@ export default function InquiriesPage() {
         key: "isRead",
         header: "確認状況",
         render: (contact) => contact.isRead ? "既読" : "未読",
+        filter: {
+          getValue: (contact) => contact.isRead ? "既読" : "未読",
+          options: [
+            { value: "未読", label: "未読" },
+            { value: "既読", label: "既読" },
+          ],
+        },
         nowrap: true,
       },
       {
         key: "source",
         header: "種別",
         render: (contact) => getContactSourceLabel(contact.source),
+        filter: {
+          getValue: (contact) => getContactSourceLabel(contact.source),
+          options: [
+            {
+              value: "外部からの問い合わせ",
+              label: "外部からの問い合わせ",
+            },
+          ],
+        },
         nowrap: true,
       },
     ],
@@ -123,6 +140,7 @@ export default function InquiriesPage() {
           rows={contacts}
           getRowKey={(contact) => contact.id}
           emptyMessage="問い合わせはありません。"
+          filteredEmptyMessage="条件に一致する問い合わせはありません。"
           onRowClick={handleRowClick}
         />
       )}
