@@ -1,4 +1,4 @@
-// frontend/amol/src/features/token-commnet/components/TokenCommentItem.tsx
+// frontend/mall/src/features/token-commnet/components/TokenCommentItem.tsx
 
 import { useNavigate } from "react-router-dom";
 
@@ -14,47 +14,34 @@ import {
   getTokenCommentDisplayName,
 } from "../../shared/types/tokenCommentTypes";
 
-import {
-  hasTokenCommentChildren,
-} from "../utils/commentTree";
+import { hasTokenCommentChildren } from "../utils/commentTree";
 
 import TokenCommentReplyForm from "./TokenCommentReplyForm";
 
 type TokenCommentItemProps = {
+  tokenBlueprintId: string;
+  currentAvatarId: string;
   node: TokenCommentTreeNode;
   expandedIds: Set<string>;
   replyingCommentId: string | null;
   replyBody: string;
   replyPosting: boolean;
-  onToggleExpanded: (
-    commentId: string,
-  ) => void;
-  onLike: (
-    commentId: string,
-  ) => void | Promise<void>;
-  onDislike: (
-    commentId: string,
-  ) => void | Promise<void>;
-  onStartReply: (
-    commentId: string,
-  ) => void;
+  onToggleExpanded: (commentId: string) => void;
+  onLike: (commentId: string) => void | Promise<void>;
+  onDislike: (commentId: string) => void | Promise<void>;
+  onStartReply: (commentId: string) => void;
   onCancelReply: () => void;
-  onReplyBodyChange: (
-    value: string,
-  ) => void;
-  onSubmitReply: (
-    parentCommentId: string,
-  ) => void | Promise<void>;
+  onReplyBodyChange: (value: string) => void;
+  onSubmitReply: (parentCommentId: string) => void | Promise<void>;
+  onReport: (commentId: string) => void;
 };
 
-function getAuthorAvatarId(
-  comment: TokenComment,
-): string {
+function getAuthorAvatarId(comment: TokenComment): string {
   if (comment.deleted) {
     return "";
   }
 
-  return comment.authorId || "";
+  return comment.authorId?.trim() || "";
 }
 
 function TokenCommentAuthor({
@@ -63,26 +50,16 @@ function TokenCommentAuthor({
   comment: TokenComment;
 }) {
   const navigate = useNavigate();
-
-  const displayName =
-    getTokenCommentDisplayName(comment);
-
-  const iconUrl =
-    getTokenCommentDisplayIconUrl(comment);
-
-  const avatarId =
-    getAuthorAvatarId(comment);
+  const displayName = getTokenCommentDisplayName(comment);
+  const iconUrl = getTokenCommentDisplayIconUrl(comment);
+  const avatarId = getAuthorAvatarId(comment);
 
   const handleOpenAvatar = () => {
     if (!avatarId) {
       return;
     }
 
-    navigate(
-      `/avatars/${encodeURIComponent(
-        avatarId,
-      )}`,
-    );
+    navigate(`/avatars/${encodeURIComponent(avatarId)}`);
   };
 
   const content = (
@@ -127,6 +104,8 @@ function TokenCommentAuthor({
 }
 
 export default function TokenCommentItem({
+  tokenBlueprintId,
+  currentAvatarId,
   node,
   expandedIds,
   replyingCommentId,
@@ -139,84 +118,98 @@ export default function TokenCommentItem({
   onCancelReply,
   onReplyBodyChange,
   onSubmitReply,
+  onReport,
 }: TokenCommentItemProps) {
   const comment = node.comment;
+  const commentId = comment.commentId?.trim() || "";
+  const authorAvatarId = getAuthorAvatarId(comment);
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedCurrentAvatarId = currentAvatarId.trim();
 
-  const isExpanded =
-    expandedIds.has(comment.commentId);
-
-  const isReplying =
-    replyingCommentId ===
-    comment.commentId;
-
-  const hasChildren =
-    hasTokenCommentChildren(node);
+  const isExpanded = expandedIds.has(commentId);
+  const isReplying = replyingCommentId === commentId;
+  const hasChildren = hasTokenCommentChildren(node);
+  const isOwnComment = Boolean(
+    normalizedCurrentAvatarId &&
+    authorAvatarId &&
+    normalizedCurrentAvatarId === authorAvatarId,
+  );
+  const canReport = Boolean(
+    normalizedTokenBlueprintId &&
+    normalizedCurrentAvatarId &&
+    commentId &&
+    !comment.deleted &&
+    !isOwnComment,
+  );
 
   const indent = Math.min(
-    Math.max(
-      comment.depth * 16,
-      0,
-    ),
+    Math.max(comment.depth * 16, 0),
     48,
   );
 
   const handleLike = () => {
-    if (comment.deleted) {
+    if (comment.deleted || !commentId) {
       return;
     }
 
-    void onLike(comment.commentId);
+    void onLike(commentId);
   };
 
   const handleDislike = () => {
-    if (comment.deleted) {
+    if (comment.deleted || !commentId) {
       return;
     }
 
-    void onDislike(comment.commentId);
+    void onDislike(commentId);
   };
 
   const handleStartReply = () => {
-    if (comment.deleted) {
+    if (comment.deleted || !commentId) {
       return;
     }
 
-    onStartReply(comment.commentId);
+    onStartReply(commentId);
+  };
+
+  const handleReport = () => {
+    if (!canReport) {
+      return;
+    }
+
+    onReport(commentId);
   };
 
   const handleToggleExpanded = () => {
-    onToggleExpanded(
-      comment.commentId,
-    );
+    if (!commentId) {
+      return;
+    }
+
+    onToggleExpanded(commentId);
   };
 
   const handleSubmitReply = () => {
-    void onSubmitReply(
-      comment.commentId,
-    );
+    if (!commentId) {
+      return;
+    }
+
+    void onSubmitReply(commentId);
   };
 
   return (
     <div
       className="token-comment-item"
-      style={{
-        marginLeft: `${indent}px`,
-      }}
+      style={{ marginLeft: `${indent}px` }}
     >
       <div className="token-comment-item__body">
         <div className="token-comment-item__header">
-          <TokenCommentAuthor
-            comment={comment}
-          />
+          <TokenCommentAuthor comment={comment} />
 
           {comment.createdAt ? (
             <time
               className="token-comment-item__date"
               dateTime={comment.createdAt}
             >
-              {formatDateTime(
-                comment.createdAt,
-              )}
+              {formatDateTime(comment.createdAt)}
             </time>
           ) : null}
         </div>
@@ -255,13 +248,21 @@ export default function TokenCommentItem({
             返信
           </button>
 
+          {canReport ? (
+            <button
+              type="button"
+              className="token-comment-item__action token-comment-item__action--report"
+              onClick={handleReport}
+            >
+              通報
+            </button>
+          ) : null}
+
           {hasChildren ? (
             <button
               type="button"
               className="token-comment-item__action"
-              onClick={
-                handleToggleExpanded
-              }
+              onClick={handleToggleExpanded}
             >
               {isExpanded
                 ? "返信を閉じる"
@@ -278,61 +279,34 @@ export default function TokenCommentItem({
           <TokenCommentReplyForm
             value={replyBody}
             replyPosting={replyPosting}
-            onChange={
-              onReplyBodyChange
-            }
+            onChange={onReplyBodyChange}
             onCancel={onCancelReply}
-            onSubmit={
-              handleSubmitReply
-            }
+            onSubmit={handleSubmitReply}
           />
         ) : null}
 
-        {isExpanded &&
-        node.children.length > 0 ? (
+        {isExpanded && node.children.length > 0 ? (
           <div className="token-comment-item__children">
-            {node.children.map(
-              (child) => (
-                <TokenCommentItem
-                  key={
-                    child.comment
-                      .commentId
-                  }
-                  node={child}
-                  expandedIds={
-                    expandedIds
-                  }
-                  replyingCommentId={
-                    replyingCommentId
-                  }
-                  replyBody={
-                    replyBody
-                  }
-                  replyPosting={
-                    replyPosting
-                  }
-                  onToggleExpanded={
-                    onToggleExpanded
-                  }
-                  onLike={onLike}
-                  onDislike={
-                    onDislike
-                  }
-                  onStartReply={
-                    onStartReply
-                  }
-                  onCancelReply={
-                    onCancelReply
-                  }
-                  onReplyBodyChange={
-                    onReplyBodyChange
-                  }
-                  onSubmitReply={
-                    onSubmitReply
-                  }
-                />
-              ),
-            )}
+            {node.children.map((child) => (
+              <TokenCommentItem
+                key={child.comment.commentId}
+                tokenBlueprintId={normalizedTokenBlueprintId}
+                currentAvatarId={normalizedCurrentAvatarId}
+                node={child}
+                expandedIds={expandedIds}
+                replyingCommentId={replyingCommentId}
+                replyBody={replyBody}
+                replyPosting={replyPosting}
+                onToggleExpanded={onToggleExpanded}
+                onLike={onLike}
+                onDislike={onDislike}
+                onStartReply={onStartReply}
+                onCancelReply={onCancelReply}
+                onReplyBodyChange={onReplyBodyChange}
+                onSubmitReply={onSubmitReply}
+                onReport={onReport}
+              />
+            ))}
           </div>
         ) : null}
       </div>

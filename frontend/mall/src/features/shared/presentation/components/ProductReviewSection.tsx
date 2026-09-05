@@ -1,8 +1,10 @@
-// frontend/amol/src/features/shared/presentation/components/ProductReviewSection.tsx
+// frontend/mall/src/features/shared/presentation/components/ProductReviewSection.tsx
 
 import { useState } from "react";
 
 import { formatDateTime } from "../../../../components/utils/date";
+import ReviewReportModal from "../../../review-report/components/ReviewReportModal";
+import { useReviewReport } from "../../../review-report/hooks/useReviewReport";
 
 import "../../styles/product-review.css";
 
@@ -21,6 +23,8 @@ export type ProductReviewItem = {
 
 export type ProductReviewSectionProps = {
   items: ProductReviewItem[];
+  productBlueprintId?: string | null;
+  currentAvatarId?: string | null;
   averageRating?: number | null;
   totalCount?: number | null;
   loading?: boolean;
@@ -42,6 +46,8 @@ function renderRatingStars(value?: number | null): string {
 
 export default function ProductReviewSection({
   items,
+  productBlueprintId,
+  currentAvatarId,
   averageRating,
   totalCount,
   loading = false,
@@ -52,79 +58,141 @@ export default function ProductReviewSection({
   className,
 }: ProductReviewSectionProps) {
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
+  const {
+    target,
+    isOpen,
+    reason,
+    detail,
+    submitting,
+    error: reportError,
+    result,
+    canSubmit,
+    openProductBlueprintReviewReport,
+    close: closeReport,
+    setReason,
+    setDetail,
+    submit,
+  } = useReviewReport();
 
   const safeItems = Array.isArray(items) ? items : [];
   const safeErrorMessage = errorMessage?.trim() || "";
+  const normalizedProductBlueprintId = productBlueprintId?.trim() || "";
+  const normalizedCurrentAvatarId = currentAvatarId?.trim() || "";
   const hasSummary = Number.isFinite(averageRating) || Number.isFinite(totalCount);
   const hasMoreReviews = safeItems.length > 1;
   const visibleItems = reviewsExpanded ? safeItems : safeItems.slice(0, 1);
 
+  const handleReport = (review: ProductReviewItem) => {
+    const reviewId = review.id?.trim() || "";
+    const reviewAvatarId = review.avatarId?.trim() || "";
+
+    if (!normalizedProductBlueprintId || !normalizedCurrentAvatarId || !reviewId) {
+      return;
+    }
+
+    if (reviewAvatarId && reviewAvatarId === normalizedCurrentAvatarId) {
+      return;
+    }
+
+    openProductBlueprintReviewReport({
+      productBlueprintId: normalizedProductBlueprintId,
+      reviewId,
+    });
+  };
+
   return (
-    <section className={joinClassNames("product-review", className)}>
-      <div className="product-review__header">
-        <h2 className="product-review__heading">レビュー</h2>
-        {loading ? <span className="product-review__status">読み込み中...</span> : null}
-      </div>
-
-      {hasSummary ? (
-        <div className="product-review__summary">
-          {Number.isFinite(averageRating) ? (
-            <strong className="product-review__average">{Number(averageRating).toFixed(1)}</strong>
-          ) : null}
-          {Number.isFinite(totalCount) ? (
-            <span className="product-review__count">{Number(totalCount)}件</span>
-          ) : null}
+    <>
+      <section className={joinClassNames("product-review", className)}>
+        <div className="product-review__header">
+          <h2 className="product-review__heading">レビュー</h2>
+          {loading ? <span className="product-review__status">読み込み中...</span> : null}
         </div>
-      ) : null}
 
-      {safeErrorMessage ? (
-        <p className="product-review__error" role="alert">
-          {safeErrorMessage}
-        </p>
-      ) : null}
-
-      {!loading && !safeErrorMessage && safeItems.length === 0 ? (
-        <p className="product-review__empty">{emptyText}</p>
-      ) : null}
-
-      {!safeErrorMessage && safeItems.length > 0 ? (
-        <>
-          <div className="product-review__list">
-            {visibleItems.map((review) => (
-              <ProductReviewItemView
-                key={review.id}
-                review={review}
-                showHelpfulVotes={showHelpfulVotes}
-                onAvatarClick={onAvatarClick}
-              />
-            ))}
+        {hasSummary ? (
+          <div className="product-review__summary">
+            {Number.isFinite(averageRating) ? (
+              <strong className="product-review__average">{Number(averageRating).toFixed(1)}</strong>
+            ) : null}
+            {Number.isFinite(totalCount) ? (
+              <span className="product-review__count">{Number(totalCount)}件</span>
+            ) : null}
           </div>
+        ) : null}
 
-          {hasMoreReviews ? (
-            <button
-              type="button"
-              className="product-review__toggle"
-              aria-expanded={reviewsExpanded}
-              onClick={() => setReviewsExpanded((current) => !current)}
-            >
-              {reviewsExpanded ? "閉じる" : "詳しく見る"}
-            </button>
-          ) : null}
-        </>
-      ) : null}
-    </section>
+        {safeErrorMessage ? (
+          <p className="product-review__error" role="alert">
+            {safeErrorMessage}
+          </p>
+        ) : null}
+
+        {!loading && !safeErrorMessage && safeItems.length === 0 ? (
+          <p className="product-review__empty">{emptyText}</p>
+        ) : null}
+
+        {!safeErrorMessage && safeItems.length > 0 ? (
+          <>
+            <div className="product-review__list">
+              {visibleItems.map((review) => (
+                <ProductReviewItemView
+                  key={review.id}
+                  review={review}
+                  productBlueprintId={normalizedProductBlueprintId}
+                  currentAvatarId={normalizedCurrentAvatarId}
+                  showHelpfulVotes={showHelpfulVotes}
+                  onAvatarClick={onAvatarClick}
+                  onReport={handleReport}
+                />
+              ))}
+            </div>
+
+            {hasMoreReviews ? (
+              <button
+                type="button"
+                className="product-review__toggle"
+                aria-expanded={reviewsExpanded}
+                onClick={() => setReviewsExpanded((current) => !current)}
+              >
+                {reviewsExpanded ? "閉じる" : "詳しく見る"}
+              </button>
+            ) : null}
+          </>
+        ) : null}
+      </section>
+
+      <ReviewReportModal
+        open={isOpen}
+        targetType={target?.type}
+        reason={reason}
+        detail={detail}
+        submitting={submitting}
+        error={reportError}
+        result={result}
+        canSubmit={canSubmit}
+        onReasonChange={setReason}
+        onDetailChange={setDetail}
+        onSubmit={submit}
+        onClose={closeReport}
+      />
+    </>
   );
 }
 
 function ProductReviewItemView({
   review,
+  productBlueprintId,
+  currentAvatarId,
   showHelpfulVotes,
   onAvatarClick,
+  onReport,
 }: {
   review: ProductReviewItem;
+  productBlueprintId: string;
+  currentAvatarId: string;
   showHelpfulVotes: boolean;
   onAvatarClick?: (avatarId: string) => void;
+  onReport?: (review: ProductReviewItem) => void;
 }) {
+  const reviewId = review.id?.trim() || "";
   const avatarId = review.avatarId?.trim() || "";
   const avatarName = review.avatarName?.trim() || "匿名ユーザー";
   const avatarIcon = review.avatarIcon?.trim() || "";
@@ -133,6 +201,8 @@ function ProductReviewItemView({
   const reviewedAt = review.reviewedAt?.trim() || "";
   const reviewedAtLabel = reviewedAt ? formatDateTime(reviewedAt) : "-";
   const canOpenAvatar = Boolean(avatarId && onAvatarClick);
+  const isOwnReview = Boolean(currentAvatarId && avatarId && currentAvatarId === avatarId);
+  const canReport = Boolean(productBlueprintId && currentAvatarId && reviewId && !isOwnReview && onReport);
 
   const avatarContent = (
     <>
@@ -173,6 +243,17 @@ function ProductReviewItemView({
         ) : (
           <div className="product-review__author">{avatarContent}</div>
         )}
+
+        {canReport ? (
+          <button
+            type="button"
+            className="product-review__report"
+            aria-label={`${avatarName}のレビューを通報`}
+            onClick={() => onReport?.(review)}
+          >
+            通報
+          </button>
+        ) : null}
       </div>
 
       {reviewTitle ? <h3 className="product-review__title">{reviewTitle}</h3> : null}

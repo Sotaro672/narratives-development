@@ -1,7 +1,11 @@
-// frontend/amol/src/features/market/presentation/components/MarketDetailContent.tsx
+// frontend/mall/src/features/market/presentation/components/MarketDetailContent.tsx
+
+import { useEffect, useState } from "react";
 
 import type { UseMarketDetailPageResult } from "../hooks/useMarketDetailPage";
 
+import { getMyAvatar } from "../../../avatar/api/avatarApi";
+import { useAuthState } from "../../../shared/hooks/useAuthState";
 import AvatarSummaryCard from "../../../shared/presentation/components/AvatarSummaryCard";
 import ProductDescription from "../../../shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../../../shared/presentation/components/ProductDetailLayout";
@@ -52,6 +56,9 @@ export default function MarketDetailContent({
   onOpenSeller,
   onOpenResaleChat,
 }: MarketDetailContentProps) {
+  const { authResolved, isLoggedIn } = useAuthState();
+  const [currentAvatarId, setCurrentAvatarId] = useState("");
+
   const {
     item,
     reviews,
@@ -76,6 +83,37 @@ export default function MarketDetailContent({
     handleNextMedia,
     handleSelectMedia,
   } = detail;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCurrentAvatar() {
+      if (!authResolved || !isLoggedIn) {
+        setCurrentAvatarId("");
+        return;
+      }
+
+      try {
+        const avatar = await getMyAvatar();
+
+        if (cancelled) {
+          return;
+        }
+
+        setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
+      } catch {
+        if (!cancelled) {
+          setCurrentAvatarId("");
+        }
+      }
+    }
+
+    void loadCurrentAvatar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authResolved, isLoggedIn]);
 
   return (
     <div className="page-layout market-detail-page">
@@ -149,6 +187,8 @@ export default function MarketDetailContent({
 
           <ProductReviewSection
             items={reviews?.items ?? []}
+            productBlueprintId={item.productBlueprintId}
+            currentAvatarId={isLoggedIn ? currentAvatarId : ""}
             loading={loadingReviews}
             errorMessage={reviewsError}
           />

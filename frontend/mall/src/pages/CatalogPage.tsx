@@ -1,11 +1,13 @@
-// frontend/amol/src/pages/CatalogPage.tsx
+// frontend/mall/src/pages/CatalogPage.tsx
 
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
 import { formatPrice } from "../components/utils/price";
 
+import { getMyAvatar } from "../features/avatar/api/avatarApi";
 import MeasurementTable from "../features/catalog/presentation/components/MeasurementTable";
 import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
 import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
@@ -26,7 +28,8 @@ import "../styles/catalog-page.css";
 
 export default function CatalogPage() {
   const navigate = useNavigate();
-  const { isLoggedIn } = useAuthState();
+  const { authResolved, isLoggedIn } = useAuthState();
+  const [currentAvatarId, setCurrentAvatarId] = useState("");
 
   const {
     catalog,
@@ -71,6 +74,37 @@ export default function CatalogPage() {
     handleToggleLike,
     handleAddToCart,
   } = useCatalogPage();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCurrentAvatar() {
+      if (!authResolved || !isLoggedIn) {
+        setCurrentAvatarId("");
+        return;
+      }
+
+      try {
+        const avatar = await getMyAvatar();
+
+        if (cancelled) {
+          return;
+        }
+
+        setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
+      } catch {
+        if (!cancelled) {
+          setCurrentAvatarId("");
+        }
+      }
+    }
+
+    void loadCurrentAvatar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authResolved, isLoggedIn]);
 
   const handleBackButtonClick = () => {
     if (isLoggedIn) {
@@ -210,6 +244,8 @@ export default function CatalogPage() {
 
             <ProductReviewSection
               items={reviewItems}
+              productBlueprintId={catalog.productBlueprint.id}
+              currentAvatarId={isLoggedIn ? currentAvatarId : ""}
               averageRating={reviewSummary?.averageRating}
               totalCount={reviewSummary?.totalCount}
               errorMessage={reviewErrorMessage}

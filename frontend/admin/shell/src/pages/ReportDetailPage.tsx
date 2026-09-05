@@ -102,7 +102,8 @@ export default function ReportDetailPage() {
     hasNextPage,
     deciding,
     decisionError,
-    canDecide,
+    canKeep,
+    canRemove,
     setPage,
     reload,
     keep,
@@ -423,14 +424,18 @@ export default function ReportDetailPage() {
                     />
                   </dl>
                 </section>
-              ) : (
+              ) : null}
+
+              {reportCase.status !== "REMOVED" ? (
                 <section className="report-detail-page__decision">
                   <div>
                     <h2 className="report-detail-page__section-title">
-                      裁定
+                      {reportCase.status === "KEPT" ? "裁定変更" : "裁定"}
                     </h2>
                     <p className="report-detail-page__description">
-                      投稿を維持するか、削除するかを決定します。
+                      {reportCase.status === "KEPT"
+                        ? "この投稿は維持済みです。必要な場合は削除へ変更できます。"
+                        : "投稿を維持するか、削除するかを決定します。"}
                     </p>
                   </div>
 
@@ -444,7 +449,11 @@ export default function ReportDetailPage() {
                       rows={5}
                       maxLength={2000}
                       disabled={deciding}
-                      placeholder="裁定の根拠を入力してください。"
+                      placeholder={
+                        reportCase.status === "KEPT"
+                          ? "削除へ変更する根拠を入力してください。"
+                          : "裁定の根拠を入力してください。"
+                      }
                       onChange={(event) =>
                         setDecisionReason(event.target.value)
                       }
@@ -461,30 +470,34 @@ export default function ReportDetailPage() {
                   ) : null}
 
                   <div className="report-detail-page__decision-actions">
-                    <button
-                      type="button"
-                      className="report-detail-page__decision-button"
-                      disabled={!canDecide || !decisionReason.trim()}
-                      onClick={() => void handleKeep()}
-                    >
-                      {deciding ? "処理中..." : "維持する"}
-                    </button>
+                    {canKeep ? (
+                      <button
+                        type="button"
+                        className="report-detail-page__decision-button"
+                        disabled={deciding || !decisionReason.trim()}
+                        onClick={() => void handleKeep()}
+                      >
+                        {deciding ? "処理中..." : "維持する"}
+                      </button>
+                    ) : null}
 
-                    <button
-                      type="button"
-                      className="report-detail-page__decision-button report-detail-page__decision-button--danger"
-                      disabled={!canDecide || !decisionReason.trim()}
-                      onClick={() => void handleRemove()}
-                    >
-                      {deciding ? "処理中..." : "削除する"}
-                    </button>
+                    {canRemove ? (
+                      <button
+                        type="button"
+                        className="report-detail-page__decision-button report-detail-page__decision-button--danger"
+                        disabled={deciding || !decisionReason.trim()}
+                        onClick={() => void handleRemove()}
+                      >
+                        {deciding ? "処理中..." : "削除する"}
+                      </button>
+                    ) : null}
                   </div>
 
                   <p className="report-detail-page__decision-note">
                     「削除する」を選択すると、対象コンテンツの削除に成功した後でケースが削除済みとして確定します。
                   </p>
                 </section>
-              )}
+              ) : null}
             </div>
           }
         />

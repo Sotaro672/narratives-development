@@ -1,4 +1,4 @@
-/* frontend/amol/src/features/shared/styles/product-review.css */
+/* frontend\mall\src\features\shared\styles\product-review.css */
 
 .product-review {
   display: flex;
@@ -88,6 +88,8 @@
 .product-review__item-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -99,7 +101,9 @@
 }
 
 .product-review__author--button {
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -166,6 +170,32 @@
   font-weight: 600;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.product-review__report {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #777;
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.product-review__report:hover {
+  background: #f7f7f7;
+  color: #b42318;
+}
+
+.product-review__report:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .product-review__title {
@@ -243,6 +273,10 @@
     padding-top: 14px;
   }
 
+  .product-review__item-header {
+    gap: 8px;
+  }
+
   .product-review__avatar,
   .product-review__avatar-placeholder {
     width: 36px;
@@ -256,6 +290,11 @@
 
   .product-review__title {
     font-size: 14px;
+  }
+
+  .product-review__report {
+    padding: 4px 6px;
+    font-size: 11px;
   }
 
   .product-review__toggle {

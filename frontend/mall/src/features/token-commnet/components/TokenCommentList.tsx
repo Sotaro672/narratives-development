@@ -4,6 +4,8 @@ import TokenCommentItem from "./TokenCommentItem";
 import type { TokenCommentTreeNode } from "../../shared/types/tokenCommentTypes";
 
 type TokenCommentListProps = {
+  tokenBlueprintId: string;
+  currentAvatarId: string;
   commentTree: TokenCommentTreeNode[];
   commentsLoading: boolean;
   expandedIds: Set<string>;
@@ -17,9 +19,12 @@ type TokenCommentListProps = {
   onCancelReply: () => void;
   onReplyBodyChange: (value: string) => void;
   onSubmitReply: (parentCommentId: string) => void | Promise<void>;
+  onReport: (commentId: string) => void;
 };
 
 export default function TokenCommentList({
+  tokenBlueprintId,
+  currentAvatarId,
   commentTree,
   commentsLoading,
   expandedIds,
@@ -33,6 +38,7 @@ export default function TokenCommentList({
   onCancelReply,
   onReplyBodyChange,
   onSubmitReply,
+  onReport,
 }: TokenCommentListProps) {
   if (commentsLoading && commentTree.length === 0) {
     return (
@@ -59,6 +65,8 @@ export default function TokenCommentList({
       {commentTree.map((node) => (
         <TokenCommentItem
           key={node.comment.commentId}
+          tokenBlueprintId={tokenBlueprintId}
+          currentAvatarId={currentAvatarId}
           node={node}
           expandedIds={expandedIds}
           replyingCommentId={replyingCommentId}
@@ -71,6 +79,7 @@ export default function TokenCommentList({
           onCancelReply={onCancelReply}
           onReplyBodyChange={onReplyBodyChange}
           onSubmitReply={onSubmitReply}
+          onReport={onReport}
         />
       ))}
     </div>

@@ -1,0 +1,219 @@
+// frontend/mall/src/features/review-report/hooks/useReviewReport.ts
+
+import { useCallback, useRef, useState } from "react";
+
+import type {
+  ReviewReportReason,
+  ReviewReportResponse,
+} from "../../shared/types/reviewReport";
+import {
+  reportProductBlueprintReview,
+  reportTokenBlueprintComment,
+} from "../api/reviewReportApi";
+
+export type ReviewReportTarget =
+  | {
+      type: "PRODUCT_BLUEPRINT_REVIEW";
+      productBlueprintId: string;
+      reviewId: string;
+    }
+  | {
+      type: "TOKEN_BLUEPRINT_COMMENT";
+      tokenBlueprintId: string;
+      commentId: string;
+    };
+
+type OpenProductBlueprintReviewReportInput = {
+  productBlueprintId: string;
+  reviewId: string;
+};
+
+type OpenTokenBlueprintCommentReportInput = {
+  tokenBlueprintId: string;
+  commentId: string;
+};
+
+const DEFAULT_REASON: ReviewReportReason = "SPAM";
+
+function normalizeId(
+  value: string,
+  fieldName: string,
+): string {
+  const normalized = value.trim();
+
+  if (!normalized) {
+    throw new Error(`${fieldName}が指定されていません。`);
+  }
+
+  return normalized;
+}
+
+export function useReviewReport() {
+  const submittingRef = useRef(false);
+
+  const [target, setTarget] = useState<ReviewReportTarget | null>(null);
+  const [reason, setReasonState] = useState<ReviewReportReason>(DEFAULT_REASON);
+  const [detail, setDetailState] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<ReviewReportResponse | null>(null);
+
+  const resetForm = useCallback(() => {
+    setReasonState(DEFAULT_REASON);
+    setDetailState("");
+    setError(null);
+    setResult(null);
+  }, []);
+
+  const openProductBlueprintReviewReport = useCallback(
+    (input: OpenProductBlueprintReviewReportInput) => {
+      const productBlueprintId = normalizeId(
+        input.productBlueprintId,
+        "productBlueprintId",
+      );
+      const reviewId = normalizeId(input.reviewId, "reviewId");
+
+      resetForm();
+      setTarget({
+        type: "PRODUCT_BLUEPRINT_REVIEW",
+        productBlueprintId,
+        reviewId,
+      });
+    },
+    [resetForm],
+  );
+
+  const openTokenBlueprintCommentReport = useCallback(
+    (input: OpenTokenBlueprintCommentReportInput) => {
+      const tokenBlueprintId = normalizeId(
+        input.tokenBlueprintId,
+        "tokenBlueprintId",
+      );
+      const commentId = normalizeId(input.commentId, "commentId");
+
+      resetForm();
+      setTarget({
+        type: "TOKEN_BLUEPRINT_COMMENT",
+        tokenBlueprintId,
+        commentId,
+      });
+    },
+    [resetForm],
+  );
+
+  const close = useCallback(() => {
+    if (submittingRef.current) {
+      return;
+    }
+
+    setTarget(null);
+    resetForm();
+  }, [resetForm]);
+
+  const setReason = useCallback((value: ReviewReportReason) => {
+    setReasonState(value);
+    setError(null);
+
+    if (value !== "OTHER") {
+      setDetailState("");
+    }
+  }, []);
+
+  const setDetail = useCallback((value: string) => {
+    setDetailState(value);
+    setError(null);
+  }, []);
+
+  const submit = useCallback(async (): Promise<ReviewReportResponse | null> => {
+    if (submittingRef.current) {
+      return null;
+    }
+
+    if (!target) {
+      setError("通報対象が指定されていません。");
+      return null;
+    }
+
+    const normalizedDetail = detail.trim();
+
+    if (reason === "OTHER" && !normalizedDetail) {
+      setError("「その他」を選択した場合は詳細を入力してください。");
+      return null;
+    }
+
+    submittingRef.current = true;
+    setSubmitting(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      let response: ReviewReportResponse;
+
+      switch (target.type) {
+        case "PRODUCT_BLUEPRINT_REVIEW":
+          response = await reportProductBlueprintReview({
+            productBlueprintId: target.productBlueprintId,
+            reviewId: target.reviewId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
+
+        case "TOKEN_BLUEPRINT_COMMENT":
+          response = await reportTokenBlueprintComment({
+            tokenBlueprintId: target.tokenBlueprintId,
+            commentId: target.commentId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
+      }
+
+      setResult(response);
+      return response;
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "通報の送信に失敗しました。",
+      );
+      return null;
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }, [
+    target,
+    reason,
+    detail,
+  ]);
+
+  const isOpen = target !== null;
+  const requiresDetail = reason === "OTHER";
+  const canSubmit =
+    isOpen &&
+    !submitting &&
+    (!requiresDetail || detail.trim().length > 0);
+  const submitted = result !== null;
+  const alreadyReported = result !== null && !result.reportCreated;
+
+  return {
+    target,
+    isOpen,
+    reason,
+    detail,
+    submitting,
+    error,
+    result,
+    submitted,
+    alreadyReported,
+    requiresDetail,
+    canSubmit,
+    openProductBlueprintReviewReport,
+    openTokenBlueprintCommentReport,
+    close,
+    setReason,
+    setDetail,
+    submit,
+  };
+}

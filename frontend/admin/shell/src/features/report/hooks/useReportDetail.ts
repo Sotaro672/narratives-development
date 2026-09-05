@@ -173,9 +173,7 @@ export function useReportDetail(caseId: string | undefined) {
       return;
     }
 
-    setPerPageState(
-      Math.max(1, Math.min(200, Math.trunc(value))),
-    );
+    setPerPageState(Math.max(1, Math.min(200, Math.trunc(value))));
     setPageState(DEFAULT_PAGE);
   }, []);
 
@@ -232,13 +230,10 @@ export function useReportDetail(caseId: string | undefined) {
       setDecisionError(null);
 
       try {
-        const updatedCase = await decideReviewReport(
-          normalizedCaseId,
-          {
-            decision,
-            reason: normalizedReason,
-          },
-        );
+        const updatedCase = await decideReviewReport(normalizedCaseId, {
+          decision,
+          reason: normalizedReason,
+        });
 
         if (requestId !== decisionRequestIdRef.current) {
           return null;
@@ -282,7 +277,11 @@ export function useReportDetail(caseId: string | undefined) {
 
   const hasPreviousPage = page > 1;
   const hasNextPage = totalPages > 0 && page < totalPages;
-  const canDecide = reportCase?.status === "PENDING" && !deciding;
+  const canKeep = reportCase?.status === "PENDING" && !deciding;
+  const canRemove =
+    (reportCase?.status === "PENDING" || reportCase?.status === "KEPT") &&
+    !deciding;
+  const canDecide = canKeep || canRemove;
 
   return {
     reportCase,
@@ -304,6 +303,8 @@ export function useReportDetail(caseId: string | undefined) {
     deciding,
     decisionError,
     canDecide,
+    canKeep,
+    canRemove,
     setReporterType,
     setReporterId,
     setCompanyId,
