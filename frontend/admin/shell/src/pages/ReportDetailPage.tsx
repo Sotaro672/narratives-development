@@ -29,9 +29,9 @@ function getStatusLabel(
     case "PENDING":
       return "未対応";
     case "KEPT":
-      return "維持";
+      return targetType === "AVATAR" ? "変化なし" : "維持";
     case "REMOVED":
-      return targetType === "AVATAR" ? "利用停止" : "削除";
+      return targetType === "AVATAR" ? "再販利用停止" : "削除";
     default:
       return status;
   }
@@ -256,7 +256,10 @@ export default function ReportDetailPage() {
                     reportCase.targetType,
                   )}`}
                 >
-                  {getStatusLabel(reportCase.status, reportCase.targetType)}
+                  {getStatusLabel(
+                    reportCase.status,
+                    reportCase.targetType,
+                  )}
                 </Tab>
               </>
             ) : undefined
@@ -457,6 +460,7 @@ export default function ReportDetailPage() {
         <ReportDecisionModal
           open={decisionModalOpen}
           status={reportCase.status}
+          targetType={reportCase.targetType}
           decisionReason={decisionReason}
           deciding={deciding}
           decisionError={decisionAttempted ? decisionError : null}

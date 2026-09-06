@@ -1,7 +1,11 @@
-//frontend\admin\shell\src\features\report\components\ReportDecisionModal.tsx
+// frontend/admin/shell/src/features/report/components/ReportDecisionModal.tsx
+
 import { useEffect } from "react";
 
-import type { ReviewReportCaseStatus } from "../../../shared/type/reviewReport";
+import type {
+  ReviewReportCaseStatus,
+  ReviewReportTargetType,
+} from "../../../shared/type/reviewReport";
 import Button from "../../../shared/ui/Button/Button";
 
 import "./ReportDecisionModal.css";
@@ -9,6 +13,7 @@ import "./ReportDecisionModal.css";
 type ReportDecisionModalProps = {
   open: boolean;
   status: ReviewReportCaseStatus;
+  targetType?: ReviewReportTargetType;
   decisionReason: string;
   deciding: boolean;
   decisionError: string | null;
@@ -23,6 +28,7 @@ type ReportDecisionModalProps = {
 export default function ReportDecisionModal({
   open,
   status,
+  targetType,
   decisionReason,
   deciding,
   decisionError,
@@ -47,6 +53,30 @@ export default function ReportDecisionModal({
   if (!open) return null;
 
   const reasonRequired = !decisionReason.trim();
+  const isAvatar = targetType === "AVATAR";
+
+  const description = isAvatar
+    ? status === "KEPT"
+      ? "このアバターは変化なしで裁定済みです。必要な場合は再販サービス利用停止へ変更できます。"
+      : "アバターに変化を加えないか、再販サービスのみ利用停止にするかを決定します。"
+    : status === "KEPT"
+      ? "この投稿は維持済みです。必要な場合は削除へ変更できます。"
+      : "投稿を維持するか、削除するかを決定します。";
+
+  const placeholder = isAvatar
+    ? status === "KEPT"
+      ? "再販サービス利用停止へ変更する根拠を入力してください。"
+      : "裁定の根拠を入力してください。"
+    : status === "KEPT"
+      ? "削除へ変更する根拠を入力してください。"
+      : "裁定の根拠を入力してください。";
+
+  const note = isAvatar
+    ? "「再販利用停止」を選択すると、アバター自体は削除・停止せず、対象アバターの再販サービスのみ利用停止にします。"
+    : "「削除する」を選択すると、対象コンテンツの削除に成功した後でケースが削除済みとして確定します。";
+
+  const keepLabel = isAvatar ? "変化なし" : "維持する";
+  const removeLabel = isAvatar ? "再販利用停止" : "削除する";
 
   return (
     <div
@@ -71,9 +101,7 @@ export default function ReportDecisionModal({
               {status === "KEPT" ? "裁定変更" : "裁定"}
             </h2>
             <p className="report-decision-modal__description">
-              {status === "KEPT"
-                ? "この投稿は維持済みです。必要な場合は削除へ変更できます。"
-                : "投稿を維持するか、削除するかを決定します。"}
+              {description}
             </p>
           </div>
 
@@ -114,11 +142,7 @@ export default function ReportDecisionModal({
               maxLength={2000}
               disabled={deciding}
               autoFocus
-              placeholder={
-                status === "KEPT"
-                  ? "削除へ変更する根拠を入力してください。"
-                  : "裁定の根拠を入力してください。"
-              }
+              placeholder={placeholder}
               onChange={(event) =>
                 onChangeDecisionReason(event.target.value)
               }
@@ -135,7 +159,7 @@ export default function ReportDecisionModal({
           ) : null}
 
           <p className="report-decision-modal__note">
-            「削除する」を選択すると、対象コンテンツの削除に成功した後でケースが削除済みとして確定します。
+            {note}
           </p>
         </div>
 
@@ -158,7 +182,7 @@ export default function ReportDecisionModal({
                 disabled={reasonRequired}
                 onClick={() => void onKeep()}
               >
-                維持する
+                {keepLabel}
               </Button>
             ) : null}
 
@@ -170,7 +194,7 @@ export default function ReportDecisionModal({
                 disabled={reasonRequired}
                 onClick={() => void onRemove()}
               >
-                削除する
+                {removeLabel}
               </Button>
             ) : null}
           </div>
