@@ -12,6 +12,9 @@ import {
   type ReviewReportDecisionNotification,
   type ReviewReportDecisionNotificationPage,
 } from "../../infrastructure/reviewReportDecisionNotificationApi";
+import {
+  emitReviewReportDecisionNotificationChanged,
+} from "../notificationEvent";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;
@@ -145,6 +148,7 @@ export function useReviewReportDecisionNotifications(
         }));
 
         await load();
+        emitReviewReportDecisionNotificationChanged();
 
         return updated;
       } catch (markReadError) {

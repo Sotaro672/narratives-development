@@ -9,6 +9,9 @@ import {
 import {
   listReviewReportDecisionNotificationsApi,
 } from "../../infrastructure/reviewReportDecisionNotificationApi";
+import {
+  subscribeReviewReportDecisionNotificationChanged,
+} from "../notificationEvent";
 
 const UNREAD_COUNT_PAGE = 1;
 const UNREAD_COUNT_PER_PAGE = 1;
@@ -39,14 +42,9 @@ export function useReviewReportDecisionNotificationUnreadCount(
 ): UseReviewReportDecisionNotificationUnreadCountResult {
   const enabled = params.enabled ?? true;
 
-  const [unreadCount, setUnreadCount] =
-    useState(0);
-
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -84,6 +82,10 @@ export function useReviewReportDecisionNotificationUnreadCount(
 
   useEffect(() => {
     void load();
+
+    return subscribeReviewReportDecisionNotificationChanged(() => {
+      void load();
+    });
   }, [load]);
 
   return {

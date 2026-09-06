@@ -1,15 +1,6 @@
 // frontend/amol/src/pages/AnnouncementPage.tsx
 
-import {
-  useCallback,
-  useMemo,
-  useState,
-} from "react";
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -20,11 +11,10 @@ import {
   useMarkAnnouncementReadMutation,
 } from "../features/announcement/hooks/useAnnouncementsQuery";
 import {
-  fetchMeReviewReportDecisionNotifications,
-  markMeReviewReportDecisionNotificationRead,
-  type ReviewReportDecisionNotification,
-  type ReviewReportDecisionNotificationPage,
-} from "../features/notification/infrastructure/reviewReportDecisionNotificationApi";
+  useMarkReviewReportDecisionNotificationReadMutation,
+  useReviewReportDecisionNotificationsQuery,
+} from "../features/notification/hooks/useReviewReportDecisionNotificationsQuery";
+import type { ReviewReportDecisionNotification } from "../features/notification/infrastructure/reviewReportDecisionNotificationApi";
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 import {
   getReviewReportReasonLabel,
@@ -33,12 +23,6 @@ import {
 
 import "../styles/page-layout.css";
 import "../styles/announcement-page.css";
-
-const REVIEW_REPORT_DECISION_NOTIFICATION_QUERY_KEY = [
-  "reviewReportDecisionNotifications",
-  "me",
-  "list",
-] as const;
 
 type AnnouncementFeedItem = {
   kind: "announcement";
@@ -108,10 +92,11 @@ function getDecisionStatusLabel(
 
 export default function AnnouncementPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const [navigatingId, setNavigatingId] = useState<string | null>(null);
-  const [markingDecisionId, setMarkingDecisionId] = useState<string | null>(null);
+  const [markingDecisionId, setMarkingDecisionId] = useState<string | null>(
+    null,
+  );
   const [actionError, setActionError] = useState<string>("");
 
   const announcementsQuery = useAnnouncementsQuery({
@@ -119,46 +104,17 @@ export default function AnnouncementPage() {
     perPage: 100,
   });
 
-  const decisionNotificationsQuery = useQuery({
-    queryKey: REVIEW_REPORT_DECISION_NOTIFICATION_QUERY_KEY,
-    queryFn: ({ signal }) =>
-      fetchMeReviewReportDecisionNotifications({
-        page: 1,
-        perPage: 100,
-        signal,
-      }),
-  });
+  const decisionNotificationsQuery =
+    useReviewReportDecisionNotificationsQuery({
+      page: 1,
+      perPage: 100,
+    });
 
   const markAnnouncementReadMutation =
     useMarkAnnouncementReadMutation();
 
-  const markDecisionReadMutation = useMutation({
-    mutationFn: markMeReviewReportDecisionNotificationRead,
-    onSuccess: (updated) => {
-      queryClient.setQueryData<ReviewReportDecisionNotificationPage>(
-        REVIEW_REPORT_DECISION_NOTIFICATION_QUERY_KEY,
-        (current) => {
-          if (!current) {
-            return current;
-          }
-
-          return {
-            ...current,
-            items: current.items.map((notification) =>
-              notification.id === updated.id
-                ? updated
-                : notification,
-            ),
-          };
-        },
-      );
-    },
-    onSettled: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: REVIEW_REPORT_DECISION_NOTIFICATION_QUERY_KEY,
-      });
-    },
-  });
+  const markDecisionReadMutation =
+    useMarkReviewReportDecisionNotificationReadMutation();
 
   const announcements = useMemo(
     () => announcementsQuery.data?.items ?? [],
@@ -171,8 +127,8 @@ export default function AnnouncementPage() {
   );
 
   const items = useMemo<NotificationFeedItem[]>(() => {
-    const announcementItems: AnnouncementFeedItem[] =
-      announcements.map((announcement) => ({
+    const announcementItems: AnnouncementFeedItem[] = announcements.map(
+      (announcement) => ({
         kind: "announcement",
         key: `announcement:${announcement.id}`,
         occurredAt:
@@ -180,7 +136,8 @@ export default function AnnouncementPage() {
           announcement.createdAt ??
           "",
         announcement,
-      }));
+      }),
+    );
 
     const decisionItems: ReviewReportDecisionFeedItem[] =
       decisionNotifications.map((notification) => ({
@@ -192,18 +149,12 @@ export default function AnnouncementPage() {
         notification,
       }));
 
-    return [
-      ...announcementItems,
-      ...decisionItems,
-    ].sort(
+    return [...announcementItems, ...decisionItems].sort(
       (left, right) =>
         toTimestamp(right.occurredAt) -
         toTimestamp(left.occurredAt),
     );
-  }, [
-    announcements,
-    decisionNotifications,
-  ]);
+  }, [announcements, decisionNotifications]);
 
   const loading =
     announcementsQuery.isPending ||
