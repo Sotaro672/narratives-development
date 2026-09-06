@@ -53,6 +53,26 @@ func (u *OrderUsecase) Create(
 ) (orderdom.Order, error) {
 	now := u.now().UTC()
 
+	// 再販サービス利用停止中のAvatarは、新たなresale商品の注文を作成できない。
+	// 通常商品のみの注文、既に成立済みOrder/Tradeの閲覧・取消・返品などは対象外。
+	hasResaleItem := false
+	for _, item := range in.Items {
+		if item.Type == orderdom.OrderItemTypeResale {
+			hasResaleItem = true
+			break
+		}
+	}
+
+	if hasResaleItem {
+		if err := checkAvatarResaleAccess(
+			ctx,
+			u.avatarResaleAccessChecker,
+			in.AvatarID,
+		); err != nil {
+			return orderdom.Order{}, err
+		}
+	}
+
 	createdAt := now
 	if in.CreatedAt != nil && !in.CreatedAt.IsZero() {
 		createdAt = in.CreatedAt.UTC()
@@ -157,7 +177,6 @@ func (u *OrderUsecase) Create(
 	// Orderは既に永続化済みのため、cart削除はbest-effortとする。
 	if u.cartRepo != nil {
 		cartID := created.CartID
-
 		if cartID != "" {
 			_ = u.cartRepo.DeleteByAvatarID(
 				ctx,
@@ -214,14 +233,12 @@ func (u *OrderUsecase) sendResaleOrderNotificationsBestEffort(
 		if item.Type != orderdom.OrderItemTypeResale {
 			continue
 		}
-
 		if item.IsCancelled {
 			continue
 		}
 
 		resaleID := item.ResaleID
 		sellerUserID := item.SellerSnapshot.UserID
-
 		if resaleID == "" || sellerUserID == "" {
 			continue
 		}
