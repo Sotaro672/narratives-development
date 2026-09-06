@@ -364,6 +364,13 @@ func (c *ReportCase) IncrementReportCount(now time.Time) error {
 		return ErrInvalidReportCount
 	}
 
+	if c.Status == CaseStatusKept {
+		c.Status = CaseStatusPending
+		c.DecidedAt = nil
+		c.DecidedBy = ""
+		c.DecisionReason = ""
+	}
+
 	c.ReportCount++
 	c.UpdatedAt = now.UTC()
 	return nil
@@ -550,12 +557,14 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		if rating == nil || *rating < 1 || *rating > 5 {
 			return nil, ErrInvalidSnapshotRating
 		}
+
 		value := *rating
 		return &value, nil
 	case TargetTypeTokenBlueprintComment:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}
+
 		return nil, nil
 	default:
 		return nil, ErrInvalidTargetType

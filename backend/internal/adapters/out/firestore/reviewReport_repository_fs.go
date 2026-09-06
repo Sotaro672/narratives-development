@@ -27,7 +27,11 @@ type ReviewReportRepositoryFS struct {
 }
 
 func NewReviewReportRepositoryFS(client *firestore.Client) *ReviewReportRepositoryFS {
-	return &ReviewReportRepositoryFS{client: client, caseCollection: defaultReviewReportCaseCollection, reportCollection: defaultReviewReportSubCollection}
+	return &ReviewReportRepositoryFS{
+		client:           client,
+		caseCollection:   defaultReviewReportCaseCollection,
+		reportCollection: defaultReviewReportSubCollection,
+	}
 }
 
 func (r *ReviewReportRepositoryFS) WithCaseCollection(name string) *ReviewReportRepositoryFS {
@@ -72,6 +76,7 @@ func (r *ReviewReportRepositoryFS) GetCase(ctx context.Context, caseID reviewrep
 	if err != nil {
 		return reviewreport.ReportCase{}, err
 	}
+
 	return decodeReviewReportCase(snap.Ref.ID, snap.Data())
 }
 
@@ -106,6 +111,7 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 
 	createdRange := reviewReportEffectiveTimeRange(filter.CreatedAt, filter.Created)
 	updatedRange := reviewReportEffectiveTimeRange(filter.UpdatedAt, filter.Updated)
+
 	q = applyReviewReportTimeRange(q, "createdAt", createdRange)
 	q = applyReviewReportTimeRange(q, "updatedAt", updatedRange)
 	q = applyReviewReportTimeRange(q, "decidedAt", filter.DecidedAt)
@@ -122,6 +128,7 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 	if sort.Order == common.SortAsc {
 		orderDirection = firestore.Asc
 	}
+
 	q = q.OrderBy(sortColumn, orderDirection)
 
 	pageNumber, perPage := normalizeReviewReportPage(page)
@@ -154,10 +161,17 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 		if err != nil {
 			return common.PageResult[reviewreport.ReportCase]{}, err
 		}
+
 		items = append(items, item)
 	}
 
-	return common.PageResult[reviewreport.ReportCase]{Items: items, TotalCount: totalCount, TotalPages: totalPages, Page: pageNumber, PerPage: perPage}, nil
+	return common.PageResult[reviewreport.ReportCase]{
+		Items:      items,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+		Page:       pageNumber,
+		PerPage:    perPage,
+	}, nil
 }
 
 func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID reviewreport.CaseID, patch reviewreport.CasePatch) (reviewreport.ReportCase, error) {
@@ -187,6 +201,12 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 		}
 		if patch.Status != nil {
 			entity.Status = *patch.Status
+
+			if entity.Status == reviewreport.CaseStatusPending {
+				entity.DecidedAt = nil
+				entity.DecidedBy = ""
+				entity.DecisionReason = ""
+			}
 		}
 		if patch.UpdatedAt != nil {
 			entity.UpdatedAt = patch.UpdatedAt.UTC()
@@ -205,7 +225,13 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 		if err := entity.Validate(); err != nil {
 			return err
 		}
-		if err := tx.Set(doc, encodeReviewReportCase(entity), firestore.MergeAll); err != nil {
+
+		data := encodeReviewReportCase(entity)
+		if entity.DecidedAt == nil {
+			data["decidedAt"] = firestore.Delete
+		}
+
+		if err := tx.Set(doc, data, firestore.MergeAll); err != nil {
 			return err
 		}
 
@@ -215,6 +241,7 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 	if err != nil {
 		return reviewreport.ReportCase{}, err
 	}
+
 	return updated, nil
 }
 
@@ -237,6 +264,7 @@ func (r *ReviewReportRepositoryFS) GetReport(ctx context.Context, caseID reviewr
 	if err != nil {
 		return reviewreport.Report{}, err
 	}
+
 	return decodeReviewReport(snap.Ref.ID, caseID, snap.Data())
 }
 
@@ -284,6 +312,7 @@ func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID revie
 	if sort.Order == common.SortAsc {
 		orderDirection = firestore.Asc
 	}
+
 	q = q.OrderBy(sortColumn, orderDirection)
 
 	pageNumber, perPage := normalizeReviewReportPage(page)
@@ -316,10 +345,17 @@ func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID revie
 		if err != nil {
 			return common.PageResult[reviewreport.Report]{}, err
 		}
+
 		items = append(items, item)
 	}
 
-	return common.PageResult[reviewreport.Report]{Items: items, TotalCount: totalCount, TotalPages: totalPages, Page: pageNumber, PerPage: perPage}, nil
+	return common.PageResult[reviewreport.Report]{
+		Items:      items,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+		Page:       pageNumber,
+		PerPage:    perPage,
+	}, nil
 }
 
 // ============================================================
@@ -385,12 +421,21 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 				return fmt.Errorf("reviewReport: report exists without parent case")
 			}
 
-			existingReport, decodeErr := decodeReviewReport(reportSnap.Ref.ID, initialCase.ID, reportSnap.Data())
+			existingReport, decodeErr := decodeReviewReport(
+				reportSnap.Ref.ID,
+				initialCase.ID,
+				reportSnap.Data(),
+			)
 			if decodeErr != nil {
 				return decodeErr
 			}
 
-			result = reviewreport.AddReportResult{Case: currentCase, Report: existingReport, CaseCreated: false, ReportCreated: false}
+			result = reviewreport.AddReportResult{
+				Case:          currentCase,
+				Report:        existingReport,
+				CaseCreated:   false,
+				ReportCreated: false,
+			}
 			return nil
 		}
 		if !reviewReportIsNotFound(reportErr) {
@@ -400,6 +445,8 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 		if !caseExists {
 			currentCase = initialCase
 		}
+
+		wasKept := caseExists && currentCase.Status == reviewreport.CaseStatusKept
 
 		if err := currentCase.IncrementReportCount(report.CreatedAt); err != nil {
 			return err
@@ -413,10 +460,34 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 				return err
 			}
 		} else {
-			if err := tx.Update(caseRef, []firestore.Update{
+			updates := []firestore.Update{
 				{Path: "reportCount", Value: currentCase.ReportCount},
 				{Path: "updatedAt", Value: currentCase.UpdatedAt.UTC()},
-			}); err != nil {
+			}
+
+			if wasKept {
+				updates = append(
+					updates,
+					firestore.Update{
+						Path:  "status",
+						Value: string(currentCase.Status),
+					},
+					firestore.Update{
+						Path:  "decidedAt",
+						Value: firestore.Delete,
+					},
+					firestore.Update{
+						Path:  "decidedBy",
+						Value: currentCase.DecidedBy,
+					},
+					firestore.Update{
+						Path:  "decisionReason",
+						Value: currentCase.DecisionReason,
+					},
+				)
+			}
+
+			if err := tx.Update(caseRef, updates); err != nil {
 				return err
 			}
 		}
@@ -425,12 +496,18 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 			return err
 		}
 
-		result = reviewreport.AddReportResult{Case: currentCase, Report: report, CaseCreated: !caseExists, ReportCreated: true}
+		result = reviewreport.AddReportResult{
+			Case:          currentCase,
+			Report:        report,
+			CaseCreated:   !caseExists,
+			ReportCreated: true,
+		}
 		return nil
 	})
 	if err != nil {
 		return reviewreport.AddReportResult{}, err
 	}
+
 	return result, nil
 }
 
@@ -462,52 +539,116 @@ func encodeReviewReportCase(entity reviewreport.ReportCase) map[string]any {
 	if entity.DecidedAt != nil {
 		out["decidedAt"] = entity.DecidedAt.UTC()
 	}
+
 	return out
 }
 
 func decodeReviewReportCase(id string, data map[string]any) (reviewreport.ReportCase, error) {
-	reportCount, err := reviewReportInt(data["reportCount"])
+	targetType, err := firestoreRequiredString(data, "targetType")
 	if err != nil {
-		return reviewreport.ReportCase{}, fmt.Errorf("reviewReport: decode reportCount: %w", err)
+		return reviewreport.ReportCase{}, err
 	}
-	snapshotRating, err := reviewReportOptionalInt(data["snapshotRating"])
+
+	targetID, err := firestoreRequiredString(data, "targetId")
 	if err != nil {
-		return reviewreport.ReportCase{}, fmt.Errorf("reviewReport: decode snapshotRating: %w", err)
+		return reviewreport.ReportCase{}, err
 	}
+
+	targetParentID, err := firestoreRequiredString(data, "targetParentId")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	targetAuthorID, err := firestoreRequiredString(data, "targetAuthorId")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	targetAuthorType, err := firestoreRequiredString(data, "targetAuthorType")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	snapshotTitle, err := firestoreString(data, "snapshotTitle")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	snapshotBody, err := firestoreRequiredString(data, "snapshotBody")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	snapshotRating64, err := firestoreOptionalInt64(data, "snapshotRating")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	var snapshotRating *int
+	if snapshotRating64 != nil {
+		value := int(*snapshotRating64)
+		snapshotRating = &value
+	}
+
+	reportCount64, err := firestoreRequiredInt64(data, "reportCount")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+	reportCount := int(reportCount64)
+
+	caseStatus, err := firestoreRequiredString(data, "status")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
 		return reviewreport.ReportCase{}, err
 	}
+
 	updatedAt, err := firestoreRequiredTime(data, "updatedAt")
 	if err != nil {
 		return reviewreport.ReportCase{}, err
 	}
+
 	decidedAt, err := firestoreOptionalTime(data, "decidedAt")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	decidedBy, err := firestoreString(data, "decidedBy")
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	decisionReason, err := firestoreString(data, "decisionReason")
 	if err != nil {
 		return reviewreport.ReportCase{}, err
 	}
 
 	entity := reviewreport.ReportCase{
 		ID:               reviewreport.CaseID(id),
-		TargetType:       reviewreport.TargetType(reviewReportString(data["targetType"])),
-		TargetID:         reviewReportString(data["targetId"]),
-		TargetParentID:   reviewReportString(data["targetParentId"]),
-		TargetAuthorID:   reviewReportString(data["targetAuthorId"]),
-		TargetAuthorType: reviewreport.ActorType(reviewReportString(data["targetAuthorType"])),
-		SnapshotTitle:    reviewReportString(data["snapshotTitle"]),
-		SnapshotBody:     reviewReportString(data["snapshotBody"]),
+		TargetType:       reviewreport.TargetType(targetType),
+		TargetID:         targetID,
+		TargetParentID:   targetParentID,
+		TargetAuthorID:   targetAuthorID,
+		TargetAuthorType: reviewreport.ActorType(targetAuthorType),
+		SnapshotTitle:    snapshotTitle,
+		SnapshotBody:     snapshotBody,
 		SnapshotRating:   snapshotRating,
 		ReportCount:      reportCount,
-		Status:           reviewreport.CaseStatus(reviewReportString(data["status"])),
+		Status:           reviewreport.CaseStatus(caseStatus),
 		CreatedAt:        createdAt,
 		UpdatedAt:        updatedAt,
 		DecidedAt:        decidedAt,
-		DecidedBy:        reviewReportString(data["decidedBy"]),
-		DecisionReason:   reviewReportString(data["decisionReason"]),
+		DecidedBy:        decidedBy,
+		DecisionReason:   decisionReason,
 	}
+
 	if err := entity.Validate(); err != nil {
 		return reviewreport.ReportCase{}, err
 	}
+
 	return entity, nil
 }
 
@@ -525,12 +666,42 @@ func encodeReviewReport(entity reviewreport.Report) map[string]any {
 }
 
 func decodeReviewReport(id string, caseID reviewreport.CaseID, data map[string]any) (reviewreport.Report, error) {
-	storedCaseID := reviewreport.CaseID(reviewReportString(data["caseId"]))
+	storedCaseIDValue, err := firestoreString(data, "caseId")
+	if err != nil {
+		return reviewreport.Report{}, err
+	}
+
+	storedCaseID := reviewreport.CaseID(storedCaseIDValue)
 	if storedCaseID == "" {
 		storedCaseID = caseID
 	}
 	if storedCaseID != caseID {
 		return reviewreport.Report{}, reviewreport.ErrInvalidCaseID
+	}
+
+	reporterType, err := firestoreRequiredString(data, "reporterType")
+	if err != nil {
+		return reviewreport.Report{}, err
+	}
+
+	reporterID, err := firestoreRequiredString(data, "reporterId")
+	if err != nil {
+		return reviewreport.Report{}, err
+	}
+
+	companyID, err := firestoreString(data, "companyId")
+	if err != nil {
+		return reviewreport.Report{}, err
+	}
+
+	reason, err := firestoreRequiredString(data, "reason")
+	if err != nil {
+		return reviewreport.Report{}, err
+	}
+
+	detail, err := firestoreString(data, "detail")
+	if err != nil {
+		return reviewreport.Report{}, err
 	}
 
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
@@ -541,16 +712,18 @@ func decodeReviewReport(id string, caseID reviewreport.CaseID, data map[string]a
 	entity := reviewreport.Report{
 		ID:           reviewreport.ReportID(id),
 		CaseID:       storedCaseID,
-		ReporterType: reviewreport.ActorType(reviewReportString(data["reporterType"])),
-		ReporterID:   reviewReportString(data["reporterId"]),
-		CompanyID:    reviewReportString(data["companyId"]),
-		Reason:       reviewreport.ReportReason(reviewReportString(data["reason"])),
-		Detail:       reviewReportString(data["detail"]),
+		ReporterType: reviewreport.ActorType(reporterType),
+		ReporterID:   reporterID,
+		CompanyID:    companyID,
+		Reason:       reviewreport.ReportReason(reason),
+		Detail:       detail,
 		CreatedAt:    createdAt,
 	}
+
 	if err := entity.Validate(); err != nil {
 		return reviewreport.Report{}, err
 	}
+
 	return entity, nil
 }
 
@@ -561,12 +734,14 @@ func decodeReviewReport(id string, caseID reviewreport.CaseID, data map[string]a
 func normalizeReviewReportPage(page common.Page) (int, int) {
 	pageNumber := page.Number
 	perPage := page.PerPage
+
 	if pageNumber <= 0 {
 		pageNumber = 1
 	}
 	if perPage <= 0 {
 		perPage = 20
 	}
+
 	return pageNumber, perPage
 }
 
@@ -592,6 +767,7 @@ func reviewReportCountQuery(ctx context.Context, q firestore.Query) (int, error)
 	defer iter.Stop()
 
 	count := 0
+
 	for {
 		_, err := iter.Next()
 		if err == iterator.Done {
@@ -600,44 +776,16 @@ func reviewReportCountQuery(ctx context.Context, q firestore.Query) (int, error)
 		if err != nil {
 			return 0, err
 		}
+
 		count++
 	}
-}
-
-func reviewReportString(value any) string {
-	stringValue, ok := value.(string)
-	if !ok {
-		return ""
-	}
-	return stringValue
-}
-
-func reviewReportInt(value any) (int, error) {
-	valueInt64, ok := value.(int64)
-	if !ok {
-		return 0, fmt.Errorf("expected int64, got %T", value)
-	}
-	return int(valueInt64), nil
-}
-
-func reviewReportOptionalInt(value any) (*int, error) {
-	if value == nil {
-		return nil, nil
-	}
-
-	valueInt64, ok := value.(int64)
-	if !ok {
-		return nil, fmt.Errorf("expected int64, got %T", value)
-	}
-
-	result := int(valueInt64)
-	return &result, nil
 }
 
 func reviewReportIsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	return status.Code(err) == codes.NotFound
 }
 

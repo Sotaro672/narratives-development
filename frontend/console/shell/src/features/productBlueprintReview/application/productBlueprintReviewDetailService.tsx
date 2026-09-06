@@ -8,7 +8,10 @@ import type {
   Review,
   ReviewStatus,
 } from "../../../shared/types/productBlueprintReview";
-
+import type {
+  ReviewReportReason,
+  ReviewReportResponse,
+} from "../../../shared/types/reviewReport";
 import type {
   PageResult,
 } from "../../../shared/types/common/common";
@@ -26,8 +29,14 @@ export type FetchProductBlueprintReviewDetailResult =
 export async function FetchProductBlueprintReviewDetailRows(
   Params: FetchProductBlueprintReviewDetailParams,
 ): Promise<FetchProductBlueprintReviewDetailResult> {
+  const ProductBlueprintID = Params.ProductBlueprintID.trim();
+
+  if (!ProductBlueprintID) {
+    throw new Error("ProductBlueprintID is required");
+  }
+
   const Query: ListProductBlueprintReviewsParams = {
-    ProductBlueprintID: Params.ProductBlueprintID,
+    ProductBlueprintID,
     Status: Params.Status,
     Page: Params.Page,
     PerPage: Params.PerPage,
@@ -38,14 +47,13 @@ export async function FetchProductBlueprintReviewDetailRows(
       Query,
     );
 
-  const items: Review[] =
-    Response.Items.map((ReviewItem) => ({
-      ...ReviewItem,
-      ReviewedAt: safeDateTimeLabelJa(
-        ReviewItem.ReviewedAt,
-        "",
-      ),
-    }));
+  const items: Review[] = Response.Items.map((ReviewItem) => ({
+    ...ReviewItem,
+    ReviewedAt: safeDateTimeLabelJa(
+      ReviewItem.ReviewedAt,
+      "",
+    ),
+  }));
 
   return {
     items,
@@ -54,4 +62,35 @@ export async function FetchProductBlueprintReviewDetailRows(
     page: Response.Page,
     perPage: Response.PerPage,
   };
+}
+
+export async function ReportProductBlueprintReview(
+  ProductBlueprintID: string,
+  ReviewID: string,
+  Reason: ReviewReportReason,
+  Detail?: string,
+): Promise<ReviewReportResponse> {
+  const NormalizedProductBlueprintID =
+    ProductBlueprintID.trim();
+  const NormalizedReviewID =
+    ReviewID.trim();
+  const NormalizedDetail =
+    Detail?.trim() ?? "";
+
+  if (!NormalizedProductBlueprintID) {
+    throw new Error("ProductBlueprintID is required");
+  }
+
+  if (!NormalizedReviewID) {
+    throw new Error("ReviewID is required");
+  }
+
+  return productBlueprintReviewHTTP.ReportProductBlueprintReview({
+    productBlueprintId: NormalizedProductBlueprintID,
+    reviewId: NormalizedReviewID,
+    reason: Reason,
+    ...(NormalizedDetail
+      ? { detail: NormalizedDetail }
+      : {}),
+  });
 }

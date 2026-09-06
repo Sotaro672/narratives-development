@@ -8,10 +8,8 @@ import {
 
 import {
   FetchProductBlueprintReviewDetailRows,
+  ReportProductBlueprintReview,
 } from "../../application/productBlueprintReviewDetailService";
-import {
-  productBlueprintReviewHTTP,
-} from "../../infrastructure/productBlueprintReviewHTTP";
 
 import type {
   Review,
@@ -295,14 +293,12 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
 
     try {
       const Result =
-        await productBlueprintReviewHTTP.ReportProductBlueprintReview({
-          productBlueprintId: NormalizedProductBlueprintID,
-          reviewId: NormalizedReviewID,
-          reason: ReportReason,
-          ...(NormalizedDetail
-            ? { detail: NormalizedDetail }
-            : {}),
-        });
+        await ReportProductBlueprintReview(
+          NormalizedProductBlueprintID,
+          NormalizedReviewID,
+          ReportReason,
+          NormalizedDetail || undefined,
+        );
 
       SetReportResult(Result);
     } catch (error: unknown) {
