@@ -618,7 +618,7 @@ func decodeReviewReportCase(id string, data map[string]any) (reviewreport.Report
 		return reviewreport.ReportCase{}, err
 	}
 
-	snapshotBody, err := firestoreRequiredString(data, "snapshotBody")
+	snapshotBody, err := firestoreString(data, "snapshotBody")
 	if err != nil {
 		return reviewreport.ReportCase{}, err
 	}
