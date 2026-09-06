@@ -21,7 +21,7 @@ export function useReports() {
   const [items, setItems] = useState<ReviewReportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatusState] = useState<ReviewReportCaseStatus | undefined>("PENDING");
+  const [status, setStatusState] = useState<ReviewReportCaseStatus | undefined>(undefined);
   const [targetType, setTargetTypeState] = useState<ReviewReportTargetType | undefined>(undefined);
   const [page, setPageState] = useState(DEFAULT_PAGE);
   const [perPage, setPerPageState] = useState(DEFAULT_PER_PAGE);
@@ -151,7 +151,7 @@ export function useReports() {
   );
 
   const resetFilters = useCallback(() => {
-    setStatusState("PENDING");
+    setStatusState(undefined);
     setTargetTypeState(undefined);
     setPageState(DEFAULT_PAGE);
     setPerPageState(DEFAULT_PER_PAGE);

@@ -11,6 +11,7 @@ import type {
   ReviewReportReason,
   ReviewReportSortOrder,
 } from "../../../shared/type/reviewReport";
+import { useReportPending } from "../context/ReportPendingContext";
 import {
   decideReviewReport,
   getReviewReport,
@@ -22,6 +23,8 @@ const DEFAULT_SORT: ReviewReportItemSort = "createdAt";
 const DEFAULT_ORDER: ReviewReportSortOrder = "desc";
 
 export function useReportDetail(caseId: string | undefined) {
+  const { refreshPendingCount } = useReportPending();
+
   const requestIdRef = useRef(0);
   const decisionRequestIdRef = useRef(0);
 
@@ -240,6 +243,8 @@ export function useReportDetail(caseId: string | undefined) {
         }
 
         setReportCase(updatedCase);
+        void refreshPendingCount();
+
         return updatedCase;
       } catch (cause) {
         if (requestId !== decisionRequestIdRef.current) {
@@ -258,7 +263,7 @@ export function useReportDetail(caseId: string | undefined) {
         }
       }
     },
-    [caseId, deciding],
+    [caseId, deciding, refreshPendingCount],
   );
 
   const keep = useCallback(
