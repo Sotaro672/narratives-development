@@ -104,7 +104,6 @@ export default function ReportDetailPage() {
     loading,
     error,
     page,
-    totalCount,
     totalPages,
     hasPreviousPage,
     hasNextPage,
@@ -125,19 +124,6 @@ export default function ReportDetailPage() {
         header: "通報日時",
         render: (report) => formatDateTime(report.createdAt),
         sortValue: (report) => new Date(report.createdAt).getTime(),
-        nowrap: true,
-      },
-      {
-        key: "reporterType",
-        header: "通報者種別",
-        render: (report) => getActorTypeLabel(report.reporterType),
-        filter: {
-          getValue: (report) => getActorTypeLabel(report.reporterType),
-          options: [
-            { value: "ユーザー", label: "ユーザー" },
-            { value: "ブランド", label: "ブランド" },
-          ],
-        },
         nowrap: true,
       },
       {
@@ -255,13 +241,6 @@ export default function ReportDetailPage() {
           main={
             <div className="report-detail-page__main">
               <section className="report-detail-page__section">
-                <div>
-                  <h2 className="report-detail-page__section-title">通報対象</h2>
-                  <p className="report-detail-page__description">
-                    通報が最初に作成された時点の投稿内容です。
-                  </p>
-                </div>
-
                 <dl className="report-detail-page__fields">
                   {reportCase.snapshotRating !== null ? (
                     <DetailField
@@ -290,12 +269,7 @@ export default function ReportDetailPage() {
 
               <section className="report-detail-page__section">
                 <div className="report-detail-page__reports-header">
-                  <div>
-                    <h2 className="report-detail-page__section-title">通報内容</h2>
-                    <p className="report-detail-page__description">
-                      {totalCount}件の通報があります。
-                    </p>
-                  </div>
+                  <h2 className="report-detail-page__section-title">通報内容</h2>
 
                   {loading ? (
                     <span
@@ -352,18 +326,6 @@ export default function ReportDetailPage() {
                 <h2 className="report-detail-page__section-title">ケース情報</h2>
 
                 <dl className="report-detail-page__fields report-detail-page__fields--compact">
-                  <DetailField
-                    label="対象種別"
-                    value={getTargetTypeLabel(reportCase.targetType)}
-                  />
-                  <DetailField
-                    label="ケースID"
-                    value={reportCase.id}
-                  />
-                  <DetailField
-                    label="対象ID"
-                    value={reportCase.targetId}
-                  />
                   <DetailField
                     label="親ID"
                     value={reportCase.targetParentId || "-"}

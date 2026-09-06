@@ -16,10 +16,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   width: 100%;
   min-width: 0;
-  padding: 8px 0 12px;
+  padding: 2px 0 4px;
   border-bottom: 1px solid #e5e5e5;
   background: #ffffff;
   box-sizing: border-box;
@@ -28,9 +28,9 @@
 .ui-page-header__left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
-  min-height: 32px;
+  min-height: 24px;
 }
 
 .ui-page-header__leading {
@@ -38,30 +38,33 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  height: 32px;
+  height: 24px;
 }
 
 .ui-page-header__heading {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
 }
 
 .ui-page-header__title {
   margin: 0;
   min-width: 0;
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 600;
-  line-height: 32px;
+  line-height: 24px;
 }
 
 .ui-page-header__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
   color: #737373;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
-  line-height: 32px;
+  line-height: 24px;
   white-space: nowrap;
 }
 
@@ -69,7 +72,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -77,11 +80,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: #111111;
   cursor: pointer;
@@ -91,8 +94,8 @@
 
 .ui-page-header__back svg {
   display: block;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   transition: transform 0.15s ease;
 }
 
@@ -137,7 +140,7 @@
 
 .ui-detail-page__aside {
   position: sticky;
-  top: 77px;
+  top: 40px;
   align-self: start;
 }
 
@@ -159,11 +162,11 @@
   }
 
   .ui-page-header {
-    align-items: flex-start;
+    align-items: center;
   }
 
   .ui-page-header__heading {
     flex-wrap: wrap;
-    gap: 4px 12px;
+    gap: 2px 8px;
   }
 }
