@@ -15,13 +15,14 @@ import (
 )
 
 type ResaleUsecase struct {
-	resaleRepo           resaledom.Repository
-	imageRepo            resaledom.ImageRepository
-	imageStorage         applicationport.ResaleImageStorage
-	reviewCleanup        resalereview.CleanupRepository
-	cartItemCleanup      CartItemCleanup
-	productRepo          productdom.Repository
-	productBlueprintRepo productblueprintdom.Repository
+	resaleRepo                resaledom.Repository
+	imageRepo                 resaledom.ImageRepository
+	imageStorage              applicationport.ResaleImageStorage
+	reviewCleanup             resalereview.CleanupRepository
+	cartItemCleanup           CartItemCleanup
+	productRepo               productdom.Repository
+	productBlueprintRepo      productblueprintdom.Repository
+	avatarResaleAccessChecker AvatarResaleAccessChecker
 }
 
 func NewResaleUsecase(
@@ -67,6 +68,17 @@ func (uc *ResaleUsecase) WithProductIdentityRepositories(
 	return uc
 }
 
+func (uc *ResaleUsecase) WithAvatarResaleAccessChecker(
+	checker AvatarResaleAccessChecker,
+) *ResaleUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.avatarResaleAccessChecker = checker
+	return uc
+}
+
 func (uc *ResaleUsecase) Create(
 	ctx context.Context,
 	item resaledom.Resale,
@@ -77,8 +89,19 @@ func (uc *ResaleUsecase) Create(
 	if uc.productRepo == nil || uc.productBlueprintRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.Create.ProductIdentity")
 	}
+	if item.AvatarID == "" {
+		return resaledom.Resale{}, resaledom.ErrInvalidAvatarID
+	}
 	if item.ProductID == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidProductID
+	}
+
+	if err := checkAvatarResaleAccess(
+		ctx,
+		uc.avatarResaleAccessChecker,
+		item.AvatarID,
+	); err != nil {
+		return resaledom.Resale{}, err
 	}
 
 	product, err := uc.productRepo.GetByID(ctx, item.ProductID)
@@ -137,6 +160,19 @@ func (uc *ResaleUsecase) Update(
 	id := item.ID
 	if id == "" {
 		return resaledom.Resale{}, resaledom.ErrInvalidID
+	}
+
+	if item.Status == resaledom.StatusListing {
+		if item.AvatarID == "" {
+			return resaledom.Resale{}, resaledom.ErrInvalidAvatarID
+		}
+		if err := checkAvatarResaleAccess(
+			ctx,
+			uc.avatarResaleAccessChecker,
+			item.AvatarID,
+		); err != nil {
+			return resaledom.Resale{}, err
+		}
 	}
 
 	if item.Status == resaledom.StatusSuspended && uc.cartItemCleanup == nil {

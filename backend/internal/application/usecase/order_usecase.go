@@ -65,20 +65,21 @@ type ResaleOrderNotificationMailerPort interface {
 // - ReturnItem は返品申請のみを記録し、返金実行は担当しない
 // - Stripe Refund / Transfer Reversal は RefundUsecase の責務
 type OrderUsecase struct {
-	repo                 orderdom.Repository
-	cartRepo             cartdom.Repository
-	listRepo             listdom.Repository
-	inventoryRepo        inventorydom.RepositoryPort
-	productBlueprintRepo productblueprintdom.Repository
-	brandRepo            branddom.Repository
-	accountRepo          accountdom.Repository
-	resaleRepo           resaledom.Repository
-	avatarRepo           avatardom.Repository
-	payoutAccountUC      *PayoutAccountUsecase
-	paymentMethodRepo    paymentmethoddom.RepositoryPort
-	shippingAddressRepo  shippingaddressdom.RepositoryPort
-	shippingQuoteUC      *ShippingQuoteUsecase
-	tradeUC              *TradeUsecase
+	repo                      orderdom.Repository
+	cartRepo                  cartdom.Repository
+	listRepo                  listdom.Repository
+	inventoryRepo             inventorydom.RepositoryPort
+	productBlueprintRepo      productblueprintdom.Repository
+	brandRepo                 branddom.Repository
+	accountRepo               accountdom.Repository
+	resaleRepo                resaledom.Repository
+	avatarRepo                avatardom.Repository
+	payoutAccountUC           *PayoutAccountUsecase
+	paymentMethodRepo         paymentmethoddom.RepositoryPort
+	shippingAddressRepo       shippingaddressdom.RepositoryPort
+	shippingQuoteUC           *ShippingQuoteUsecase
+	tradeUC                   *TradeUsecase
+	avatarResaleAccessChecker AvatarResaleAccessChecker
 
 	authUserReader                applicationport.AuthUserReader
 	orderConfirmationMailer       OrderConfirmationMailerPort
@@ -157,6 +158,17 @@ func (u *OrderUsecase) WithTradeUsecase(
 	}
 
 	u.tradeUC = tradeUC
+	return u
+}
+
+func (u *OrderUsecase) WithAvatarResaleAccessChecker(
+	checker AvatarResaleAccessChecker,
+) *OrderUsecase {
+	if u == nil {
+		return u
+	}
+
+	u.avatarResaleAccessChecker = checker
 	return u
 }
 

@@ -342,11 +342,10 @@ func (h *OrderHandler) cancelMe(
 		),
 	)
 
-	parts :=
-		strings.Split(
-			itemPath,
-			"/",
-		)
+	parts := strings.Split(
+		itemPath,
+		"/",
+	)
 
 	if len(parts) != 4 ||
 		parts[0] == "" ||
@@ -358,31 +357,27 @@ func (h *OrderHandler) cancelMe(
 		return
 	}
 
-	orderID :=
-		strings.TrimSpace(
-			parts[0],
-		)
+	orderID := strings.TrimSpace(
+		parts[0],
+	)
 
-	itemIndex, err :=
-		strconv.Atoi(
-			parts[2],
-		)
-	if err != nil ||
-		itemIndex < 0 {
+	itemIndex, err := strconv.Atoi(
+		parts[2],
+	)
+	if err != nil || itemIndex < 0 {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
 	}
 
-	out, err :=
-		h.uc.CancelItem(
-			ctx,
-			usecase.CancelOrderItemInput{
-				ID:        orderID,
-				AvatarID:  avatarID,
-				ItemIndex: itemIndex,
-			},
-		)
+	out, err := h.uc.CancelItem(
+		ctx,
+		usecase.CancelOrderItemInput{
+			ID:        orderID,
+			AvatarID:  avatarID,
+			ItemIndex: itemIndex,
+		},
+	)
 	if err != nil {
 		writeOrderErr(w, err)
 		return
@@ -398,11 +393,10 @@ func (h *OrderHandler) cancelMe(
 		return
 	}
 
-	detail, err :=
-		h.orderDetailQuery.EnrichOrderDetail(
-			ctx,
-			out,
-		)
+	detail, err := h.orderDetailQuery.EnrichOrderDetail(
+		ctx,
+		out,
+	)
 	if err != nil {
 		writeOrderErr(w, err)
 		return
@@ -432,11 +426,10 @@ func (h *OrderHandler) returnMe(
 		),
 	)
 
-	parts :=
-		strings.Split(
-			itemPath,
-			"/",
-		)
+	parts := strings.Split(
+		itemPath,
+		"/",
+	)
 
 	if len(parts) != 4 ||
 		parts[0] == "" ||
@@ -448,17 +441,14 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
-	orderID :=
-		strings.TrimSpace(
-			parts[0],
-		)
+	orderID := strings.TrimSpace(
+		parts[0],
+	)
 
-	itemIndex, err :=
-		strconv.Atoi(
-			parts[2],
-		)
-	if err != nil ||
-		itemIndex < 0 {
+	itemIndex, err := strconv.Atoi(
+		parts[2],
+	)
+	if err != nil || itemIndex < 0 {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
 		return
@@ -472,15 +462,13 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
-	packageState :=
-		strings.TrimSpace(
-			req.PackageState,
-		)
+	packageState := strings.TrimSpace(
+		req.PackageState,
+	)
 
-	reason :=
-		strings.TrimSpace(
-			req.Reason,
-		)
+	reason := strings.TrimSpace(
+		req.Reason,
+	)
 
 	if packageState != "unopened" &&
 		packageState != "opened" {
@@ -521,28 +509,26 @@ func (h *OrderHandler) returnMe(
 
 	switch packageState {
 	case "unopened":
-		result, err =
-			h.returnRequestUC.RequestUnopened(
-				ctx,
-				usecase.RequestUnopenedReturnInput{
-					OrderID:   orderID,
-					AvatarID:  avatarID,
-					ItemIndex: itemIndex,
-					Reason:    reason,
-				},
-			)
+		result, err = h.returnRequestUC.RequestUnopened(
+			ctx,
+			usecase.RequestUnopenedReturnInput{
+				OrderID:   orderID,
+				AvatarID:  avatarID,
+				ItemIndex: itemIndex,
+				Reason:    reason,
+			},
+		)
 
 	case "opened":
-		result, err =
-			h.returnRequestUC.RequestOpenedFromOrderDetail(
-				ctx,
-				usecase.RequestOpenedFromOrderDetailInput{
-					OrderID:   orderID,
-					AvatarID:  avatarID,
-					ItemIndex: itemIndex,
-					Reason:    reason,
-				},
-			)
+		result, err = h.returnRequestUC.RequestOpenedFromOrderDetail(
+			ctx,
+			usecase.RequestOpenedFromOrderDetailInput{
+				OrderID:   orderID,
+				AvatarID:  avatarID,
+				ItemIndex: itemIndex,
+				Reason:    reason,
+			},
+		)
 	}
 
 	out := result.Order
@@ -561,11 +547,10 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
-	detail, err :=
-		h.orderDetailQuery.EnrichOrderDetail(
-			ctx,
-			out,
-		)
+	detail, err := h.orderDetailQuery.EnrichOrderDetail(
+		ctx,
+		out,
+	)
 	if err != nil {
 		writeOrderErr(w, err)
 		return
@@ -660,12 +645,9 @@ func parseOrderSort(r *http.Request) common.Sort {
 }
 
 func writeOrderErr(w http.ResponseWriter, err error) {
-	message := "internal_error"
-	if err != nil {
-		message = err.Error()
-	}
-
-	writeJSON(w, orderHTTPStatus(err), map[string]string{"error": message})
+	writeJSON(w, orderHTTPStatus(err), map[string]string{
+		"error": orderErrorMessage(err),
+	})
 }
 
 func orderHTTPStatus(err error) int {
@@ -675,6 +657,9 @@ func orderHTTPStatus(err error) int {
 
 	case errors.Is(err, context.Canceled):
 		return 499
+
+	case usecase.IsResaleServiceSuspended(err):
+		return http.StatusForbidden
 
 	case errors.Is(err, orderdom.ErrNotFound),
 		errors.Is(err, inventorydom.ErrNotFound),
@@ -702,6 +687,16 @@ func orderHTTPStatus(err error) int {
 	default:
 		return http.StatusInternalServerError
 	}
+}
+
+func orderErrorMessage(err error) string {
+	if err == nil {
+		return "internal_error"
+	}
+	if usecase.IsResaleServiceSuspended(err) {
+		return "resale_service_suspended"
+	}
+	return err.Error()
 }
 
 func isInvalidOrderError(err error) bool {

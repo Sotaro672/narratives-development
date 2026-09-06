@@ -16,13 +16,25 @@ var (
 
 // CartUsecase coordinates cart operations.
 type CartUsecase struct {
-	repo cartdom.Repository
+	repo                      cartdom.Repository
+	avatarResaleAccessChecker AvatarResaleAccessChecker
 }
 
 func NewCartUsecase(repo cartdom.Repository) *CartUsecase {
 	return &CartUsecase{
 		repo: repo,
 	}
+}
+
+func (uc *CartUsecase) WithAvatarResaleAccessChecker(
+	checker AvatarResaleAccessChecker,
+) *CartUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.avatarResaleAccessChecker = checker
+	return uc
 }
 
 // Get returns the cart for avatarID.
@@ -108,6 +120,7 @@ func (uc *CartUsecase) AddItem(
 
 // AddResaleItem adds a resale item to cart.
 // Resale item is stored by (resaleId, productId), and qty is always 1.
+// Avatars whose resale service is suspended cannot add resale items.
 func (uc *CartUsecase) AddResaleItem(
 	ctx context.Context,
 	avatarID, resaleID, productID string,
@@ -117,6 +130,14 @@ func (uc *CartUsecase) AddResaleItem(
 	pid := productID
 	if aid == "" || rid == "" || pid == "" {
 		return nil, ErrCartInvalidArgument
+	}
+
+	if err := checkAvatarResaleAccess(
+		ctx,
+		uc.avatarResaleAccessChecker,
+		aid,
+	); err != nil {
+		return nil, err
 	}
 
 	now := time.Now()
@@ -188,6 +209,7 @@ func (uc *CartUsecase) RemoveItem(
 }
 
 // RemoveResaleItem removes a resale item from cart.
+// Removal remains available even when the avatar's resale service is suspended.
 func (uc *CartUsecase) RemoveResaleItem(
 	ctx context.Context,
 	avatarID, resaleID, productID string,

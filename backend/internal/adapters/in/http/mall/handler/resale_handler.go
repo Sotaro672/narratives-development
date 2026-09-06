@@ -1352,6 +1352,9 @@ func resaleHTTPStatus(err error) int {
 		errors.Is(err, context.DeadlineExceeded):
 		return http.StatusRequestTimeout
 
+	case usecase.IsResaleServiceSuspended(err):
+		return http.StatusForbidden
+
 	case errors.Is(err, resaledom.ErrNotFound),
 		errors.Is(err, resaledom.ErrConditionImageNotFound):
 		return http.StatusNotFound
@@ -1408,6 +1411,9 @@ func resaleErrorMessage(err error) string {
 	case errors.Is(err, context.Canceled),
 		errors.Is(err, context.DeadlineExceeded):
 		return "request_timeout"
+
+	case usecase.IsResaleServiceSuspended(err):
+		return "resale_service_suspended"
 
 	case strings.Contains(message, "not supported"):
 		return "not_implemented"

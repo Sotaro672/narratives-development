@@ -171,6 +171,9 @@ func buildMallUsecases(
 		).
 		WithCartItemCleanup(
 			r.cartRepo,
+		).
+		WithAvatarResaleAccessChecker(
+			r.reviewReportRepo,
 		)
 
 	resaleReviewUC := usecase.NewResaleReviewUsecase(
@@ -264,7 +267,11 @@ func buildMallUsecases(
 		return nil, errors.New("di.mall: review report usecase is nil")
 	}
 
-	cartUC := usecase.NewCartUsecase(r.cartRepo)
+	cartUC := usecase.NewCartUsecase(
+		r.cartRepo,
+	).WithAvatarResaleAccessChecker(
+		r.reviewReportRepo,
+	)
 
 	tradeUC := usecase.NewTradeUsecase(r.tradeRepo)
 	if tradeUC == nil {
@@ -545,6 +552,9 @@ func buildMallUsecases(
 		).
 		WithTradeUsecase(
 			tradeUC,
+		).
+		WithAvatarResaleAccessChecker(
+			r.reviewReportRepo,
 		).
 		WithOrderConfirmationNotification(
 			authUserReader,

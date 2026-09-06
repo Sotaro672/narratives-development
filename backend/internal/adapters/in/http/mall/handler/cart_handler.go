@@ -39,25 +39,18 @@ func (h *CartHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && path == "/mall/me/cart":
 		h.handleGet(w, r)
-
 	case r.Method == http.MethodDelete && path == "/mall/me/cart":
 		h.handleClear(w, r)
-
 	case r.Method == http.MethodPost && path == "/mall/me/cart/items":
 		h.handleAddItem(w, r)
-
 	case r.Method == http.MethodPut && path == "/mall/me/cart/items":
 		h.handleSetItemQty(w, r)
-
 	case r.Method == http.MethodDelete && path == "/mall/me/cart/items":
 		h.handleRemoveItem(w, r)
-
 	case r.Method == http.MethodPost && path == "/mall/me/cart/resales":
 		h.handleAddResaleItem(w, r)
-
 	case r.Method == http.MethodDelete && path == "/mall/me/cart/resales":
 		h.handleRemoveResaleItem(w, r)
-
 	default:
 		writeErr(w, http.StatusNotFound, "not found")
 	}
@@ -85,11 +78,7 @@ func (h *CartHandler) handleAddItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if request.InventoryID == "" || request.ListID == "" || request.ModelID == "" || request.Qty <= 0 {
-		writeErr(
-			w,
-			http.StatusBadRequest,
-			"inventoryId, listId, modelId, qty(>=1) are required",
-		)
+		writeErr(w, http.StatusBadRequest, "inventoryId, listId, modelId, qty(>=1) are required")
 		return
 	}
 
@@ -153,11 +142,7 @@ func (h *CartHandler) handleSetItemQty(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if request.InventoryID == "" || request.ListID == "" || request.ModelID == "" {
-		writeErr(
-			w,
-			http.StatusBadRequest,
-			"inventoryId, listId and modelId are required",
-		)
+		writeErr(w, http.StatusBadRequest, "inventoryId, listId and modelId are required")
 		return
 	}
 
@@ -190,11 +175,7 @@ func (h *CartHandler) handleRemoveItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if request.InventoryID == "" || request.ListID == "" || request.ModelID == "" {
-		writeErr(
-			w,
-			http.StatusBadRequest,
-			"inventoryId, listId and modelId are required",
-		)
+		writeErr(w, http.StatusBadRequest, "inventoryId, listId and modelId are required")
 		return
 	}
 
@@ -290,6 +271,11 @@ func (h *CartHandler) respondCartDTO(
 func (h *CartHandler) writeCartErr(w http.ResponseWriter, err error) {
 	if err == nil {
 		writeErr(w, http.StatusInternalServerError, "unknown error")
+		return
+	}
+
+	if usecase.IsResaleServiceSuspended(err) {
+		writeErr(w, http.StatusForbidden, "resale_service_suspended")
 		return
 	}
 
