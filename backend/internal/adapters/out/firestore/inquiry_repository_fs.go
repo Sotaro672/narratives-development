@@ -417,10 +417,21 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 	if err != nil {
 		return idom.Inquiry{}, err
 	}
-	productID, err := firestoreRequiredString(data, "productId")
+
+	inquiryTypeText, err := firestoreRequiredString(data, "inquiryType")
 	if err != nil {
 		return idom.Inquiry{}, err
 	}
+	inquiryType := idom.InquiryType(inquiryTypeText)
+
+	productID, err := firestoreString(data, "productId")
+	if err != nil {
+		return idom.Inquiry{}, err
+	}
+	if inquiryType == idom.InquiryTypeProduct && productID == "" {
+		return idom.Inquiry{}, idom.ErrInvalidProductID
+	}
+
 	orderID, err := firestoreOptionalString(data, "orderId")
 	if err != nil {
 		return idom.Inquiry{}, err
@@ -438,10 +449,6 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		return idom.Inquiry{}, err
 	}
 	statusText, err := firestoreRequiredString(data, "status")
-	if err != nil {
-		return idom.Inquiry{}, err
-	}
-	inquiryTypeText, err := firestoreRequiredString(data, "inquiryType")
 	if err != nil {
 		return idom.Inquiry{}, err
 	}
@@ -500,7 +507,7 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		Subject:     ptrOrEmpty(subject),
 		Content:     content,
 		Status:      idom.InquiryStatus(statusText),
-		InquiryType: idom.InquiryType(inquiryTypeText),
+		InquiryType: inquiryType,
 		IsRead:      isRead,
 		ResolvedAt:  resolvedAt,
 		ResolvedBy:  resolvedBy,

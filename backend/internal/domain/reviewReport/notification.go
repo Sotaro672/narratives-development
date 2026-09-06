@@ -42,6 +42,10 @@ type DecisionNotificationID string
 // BuildDecisionNotificationID は、1回の裁定結果と1件の通報者を一意に結び付ける。
 // caseId + reportId + decidedAt を利用することで、同一裁定の再実行では重複せず、
 // KEPT 後にケースが再度 PENDING となり再裁定された場合は別通知として扱える。
+//
+// Firestore Timestamp はマイクロ秒精度で永続化されるため、
+// ID生成に使用する decidedAt もマイクロ秒精度へ正規化する。
+// これにより保存前とFirestore復元後で同じIDを再計算できる。
 func BuildDecisionNotificationID(
 	caseID CaseID,
 	reportID ReportID,
@@ -57,11 +61,13 @@ func BuildDecisionNotificationID(
 		return "", ErrDecisionNotificationCaseNotDecided
 	}
 
+	canonicalDecidedAt := decidedAt.UTC().Truncate(time.Microsecond)
+
 	source := string(caseID) +
 		"|" +
 		string(reportID) +
 		"|" +
-		decidedAt.UTC().Format(time.RFC3339Nano)
+		canonicalDecidedAt.Format(time.RFC3339Nano)
 
 	sum := sha256.Sum256([]byte(source))
 
@@ -133,8 +139,8 @@ func NewDecisionNotification(
 		return DecisionNotification{}, ErrDecisionNotificationCaseNotDecided
 	}
 
-	decidedAt := reportCase.DecidedAt.UTC()
-	createdAt = createdAt.UTC()
+	decidedAt := reportCase.DecidedAt.UTC().Truncate(time.Microsecond)
+	createdAt = createdAt.UTC().Truncate(time.Microsecond)
 	if createdAt.IsZero() || createdAt.Before(decidedAt) {
 		return DecisionNotification{}, ErrInvalidDecisionNotificationCreatedAt
 	}
@@ -224,7 +230,7 @@ func (n DecisionNotification) Validate() error {
 		return ErrDecisionReasonRequired
 	}
 
-	n.DecidedAt = n.DecidedAt.UTC()
+	n.DecidedAt = n.DecidedAt.UTC().Truncate(time.Microsecond)
 	if n.DecidedAt.IsZero() {
 		return ErrDecisionNotificationCaseNotDecided
 	}
@@ -241,18 +247,18 @@ func (n DecisionNotification) Validate() error {
 		return ErrInvalidDecisionNotificationID
 	}
 
-	n.CreatedAt = n.CreatedAt.UTC()
+	n.CreatedAt = n.CreatedAt.UTC().Truncate(time.Microsecond)
 	if n.CreatedAt.IsZero() || n.CreatedAt.Before(n.DecidedAt) {
 		return ErrInvalidDecisionNotificationCreatedAt
 	}
 
-	n.UpdatedAt = n.UpdatedAt.UTC()
+	n.UpdatedAt = n.UpdatedAt.UTC().Truncate(time.Microsecond)
 	if n.UpdatedAt.IsZero() || n.UpdatedAt.Before(n.CreatedAt) {
 		return ErrInvalidDecisionNotificationUpdatedAt
 	}
 
 	if n.ReadAt != nil {
-		readAt := n.ReadAt.UTC()
+		readAt := n.ReadAt.UTC().Truncate(time.Microsecond)
 		if readAt.IsZero() || readAt.Before(n.CreatedAt) {
 			return ErrInvalidDecisionNotificationReadAt
 		}
@@ -276,8 +282,8 @@ func (n *DecisionNotification) MarkRead(now time.Time) error {
 		return ErrInvalidDecisionNotificationID
 	}
 
-	now = now.UTC()
-	if now.IsZero() || now.Before(n.CreatedAt.UTC()) {
+	now = now.UTC().Truncate(time.Microsecond)
+	if now.IsZero() || now.Before(n.CreatedAt.UTC().Truncate(time.Microsecond)) {
 		return ErrInvalidDecisionNotificationReadAt
 	}
 
