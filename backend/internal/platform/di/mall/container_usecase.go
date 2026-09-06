@@ -101,9 +101,6 @@ func buildMallUsecases(
 	if r.reviewReportRepo == nil {
 		return nil, errors.New("di.mall: review report repository is nil")
 	}
-	if r.reviewReportDecisionNotificationRepo == nil {
-		return nil, errors.New("di.mall: review report decision notification repository is nil")
-	}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
 
