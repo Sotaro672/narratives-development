@@ -22,18 +22,19 @@ const (
 type Container struct {
 	Infra *shared.Infra
 
-	adminFirebaseUID     string
-	adminEmail           string
-	contactUsecase       *usecase.ContactUsecase
-	reviewReportUsecase  *usecase.ReviewReportUsecase
-	companyRepo          *fsrepo.CompanyRepositoryFS
-	memberRepo           *fsrepo.MemberRepositoryFS
-	avatarRepo           *fsrepo.AvatarRepositoryFS
-	brandRepo            *fsrepo.BrandRepositoryFS
-	productBlueprintRepo *fsrepo.ProductBlueprintRepositoryFS
-	tokenBlueprintRepo   *fsrepo.TokenBlueprintRepositoryFS
-	reportNameQuery      *adminquery.ReportNameQuery
-	gasBalanceQuery      *adminquery.GasBalanceQuery
+	adminFirebaseUID                     string
+	adminEmail                           string
+	contactUsecase                       *usecase.ContactUsecase
+	reviewReportUsecase                  *usecase.ReviewReportUsecase
+	companyRepo                          *fsrepo.CompanyRepositoryFS
+	memberRepo                           *fsrepo.MemberRepositoryFS
+	avatarRepo                           *fsrepo.AvatarRepositoryFS
+	brandRepo                            *fsrepo.BrandRepositoryFS
+	productBlueprintRepo                 *fsrepo.ProductBlueprintRepositoryFS
+	tokenBlueprintRepo                   *fsrepo.TokenBlueprintRepositoryFS
+	reviewReportDecisionNotificationRepo *fsrepo.ReviewReportDecisionNotificationRepositoryFS
+	reportNameQuery                      *adminquery.ReportNameQuery
+	gasBalanceQuery                      *adminquery.GasBalanceQuery
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -73,6 +74,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	brandRepo := fsrepo.NewBrandRepositoryFS(infra.Firestore)
 	productBlueprintRepo := fsrepo.NewProductBlueprintRepositoryFS(infra.Firestore)
 	tokenBlueprintRepo := fsrepo.NewTokenBlueprintRepositoryFS(infra.Firestore)
+
 	reportNameQuery := adminquery.NewReportNameQuery(
 		avatarRepo,
 		brandRepo,
@@ -85,6 +87,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	reviewReportRepo := fsrepo.NewReviewReportRepositoryFS(infra.Firestore)
 	if reviewReportRepo == nil {
 		return nil, errors.New("di.admin: review report repository is nil")
+	}
+
+	reviewReportDecisionNotificationRepo := fsrepo.NewReviewReportDecisionNotificationRepositoryFS(infra.Firestore)
+	if reviewReportDecisionNotificationRepo == nil {
+		return nil, errors.New("di.admin: review report decision notification repository is nil")
 	}
 
 	productBlueprintReviewRepo := fsrepo.NewProductBlueprintReviewRepositoryFS(infra.Firestore)
@@ -122,9 +129,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	reviewReportUsecase := usecase.NewReviewReportUsecase(
 		usecase.ReviewReportUsecaseDeps{
-			ReportRepo:             reviewReportRepo,
-			ProductReviewModerator: productBlueprintReviewUsecase,
-			TokenCommentModerator:  tokenBlueprintReviewUsecase,
+			ReportRepo:               reviewReportRepo,
+			DecisionNotificationRepo: reviewReportDecisionNotificationRepo,
+			ProductReviewModerator:   productBlueprintReviewUsecase,
+			TokenCommentModerator:    tokenBlueprintReviewUsecase,
 		},
 	)
 	if reviewReportUsecase == nil {
@@ -154,18 +162,19 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	})
 
 	return &Container{
-		Infra:                infra,
-		adminFirebaseUID:     adminFirebaseUID,
-		adminEmail:           adminEmail,
-		contactUsecase:       contactUsecase,
-		reviewReportUsecase:  reviewReportUsecase,
-		companyRepo:          companyRepo,
-		memberRepo:           memberRepo,
-		avatarRepo:           avatarRepo,
-		brandRepo:            brandRepo,
-		productBlueprintRepo: productBlueprintRepo,
-		tokenBlueprintRepo:   tokenBlueprintRepo,
-		reportNameQuery:      reportNameQuery,
-		gasBalanceQuery:      gasBalanceQuery,
+		Infra:                                infra,
+		adminFirebaseUID:                     adminFirebaseUID,
+		adminEmail:                           adminEmail,
+		contactUsecase:                       contactUsecase,
+		reviewReportUsecase:                  reviewReportUsecase,
+		companyRepo:                          companyRepo,
+		memberRepo:                           memberRepo,
+		avatarRepo:                           avatarRepo,
+		brandRepo:                            brandRepo,
+		productBlueprintRepo:                 productBlueprintRepo,
+		tokenBlueprintRepo:                   tokenBlueprintRepo,
+		reviewReportDecisionNotificationRepo: reviewReportDecisionNotificationRepo,
+		reportNameQuery:                      reportNameQuery,
+		gasBalanceQuery:                      gasBalanceQuery,
 	}, nil
 }

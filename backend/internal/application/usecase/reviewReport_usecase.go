@@ -50,7 +50,8 @@ type ReviewReportTokenCommentModerator interface {
 // ============================================================
 
 type ReviewReportUsecase struct {
-	reportRepo reviewreport.RepositoryPort
+	reportRepo               reviewreport.RepositoryPort
+	decisionNotificationRepo reviewreport.DecisionNotificationRepository
 
 	productReviewRepo       pbr.Repository
 	productBlueprintRepo    applicationport.ProductBlueprintGetter
@@ -66,7 +67,8 @@ type ReviewReportUsecase struct {
 }
 
 type ReviewReportUsecaseDeps struct {
-	ReportRepo reviewreport.RepositoryPort
+	ReportRepo               reviewreport.RepositoryPort
+	DecisionNotificationRepo reviewreport.DecisionNotificationRepository
 
 	ProductReviewRepo       pbr.Repository
 	ProductBlueprintRepo    applicationport.ProductBlueprintGetter
@@ -88,21 +90,29 @@ func NewReviewReportUsecase(deps ReviewReportUsecaseDeps) *ReviewReportUsecase {
 	}
 
 	return &ReviewReportUsecase{
-		reportRepo:              deps.ReportRepo,
-		productReviewRepo:       deps.ProductReviewRepo,
-		productBlueprintRepo:    deps.ProductBlueprintRepo,
-		productPurchaseResolver: deps.ProductPurchaseResolver,
-		productReviewModerator:  deps.ProductReviewModerator,
-		tokenCommentRepo:        deps.TokenCommentRepo,
-		tokenBlueprintRepo:      deps.TokenBlueprintRepo,
-		tokenAccessResolver:     deps.TokenAccessResolver,
-		tokenCommentModerator:   deps.TokenCommentModerator,
-		now:                     now,
+		reportRepo:               deps.ReportRepo,
+		decisionNotificationRepo: deps.DecisionNotificationRepo,
+		productReviewRepo:        deps.ProductReviewRepo,
+		productBlueprintRepo:     deps.ProductBlueprintRepo,
+		productPurchaseResolver:  deps.ProductPurchaseResolver,
+		productReviewModerator:   deps.ProductReviewModerator,
+		tokenCommentRepo:         deps.TokenCommentRepo,
+		tokenBlueprintRepo:       deps.TokenBlueprintRepo,
+		tokenAccessResolver:      deps.TokenAccessResolver,
+		tokenCommentModerator:    deps.TokenCommentModerator,
+		now:                      now,
 	}
 }
 
 func (u *ReviewReportUsecase) ensureReportRepository() error {
 	if u == nil || u.reportRepo == nil {
+		return ErrReviewReportUsecaseNotConfigured
+	}
+	return nil
+}
+
+func (u *ReviewReportUsecase) ensureDecisionNotificationRepository() error {
+	if u == nil || u.decisionNotificationRepo == nil {
 		return ErrReviewReportUsecaseNotConfigured
 	}
 	return nil
@@ -548,18 +558,35 @@ func (u *ReviewReportUsecase) DecideReportCase(
 	if err := u.ensureReportRepository(); err != nil {
 		return reviewreport.ReportCase{}, err
 	}
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return reviewreport.ReportCase{}, err
+	}
 	if input.CaseID == "" {
 		return reviewreport.ReportCase{}, reviewreport.ErrInvalidCaseID
 	}
 
+	var (
+		decidedCase reviewreport.ReportCase
+		err         error
+	)
+
 	switch input.Decision {
 	case ReviewReportDecisionKeep:
-		return u.keepReportCase(ctx, input)
+		decidedCase, err = u.keepReportCase(ctx, input)
 	case ReviewReportDecisionRemove:
-		return u.removeReportCase(ctx, input)
+		decidedCase, err = u.removeReportCase(ctx, input)
 	default:
 		return reviewreport.ReportCase{}, ErrReviewReportInvalidDecision
 	}
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	if err := u.createDecisionNotifications(ctx, decidedCase); err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	return decidedCase, nil
 }
 
 func (u *ReviewReportUsecase) keepReportCase(
@@ -638,6 +665,73 @@ func (u *ReviewReportUsecase) removeReportCase(
 		reportCase.ID,
 		reviewreport.NewCasePatchFromEntity(reportCase),
 	)
+}
+
+func (u *ReviewReportUsecase) createDecisionNotifications(
+	ctx context.Context,
+	reportCase reviewreport.ReportCase,
+) error {
+	if err := u.ensureReportRepository(); err != nil {
+		return err
+	}
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return err
+	}
+	if reportCase.DecidedAt == nil || reportCase.DecidedAt.IsZero() {
+		return reviewreport.ErrDecisionNotificationCaseNotDecided
+	}
+
+	decidedAt := reportCase.DecidedAt.UTC()
+	filter := reviewreport.ReportFilter{
+		CaseID: reportCase.ID,
+		CreatedAt: common.TimeRange{
+			To: &decidedAt,
+		},
+	}
+	sort := common.Sort{
+		Column: "createdAt",
+		Order:  common.SortAsc,
+	}
+
+	const perPage = 100
+
+	for pageNumber := 1; ; pageNumber++ {
+		result, err := u.reportRepo.ListReports(
+			ctx,
+			reportCase.ID,
+			filter,
+			sort,
+			common.Page{
+				Number:  pageNumber,
+				PerPage: perPage,
+			},
+		)
+		if err != nil {
+			return err
+		}
+
+		for _, report := range result.Items {
+			notification, err := reviewreport.NewDecisionNotification(
+				reportCase,
+				report,
+				decidedAt,
+			)
+			if err != nil {
+				return err
+			}
+
+			if _, err := u.decisionNotificationRepo.CreateIfAbsent(
+				ctx,
+				notification,
+			); err != nil {
+				return err
+			}
+		}
+
+		if pageNumber >= result.TotalPages {
+			return nil
+		}
+	}
 }
 
 func (u *ReviewReportUsecase) removeProductBlueprintReviewTarget(
