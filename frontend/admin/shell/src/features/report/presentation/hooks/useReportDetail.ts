@@ -10,12 +10,12 @@ import type {
   ReviewReportItemSort,
   ReviewReportReason,
   ReviewReportSortOrder,
-} from "../../../shared/type/reviewReport";
-import { useReportPending } from "../context/ReportPendingContext";
+} from "../../../../shared/type/reviewReport";
+import { useReportPending } from "../../context/ReportPendingContext";
 import {
   decideReviewReport,
   getReviewReport,
-} from "../infrastructure/reportApi";
+} from "../../infrastructure/reportApi";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 50;

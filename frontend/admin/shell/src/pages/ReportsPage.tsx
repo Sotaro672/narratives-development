@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useReports } from "../features/report/hooks/useReports";
+import { useReports } from "../features/report/presentation/hooks/useReports";
 import type {
   ReviewReportCase,
   ReviewReportCaseStatus,

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import ReportDecisionModal from "../features/report/components/ReportDecisionModal";
-import { useReportDetail } from "../features/report/hooks/useReportDetail";
+import { useReportDetail } from "../features/report/presentation/hooks/useReportDetail";
 import type {
   ReviewReportActorType,
   ReviewReportCaseStatus,

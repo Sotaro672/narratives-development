@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listReviewReports } from "../infrastructure/reportApi";
+import { listReviewReports } from "../../infrastructure/reportApi";
 
 export function useReportPendingCount() {
   const requestIdRef = useRef(0);

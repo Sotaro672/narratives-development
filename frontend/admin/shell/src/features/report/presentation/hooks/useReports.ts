@@ -8,8 +8,8 @@ import type {
   ReviewReportCaseSort,
   ReviewReportSortOrder,
   ReviewReportTargetType,
-} from "../../../shared/type/reviewReport";
-import { listReviewReports } from "../infrastructure/reportApi";
+} from "../../../../shared/type/reviewReport";
+import { listReviewReports } from "../../infrastructure/reportApi";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 50;
