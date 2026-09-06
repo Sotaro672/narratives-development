@@ -80,6 +80,50 @@ func (r *ReviewReportRepositoryFS) GetCase(ctx context.Context, caseID reviewrep
 	return decodeReviewReportCase(snap.Ref.ID, snap.Data())
 }
 
+// IsAvatarResaleSuspended reports whether the avatar is currently blocked from
+// using the resale service by an Admin review-report decision.
+//
+// The AVATAR review-report case ID is deterministic (avatar_{avatarId}), so the
+// check is a direct document lookup rather than a collection query. A missing
+// case means the avatar has no resale suspension. Only REMOVED is treated as
+// suspended; PENDING and KEPT remain allowed.
+func (r *ReviewReportRepositoryFS) IsAvatarResaleSuspended(
+	ctx context.Context,
+	avatarID string,
+) (bool, error) {
+	if r == nil || r.client == nil {
+		return false, fmt.Errorf("reviewReport repository is not configured")
+	}
+	if avatarID == "" {
+		return false, reviewreport.ErrInvalidTargetID
+	}
+
+	caseID, err := reviewreport.BuildCaseID(
+		reviewreport.TargetTypeAvatar,
+		avatarID,
+	)
+	if err != nil {
+		return false, err
+	}
+
+	reportCase, err := r.GetCase(ctx, caseID)
+	if err != nil {
+		if reviewReportIsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	if reportCase.TargetType != reviewreport.TargetTypeAvatar {
+		return false, reviewreport.ErrInvalidTargetType
+	}
+	if reportCase.TargetID != avatarID {
+		return false, reviewreport.ErrInvalidTargetID
+	}
+
+	return reportCase.Status == reviewreport.CaseStatusRemoved, nil
+}
+
 func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewreport.CaseFilter, sort common.Sort, page common.Page) (common.PageResult[reviewreport.ReportCase], error) {
 	if r == nil || r.client == nil {
 		return common.PageResult[reviewreport.ReportCase]{}, fmt.Errorf("reviewReport repository is not configured")
