@@ -685,11 +685,13 @@ func (u *ReviewReportUsecase) DecideReportCase(
 	if err := u.ensureReportRepository(); err != nil {
 		return reviewreport.ReportCase{}, err
 	}
-	if err := u.ensureDecisionNotificationRepository(); err != nil {
-		return reviewreport.ReportCase{}, err
-	}
 	if input.CaseID == "" {
 		return reviewreport.ReportCase{}, reviewreport.ErrInvalidCaseID
+	}
+	if input.Decision == ReviewReportDecisionRemove {
+		if err := u.ensureDecisionNotificationRepository(); err != nil {
+			return reviewreport.ReportCase{}, err
+		}
 	}
 
 	var (
@@ -709,8 +711,10 @@ func (u *ReviewReportUsecase) DecideReportCase(
 		return reviewreport.ReportCase{}, err
 	}
 
-	if err := u.createDecisionNotifications(ctx, decidedCase); err != nil {
-		return reviewreport.ReportCase{}, err
+	if decidedCase.Status == reviewreport.CaseStatusRemoved {
+		if err := u.createDecisionNotifications(ctx, decidedCase); err != nil {
+			return reviewreport.ReportCase{}, err
+		}
 	}
 
 	return decidedCase, nil
