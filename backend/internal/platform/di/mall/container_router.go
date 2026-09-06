@@ -59,6 +59,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var inquiryH http.Handler
 	var meAvatarsH http.Handler
 	var announcementH http.Handler
+	var reviewReportDecisionNotificationH http.Handler
 	var marketH http.Handler
 	var resaleH http.Handler
 	var previewPublicH http.Handler
@@ -177,6 +178,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 			cont.AnnouncementUC,
 			cont.AnnouncementQ,
 		)
+	}
+
+	// /mall/me/review-report-decision-notifications
+	if cont.ReviewReportUC != nil {
+		reviewReportDecisionNotificationH =
+			mallhandler.NewReviewReportDecisionNotificationHandler(
+				cont.ReviewReportUC,
+			)
 	}
 
 	// /mall/market/resales
@@ -331,12 +340,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		OrderScanTransfer: orderScanTransferH,
 
-		Payment:      payH,
-		Order:        orderH,
-		Trade:        tradeH,
-		AvatarReview: avatarReviewH,
-		Inquiry:      inquiryH,
-		Announcement: announcementH,
+		Payment:                          payH,
+		Order:                            orderH,
+		Trade:                            tradeH,
+		AvatarReview:                     avatarReviewH,
+		Inquiry:                          inquiryH,
+		Announcement:                     announcementH,
+		ReviewReportDecisionNotification: reviewReportDecisionNotificationH,
 
 		SetupStatus: setupStatusH,
 	}

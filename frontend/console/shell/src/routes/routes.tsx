@@ -53,12 +53,14 @@ import {
   AnnouncementCreatePage,
   AnnouncementTokenListPage,
   AnnouncementDetailPage,
+  NotificationPage,
 } from "../pages";
 
 export const routes: RouteObject[] = [
   { path: "/auth", element: <AuthPage /> },
   { path: "/invitation", element: <InvitationPage /> },
   { path: "/company", element: <CompanyDetail /> },
+  { path: "/notifications", element: <NotificationPage /> },
   {
     path: "/stockLocation",
     children: [

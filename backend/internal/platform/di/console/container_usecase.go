@@ -593,9 +593,6 @@ func buildUsecases(
 	if reviewReportRepo == nil {
 		return nil, resources.CloseWithError(errors.New("di.console: review report repository is nil"))
 	}
-	if r.reviewReportDecisionNotificationRepo == nil {
-		return nil, resources.CloseWithError(errors.New("di.console: review report decision notification repository is nil"))
-	}
 
 	reviewReportUC := uc.NewReviewReportUsecase(
 		uc.ReviewReportUsecaseDeps{
@@ -617,7 +614,8 @@ func buildUsecases(
 
 	cartUC := uc.NewCartUsecase(r.cartRepo)
 
-	invitationDeliveryQueue, err := cloudtasksadp.NewInvitationDeliveryQueueFromEnv(ctx)
+	invitationDeliveryQueue, err :=
+		cloudtasksadp.NewInvitationDeliveryQueueFromEnv(ctx)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}

@@ -101,6 +101,11 @@ type Deps struct {
 	// - POST /mall/me/announcement/{announcementId}/read
 	Announcement http.Handler
 
+	// review report decision notifications (me)
+	// - GET  /mall/me/review-report-decision-notifications
+	// - POST /mall/me/review-report-decision-notifications/{notificationId}/read
+	ReviewReportDecisionNotification http.Handler
+
 	// /mall/me/setup-status (existence checks for redirect)
 	SetupStatus http.Handler
 }
@@ -136,13 +141,11 @@ func handleSafeAuth(
 		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
 		h = http.NotFoundHandler()
 	}
-
 	if auth == nil {
 		log.Printf("[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)", name, pattern)
 		handleSafe(mux, pattern, mallRouterUnavailableHandler("auth_middleware_not_configured"), name)
 		return
 	}
-
 	handleSafe(mux, pattern, auth(h), name)
 }
 
@@ -164,19 +167,16 @@ func handleSafeAuthAvatar(
 		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
 		h = http.NotFoundHandler()
 	}
-
 	if auth == nil {
 		log.Printf("[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)", name, pattern)
 		handleSafe(mux, pattern, mallRouterUnavailableHandler("auth_middleware_not_configured"), name)
 		return
 	}
-
 	if avatar == nil {
 		log.Printf("[mall.router] ERROR: nil avatar context middleware: %s pattern=%s (failing closed)", name, pattern)
 		handleSafe(mux, pattern, mallRouterUnavailableHandler("avatar_context_middleware_not_configured"), name)
 		return
 	}
-
 	handleSafe(mux, pattern, auth(avatar(h)), name)
 }
 
@@ -187,11 +187,9 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 	if h == nil {
 		return nil
 	}
-
 	if auth == nil {
 		log.Printf("[mall.router] ERROR: nil auth middleware: Avatar(create) (failing closed for POST)")
 		unavailable := mallRouterUnavailableHandler("auth_middleware_not_configured")
-
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPost && (r.URL.Path == "/mall/avatars" || r.URL.Path == "/mall/avatars/") {
 				unavailable.ServeHTTP(w, r)
@@ -200,7 +198,6 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 			h.ServeHTTP(w, r)
 		})
 	}
-
 	authed := auth(h)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && (r.URL.Path == "/mall/avatars" || r.URL.Path == "/mall/avatars/") {
@@ -219,13 +216,11 @@ func paymentReadOnlyHandler(h http.Handler) http.Handler {
 	if h == nil {
 		return nil
 	}
-
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodOptions {
 			h.ServeHTTP(w, r)
 			return
 		}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Allow", "GET, OPTIONS")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -394,6 +389,24 @@ func Register(
 	// announcements (me)
 	handleSafeAuthAvatar(mux, "/mall/me/announcement", deps.Announcement, "Announcement(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/announcement/", deps.Announcement, "Announcement(me)", auth, avatar)
+
+	// review report decision notifications (me)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/review-report-decision-notifications",
+		deps.ReviewReportDecisionNotification,
+		"ReviewReportDecisionNotification(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/review-report-decision-notifications/",
+		deps.ReviewReportDecisionNotification,
+		"ReviewReportDecisionNotification(me)",
+		auth,
+		avatar,
+	)
 
 	// shipping quote (me)
 	handleSafeAuthAvatar(mux, "/mall/me/shipping-quotes", deps.ShippingQuote, "ShippingQuote(me)", auth, avatar)

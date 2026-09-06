@@ -1,0 +1,127 @@
+/* frontend/console/shell/src/styles/notification.css */
+
+.notification-page {
+  width: 100%;
+  min-width: 0;
+}
+
+.notification-page__error {
+  margin: 1.5rem 1.5rem 0;
+  padding: 12px 16px;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.notification-page__row {
+  vertical-align: top;
+}
+
+.notification-page__row--unread {
+  cursor: pointer;
+}
+
+.notification-page__row--unread:hover {
+  background-color: #f8fafc;
+}
+
+.notification-page__row--unread:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: -2px;
+}
+
+.notification-page__row--busy {
+  cursor: progress;
+  opacity: 0.75;
+}
+
+.notification-page__status-cell {
+  width: 92px;
+  white-space: nowrap;
+}
+
+.notification-page__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.notification-page__status--unread {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.notification-page__status--read {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.notification-page__content-cell {
+  min-width: 320px;
+}
+
+.notification-page__content,
+.notification-page__reason {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.notification-page__category {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.notification-page__title {
+  color: #1f2937;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.notification-page__body {
+  color: #374151;
+  line-height: 1.6;
+}
+
+.notification-page__detail {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.notification-page__target,
+.notification-page__decision {
+  white-space: nowrap;
+}
+
+.notification-page__reason-cell {
+  min-width: 180px;
+  max-width: 320px;
+}
+
+.notification-page__date {
+  white-space: nowrap;
+  color: #64748b;
+}
+
+@media (max-width: 960px) {
+  .notification-page__content-cell {
+    min-width: 240px;
+  }
+
+  .notification-page__reason-cell {
+    min-width: 150px;
+  }
+}
