@@ -67,7 +67,10 @@ func (uc *ResaleUsecase) WithProductIdentityRepositories(
 	return uc
 }
 
-func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (resaledom.Resale, error) {
+func (uc *ResaleUsecase) Create(
+	ctx context.Context,
+	item resaledom.Resale,
+) (resaledom.Resale, error) {
 	if uc == nil || uc.resaleRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.Create")
 	}
@@ -86,7 +89,10 @@ func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (res
 		return resaledom.Resale{}, resaledom.ErrInvalidProductID
 	}
 
-	productBlueprintID, _, err := uc.productBlueprintRepo.GetIDByModelID(ctx, product.ModelID)
+	productBlueprintID, _, err := uc.productBlueprintRepo.GetIDByModelID(
+		ctx,
+		product.ModelID,
+	)
 	if err != nil {
 		return resaledom.Resale{}, err
 	}
@@ -94,7 +100,10 @@ func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (res
 		return resaledom.Resale{}, resaledom.ErrInvalidProductBlueprintID
 	}
 
-	productBlueprint, err := uc.productBlueprintRepo.GetByID(ctx, productBlueprintID)
+	productBlueprint, err := uc.productBlueprintRepo.GetByID(
+		ctx,
+		productBlueprintID,
+	)
 	if err != nil {
 		return resaledom.Resale{}, err
 	}
@@ -117,7 +126,10 @@ func (uc *ResaleUsecase) Create(ctx context.Context, item resaledom.Resale) (res
 	return uc.resaleRepo.Create(ctx, item)
 }
 
-func (uc *ResaleUsecase) Update(ctx context.Context, item resaledom.Resale) (resaledom.Resale, error) {
+func (uc *ResaleUsecase) Update(
+	ctx context.Context,
+	item resaledom.Resale,
+) (resaledom.Resale, error) {
 	if uc == nil || uc.resaleRepo == nil {
 		return resaledom.Resale{}, ErrNotSupported("Resale.Update")
 	}
@@ -151,7 +163,62 @@ func (uc *ResaleUsecase) Update(ctx context.Context, item resaledom.Resale) (res
 	return updated, nil
 }
 
-func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
+// SuspendAvatarResaleByAdmin suspends only the resale service for an avatar.
+//
+// Policy:
+// - Avatar itself is not deleted or disabled.
+// - Only currently listing resales are changed to suspended.
+// - Already suspended resales remain unchanged.
+// - Sold resales and completed/past trades remain unchanged.
+// - Suspended resale items are removed from carts through Update.
+// - The operation is idempotent; retrying completes any remaining listings.
+func (uc *ResaleUsecase) SuspendAvatarResaleByAdmin(
+	ctx context.Context,
+	input SuspendAvatarResaleByAdminInput,
+) error {
+	if uc == nil || uc.resaleRepo == nil {
+		return ErrNotSupported("Resale.SuspendAvatarResaleByAdmin")
+	}
+	if input.AvatarID == "" {
+		return resaledom.ErrInvalidAvatarID
+	}
+
+	items, err := uc.resaleRepo.ListByAvatarID(ctx, input.AvatarID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+
+	for _, item := range items {
+		if item.AvatarID != input.AvatarID {
+			return resaledom.ErrInvalidAvatarID
+		}
+		if item.Status != resaledom.StatusListing {
+			continue
+		}
+
+		if err := item.Suspend(now); err != nil {
+			return err
+		}
+
+		if input.AdminID != "" {
+			updatedBy := input.AdminID
+			item.UpdatedBy = &updatedBy
+		}
+
+		if _, err := uc.Update(ctx, item); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (uc *ResaleUsecase) Delete(
+	ctx context.Context,
+	id string,
+) error {
 	if uc == nil || uc.resaleRepo == nil {
 		return ErrNotSupported("Resale.Delete")
 	}
@@ -190,7 +257,10 @@ func (uc *ResaleUsecase) Delete(ctx context.Context, id string) error {
 	return uc.cartItemCleanup.RemoveItemsByResaleID(ctx, id)
 }
 
-func (uc *ResaleUsecase) CreateImage(ctx context.Context, img resaledom.ResaleImage) (resaledom.ResaleImage, error) {
+func (uc *ResaleUsecase) CreateImage(
+	ctx context.Context,
+	img resaledom.ResaleImage,
+) (resaledom.ResaleImage, error) {
 	if uc == nil {
 		return resaledom.ResaleImage{}, ErrNotSupported("Resale.CreateImage")
 	}
@@ -228,7 +298,11 @@ func (uc *ResaleUsecase) CreateImage(ctx context.Context, img resaledom.ResaleIm
 	return created, nil
 }
 
-func (uc *ResaleUsecase) DeleteImage(ctx context.Context, resaleID string, imageID string) error {
+func (uc *ResaleUsecase) DeleteImage(
+	ctx context.Context,
+	resaleID string,
+	imageID string,
+) error {
 	if uc == nil {
 		return ErrNotSupported("Resale.DeleteImage")
 	}
@@ -246,7 +320,8 @@ func (uc *ResaleUsecase) DeleteImage(ctx context.Context, resaleID string, image
 	}
 
 	if err := uc.imageRepo.Delete(ctx, resaleID, imageID); err != nil {
-		if !errors.Is(err, resaledom.ErrNotFound) && !errors.Is(err, resaledom.ErrConditionImageNotFound) {
+		if !errors.Is(err, resaledom.ErrNotFound) &&
+			!errors.Is(err, resaledom.ErrConditionImageNotFound) {
 			return err
 		}
 	}

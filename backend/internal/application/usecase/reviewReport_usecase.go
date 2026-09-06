@@ -46,16 +46,17 @@ type ReviewReportTokenCommentModerator interface {
 	) error
 }
 
-// ReviewReportAvatarModerator owns Admin moderation of avatars.
-// Avatar removal in ReviewReport means service-level suspension, not physical deletion.
-type ReviewReportAvatarModerator interface {
-	SuspendAvatarByAdmin(
+// ReviewReportAvatarResaleModerator owns Admin moderation of avatar resale access.
+// AVATAR + REMOVE in ReviewReport means resale-service suspension only.
+// It must not delete or disable the avatar itself.
+type ReviewReportAvatarResaleModerator interface {
+	SuspendAvatarResaleByAdmin(
 		ctx context.Context,
-		input SuspendAvatarByAdminInput,
+		input SuspendAvatarResaleByAdminInput,
 	) error
 }
 
-type SuspendAvatarByAdminInput struct {
+type SuspendAvatarResaleByAdminInput struct {
 	AvatarID string
 	Reason   string
 	AdminID  string
@@ -79,8 +80,8 @@ type ReviewReportUsecase struct {
 	tokenAccessResolver   applicationport.ReviewReportTokenAccessResolver
 	tokenCommentModerator ReviewReportTokenCommentModerator
 
-	avatarRepo      avatar.Repository
-	avatarModerator ReviewReportAvatarModerator
+	avatarRepo            avatar.Repository
+	avatarResaleModerator ReviewReportAvatarResaleModerator
 
 	now func() time.Time
 }
@@ -99,8 +100,8 @@ type ReviewReportUsecaseDeps struct {
 	TokenAccessResolver   applicationport.ReviewReportTokenAccessResolver
 	TokenCommentModerator ReviewReportTokenCommentModerator
 
-	AvatarRepo      avatar.Repository
-	AvatarModerator ReviewReportAvatarModerator
+	AvatarRepo            avatar.Repository
+	AvatarResaleModerator ReviewReportAvatarResaleModerator
 
 	Now func() time.Time
 }
@@ -123,7 +124,7 @@ func NewReviewReportUsecase(deps ReviewReportUsecaseDeps) *ReviewReportUsecase {
 		tokenAccessResolver:      deps.TokenAccessResolver,
 		tokenCommentModerator:    deps.TokenCommentModerator,
 		avatarRepo:               deps.AvatarRepo,
-		avatarModerator:          deps.AvatarModerator,
+		avatarResaleModerator:    deps.AvatarResaleModerator,
 		now:                      now,
 	}
 }
@@ -877,8 +878,9 @@ func (u *ReviewReportUsecase) removeReportCase(
 	}
 
 	// IMPORTANT:
-	// 対象コンテンツを先に削除する。
-	// 対象削除に失敗した場合、ReportCase を REMOVED にしてはいけない。
+	// REMOVE の対象側処理を先に完了する。
+	// 商品レビュー/コメントは削除、AVATARは再販サービスのみ利用停止とする。
+	// 対象側処理に失敗した場合、ReportCase を REMOVED にしてはいけない。
 	switch reportCase.TargetType {
 	case reviewreport.TargetTypeProductBlueprintReview:
 		if err := u.removeProductBlueprintReviewTarget(
@@ -899,7 +901,7 @@ func (u *ReviewReportUsecase) removeReportCase(
 		}
 
 	case reviewreport.TargetTypeAvatar:
-		if err := u.suspendAvatarTarget(
+		if err := u.suspendAvatarResaleTarget(
 			ctx,
 			reportCase,
 			input.Reason,
@@ -1033,19 +1035,19 @@ func (u *ReviewReportUsecase) removeTokenBlueprintCommentTarget(
 	)
 }
 
-func (u *ReviewReportUsecase) suspendAvatarTarget(
+func (u *ReviewReportUsecase) suspendAvatarResaleTarget(
 	ctx context.Context,
 	reportCase reviewreport.ReportCase,
 	reason string,
 	adminID string,
 ) error {
-	if u.avatarModerator == nil {
+	if u.avatarResaleModerator == nil {
 		return ErrReviewReportUsecaseNotConfigured
 	}
 
-	return u.avatarModerator.SuspendAvatarByAdmin(
+	return u.avatarResaleModerator.SuspendAvatarResaleByAdmin(
 		ctx,
-		SuspendAvatarByAdminInput{
+		SuspendAvatarResaleByAdminInput{
 			AvatarID: reportCase.TargetID,
 			Reason:   reason,
 			AdminID:  adminID,
