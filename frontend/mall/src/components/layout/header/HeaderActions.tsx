@@ -1,21 +1,15 @@
 // frontend/mall/src/components/layout/header/HeaderActions.tsx
 
-import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import { useAnnouncementUnreadCount } from "../../../features/announcement/hooks/useAnnouncementUnreadCount";
 import { useInquiryBadgeCounter } from "../../../features/inquiry/presentation/hooks/useInquiryBadgeCounter";
-import { fetchMeReviewReportDecisionNotifications } from "../../../features/notification/infrastructure/reviewReportDecisionNotificationApi";
+import { useNotificationUnreadCount } from "../../../features/notification/hooks/useNotificationUnreadCount";
 import { useResaleChatBadgeCounter } from "../../../features/resale/presentation/hooks/useResaleChatBadgeCounter";
 
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {
   actions: HeaderActionState;
-};
-
-type UseReviewReportDecisionNotificationUnreadCountParams = {
-  enabled?: boolean;
 };
 
 function normalizeCount(value: unknown): number {
@@ -34,49 +28,6 @@ function isResalePagePath(pathname: string): boolean {
 
 function isResaleDetailPagePath(pathname: string): boolean {
   return /^\/resales\/[^/]+\/?$/.test(pathname);
-}
-
-function useReviewReportDecisionNotificationUnreadCount(
-  params: UseReviewReportDecisionNotificationUnreadCountParams = {},
-): number {
-  const enabled = params.enabled ?? true;
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    if (!enabled) {
-      setUnreadCount(0);
-      return;
-    }
-
-    const controller = new AbortController();
-
-    fetchMeReviewReportDecisionNotifications({
-      page: 1,
-      perPage: 1,
-      isRead: false,
-      signal: controller.signal,
-    })
-      .then((result) => {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setUnreadCount(normalizeCount(result.totalCount));
-      })
-      .catch(() => {
-        if (controller.signal.aborted) {
-          return;
-        }
-
-        setUnreadCount(0);
-      });
-
-    return () => {
-      controller.abort();
-    };
-  }, [enabled]);
-
-  return unreadCount;
 }
 
 export default function HeaderActions({ actions }: HeaderActionsProps) {
@@ -106,14 +57,9 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     toggleSettings,
   } = actions;
 
-  const { unreadCount: announcementUnreadCount } = useAnnouncementUnreadCount({
+  const { unreadCount: notificationUnreadCount } = useNotificationUnreadCount({
     enabled: shouldShowAnnouncementButton,
   });
-
-  const reviewReportDecisionUnreadCount =
-    useReviewReportDecisionNotificationUnreadCount({
-      enabled: shouldShowAnnouncementButton,
-    });
 
   const { badgeCount: inquiryBadgeCount } = useInquiryBadgeCounter({
     enabled: shouldShowAnnouncementButton,
@@ -124,12 +70,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
   });
 
   const safeCartItemCount = normalizeCount(cartItemCount);
-  const safeAnnouncementUnreadCount = normalizeCount(announcementUnreadCount);
-  const safeReviewReportDecisionUnreadCount = normalizeCount(
-    reviewReportDecisionUnreadCount,
-  );
-  const safeNotificationUnreadCount =
-    safeAnnouncementUnreadCount + safeReviewReportDecisionUnreadCount;
+  const safeNotificationUnreadCount = normalizeCount(notificationUnreadCount);
   const safeInquiryBadgeCount = normalizeCount(inquiryBadgeCount);
   const safeResaleChatBadgeCount = normalizeCount(resaleChatBadgeCount);
   const safeChatBadgeCount = safeInquiryBadgeCount + safeResaleChatBadgeCount;
