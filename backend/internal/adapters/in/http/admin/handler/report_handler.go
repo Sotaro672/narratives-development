@@ -41,6 +41,7 @@ type reviewReportCaseResponse struct {
 	TargetType       reviewreport.TargetType `json:"targetType"`
 	TargetID         string                  `json:"targetId"`
 	TargetParentID   string                  `json:"targetParentId"`
+	TargetParentName string                  `json:"targetParentName,omitempty"`
 	TargetAuthorID   string                  `json:"targetAuthorId"`
 	TargetAuthorName string                  `json:"targetAuthorName,omitempty"`
 	TargetAuthorType reviewreport.ActorType  `json:"targetAuthorType"`
@@ -472,6 +473,11 @@ func (h *ReportHandler) toReviewReportDetailCaseResponse(
 		return response
 	}
 
+	response.TargetParentName = h.nameQuery.ResolveTargetParentName(
+		ctx,
+		reportCase.TargetType,
+		reportCase.TargetParentID,
+	)
 	response.TargetAuthorName = h.nameQuery.ResolveTargetAuthorName(
 		ctx,
 		reportCase.TargetAuthorType,

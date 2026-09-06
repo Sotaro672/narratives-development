@@ -386,8 +386,12 @@ export default function ReportDetailPage() {
 
                   <dl className="report-detail-page__fields report-detail-page__fields--compact">
                     <DetailField
-                      label="親ID"
-                      value={reportCase.targetParentId || "-"}
+                      label="親"
+                      value={
+                        reportCase.targetParentName ||
+                        reportCase.targetParentId ||
+                        "-"
+                      }
                     />
                     <DetailField
                       label="投稿者種別"

@@ -44,6 +44,7 @@ export type ReviewReportCase = {
   targetType: ReviewReportTargetType;
   targetId: string;
   targetParentId: string;
+  targetParentName?: string;
   targetAuthorId: string;
   targetAuthorName?: string;
   targetAuthorType: ReviewReportActorType;

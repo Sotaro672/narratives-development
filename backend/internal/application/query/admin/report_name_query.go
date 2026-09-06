@@ -8,7 +8,9 @@ import (
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
+	productblueprintdom "narratives/internal/domain/productBlueprint"
 	reviewreport "narratives/internal/domain/reviewReport"
+	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 // ============================================================
@@ -32,15 +34,25 @@ type reportMemberReader interface {
 	GetByUID(ctx context.Context, uid string) (memberdom.Record, error)
 }
 
+type reportProductBlueprintReader interface {
+	GetByID(ctx context.Context, id string) (productblueprintdom.ProductBlueprint, error)
+}
+
+type reportTokenBlueprintReader interface {
+	GetByID(ctx context.Context, id string) (*tokenblueprintdom.TokenBlueprint, error)
+}
+
 // ============================================================
 // Query
 // ============================================================
 
 type ReportNameQuery struct {
-	avatarRepo  reportAvatarReader
-	brandRepo   reportBrandReader
-	companyRepo reportCompanyReader
-	memberRepo  reportMemberReader
+	avatarRepo           reportAvatarReader
+	brandRepo            reportBrandReader
+	companyRepo          reportCompanyReader
+	memberRepo           reportMemberReader
+	productBlueprintRepo reportProductBlueprintReader
+	tokenBlueprintRepo   reportTokenBlueprintReader
 }
 
 func NewReportNameQuery(
@@ -48,12 +60,16 @@ func NewReportNameQuery(
 	brandRepo reportBrandReader,
 	companyRepo reportCompanyReader,
 	memberRepo reportMemberReader,
+	productBlueprintRepo reportProductBlueprintReader,
+	tokenBlueprintRepo reportTokenBlueprintReader,
 ) *ReportNameQuery {
 	return &ReportNameQuery{
-		avatarRepo:  avatarRepo,
-		brandRepo:   brandRepo,
-		companyRepo: companyRepo,
-		memberRepo:  memberRepo,
+		avatarRepo:           avatarRepo,
+		brandRepo:            brandRepo,
+		companyRepo:          companyRepo,
+		memberRepo:           memberRepo,
+		productBlueprintRepo: productBlueprintRepo,
+		tokenBlueprintRepo:   tokenBlueprintRepo,
 	}
 }
 
@@ -129,6 +145,36 @@ func (q *ReportNameQuery) ResolveMemberName(ctx context.Context, memberID string
 	return ""
 }
 
+// ResolveProductName は productBlueprintId から productName を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveProductName(ctx context.Context, productBlueprintID string) string {
+	if q == nil || q.productBlueprintRepo == nil || productBlueprintID == "" {
+		return ""
+	}
+
+	entity, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
+	if err != nil {
+		return ""
+	}
+
+	return entity.ProductName
+}
+
+// ResolveTokenName は tokenBlueprintId から tokenName を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveTokenName(ctx context.Context, tokenBlueprintID string) string {
+	if q == nil || q.tokenBlueprintRepo == nil || tokenBlueprintID == "" {
+		return ""
+	}
+
+	entity, err := q.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
+	if err != nil || entity == nil {
+		return ""
+	}
+
+	return entity.Name
+}
+
 // ============================================================
 // Review report resolvers
 // ============================================================
@@ -164,6 +210,24 @@ func (q *ReportNameQuery) ResolveTargetAuthorName(
 		return q.ResolveAvatarName(ctx, authorID)
 	case reviewreport.ActorTypeBrand:
 		return q.ResolveMemberName(ctx, authorID)
+	default:
+		return ""
+	}
+}
+
+// ResolveTargetParentName は通報対象の親リソース名を解決する。
+// 商品レビューでは productName、トークンコメントでは tokenName を返す。
+// 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
+func (q *ReportNameQuery) ResolveTargetParentName(
+	ctx context.Context,
+	targetType reviewreport.TargetType,
+	targetParentID string,
+) string {
+	switch targetType {
+	case reviewreport.TargetTypeProductBlueprintReview:
+		return q.ResolveProductName(ctx, targetParentID)
+	case reviewreport.TargetTypeTokenBlueprintComment:
+		return q.ResolveTokenName(ctx, targetParentID)
 	default:
 		return ""
 	}
