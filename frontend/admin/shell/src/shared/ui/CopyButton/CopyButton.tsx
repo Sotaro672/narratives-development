@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import "./CopyButton.css";
+import Button from "../Button/Button";
 
 type CopyButtonProps = {
   value: string;
@@ -46,9 +46,10 @@ export default function CopyButton({
 
   return (
     <span className="ui-copy-control">
-      <button
-        type="button"
-        className="ui-copy-button"
+      <Button
+        variant="secondary"
+        size="md"
+        iconOnly
         onClick={() => void handleCopy()}
         disabled={disabled || !value}
         aria-label={ariaLabel}
@@ -65,15 +66,27 @@ export default function CopyButton({
           strokeLinejoin="round"
           aria-hidden="true"
         >
-          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+          <rect
+            width="14"
+            height="14"
+            x="8"
+            y="8"
+            rx="2"
+            ry="2"
+          />
           <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
         </svg>
-      </button>
+      </Button>
 
       <span
-        className={`ui-copy-control__feedback ${
-          copied ? "ui-copy-control__feedback--visible" : ""
-        }`}
+        className={[
+          "ui-copy-control__feedback",
+          copied
+            ? "ui-copy-control__feedback--visible"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
         role="status"
         aria-live="polite"
       >

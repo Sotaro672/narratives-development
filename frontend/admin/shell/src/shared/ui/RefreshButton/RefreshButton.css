@@ -1,43 +1,5 @@
 /* frontend/admin/shell/src/shared/ui/RefreshButton/RefreshButton.css */
 
-.ui-refresh-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid #cccccc;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #333333;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background-color 0.2s ease, opacity 0.2s ease;
-}
-
-.ui-refresh-button:hover:not(:disabled) {
-  background-color: #f3f3f3;
-}
-
-.ui-refresh-button:active:not(:disabled) {
-  background-color: #e5e5e5;
-}
-
-.ui-refresh-button:focus-visible {
-  outline: 2px solid #111111;
-  outline-offset: 2px;
-}
-
-.ui-refresh-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.ui-refresh-button__icon {
-  display: block;
-}
-
 .ui-refresh-button__icon--loading {
   animation: ui-refresh-button-spin 1s linear infinite;
 }

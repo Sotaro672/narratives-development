@@ -1,5 +1,8 @@
 // frontend/admin/shell/src/shared/ui/RefreshButton/RefreshButton.tsx
 
+import type { ButtonSize } from "../Button/Button";
+import Button from "../Button/Button";
+
 import "./RefreshButton.css";
 
 type RefreshButtonProps = {
@@ -9,7 +12,8 @@ type RefreshButtonProps = {
   title?: string;
   ariaLabel?: string;
   className?: string;
-  size?: number;
+  iconSize?: number;
+  buttonSize?: ButtonSize;
 };
 
 export default function RefreshButton({
@@ -19,41 +23,36 @@ export default function RefreshButton({
   title = "リフレッシュ",
   ariaLabel = "リフレッシュ",
   className = "",
-  size = 18,
+  iconSize = 16,
+  buttonSize = "sm",
 }: RefreshButtonProps) {
-  const buttonClassName = ["ui-refresh-button", className].filter(Boolean).join(" ");
-  const iconClassName = [
-    "ui-refresh-button__icon",
-    loading && "ui-refresh-button__icon--loading",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
   return (
-    <button
-      type="button"
-      className={buttonClassName}
+    <Button
+      variant="secondary"
+      size={buttonSize}
+      iconOnly
+      loading={loading}
+      disabled={disabled}
+      className={className}
       aria-label={ariaLabel}
-      aria-busy={loading}
       title={title}
       onClick={() => void onClick?.()}
-      disabled={disabled || loading}
     >
       <svg
-        width={size}
-        height={size}
+        width={iconSize}
+        height={iconSize}
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={iconClassName}
+        className={loading ? "ui-refresh-button__icon--loading" : undefined}
         aria-hidden="true"
       >
         <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8" />
         <path d="M21 3v5h-5" />
       </svg>
-    </button>
+    </Button>
   );
 }

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import ReportDecisionModal from "../features/report/components/ReportDecisionModal";
 import { useReportDetail } from "../features/report/hooks/useReportDetail";
 import type {
   ReviewReportActorType,
@@ -11,6 +12,7 @@ import type {
   ReviewReportReason,
   ReviewReportTargetType,
 } from "../shared/type/reviewReport";
+import Button from "../shared/ui/Button/Button";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
@@ -84,7 +86,13 @@ function getReasonLabel(reason: ReviewReportReason): string {
   }
 }
 
-function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+function DetailField({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
   return (
     <div className="report-detail-page__field">
       <dt className="report-detail-page__field-label">{label}</dt>
@@ -97,6 +105,8 @@ export default function ReportDetailPage() {
   const navigate = useNavigate();
   const { reportId } = useParams();
   const [decisionReason, setDecisionReason] = useState("");
+  const [decisionModalOpen, setDecisionModalOpen] = useState(false);
+  const [decisionAttempted, setDecisionAttempted] = useState(false);
 
   const {
     reportCase,
@@ -109,6 +119,7 @@ export default function ReportDetailPage() {
     hasNextPage,
     deciding,
     decisionError,
+    canDecide,
     canKeep,
     canRemove,
     setPage,
@@ -164,300 +175,267 @@ export default function ReportDetailPage() {
     [],
   );
 
+  const openDecisionModal = () => {
+    if (!canDecide) return;
+    setDecisionReason("");
+    setDecisionAttempted(false);
+    setDecisionModalOpen(true);
+  };
+
+  const closeDecisionModal = () => {
+    if (deciding) return;
+    setDecisionModalOpen(false);
+    setDecisionReason("");
+    setDecisionAttempted(false);
+  };
+
   const handleKeep = async () => {
+    setDecisionAttempted(true);
     const result = await keep(decisionReason);
-    if (result) setDecisionReason("");
+
+    if (result) {
+      setDecisionModalOpen(false);
+      setDecisionReason("");
+      setDecisionAttempted(false);
+    }
   };
 
   const handleRemove = async () => {
+    setDecisionAttempted(true);
     const result = await remove(decisionReason);
-    if (result) setDecisionReason("");
+
+    if (result) {
+      setDecisionModalOpen(false);
+      setDecisionReason("");
+      setDecisionAttempted(false);
+    }
   };
 
-  const pageTitle = reportCase ? getTargetTypeLabel(reportCase.targetType) : "通報詳細";
+  const pageTitle = reportCase
+    ? getTargetTypeLabel(reportCase.targetType)
+    : "通報詳細";
 
   return (
-    <Page>
-      <PageHeader
-        title={pageTitle}
-        meta={
-          reportCase ? (
-            <>
-              <span>通報 {reportCase.reportCount}件</span>
-              <Tab
-                tone={getStatusTone(reportCase.status)}
-                aria-label={`対応状況 ${getStatusLabel(reportCase.status)}`}
-              >
-                {getStatusLabel(reportCase.status)}
-              </Tab>
-            </>
-          ) : undefined
-        }
-        leading={
-          <button
-            type="button"
-            className="ui-page-header__back"
-            aria-label="戻る"
-            onClick={() => navigate("/reports")}
-          >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M19 12H5" />
-              <path d="M12 19l-7-7 7-7" />
-            </svg>
-          </button>
-        }
-        actions={
-          <RefreshButton
-            onClick={reload}
-            loading={loading}
-            title="リフレッシュ"
-            ariaLabel="通報詳細をリフレッシュ"
-          />
-        }
-      />
-
-      {loading && !reportCase ? <p>通報情報を読み込んでいます。</p> : null}
-
-      {!loading && error ? (
-        <p role="alert">通報情報を取得できませんでした。{error}</p>
-      ) : null}
-
-      {!loading && !error && !reportCase ? (
-        <p role="alert">通報情報を取得できませんでした。</p>
-      ) : null}
-
-      {reportCase ? (
-        <DetailPageBody
-          main={
-            <div className="report-detail-page__main">
-              <section className="report-detail-page__section">
-                <dl className="report-detail-page__fields">
-                  {reportCase.snapshotRating !== null ? (
-                    <DetailField
-                      label="評価"
-                      value={`${reportCase.snapshotRating} / 5`}
-                    />
-                  ) : null}
-
-                  {reportCase.snapshotTitle ? (
-                    <DetailField
-                      label="タイトル"
-                      value={reportCase.snapshotTitle}
-                    />
-                  ) : null}
-
-                  <DetailField
-                    label="本文"
-                    value={
-                      <div className="report-detail-page__body-text">
-                        {reportCase.snapshotBody || "-"}
-                      </div>
-                    }
-                  />
-                </dl>
-              </section>
-
-              <section className="report-detail-page__section">
-                <div className="report-detail-page__reports-header">
-                  <h2 className="report-detail-page__section-title">通報内容</h2>
-
-                  {loading ? (
-                    <span
-                      className="report-detail-page__updating"
-                      aria-live="polite"
-                    >
-                      更新中...
-                    </span>
-                  ) : null}
-                </div>
-
-                <Table
-                  columns={columns}
-                  rows={reports}
-                  getRowKey={(report) => report.id}
-                  emptyMessage="通報内容はありません。"
-                  filteredEmptyMessage="条件に一致する通報はありません。"
-                />
-
-                {totalPages > 1 ? (
-                  <nav
-                    className="report-detail-page__pagination"
-                    aria-label="通報内容のページ送り"
-                  >
-                    <button
-                      type="button"
-                      className="report-detail-page__pagination-button"
-                      disabled={!hasPreviousPage || loading}
-                      onClick={() => setPage(page - 1)}
-                    >
-                      前へ
-                    </button>
-
-                    <span className="report-detail-page__pagination-label">
-                      {page} / {totalPages}
-                    </span>
-
-                    <button
-                      type="button"
-                      className="report-detail-page__pagination-button"
-                      disabled={!hasNextPage || loading}
-                      onClick={() => setPage(page + 1)}
-                    >
-                      次へ
-                    </button>
-                  </nav>
-                ) : null}
-              </section>
-            </div>
+    <>
+      <Page>
+        <PageHeader
+          title={pageTitle}
+          meta={
+            reportCase ? (
+              <>
+                <span>通報 {reportCase.reportCount}件</span>
+                <Tab
+                  tone={getStatusTone(reportCase.status)}
+                  aria-label={`対応状況 ${getStatusLabel(reportCase.status)}`}
+                >
+                  {getStatusLabel(reportCase.status)}
+                </Tab>
+              </>
+            ) : undefined
           }
-          aside={
-            <div className="report-detail-page__aside">
-              <section className="report-detail-page__section">
-                <h2 className="report-detail-page__section-title">ケース情報</h2>
+          leading={
+            <button
+              type="button"
+              className="ui-page-header__back"
+              aria-label="戻る"
+              onClick={() => navigate("/reports")}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M19 12H5" />
+                <path d="M12 19l-7-7 7-7" />
+              </svg>
+            </button>
+          }
+          actions={
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={!canDecide || loading}
+                onClick={openDecisionModal}
+              >
+                裁定
+              </Button>
 
-                <dl className="report-detail-page__fields report-detail-page__fields--compact">
-                  <DetailField
-                    label="親ID"
-                    value={reportCase.targetParentId || "-"}
-                  />
-                  <DetailField
-                    label="投稿者種別"
-                    value={getActorTypeLabel(reportCase.targetAuthorType)}
-                  />
-                  <DetailField
-                    label="投稿者ID"
-                    value={reportCase.targetAuthorId}
-                  />
-                  <DetailField
-                    label="初回通報"
-                    value={formatDateTime(reportCase.createdAt)}
-                  />
-                  <DetailField
-                    label="最終更新"
-                    value={formatDateTime(reportCase.updatedAt)}
-                  />
-                </dl>
-              </section>
+              <RefreshButton
+                onClick={reload}
+                loading={loading}
+                title="リフレッシュ"
+                ariaLabel="通報詳細をリフレッシュ"
+              />
+            </>
+          }
+        />
 
-              {reportCase.status !== "PENDING" ? (
+        {loading && !reportCase ? (
+          <p>通報情報を読み込んでいます。</p>
+        ) : null}
+
+        {!loading && error ? (
+          <p role="alert">
+            通報情報を取得できませんでした。{error}
+          </p>
+        ) : null}
+
+        {!loading && !error && !reportCase ? (
+          <p role="alert">
+            通報情報を取得できませんでした。
+          </p>
+        ) : null}
+
+        {reportCase ? (
+          <DetailPageBody
+            main={
+              <div className="report-detail-page__main">
                 <section className="report-detail-page__section">
-                  <h2 className="report-detail-page__section-title">裁定結果</h2>
+                  <dl className="report-detail-page__fields">
+                    {reportCase.snapshotRating !== null ? (
+                      <DetailField
+                        label="評価"
+                        value={`${reportCase.snapshotRating} / 5`}
+                      />
+                    ) : null}
 
-                  <dl className="report-detail-page__fields report-detail-page__fields--compact">
+                    {reportCase.snapshotTitle ? (
+                      <DetailField
+                        label="タイトル"
+                        value={reportCase.snapshotTitle}
+                      />
+                    ) : null}
+
                     <DetailField
-                      label="結果"
-                      value={getStatusLabel(reportCase.status)}
-                    />
-                    <DetailField
-                      label="裁定日時"
+                      label="本文"
                       value={
-                        reportCase.decidedAt
-                          ? formatDateTime(reportCase.decidedAt)
-                          : "-"
-                      }
-                    />
-                    <DetailField
-                      label="管理者"
-                      value={reportCase.decidedBy || "-"}
-                    />
-                    <DetailField
-                      label="裁定理由"
-                      value={
-                        <div className="report-detail-page__pre-wrap">
-                          {reportCase.decisionReason || "-"}
+                        <div className="report-detail-page__body-text">
+                          {reportCase.snapshotBody || "-"}
                         </div>
                       }
                     />
                   </dl>
                 </section>
-              ) : null}
 
-              {reportCase.status !== "REMOVED" ? (
-                <section className="report-detail-page__decision">
-                  <div>
+                <section className="report-detail-page__section">
+                  <div className="report-detail-page__reports-header">
                     <h2 className="report-detail-page__section-title">
-                      {reportCase.status === "KEPT" ? "裁定変更" : "裁定"}
+                      通報内容
                     </h2>
-                    <p className="report-detail-page__description">
-                      {reportCase.status === "KEPT"
-                        ? "この投稿は維持済みです。必要な場合は削除へ変更できます。"
-                        : "投稿を維持するか、削除するかを決定します。"}
-                    </p>
+
+                    {loading ? (
+                      <span
+                        className="report-detail-page__updating"
+                        aria-live="polite"
+                      >
+                        更新中...
+                      </span>
+                    ) : null}
                   </div>
 
-                  <label className="report-detail-page__decision-field">
-                    <span className="report-detail-page__decision-label">
-                      裁定理由
-                    </span>
-                    <textarea
-                      className="report-detail-page__decision-textarea"
-                      value={decisionReason}
-                      rows={5}
-                      maxLength={2000}
-                      disabled={deciding}
-                      placeholder={
-                        reportCase.status === "KEPT"
-                          ? "削除へ変更する根拠を入力してください。"
-                          : "裁定の根拠を入力してください。"
-                      }
-                      onChange={(event) =>
-                        setDecisionReason(event.target.value)
-                      }
-                    />
-                  </label>
+                  <Table
+                    columns={columns}
+                    rows={reports}
+                    getRowKey={(report) => report.id}
+                    emptyMessage="通報内容はありません。"
+                    filteredEmptyMessage="条件に一致する通報はありません。"
+                  />
 
-                  {decisionError ? (
-                    <p
-                      className="report-detail-page__decision-error"
-                      role="alert"
+                  {totalPages > 1 ? (
+                    <nav
+                      className="report-detail-page__pagination"
+                      aria-label="通報内容のページ送り"
                     >
-                      {decisionError}
-                    </p>
+                      <button
+                        type="button"
+                        className="report-detail-page__pagination-button"
+                        disabled={!hasPreviousPage || loading}
+                        onClick={() => setPage(page - 1)}
+                      >
+                        前へ
+                      </button>
+
+                      <span className="report-detail-page__pagination-label">
+                        {page} / {totalPages}
+                      </span>
+
+                      <button
+                        type="button"
+                        className="report-detail-page__pagination-button"
+                        disabled={!hasNextPage || loading}
+                        onClick={() => setPage(page + 1)}
+                      >
+                        次へ
+                      </button>
+                    </nav>
                   ) : null}
-
-                  <div className="report-detail-page__decision-actions">
-                    {canKeep ? (
-                      <button
-                        type="button"
-                        className="report-detail-page__decision-button"
-                        disabled={deciding || !decisionReason.trim()}
-                        onClick={() => void handleKeep()}
-                      >
-                        {deciding ? "処理中..." : "維持する"}
-                      </button>
-                    ) : null}
-
-                    {canRemove ? (
-                      <button
-                        type="button"
-                        className="report-detail-page__decision-button report-detail-page__decision-button--danger"
-                        disabled={deciding || !decisionReason.trim()}
-                        onClick={() => void handleRemove()}
-                      >
-                        {deciding ? "処理中..." : "削除する"}
-                      </button>
-                    ) : null}
-                  </div>
-
-                  <p className="report-detail-page__decision-note">
-                    「削除する」を選択すると、対象コンテンツの削除に成功した後でケースが削除済みとして確定します。
-                  </p>
                 </section>
-              ) : null}
-            </div>
+              </div>
+            }
+            aside={
+              <div className="report-detail-page__aside">
+                <section className="report-detail-page__section">
+                  <h2 className="report-detail-page__section-title">
+                    ケース情報
+                  </h2>
+
+                  <dl className="report-detail-page__fields report-detail-page__fields--compact">
+                    <DetailField
+                      label="親ID"
+                      value={reportCase.targetParentId || "-"}
+                    />
+                    <DetailField
+                      label="投稿者種別"
+                      value={getActorTypeLabel(
+                        reportCase.targetAuthorType,
+                      )}
+                    />
+                    <DetailField
+                      label="投稿者ID"
+                      value={reportCase.targetAuthorId}
+                    />
+                    <DetailField
+                      label="初回通報"
+                      value={formatDateTime(reportCase.createdAt)}
+                    />
+                    <DetailField
+                      label="最終更新"
+                      value={formatDateTime(reportCase.updatedAt)}
+                    />
+                  </dl>
+                </section>
+              </div>
+            }
+          />
+        ) : null}
+      </Page>
+
+      {reportCase ? (
+        <ReportDecisionModal
+          open={decisionModalOpen}
+          status={reportCase.status}
+          decisionReason={decisionReason}
+          deciding={deciding}
+          decisionError={
+            decisionAttempted
+              ? decisionError
+              : null
           }
+          canKeep={canKeep}
+          canRemove={canRemove}
+          onChangeDecisionReason={setDecisionReason}
+          onClose={closeDecisionModal}
+          onKeep={handleKeep}
+          onRemove={handleRemove}
         />
       ) : null}
-    </Page>
+    </>
   );
 }
