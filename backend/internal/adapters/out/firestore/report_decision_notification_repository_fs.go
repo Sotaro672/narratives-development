@@ -1,4 +1,4 @@
-// backend/internal/adapters/out/firestore/review_report_decision_notification_repository_fs.go
+// backend/internal/adapters/out/firestore/report_decision_notification_repository_fs.go
 package firestore
 
 import (
@@ -13,40 +13,40 @@ import (
 	"google.golang.org/grpc/status"
 
 	common "narratives/internal/domain/common"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 )
 
-const defaultReviewReportDecisionNotificationCollection = "reviewReportDecisionNotifications"
+const defaultReportDecisionNotificationCollection = "reportDecisionNotifications"
 
-type ReviewReportDecisionNotificationRepositoryFS struct {
+type ReportDecisionNotificationRepositoryFS struct {
 	client     *firestore.Client
 	collection string
 }
 
-func NewReviewReportDecisionNotificationRepositoryFS(
+func NewReportDecisionNotificationRepositoryFS(
 	client *firestore.Client,
-) *ReviewReportDecisionNotificationRepositoryFS {
-	return &ReviewReportDecisionNotificationRepositoryFS{
+) *ReportDecisionNotificationRepositoryFS {
+	return &ReportDecisionNotificationRepositoryFS{
 		client:     client,
-		collection: defaultReviewReportDecisionNotificationCollection,
+		collection: defaultReportDecisionNotificationCollection,
 	}
 }
 
-func (r *ReviewReportDecisionNotificationRepositoryFS) WithCollection(
+func (r *ReportDecisionNotificationRepositoryFS) WithCollection(
 	name string,
-) *ReviewReportDecisionNotificationRepositoryFS {
+) *ReportDecisionNotificationRepositoryFS {
 	if r != nil && name != "" {
 		r.collection = name
 	}
 	return r
 }
 
-func (r *ReviewReportDecisionNotificationRepositoryFS) collectionRef() *firestore.CollectionRef {
+func (r *ReportDecisionNotificationRepositoryFS) collectionRef() *firestore.CollectionRef {
 	return r.client.Collection(r.collection)
 }
 
-func (r *ReviewReportDecisionNotificationRepositoryFS) notificationDoc(
-	notificationID reviewreport.DecisionNotificationID,
+func (r *ReportDecisionNotificationRepositoryFS) notificationDoc(
+	notificationID reportdom.DecisionNotificationID,
 ) *firestore.DocumentRef {
 	return r.collectionRef().Doc(string(notificationID))
 }
@@ -55,27 +55,27 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) notificationDoc(
 // CreateIfAbsent
 // ============================================================
 
-func (r *ReviewReportDecisionNotificationRepositoryFS) CreateIfAbsent(
+func (r *ReportDecisionNotificationRepositoryFS) CreateIfAbsent(
 	ctx context.Context,
-	notification reviewreport.DecisionNotification,
-) (reviewreport.CreateDecisionNotificationResult, error) {
+	notification reportdom.DecisionNotification,
+) (reportdom.CreateDecisionNotificationResult, error) {
 	if r == nil || r.client == nil {
-		return reviewreport.CreateDecisionNotificationResult{},
-			fmt.Errorf("reviewReport decision notification repository is not configured")
+		return reportdom.CreateDecisionNotificationResult{},
+			fmt.Errorf("report decision notification repository is not configured")
 	}
 	if err := notification.Validate(); err != nil {
-		return reviewreport.CreateDecisionNotificationResult{}, err
+		return reportdom.CreateDecisionNotificationResult{}, err
 	}
 
 	doc := r.notificationDoc(notification.ID)
-	var result reviewreport.CreateDecisionNotificationResult
+	var result reportdom.CreateDecisionNotificationResult
 
 	err := r.client.RunTransaction(
 		ctx,
 		func(ctx context.Context, tx *firestore.Transaction) error {
 			snap, err := tx.Get(doc)
 			if err == nil {
-				existing, decodeErr := decodeReviewReportDecisionNotification(
+				existing, decodeErr := decodeReportDecisionNotification(
 					snap.Ref.ID,
 					snap.Data(),
 				)
@@ -83,24 +83,24 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) CreateIfAbsent(
 					return decodeErr
 				}
 
-				result = reviewreport.CreateDecisionNotificationResult{
+				result = reportdom.CreateDecisionNotificationResult{
 					Notification: existing,
 					Created:      false,
 				}
 				return nil
 			}
-			if !reviewReportIsNotFound(err) {
+			if !reportIsNotFound(err) {
 				return err
 			}
 
 			if err := tx.Create(
 				doc,
-				encodeReviewReportDecisionNotification(notification),
+				encodeReportDecisionNotification(notification),
 			); err != nil {
 				return err
 			}
 
-			result = reviewreport.CreateDecisionNotificationResult{
+			result = reportdom.CreateDecisionNotificationResult{
 				Notification: notification,
 				Created:      true,
 			}
@@ -108,7 +108,7 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) CreateIfAbsent(
 		},
 	)
 	if err != nil {
-		return reviewreport.CreateDecisionNotificationResult{}, err
+		return reportdom.CreateDecisionNotificationResult{}, err
 	}
 
 	return result, nil
@@ -118,25 +118,25 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) CreateIfAbsent(
 // GetByID
 // ============================================================
 
-func (r *ReviewReportDecisionNotificationRepositoryFS) GetByID(
+func (r *ReportDecisionNotificationRepositoryFS) GetByID(
 	ctx context.Context,
-	notificationID reviewreport.DecisionNotificationID,
-) (reviewreport.DecisionNotification, error) {
+	notificationID reportdom.DecisionNotificationID,
+) (reportdom.DecisionNotification, error) {
 	if r == nil || r.client == nil {
-		return reviewreport.DecisionNotification{},
-			fmt.Errorf("reviewReport decision notification repository is not configured")
+		return reportdom.DecisionNotification{},
+			fmt.Errorf("report decision notification repository is not configured")
 	}
 	if notificationID == "" {
-		return reviewreport.DecisionNotification{},
-			reviewreport.ErrInvalidDecisionNotificationID
+		return reportdom.DecisionNotification{},
+			reportdom.ErrInvalidDecisionNotificationID
 	}
 
 	snap, err := r.notificationDoc(notificationID).Get(ctx)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
-	return decodeReviewReportDecisionNotification(
+	return decodeReportDecisionNotification(
 		snap.Ref.ID,
 		snap.Data(),
 	)
@@ -146,19 +146,19 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) GetByID(
 // List
 // ============================================================
 
-func (r *ReviewReportDecisionNotificationRepositoryFS) List(
+func (r *ReportDecisionNotificationRepositoryFS) List(
 	ctx context.Context,
-	filter reviewreport.DecisionNotificationFilter,
+	filter reportdom.DecisionNotificationFilter,
 	sort common.Sort,
 	page common.Page,
-) (common.PageResult[reviewreport.DecisionNotification], error) {
+) (common.PageResult[reportdom.DecisionNotification], error) {
 	if r == nil || r.client == nil {
-		return common.PageResult[reviewreport.DecisionNotification]{},
-			fmt.Errorf("reviewReport decision notification repository is not configured")
+		return common.PageResult[reportdom.DecisionNotification]{},
+			fmt.Errorf("report decision notification repository is not configured")
 	}
 	if filter.SearchQuery != "" {
-		return common.PageResult[reviewreport.DecisionNotification]{},
-			fmt.Errorf("reviewReport decision notification: searchQuery is not supported")
+		return common.PageResult[reportdom.DecisionNotification]{},
+			fmt.Errorf("report decision notification: searchQuery is not supported")
 	}
 
 	q := r.collectionRef().Query
@@ -220,22 +220,22 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) List(
 		)
 	}
 
-	createdRange := reviewReportEffectiveTimeRange(
+	createdRange := reportEffectiveTimeRange(
 		filter.CreatedAt,
 		filter.Created,
 	)
 
-	q = applyReviewReportTimeRange(
+	q = applyReportTimeRange(
 		q,
 		"createdAt",
 		createdRange,
 	)
-	q = applyReviewReportTimeRange(
+	q = applyReportTimeRange(
 		q,
 		"updatedAt",
 		filter.Updated,
 	)
-	q = applyReviewReportTimeRange(
+	q = applyReportTimeRange(
 		q,
 		"decidedAt",
 		filter.DecidedAt,
@@ -245,10 +245,10 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) List(
 	if sortColumn == "" {
 		sortColumn = "createdAt"
 	}
-	if _, ok := reviewreport.AllowedDecisionNotificationSortColumns[sortColumn]; !ok {
-		return common.PageResult[reviewreport.DecisionNotification]{},
+	if _, ok := reportdom.AllowedDecisionNotificationSortColumns[sortColumn]; !ok {
+		return common.PageResult[reportdom.DecisionNotification]{},
 			fmt.Errorf(
-				"reviewReport decision notification: invalid sort column: %s",
+				"report decision notification: invalid sort column: %s",
 				sortColumn,
 			)
 	}
@@ -263,12 +263,12 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) List(
 		orderDirection,
 	)
 
-	pageNumber, perPage := normalizeReviewReportPage(page)
+	pageNumber, perPage := normalizeReportPage(page)
 	offset := (pageNumber - 1) * perPage
 
-	totalCount, err := reviewReportCountQuery(ctx, q)
+	totalCount, err := reportCountQuery(ctx, q)
 	if err != nil {
-		return common.PageResult[reviewreport.DecisionNotification]{}, err
+		return common.PageResult[reportdom.DecisionNotification]{}, err
 	}
 
 	totalPages := int(
@@ -282,7 +282,7 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) List(
 	}
 
 	items := make(
-		[]reviewreport.DecisionNotification,
+		[]reportdom.DecisionNotification,
 		0,
 		perPage,
 	)
@@ -299,21 +299,21 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) List(
 			break
 		}
 		if err != nil {
-			return common.PageResult[reviewreport.DecisionNotification]{}, err
+			return common.PageResult[reportdom.DecisionNotification]{}, err
 		}
 
-		item, err := decodeReviewReportDecisionNotification(
+		item, err := decodeReportDecisionNotification(
 			snap.Ref.ID,
 			snap.Data(),
 		)
 		if err != nil {
-			return common.PageResult[reviewreport.DecisionNotification]{}, err
+			return common.PageResult[reportdom.DecisionNotification]{}, err
 		}
 
 		items = append(items, item)
 	}
 
-	return common.PageResult[reviewreport.DecisionNotification]{
+	return common.PageResult[reportdom.DecisionNotification]{
 		Items:      items,
 		TotalCount: totalCount,
 		TotalPages: totalPages,
@@ -326,35 +326,35 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) List(
 // MarkRead
 // ============================================================
 
-func (r *ReviewReportDecisionNotificationRepositoryFS) MarkRead(
+func (r *ReportDecisionNotificationRepositoryFS) MarkRead(
 	ctx context.Context,
-	notificationID reviewreport.DecisionNotificationID,
-	recipientType reviewreport.ActorType,
+	notificationID reportdom.DecisionNotificationID,
+	recipientType reportdom.ActorType,
 	recipientID string,
 	readAt time.Time,
-) (reviewreport.DecisionNotification, error) {
+) (reportdom.DecisionNotification, error) {
 	if r == nil || r.client == nil {
-		return reviewreport.DecisionNotification{},
-			fmt.Errorf("reviewReport decision notification repository is not configured")
+		return reportdom.DecisionNotification{},
+			fmt.Errorf("report decision notification repository is not configured")
 	}
 	if notificationID == "" {
-		return reviewreport.DecisionNotification{},
-			reviewreport.ErrInvalidDecisionNotificationID
+		return reportdom.DecisionNotification{},
+			reportdom.ErrInvalidDecisionNotificationID
 	}
 	if err := recipientType.Validate(); err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 	if recipientID == "" {
-		return reviewreport.DecisionNotification{},
-			reviewreport.ErrInvalidReporterID
+		return reportdom.DecisionNotification{},
+			reportdom.ErrInvalidReporterID
 	}
 	if readAt.IsZero() {
-		return reviewreport.DecisionNotification{},
-			reviewreport.ErrInvalidDecisionNotificationReadAt
+		return reportdom.DecisionNotification{},
+			reportdom.ErrInvalidDecisionNotificationReadAt
 	}
 
 	doc := r.notificationDoc(notificationID)
-	var updated reviewreport.DecisionNotification
+	var updated reportdom.DecisionNotification
 
 	err := r.client.RunTransaction(
 		ctx,
@@ -364,7 +364,7 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) MarkRead(
 				return err
 			}
 
-			entity, err := decodeReviewReportDecisionNotification(
+			entity, err := decodeReportDecisionNotification(
 				snap.Ref.ID,
 				snap.Data(),
 			)
@@ -376,7 +376,7 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) MarkRead(
 				entity.RecipientID != recipientID {
 				return status.Error(
 					codes.NotFound,
-					"review report decision notification not found",
+					"report decision notification not found",
 				)
 			}
 
@@ -414,7 +414,7 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) MarkRead(
 		},
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	return updated, nil
@@ -424,8 +424,8 @@ func (r *ReviewReportDecisionNotificationRepositoryFS) MarkRead(
 // Encode / Decode
 // ============================================================
 
-func encodeReviewReportDecisionNotification(
-	entity reviewreport.DecisionNotification,
+func encodeReportDecisionNotification(
+	entity reportdom.DecisionNotification,
 ) map[string]any {
 	out := map[string]any{
 		"id":               string(entity.ID),
@@ -455,25 +455,21 @@ func encodeReviewReportDecisionNotification(
 	return out
 }
 
-func decodeReviewReportDecisionNotification(
+func decodeReportDecisionNotification(
 	id string,
 	data map[string]any,
-) (reviewreport.DecisionNotification, error) {
-	// notificationKind導入前の既存通知にはフィールドが存在しないため、
-	// 欠損時は従来どおりREPORTER_DECISIONとして復元する。
-	notificationKind := reviewreport.NotificationKindReporterDecision
-	notificationKindValue, err := firestoreOptionalString(
+) (reportdom.DecisionNotification, error) {
+	notificationKindValue, err := firestoreRequiredString(
 		data,
 		"notificationKind",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
-	if notificationKindValue != nil {
-		notificationKind = reviewreport.NotificationKind(*notificationKindValue)
-		if err := notificationKind.Validate(); err != nil {
-			return reviewreport.DecisionNotification{}, err
-		}
+
+	notificationKind := reportdom.NotificationKind(notificationKindValue)
+	if err := notificationKind.Validate(); err != nil {
+		return reportdom.DecisionNotification{}, err
 	}
 
 	caseIDValue, err := firestoreRequiredString(
@@ -481,17 +477,17 @@ func decodeReviewReportDecisionNotification(
 		"caseId",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
-	// REPORTER_DECISIONではValidateで必須、
-	// TARGET_ENFORCEMENTでは空文字を許可する。
+	// REPORTER_DECISION では Validate で必須、
+	// TARGET_ENFORCEMENT では空文字を許可する。
 	reportIDValue, err := firestoreString(
 		data,
 		"reportId",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	recipientTypeValue, err := firestoreRequiredString(
@@ -499,7 +495,7 @@ func decodeReviewReportDecisionNotification(
 		"recipientType",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	recipientID, err := firestoreRequiredString(
@@ -507,7 +503,7 @@ func decodeReviewReportDecisionNotification(
 		"recipientId",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	companyID, err := firestoreString(
@@ -515,7 +511,7 @@ func decodeReviewReportDecisionNotification(
 		"companyId",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	targetTypeValue, err := firestoreRequiredString(
@@ -523,7 +519,7 @@ func decodeReviewReportDecisionNotification(
 		"targetType",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	targetID, err := firestoreRequiredString(
@@ -531,7 +527,7 @@ func decodeReviewReportDecisionNotification(
 		"targetId",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	targetParentID, err := firestoreRequiredString(
@@ -539,17 +535,17 @@ func decodeReviewReportDecisionNotification(
 		"targetParentId",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
-	// REPORTER_DECISIONではValidateで有効なReportReasonが必須、
-	// TARGET_ENFORCEMENTでは空文字を許可する。
+	// REPORTER_DECISION では Validate で有効な ReportReason が必須、
+	// TARGET_ENFORCEMENT では空文字を許可する。
 	reportReasonValue, err := firestoreString(
 		data,
 		"reportReason",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	reportDetail, err := firestoreString(
@@ -557,7 +553,7 @@ func decodeReviewReportDecisionNotification(
 		"reportDetail",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	decisionStatusValue, err := firestoreRequiredString(
@@ -565,7 +561,7 @@ func decodeReviewReportDecisionNotification(
 		"decisionStatus",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	decisionReason, err := firestoreRequiredString(
@@ -573,7 +569,7 @@ func decodeReviewReportDecisionNotification(
 		"decisionReason",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	decidedAt, err := firestoreRequiredTime(
@@ -581,7 +577,7 @@ func decodeReviewReportDecisionNotification(
 		"decidedAt",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	createdAt, err := firestoreRequiredTime(
@@ -589,7 +585,7 @@ func decodeReviewReportDecisionNotification(
 		"createdAt",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	updatedAt, err := firestoreRequiredTime(
@@ -597,7 +593,7 @@ func decodeReviewReportDecisionNotification(
 		"updatedAt",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	readAt, err := firestoreOptionalTime(
@@ -605,28 +601,28 @@ func decodeReviewReportDecisionNotification(
 		"readAt",
 	)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
-	entity := reviewreport.DecisionNotification{
-		ID:               reviewreport.DecisionNotificationID(id),
+	entity := reportdom.DecisionNotification{
+		ID:               reportdom.DecisionNotificationID(id),
 		NotificationKind: notificationKind,
 
-		CaseID:   reviewreport.CaseID(caseIDValue),
-		ReportID: reviewreport.ReportID(reportIDValue),
+		CaseID:   reportdom.CaseID(caseIDValue),
+		ReportID: reportdom.ReportID(reportIDValue),
 
-		RecipientType: reviewreport.ActorType(recipientTypeValue),
+		RecipientType: reportdom.ActorType(recipientTypeValue),
 		RecipientID:   recipientID,
 		CompanyID:     companyID,
 
-		TargetType:     reviewreport.TargetType(targetTypeValue),
+		TargetType:     reportdom.TargetType(targetTypeValue),
 		TargetID:       targetID,
 		TargetParentID: targetParentID,
 
-		ReportReason: reviewreport.ReportReason(reportReasonValue),
+		ReportReason: reportdom.ReportReason(reportReasonValue),
 		ReportDetail: reportDetail,
 
-		DecisionStatus: reviewreport.CaseStatus(decisionStatusValue),
+		DecisionStatus: reportdom.CaseStatus(decisionStatusValue),
 		DecisionReason: decisionReason,
 		DecidedAt:      decidedAt,
 
@@ -636,10 +632,10 @@ func decodeReviewReportDecisionNotification(
 	}
 
 	if err := entity.Validate(); err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 
 	return entity, nil
 }
 
-var _ reviewreport.DecisionNotificationRepository = (*ReviewReportDecisionNotificationRepositoryFS)(nil)
+var _ reportdom.DecisionNotificationRepository = (*ReportDecisionNotificationRepositoryFS)(nil)

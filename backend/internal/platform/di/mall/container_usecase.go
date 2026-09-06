@@ -61,7 +61,7 @@ type mallUsecases struct {
 	likeUC                         *usecase.LikeUsecase
 	productBlueprintReviewUC       *usecase.ProductBlueprintReviewUsecase
 	tokenBlueprintReviewUC         *usecase.TokenBlueprintReviewUsecase
-	reviewReportUC                 *usecase.ReviewReportUsecase
+	reviewReportUC                 *usecase.ReportUsecase
 	paymentFlowUC                  *usecase.PaymentFlowUsecase
 
 	// TransferUsecaseの構築時にも利用するためContainerには公開しない。
@@ -248,8 +248,8 @@ func buildMallUsecases(
 		r.brandRepo,
 	)
 
-	reviewReportUC := usecase.NewReviewReportUsecase(
-		usecase.ReviewReportUsecaseDeps{
+	reviewReportUC := usecase.NewReportUsecase(
+		usecase.ReportUsecaseDeps{
 			ReportRepo:               r.reviewReportRepo,
 			DecisionNotificationRepo: r.reviewReportDecisionNotificationRepo,
 			ProductReviewRepo:        r.productBlueprintReviewRepo,

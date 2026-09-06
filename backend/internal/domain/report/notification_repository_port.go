@@ -1,5 +1,5 @@
-// backend/internal/domain/reviewReport/notification_repository_port.go
-package reviewReport
+// backend/internal/domain/report/notification_repository_port.go
+package report
 
 import (
 	"context"
@@ -59,7 +59,7 @@ type CreateDecisionNotificationResult struct {
 // DecisionNotificationRepository
 // ============================================================
 
-// DecisionNotificationRepository persists review-report decision notifications.
+// DecisionNotificationRepository persists report decision notifications.
 //
 // DecisionNotification.ID is deterministic for one ReportCase decision and
 // one Report. CreateIfAbsent must therefore be idempotent.

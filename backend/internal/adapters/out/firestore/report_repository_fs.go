@@ -1,4 +1,4 @@
-// backend/internal/adapters/out/firestore/reviewReport_repository_fs.go
+// backend/internal/adapters/out/firestore/report_repository_fs.go
 package firestore
 
 import (
@@ -12,51 +12,51 @@ import (
 	"google.golang.org/grpc/status"
 
 	common "narratives/internal/domain/common"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 )
 
 const (
-	defaultReviewReportCaseCollection = "reviewReportCases"
-	defaultReviewReportSubCollection  = "reports"
+	defaultReportCaseCollection = "reportCases"
+	defaultReportSubCollection  = "reports"
 )
 
-type ReviewReportRepositoryFS struct {
+type ReportRepositoryFS struct {
 	client           *firestore.Client
 	caseCollection   string
 	reportCollection string
 }
 
-func NewReviewReportRepositoryFS(client *firestore.Client) *ReviewReportRepositoryFS {
-	return &ReviewReportRepositoryFS{
+func NewReportRepositoryFS(client *firestore.Client) *ReportRepositoryFS {
+	return &ReportRepositoryFS{
 		client:           client,
-		caseCollection:   defaultReviewReportCaseCollection,
-		reportCollection: defaultReviewReportSubCollection,
+		caseCollection:   defaultReportCaseCollection,
+		reportCollection: defaultReportSubCollection,
 	}
 }
 
-func (r *ReviewReportRepositoryFS) WithCaseCollection(name string) *ReviewReportRepositoryFS {
+func (r *ReportRepositoryFS) WithCaseCollection(name string) *ReportRepositoryFS {
 	if r != nil && name != "" {
 		r.caseCollection = name
 	}
 	return r
 }
 
-func (r *ReviewReportRepositoryFS) WithReportCollection(name string) *ReviewReportRepositoryFS {
+func (r *ReportRepositoryFS) WithReportCollection(name string) *ReportRepositoryFS {
 	if r != nil && name != "" {
 		r.reportCollection = name
 	}
 	return r
 }
 
-func (r *ReviewReportRepositoryFS) caseDoc(caseID reviewreport.CaseID) *firestore.DocumentRef {
+func (r *ReportRepositoryFS) caseDoc(caseID reportdom.CaseID) *firestore.DocumentRef {
 	return r.client.Collection(r.caseCollection).Doc(string(caseID))
 }
 
-func (r *ReviewReportRepositoryFS) reportsCol(caseID reviewreport.CaseID) *firestore.CollectionRef {
+func (r *ReportRepositoryFS) reportsCol(caseID reportdom.CaseID) *firestore.CollectionRef {
 	return r.caseDoc(caseID).Collection(r.reportCollection)
 }
 
-func (r *ReviewReportRepositoryFS) reportDoc(caseID reviewreport.CaseID, reportID reviewreport.ReportID) *firestore.DocumentRef {
+func (r *ReportRepositoryFS) reportDoc(caseID reportdom.CaseID, reportID reportdom.ReportID) *firestore.DocumentRef {
 	return r.reportsCol(caseID).Doc(string(reportID))
 }
 
@@ -64,72 +64,71 @@ func (r *ReviewReportRepositoryFS) reportDoc(caseID reviewreport.CaseID, reportI
 // CaseRepository
 // ============================================================
 
-func (r *ReviewReportRepositoryFS) GetCase(ctx context.Context, caseID reviewreport.CaseID) (reviewreport.ReportCase, error) {
+func (r *ReportRepositoryFS) GetCase(ctx context.Context, caseID reportdom.CaseID) (reportdom.ReportCase, error) {
 	if r == nil || r.client == nil {
-		return reviewreport.ReportCase{}, fmt.Errorf("reviewReport repository is not configured")
+		return reportdom.ReportCase{}, fmt.Errorf("report repository is not configured")
 	}
 	if caseID == "" {
-		return reviewreport.ReportCase{}, reviewreport.ErrInvalidCaseID
+		return reportdom.ReportCase{}, reportdom.ErrInvalidCaseID
 	}
 
 	snap, err := r.caseDoc(caseID).Get(ctx)
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
-	return decodeReviewReportCase(snap.Ref.ID, snap.Data())
+	return decodeReportCase(snap.Ref.ID, snap.Data())
 }
 
 // IsAvatarResaleSuspended reports whether the avatar is currently blocked from
-// using the resale service by an Admin review-report decision.
+// using the resale service by an Admin report decision.
 //
-// The AVATAR review-report case ID is deterministic (avatar_{avatarId}), so the
+// The AVATAR report case ID is deterministic (avatar_{avatarId}), so the
 // check is a direct document lookup rather than a collection query. A missing
 // case means the avatar has no resale suspension. Only REMOVED is treated as
 // suspended; PENDING and KEPT remain allowed.
-func (r *ReviewReportRepositoryFS) IsAvatarResaleSuspended(
-	ctx context.Context,
-	avatarID string,
-) (bool, error) {
+func (r *ReportRepositoryFS) IsAvatarResaleSuspended(ctx context.Context, avatarID string) (bool, error) {
 	if r == nil || r.client == nil {
-		return false, fmt.Errorf("reviewReport repository is not configured")
+		return false, fmt.Errorf("report repository is not configured")
 	}
 	if avatarID == "" {
-		return false, reviewreport.ErrInvalidTargetID
+		return false, reportdom.ErrInvalidTargetID
 	}
 
-	caseID, err := reviewreport.BuildCaseID(
-		reviewreport.TargetTypeAvatar,
-		avatarID,
-	)
+	caseID, err := reportdom.BuildCaseID(reportdom.TargetTypeAvatar, avatarID)
 	if err != nil {
 		return false, err
 	}
 
 	reportCase, err := r.GetCase(ctx, caseID)
 	if err != nil {
-		if reviewReportIsNotFound(err) {
+		if reportIsNotFound(err) {
 			return false, nil
 		}
 		return false, err
 	}
 
-	if reportCase.TargetType != reviewreport.TargetTypeAvatar {
-		return false, reviewreport.ErrInvalidTargetType
+	if reportCase.TargetType != reportdom.TargetTypeAvatar {
+		return false, reportdom.ErrInvalidTargetType
 	}
 	if reportCase.TargetID != avatarID {
-		return false, reviewreport.ErrInvalidTargetID
+		return false, reportdom.ErrInvalidTargetID
 	}
 
-	return reportCase.Status == reviewreport.CaseStatusRemoved, nil
+	return reportCase.Status == reportdom.CaseStatusRemoved, nil
 }
 
-func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewreport.CaseFilter, sort common.Sort, page common.Page) (common.PageResult[reviewreport.ReportCase], error) {
+func (r *ReportRepositoryFS) ListCases(
+	ctx context.Context,
+	filter reportdom.CaseFilter,
+	sort common.Sort,
+	page common.Page,
+) (common.PageResult[reportdom.ReportCase], error) {
 	if r == nil || r.client == nil {
-		return common.PageResult[reviewreport.ReportCase]{}, fmt.Errorf("reviewReport repository is not configured")
+		return common.PageResult[reportdom.ReportCase]{}, fmt.Errorf("report repository is not configured")
 	}
 	if filter.SearchQuery != "" {
-		return common.PageResult[reviewreport.ReportCase]{}, fmt.Errorf("reviewReport: searchQuery is not supported")
+		return common.PageResult[reportdom.ReportCase]{}, fmt.Errorf("report: searchQuery is not supported")
 	}
 
 	q := r.client.Collection(r.caseCollection).Query
@@ -153,19 +152,19 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 		q = q.Where("status", "==", string(*filter.Status))
 	}
 
-	createdRange := reviewReportEffectiveTimeRange(filter.CreatedAt, filter.Created)
-	updatedRange := reviewReportEffectiveTimeRange(filter.UpdatedAt, filter.Updated)
+	createdRange := reportEffectiveTimeRange(filter.CreatedAt, filter.Created)
+	updatedRange := reportEffectiveTimeRange(filter.UpdatedAt, filter.Updated)
 
-	q = applyReviewReportTimeRange(q, "createdAt", createdRange)
-	q = applyReviewReportTimeRange(q, "updatedAt", updatedRange)
-	q = applyReviewReportTimeRange(q, "decidedAt", filter.DecidedAt)
+	q = applyReportTimeRange(q, "createdAt", createdRange)
+	q = applyReportTimeRange(q, "updatedAt", updatedRange)
+	q = applyReportTimeRange(q, "decidedAt", filter.DecidedAt)
 
 	sortColumn := sort.Column
 	if sortColumn == "" {
 		sortColumn = "updatedAt"
 	}
-	if _, ok := reviewreport.AllowedCaseSortColumns[sortColumn]; !ok {
-		return common.PageResult[reviewreport.ReportCase]{}, fmt.Errorf("reviewReport: invalid case sort column: %s", sortColumn)
+	if _, ok := reportdom.AllowedCaseSortColumns[sortColumn]; !ok {
+		return common.PageResult[reportdom.ReportCase]{}, fmt.Errorf("report: invalid case sort column: %s", sortColumn)
 	}
 
 	orderDirection := firestore.Desc
@@ -175,12 +174,12 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 
 	q = q.OrderBy(sortColumn, orderDirection)
 
-	pageNumber, perPage := normalizeReviewReportPage(page)
+	pageNumber, perPage := normalizeReportPage(page)
 	offset := (pageNumber - 1) * perPage
 
-	totalCount, err := reviewReportCountQuery(ctx, q)
+	totalCount, err := reportCountQuery(ctx, q)
 	if err != nil {
-		return common.PageResult[reviewreport.ReportCase]{}, err
+		return common.PageResult[reportdom.ReportCase]{}, err
 	}
 
 	totalPages := int(math.Ceil(float64(totalCount) / float64(perPage)))
@@ -188,7 +187,7 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 		totalPages = 1
 	}
 
-	items := make([]reviewreport.ReportCase, 0, perPage)
+	items := make([]reportdom.ReportCase, 0, perPage)
 	iter := q.Offset(offset).Limit(perPage).Documents(ctx)
 	defer iter.Stop()
 
@@ -198,18 +197,18 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 			break
 		}
 		if err != nil {
-			return common.PageResult[reviewreport.ReportCase]{}, err
+			return common.PageResult[reportdom.ReportCase]{}, err
 		}
 
-		item, err := decodeReviewReportCase(snap.Ref.ID, snap.Data())
+		item, err := decodeReportCase(snap.Ref.ID, snap.Data())
 		if err != nil {
-			return common.PageResult[reviewreport.ReportCase]{}, err
+			return common.PageResult[reportdom.ReportCase]{}, err
 		}
 
 		items = append(items, item)
 	}
 
-	return common.PageResult[reviewreport.ReportCase]{
+	return common.PageResult[reportdom.ReportCase]{
 		Items:      items,
 		TotalCount: totalCount,
 		TotalPages: totalPages,
@@ -218,16 +217,20 @@ func (r *ReviewReportRepositoryFS) ListCases(ctx context.Context, filter reviewr
 	}, nil
 }
 
-func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID reviewreport.CaseID, patch reviewreport.CasePatch) (reviewreport.ReportCase, error) {
+func (r *ReportRepositoryFS) UpdateCase(
+	ctx context.Context,
+	caseID reportdom.CaseID,
+	patch reportdom.CasePatch,
+) (reportdom.ReportCase, error) {
 	if r == nil || r.client == nil {
-		return reviewreport.ReportCase{}, fmt.Errorf("reviewReport repository is not configured")
+		return reportdom.ReportCase{}, fmt.Errorf("report repository is not configured")
 	}
 	if caseID == "" {
-		return reviewreport.ReportCase{}, reviewreport.ErrInvalidCaseID
+		return reportdom.ReportCase{}, reportdom.ErrInvalidCaseID
 	}
 
 	doc := r.caseDoc(caseID)
-	var updated reviewreport.ReportCase
+	var updated reportdom.ReportCase
 
 	err := r.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		snap, err := tx.Get(doc)
@@ -235,7 +238,7 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 			return err
 		}
 
-		entity, err := decodeReviewReportCase(snap.Ref.ID, snap.Data())
+		entity, err := decodeReportCase(snap.Ref.ID, snap.Data())
 		if err != nil {
 			return err
 		}
@@ -245,8 +248,7 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 		}
 		if patch.Status != nil {
 			entity.Status = *patch.Status
-
-			if entity.Status == reviewreport.CaseStatusPending {
+			if entity.Status == reportdom.CaseStatusPending {
 				entity.DecidedAt = nil
 				entity.DecidedBy = ""
 				entity.DecisionReason = ""
@@ -270,7 +272,7 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 			return err
 		}
 
-		data := encodeReviewReportCase(entity)
+		data := encodeReportCase(entity)
 		if entity.DecidedAt == nil {
 			data["decidedAt"] = firestore.Delete
 		}
@@ -283,7 +285,7 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 		return nil
 	})
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	return updated, nil
@@ -293,37 +295,47 @@ func (r *ReviewReportRepositoryFS) UpdateCase(ctx context.Context, caseID review
 // ReportRepository
 // ============================================================
 
-func (r *ReviewReportRepositoryFS) GetReport(ctx context.Context, caseID reviewreport.CaseID, reportID reviewreport.ReportID) (reviewreport.Report, error) {
+func (r *ReportRepositoryFS) GetReport(
+	ctx context.Context,
+	caseID reportdom.CaseID,
+	reportID reportdom.ReportID,
+) (reportdom.Report, error) {
 	if r == nil || r.client == nil {
-		return reviewreport.Report{}, fmt.Errorf("reviewReport repository is not configured")
+		return reportdom.Report{}, fmt.Errorf("report repository is not configured")
 	}
 	if caseID == "" {
-		return reviewreport.Report{}, reviewreport.ErrInvalidCaseID
+		return reportdom.Report{}, reportdom.ErrInvalidCaseID
 	}
 	if reportID == "" {
-		return reviewreport.Report{}, reviewreport.ErrInvalidReportID
+		return reportdom.Report{}, reportdom.ErrInvalidReportID
 	}
 
 	snap, err := r.reportDoc(caseID, reportID).Get(ctx)
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
-	return decodeReviewReport(snap.Ref.ID, caseID, snap.Data())
+	return decodeReport(snap.Ref.ID, caseID, snap.Data())
 }
 
-func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID reviewreport.CaseID, filter reviewreport.ReportFilter, sort common.Sort, page common.Page) (common.PageResult[reviewreport.Report], error) {
+func (r *ReportRepositoryFS) ListReports(
+	ctx context.Context,
+	caseID reportdom.CaseID,
+	filter reportdom.ReportFilter,
+	sort common.Sort,
+	page common.Page,
+) (common.PageResult[reportdom.Report], error) {
 	if r == nil || r.client == nil {
-		return common.PageResult[reviewreport.Report]{}, fmt.Errorf("reviewReport repository is not configured")
+		return common.PageResult[reportdom.Report]{}, fmt.Errorf("report repository is not configured")
 	}
 	if caseID == "" {
-		return common.PageResult[reviewreport.Report]{}, reviewreport.ErrInvalidCaseID
+		return common.PageResult[reportdom.Report]{}, reportdom.ErrInvalidCaseID
 	}
 	if filter.CaseID != "" && filter.CaseID != caseID {
-		return common.PageResult[reviewreport.Report]{}, reviewreport.ErrInvalidCaseID
+		return common.PageResult[reportdom.Report]{}, reportdom.ErrInvalidCaseID
 	}
 	if filter.SearchQuery != "" {
-		return common.PageResult[reviewreport.Report]{}, fmt.Errorf("reviewReport: searchQuery is not supported")
+		return common.PageResult[reportdom.Report]{}, fmt.Errorf("report: searchQuery is not supported")
 	}
 
 	q := r.reportsCol(caseID).Query
@@ -341,15 +353,15 @@ func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID revie
 		q = q.Where("reason", "==", string(*filter.Reason))
 	}
 
-	createdRange := reviewReportEffectiveTimeRange(filter.CreatedAt, filter.Created)
-	q = applyReviewReportTimeRange(q, "createdAt", createdRange)
+	createdRange := reportEffectiveTimeRange(filter.CreatedAt, filter.Created)
+	q = applyReportTimeRange(q, "createdAt", createdRange)
 
 	sortColumn := sort.Column
 	if sortColumn == "" {
 		sortColumn = "createdAt"
 	}
-	if _, ok := reviewreport.AllowedReportSortColumns[sortColumn]; !ok {
-		return common.PageResult[reviewreport.Report]{}, fmt.Errorf("reviewReport: invalid report sort column: %s", sortColumn)
+	if _, ok := reportdom.AllowedReportSortColumns[sortColumn]; !ok {
+		return common.PageResult[reportdom.Report]{}, fmt.Errorf("report: invalid report sort column: %s", sortColumn)
 	}
 
 	orderDirection := firestore.Desc
@@ -359,12 +371,12 @@ func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID revie
 
 	q = q.OrderBy(sortColumn, orderDirection)
 
-	pageNumber, perPage := normalizeReviewReportPage(page)
+	pageNumber, perPage := normalizeReportPage(page)
 	offset := (pageNumber - 1) * perPage
 
-	totalCount, err := reviewReportCountQuery(ctx, q)
+	totalCount, err := reportCountQuery(ctx, q)
 	if err != nil {
-		return common.PageResult[reviewreport.Report]{}, err
+		return common.PageResult[reportdom.Report]{}, err
 	}
 
 	totalPages := int(math.Ceil(float64(totalCount) / float64(perPage)))
@@ -372,7 +384,7 @@ func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID revie
 		totalPages = 1
 	}
 
-	items := make([]reviewreport.Report, 0, perPage)
+	items := make([]reportdom.Report, 0, perPage)
 	iter := q.Offset(offset).Limit(perPage).Documents(ctx)
 	defer iter.Stop()
 
@@ -382,18 +394,18 @@ func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID revie
 			break
 		}
 		if err != nil {
-			return common.PageResult[reviewreport.Report]{}, err
+			return common.PageResult[reportdom.Report]{}, err
 		}
 
-		item, err := decodeReviewReport(snap.Ref.ID, caseID, snap.Data())
+		item, err := decodeReport(snap.Ref.ID, caseID, snap.Data())
 		if err != nil {
-			return common.PageResult[reviewreport.Report]{}, err
+			return common.PageResult[reportdom.Report]{}, err
 		}
 
 		items = append(items, item)
 	}
 
-	return common.PageResult[reviewreport.Report]{
+	return common.PageResult[reportdom.Report]{
 		Items:      items,
 		TotalCount: totalCount,
 		TotalPages: totalPages,
@@ -406,53 +418,57 @@ func (r *ReviewReportRepositoryFS) ListReports(ctx context.Context, caseID revie
 // MutationRepository
 // ============================================================
 
-func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase reviewreport.ReportCase, report reviewreport.Report) (reviewreport.AddReportResult, error) {
+func (r *ReportRepositoryFS) AddReport(
+	ctx context.Context,
+	initialCase reportdom.ReportCase,
+	report reportdom.Report,
+) (reportdom.AddReportResult, error) {
 	if r == nil || r.client == nil {
-		return reviewreport.AddReportResult{}, fmt.Errorf("reviewReport repository is not configured")
+		return reportdom.AddReportResult{}, fmt.Errorf("report repository is not configured")
 	}
 	if err := initialCase.Validate(); err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if err := report.Validate(); err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if report.CaseID != initialCase.ID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidCaseID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidCaseID
 	}
 
-	expectedCaseID, err := reviewreport.BuildCaseID(initialCase.TargetType, initialCase.TargetID)
+	expectedCaseID, err := reportdom.BuildCaseID(initialCase.TargetType, initialCase.TargetID)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if expectedCaseID != initialCase.ID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidCaseID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidCaseID
 	}
 
-	expectedReportID, err := reviewreport.BuildReporterKey(report.ReporterType, report.ReporterID)
+	expectedReportID, err := reportdom.BuildReporterKey(report.ReporterType, report.ReporterID)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if expectedReportID != report.ID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidReportID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidReportID
 	}
 
 	caseRef := r.caseDoc(initialCase.ID)
 	reportRef := r.reportDoc(initialCase.ID, report.ID)
-	var result reviewreport.AddReportResult
+	var result reportdom.AddReportResult
 
 	err = r.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		caseExists := true
-		var currentCase reviewreport.ReportCase
+		var currentCase reportdom.ReportCase
 
 		caseSnap, caseErr := tx.Get(caseRef)
 		if caseErr != nil {
-			if reviewReportIsNotFound(caseErr) {
+			if reportIsNotFound(caseErr) {
 				caseExists = false
 			} else {
 				return caseErr
 			}
 		} else {
-			decodedCase, decodeErr := decodeReviewReportCase(caseSnap.Ref.ID, caseSnap.Data())
+			decodedCase, decodeErr := decodeReportCase(caseSnap.Ref.ID, caseSnap.Data())
 			if decodeErr != nil {
 				return decodeErr
 			}
@@ -462,10 +478,10 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 		reportSnap, reportErr := tx.Get(reportRef)
 		if reportErr == nil {
 			if !caseExists {
-				return fmt.Errorf("reviewReport: report exists without parent case")
+				return fmt.Errorf("report: report exists without parent case")
 			}
 
-			existingReport, decodeErr := decodeReviewReport(
+			existingReport, decodeErr := decodeReport(
 				reportSnap.Ref.ID,
 				initialCase.ID,
 				reportSnap.Data(),
@@ -474,7 +490,7 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 				return decodeErr
 			}
 
-			result = reviewreport.AddReportResult{
+			result = reportdom.AddReportResult{
 				Case:          currentCase,
 				Report:        existingReport,
 				CaseCreated:   false,
@@ -482,7 +498,7 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 			}
 			return nil
 		}
-		if !reviewReportIsNotFound(reportErr) {
+		if !reportIsNotFound(reportErr) {
 			return reportErr
 		}
 
@@ -490,7 +506,7 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 			currentCase = initialCase
 		}
 
-		wasKept := caseExists && currentCase.Status == reviewreport.CaseStatusKept
+		wasKept := caseExists && currentCase.Status == reportdom.CaseStatusKept
 
 		if err := currentCase.IncrementReportCount(report.CreatedAt); err != nil {
 			return err
@@ -500,7 +516,7 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 		}
 
 		if !caseExists {
-			if err := tx.Create(caseRef, encodeReviewReportCase(currentCase)); err != nil {
+			if err := tx.Create(caseRef, encodeReportCase(currentCase)); err != nil {
 				return err
 			}
 		} else {
@@ -536,11 +552,11 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 			}
 		}
 
-		if err := tx.Create(reportRef, encodeReviewReport(report)); err != nil {
+		if err := tx.Create(reportRef, encodeReport(report)); err != nil {
 			return err
 		}
 
-		result = reviewreport.AddReportResult{
+		result = reportdom.AddReportResult{
 			Case:          currentCase,
 			Report:        report,
 			CaseCreated:   !caseExists,
@@ -549,7 +565,7 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 		return nil
 	})
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 
 	return result, nil
@@ -559,7 +575,7 @@ func (r *ReviewReportRepositoryFS) AddReport(ctx context.Context, initialCase re
 // Encode / Decode
 // ============================================================
 
-func encodeReviewReportCase(entity reviewreport.ReportCase) map[string]any {
+func encodeReportCase(entity reportdom.ReportCase) map[string]any {
 	out := map[string]any{
 		"id":               string(entity.ID),
 		"targetType":       string(entity.TargetType),
@@ -587,45 +603,45 @@ func encodeReviewReportCase(entity reviewreport.ReportCase) map[string]any {
 	return out
 }
 
-func decodeReviewReportCase(id string, data map[string]any) (reviewreport.ReportCase, error) {
+func decodeReportCase(id string, data map[string]any) (reportdom.ReportCase, error) {
 	targetType, err := firestoreRequiredString(data, "targetType")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	targetID, err := firestoreRequiredString(data, "targetId")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	targetParentID, err := firestoreRequiredString(data, "targetParentId")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	targetAuthorID, err := firestoreRequiredString(data, "targetAuthorId")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	targetAuthorType, err := firestoreRequiredString(data, "targetAuthorType")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	snapshotTitle, err := firestoreString(data, "snapshotTitle")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	snapshotBody, err := firestoreString(data, "snapshotBody")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	snapshotRating64, err := firestoreOptionalInt64(data, "snapshotRating")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	var snapshotRating *int
@@ -636,52 +652,52 @@ func decodeReviewReportCase(id string, data map[string]any) (reviewreport.Report
 
 	reportCount64, err := firestoreRequiredInt64(data, "reportCount")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 	reportCount := int(reportCount64)
 
 	caseStatus, err := firestoreRequiredString(data, "status")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	updatedAt, err := firestoreRequiredTime(data, "updatedAt")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	decidedAt, err := firestoreOptionalTime(data, "decidedAt")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	decidedBy, err := firestoreString(data, "decidedBy")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	decisionReason, err := firestoreString(data, "decisionReason")
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
-	entity := reviewreport.ReportCase{
-		ID:               reviewreport.CaseID(id),
-		TargetType:       reviewreport.TargetType(targetType),
+	entity := reportdom.ReportCase{
+		ID:               reportdom.CaseID(id),
+		TargetType:       reportdom.TargetType(targetType),
 		TargetID:         targetID,
 		TargetParentID:   targetParentID,
 		TargetAuthorID:   targetAuthorID,
-		TargetAuthorType: reviewreport.ActorType(targetAuthorType),
+		TargetAuthorType: reportdom.ActorType(targetAuthorType),
 		SnapshotTitle:    snapshotTitle,
 		SnapshotBody:     snapshotBody,
 		SnapshotRating:   snapshotRating,
 		ReportCount:      reportCount,
-		Status:           reviewreport.CaseStatus(caseStatus),
+		Status:           reportdom.CaseStatus(caseStatus),
 		CreatedAt:        createdAt,
 		UpdatedAt:        updatedAt,
 		DecidedAt:        decidedAt,
@@ -690,13 +706,13 @@ func decodeReviewReportCase(id string, data map[string]any) (reviewreport.Report
 	}
 
 	if err := entity.Validate(); err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	return entity, nil
 }
 
-func encodeReviewReport(entity reviewreport.Report) map[string]any {
+func encodeReport(entity reportdom.Report) map[string]any {
 	return map[string]any{
 		"id":           string(entity.ID),
 		"caseId":       string(entity.CaseID),
@@ -709,63 +725,67 @@ func encodeReviewReport(entity reviewreport.Report) map[string]any {
 	}
 }
 
-func decodeReviewReport(id string, caseID reviewreport.CaseID, data map[string]any) (reviewreport.Report, error) {
+func decodeReport(
+	id string,
+	caseID reportdom.CaseID,
+	data map[string]any,
+) (reportdom.Report, error) {
 	storedCaseIDValue, err := firestoreString(data, "caseId")
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
-	storedCaseID := reviewreport.CaseID(storedCaseIDValue)
+	storedCaseID := reportdom.CaseID(storedCaseIDValue)
 	if storedCaseID == "" {
 		storedCaseID = caseID
 	}
 	if storedCaseID != caseID {
-		return reviewreport.Report{}, reviewreport.ErrInvalidCaseID
+		return reportdom.Report{}, reportdom.ErrInvalidCaseID
 	}
 
 	reporterType, err := firestoreRequiredString(data, "reporterType")
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
 	reporterID, err := firestoreRequiredString(data, "reporterId")
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
 	companyID, err := firestoreString(data, "companyId")
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
 	reason, err := firestoreRequiredString(data, "reason")
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
 	detail, err := firestoreString(data, "detail")
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
 	createdAt, err := firestoreRequiredTime(data, "createdAt")
 	if err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
-	entity := reviewreport.Report{
-		ID:           reviewreport.ReportID(id),
+	entity := reportdom.Report{
+		ID:           reportdom.ReportID(id),
 		CaseID:       storedCaseID,
-		ReporterType: reviewreport.ActorType(reporterType),
+		ReporterType: reportdom.ActorType(reporterType),
 		ReporterID:   reporterID,
 		CompanyID:    companyID,
-		Reason:       reviewreport.ReportReason(reason),
+		Reason:       reportdom.ReportReason(reason),
 		Detail:       detail,
 		CreatedAt:    createdAt,
 	}
 
 	if err := entity.Validate(); err != nil {
-		return reviewreport.Report{}, err
+		return reportdom.Report{}, err
 	}
 
 	return entity, nil
@@ -775,7 +795,7 @@ func decodeReviewReport(id string, caseID reviewreport.CaseID, data map[string]a
 // Helpers
 // ============================================================
 
-func normalizeReviewReportPage(page common.Page) (int, int) {
+func normalizeReportPage(page common.Page) (int, int) {
 	pageNumber := page.Number
 	perPage := page.PerPage
 
@@ -789,14 +809,14 @@ func normalizeReviewReportPage(page common.Page) (int, int) {
 	return pageNumber, perPage
 }
 
-func reviewReportEffectiveTimeRange(primary, fallback common.TimeRange) common.TimeRange {
+func reportEffectiveTimeRange(primary, fallback common.TimeRange) common.TimeRange {
 	if primary.From != nil || primary.To != nil {
 		return primary
 	}
 	return fallback
 }
 
-func applyReviewReportTimeRange(q firestore.Query, field string, timeRange common.TimeRange) firestore.Query {
+func applyReportTimeRange(q firestore.Query, field string, timeRange common.TimeRange) firestore.Query {
 	if timeRange.From != nil {
 		q = q.Where(field, ">=", timeRange.From.UTC())
 	}
@@ -806,12 +826,11 @@ func applyReviewReportTimeRange(q firestore.Query, field string, timeRange commo
 	return q
 }
 
-func reviewReportCountQuery(ctx context.Context, q firestore.Query) (int, error) {
+func reportCountQuery(ctx context.Context, q firestore.Query) (int, error) {
 	iter := q.Documents(ctx)
 	defer iter.Stop()
 
 	count := 0
-
 	for {
 		_, err := iter.Next()
 		if err == iterator.Done {
@@ -820,17 +839,15 @@ func reviewReportCountQuery(ctx context.Context, q firestore.Query) (int, error)
 		if err != nil {
 			return 0, err
 		}
-
 		count++
 	}
 }
 
-func reviewReportIsNotFound(err error) bool {
+func reportIsNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-
 	return status.Code(err) == codes.NotFound
 }
 
-var _ reviewreport.RepositoryPort = (*ReviewReportRepositoryFS)(nil)
+var _ reportdom.RepositoryPort = (*ReportRepositoryFS)(nil)

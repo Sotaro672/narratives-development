@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/console/handler/review_report_decision_notification_handler.go
+// backend/internal/adapters/in/http/console/handler/report_decision_notification_handler.go
 package consoleHandler
 
 import (
@@ -13,45 +13,45 @@ import (
 
 	uc "narratives/internal/application/usecase"
 	domcommon "narratives/internal/domain/common"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 )
 
 const (
-	defaultReviewReportDecisionNotificationPage    = 1
-	defaultReviewReportDecisionNotificationPerPage = 20
-	maxReviewReportDecisionNotificationPerPage     = 100
+	defaultReportDecisionNotificationPage    = 1
+	defaultReportDecisionNotificationPerPage = 20
+	maxReportDecisionNotificationPerPage     = 100
 )
 
-type ReviewReportDecisionNotificationHandler struct {
-	ReviewReportUC *uc.ReviewReportUsecase
+type ReportDecisionNotificationHandler struct {
+	ReportUC *uc.ReportUsecase
 }
 
-func NewReviewReportDecisionNotificationHandler(
-	reviewReportUC *uc.ReviewReportUsecase,
-) *ReviewReportDecisionNotificationHandler {
-	return &ReviewReportDecisionNotificationHandler{
-		ReviewReportUC: reviewReportUC,
+func NewReportDecisionNotificationHandler(
+	reportUC *uc.ReportUsecase,
+) *ReportDecisionNotificationHandler {
+	return &ReportDecisionNotificationHandler{
+		ReportUC: reportUC,
 	}
 }
 
 // Supported:
-// - GET  /review-report-decision-notifications
-// - GET  /review-report-decision-notifications?isRead=false&page=1&perPage=20
-// - POST /review-report-decision-notifications/{notificationId}/read
-func (h *ReviewReportDecisionNotificationHandler) ServeHTTP(
+// - GET  /report-decision-notifications
+// - GET  /report-decision-notifications?isRead=false&page=1&perPage=20
+// - POST /report-decision-notifications/{notificationId}/read
+func (h *ReportDecisionNotificationHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	if h == nil || h.ReviewReportUC == nil {
+	if h == nil || h.ReportUC == nil {
 		writeError(
 			w,
 			http.StatusServiceUnavailable,
-			"ReviewReportDecisionNotificationHandlerNotInitialized",
+			"ReportDecisionNotificationHandlerNotInitialized",
 		)
 		return
 	}
 
-	notificationID, isReadPath, matched := parseReviewReportDecisionNotificationPath(
+	notificationID, isReadPath, matched := parseReportDecisionNotificationPath(
 		r.URL.Path,
 	)
 	if !matched {
@@ -83,32 +83,32 @@ func (h *ReviewReportDecisionNotificationHandler) ServeHTTP(
 // DTO
 // ============================================================
 
-type reviewReportDecisionNotificationResponse struct {
-	ID             string                    `json:"id"`
-	CaseID         string                    `json:"caseId"`
-	ReportID       string                    `json:"reportId"`
-	RecipientType  reviewreport.ActorType    `json:"recipientType"`
-	RecipientID    string                    `json:"recipientId"`
-	CompanyID      string                    `json:"companyId"`
-	TargetType     reviewreport.TargetType   `json:"targetType"`
-	TargetID       string                    `json:"targetId"`
-	TargetParentID string                    `json:"targetParentId"`
-	ReportReason   reviewreport.ReportReason `json:"reportReason"`
-	ReportDetail   string                    `json:"reportDetail"`
-	DecisionStatus reviewreport.CaseStatus   `json:"decisionStatus"`
-	DecisionReason string                    `json:"decisionReason"`
-	DecidedAt      time.Time                 `json:"decidedAt"`
-	CreatedAt      time.Time                 `json:"createdAt"`
-	UpdatedAt      time.Time                 `json:"updatedAt"`
-	ReadAt         *time.Time                `json:"readAt"`
-	IsRead         bool                      `json:"isRead"`
+type reportDecisionNotificationResponse struct {
+	ID             string                 `json:"id"`
+	CaseID         string                 `json:"caseId"`
+	ReportID       string                 `json:"reportId"`
+	RecipientType  reportdom.ActorType    `json:"recipientType"`
+	RecipientID    string                 `json:"recipientId"`
+	CompanyID      string                 `json:"companyId"`
+	TargetType     reportdom.TargetType   `json:"targetType"`
+	TargetID       string                 `json:"targetId"`
+	TargetParentID string                 `json:"targetParentId"`
+	ReportReason   reportdom.ReportReason `json:"reportReason"`
+	ReportDetail   string                 `json:"reportDetail"`
+	DecisionStatus reportdom.CaseStatus   `json:"decisionStatus"`
+	DecisionReason string                 `json:"decisionReason"`
+	DecidedAt      time.Time              `json:"decidedAt"`
+	CreatedAt      time.Time              `json:"createdAt"`
+	UpdatedAt      time.Time              `json:"updatedAt"`
+	ReadAt         *time.Time             `json:"readAt"`
+	IsRead         bool                   `json:"isRead"`
 }
 
 // ============================================================
 // List
 // ============================================================
 
-func (h *ReviewReportDecisionNotificationHandler) list(
+func (h *ReportDecisionNotificationHandler) list(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
@@ -122,7 +122,7 @@ func (h *ReviewReportDecisionNotificationHandler) list(
 		return
 	}
 
-	isRead, err := parseReviewReportDecisionNotificationIsRead(
+	isRead, err := parseReportDecisionNotificationIsRead(
 		r.URL.Query().Get("isRead"),
 	)
 	if err != nil {
@@ -134,7 +134,7 @@ func (h *ReviewReportDecisionNotificationHandler) list(
 		return
 	}
 
-	page, err := parseReviewReportDecisionNotificationPage(r)
+	page, err := parseReportDecisionNotificationPage(r)
 	if err != nil {
 		writeError(
 			w,
@@ -144,33 +144,33 @@ func (h *ReviewReportDecisionNotificationHandler) list(
 		return
 	}
 
-	result, err := h.ReviewReportUC.ListDecisionNotificationsForCompany(
+	result, err := h.ReportUC.ListDecisionNotificationsForCompany(
 		r.Context(),
 		companyID,
 		isRead,
 		page,
 	)
 	if err != nil {
-		writeReviewReportDecisionNotificationError(w, err)
+		writeReportDecisionNotificationError(w, err)
 		return
 	}
 
 	items := make(
-		[]reviewReportDecisionNotificationResponse,
+		[]reportDecisionNotificationResponse,
 		0,
 		len(result.Items),
 	)
 	for _, notification := range result.Items {
 		items = append(
 			items,
-			toReviewReportDecisionNotificationResponse(notification),
+			toReportDecisionNotificationResponse(notification),
 		)
 	}
 
 	writeJSON(
 		w,
 		http.StatusOK,
-		domcommon.PageResult[reviewReportDecisionNotificationResponse]{
+		domcommon.PageResult[reportDecisionNotificationResponse]{
 			Items:      items,
 			TotalCount: result.TotalCount,
 			TotalPages: result.TotalPages,
@@ -184,7 +184,7 @@ func (h *ReviewReportDecisionNotificationHandler) list(
 // Mark read
 // ============================================================
 
-func (h *ReviewReportDecisionNotificationHandler) markRead(
+func (h *ReportDecisionNotificationHandler) markRead(
 	w http.ResponseWriter,
 	r *http.Request,
 	notificationID string,
@@ -208,20 +208,20 @@ func (h *ReviewReportDecisionNotificationHandler) markRead(
 		return
 	}
 
-	notification, err := h.ReviewReportUC.MarkDecisionNotificationReadForCompany(
+	notification, err := h.ReportUC.MarkDecisionNotificationReadForCompany(
 		r.Context(),
-		reviewreport.DecisionNotificationID(notificationID),
+		reportdom.DecisionNotificationID(notificationID),
 		companyID,
 	)
 	if err != nil {
-		writeReviewReportDecisionNotificationError(w, err)
+		writeReportDecisionNotificationError(w, err)
 		return
 	}
 
 	writeJSON(
 		w,
 		http.StatusOK,
-		toReviewReportDecisionNotificationResponse(notification),
+		toReportDecisionNotificationResponse(notification),
 	)
 }
 
@@ -229,7 +229,7 @@ func (h *ReviewReportDecisionNotificationHandler) markRead(
 // Path
 // ============================================================
 
-func parseReviewReportDecisionNotificationPath(
+func parseReportDecisionNotificationPath(
 	path string,
 ) (
 	notificationID string,
@@ -244,12 +244,12 @@ func parseReviewReportDecisionNotificationPath(
 	parts := strings.Split(trimmed, "/")
 
 	if len(parts) == 1 &&
-		parts[0] == "review-report-decision-notifications" {
+		parts[0] == "report-decision-notifications" {
 		return "", false, true
 	}
 
 	if len(parts) == 3 &&
-		parts[0] == "review-report-decision-notifications" &&
+		parts[0] == "report-decision-notifications" &&
 		parts[1] != "" &&
 		parts[2] == "read" {
 		return parts[1], true, true
@@ -262,7 +262,7 @@ func parseReviewReportDecisionNotificationPath(
 // Query params
 // ============================================================
 
-func parseReviewReportDecisionNotificationIsRead(
+func parseReportDecisionNotificationIsRead(
 	raw string,
 ) (*bool, error) {
 	if raw == "" {
@@ -283,11 +283,11 @@ func parseReviewReportDecisionNotificationIsRead(
 	}
 }
 
-func parseReviewReportDecisionNotificationPage(
+func parseReportDecisionNotificationPage(
 	r *http.Request,
 ) (domcommon.Page, error) {
-	pageNumber := defaultReviewReportDecisionNotificationPage
-	perPage := defaultReviewReportDecisionNotificationPerPage
+	pageNumber := defaultReportDecisionNotificationPage
+	perPage := defaultReportDecisionNotificationPerPage
 
 	rawPage := r.URL.Query().Get("page")
 	if rawPage != "" {
@@ -303,7 +303,7 @@ func parseReviewReportDecisionNotificationPage(
 		parsed, err := strconv.Atoi(rawPerPage)
 		if err != nil ||
 			parsed <= 0 ||
-			parsed > maxReviewReportDecisionNotificationPerPage {
+			parsed > maxReportDecisionNotificationPerPage {
 			return domcommon.Page{}, errors.New("invalid perPage")
 		}
 		perPage = parsed
@@ -319,10 +319,10 @@ func parseReviewReportDecisionNotificationPage(
 // Mapping
 // ============================================================
 
-func toReviewReportDecisionNotificationResponse(
-	notification reviewreport.DecisionNotification,
-) reviewReportDecisionNotificationResponse {
-	return reviewReportDecisionNotificationResponse{
+func toReportDecisionNotificationResponse(
+	notification reportdom.DecisionNotification,
+) reportDecisionNotificationResponse {
+	return reportDecisionNotificationResponse{
 		ID:             string(notification.ID),
 		CaseID:         string(notification.CaseID),
 		ReportID:       string(notification.ReportID),
@@ -348,74 +348,82 @@ func toReviewReportDecisionNotificationResponse(
 // Error mapping
 // ============================================================
 
-func writeReviewReportDecisionNotificationError(
+func writeReportDecisionNotificationError(
 	w http.ResponseWriter,
 	err error,
 ) {
 	switch {
 	case errors.Is(
 		err,
-		uc.ErrReviewReportUsecaseNotConfigured,
+		uc.ErrReportUsecaseNotConfigured,
 	):
 		writeError(
 			w,
 			http.StatusServiceUnavailable,
-			"ReviewReportUsecaseNotConfigured",
+			"ReportUsecaseNotConfigured",
 		)
 
 	case errors.Is(
 		err,
-		uc.ErrReviewReportForbidden,
+		uc.ErrReportForbidden,
 	):
 		writeError(
 			w,
 			http.StatusForbidden,
-			"ReviewReportForbidden",
+			"ReportForbidden",
 		)
 
 	case status.Code(err) == codes.NotFound:
 		writeError(
 			w,
 			http.StatusNotFound,
-			"ReviewReportDecisionNotificationNotFound",
+			"ReportDecisionNotificationNotFound",
 		)
 
-	case reviewreport.IsInvalid(err),
+	case reportdom.IsInvalid(err),
 		errors.Is(
 			err,
-			reviewreport.ErrInvalidDecisionNotificationID,
+			reportdom.ErrInvalidDecisionNotificationID,
 		),
 		errors.Is(
 			err,
-			reviewreport.ErrDecisionNotificationCaseMismatch,
+			reportdom.ErrInvalidDecisionNotificationKind,
 		),
 		errors.Is(
 			err,
-			reviewreport.ErrDecisionNotificationCaseNotDecided,
+			reportdom.ErrDecisionNotificationCaseMismatch,
 		),
 		errors.Is(
 			err,
-			reviewreport.ErrInvalidDecisionNotificationCreatedAt,
+			reportdom.ErrDecisionNotificationCaseNotDecided,
 		),
 		errors.Is(
 			err,
-			reviewreport.ErrInvalidDecisionNotificationUpdatedAt,
+			reportdom.ErrInvalidDecisionNotificationCreatedAt,
 		),
 		errors.Is(
 			err,
-			reviewreport.ErrInvalidDecisionNotificationReadAt,
+			reportdom.ErrInvalidDecisionNotificationUpdatedAt,
+		),
+		errors.Is(
+			err,
+			reportdom.ErrInvalidDecisionNotificationReadAt,
+		),
+		errors.Is(
+			err,
+			reportdom.ErrTargetDecisionNotificationReportData,
 		):
 		writeError(
 			w,
 			http.StatusBadRequest,
-			"InvalidReviewReportDecisionNotification",
+			"InvalidReportDecisionNotification",
 		)
 
 	default:
 		writeError(
 			w,
 			http.StatusInternalServerError,
-			"ReviewReportDecisionNotificationInternalError",
+			"ReportDecisionNotificationInternalError",
 		)
 	}
 }

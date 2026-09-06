@@ -35,8 +35,8 @@ type mallRepositories struct {
 	productRepo                          *fs.ProductRepositoryFS
 	productBlueprintRepoFS               *fs.ProductBlueprintRepositoryFS
 	productBlueprintReviewRepo           *fs.ProductBlueprintReviewRepositoryFS
-	reviewReportRepo                     *fs.ReviewReportRepositoryFS
-	reviewReportDecisionNotificationRepo *fs.ReviewReportDecisionNotificationRepositoryFS
+	reviewReportRepo                     *fs.ReportRepositoryFS
+	reviewReportDecisionNotificationRepo *fs.ReportDecisionNotificationRepositoryFS
 	refundRepo                           *fs.RefundRepositoryFS
 	refundCompletionNotificationRepo     *fs.RefundCompletionNotificationRepositoryFS
 	resalePayoutNotificationRepo         *fs.ResalePayoutNotificationRepositoryFS
@@ -93,8 +93,8 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 	announcementAttachmentRepo := fs.NewAnnouncementAttachmentRepositoryFS(fsClient)
 	tokenBlueprintReviewRepo := fs.NewTokenBlueprintReviewRepositoryFS(fsClient)
 	productBlueprintReviewRepo := fs.NewProductBlueprintReviewRepositoryFS(fsClient)
-	reviewReportRepo := fs.NewReviewReportRepositoryFS(fsClient)
-	reviewReportDecisionNotificationRepo := fs.NewReviewReportDecisionNotificationRepositoryFS(fsClient)
+	reviewReportRepo := fs.NewReportRepositoryFS(fsClient)
+	reviewReportDecisionNotificationRepo := fs.NewReportDecisionNotificationRepositoryFS(fsClient)
 	likeRepo := fs.NewLikeRepositoryFS(fsClient)
 	listRepoFS := fs.NewListRepositoryFS(fsClient)
 	listImageRecordRepo := fs.NewListImageRepositoryFS(fsClient)

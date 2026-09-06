@@ -9,7 +9,7 @@ import (
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -176,7 +176,7 @@ func (q *ReportNameQuery) ResolveTokenName(ctx context.Context, tokenBlueprintID
 }
 
 // ============================================================
-// Review report resolvers
+// Report resolvers
 // ============================================================
 
 // ResolveReporterName は通報者の表示名を解決する。
@@ -184,13 +184,13 @@ func (q *ReportNameQuery) ResolveTokenName(ctx context.Context, tokenBlueprintID
 // memberName への変換は行わない。
 func (q *ReportNameQuery) ResolveReporterName(
 	ctx context.Context,
-	reporterType reviewreport.ActorType,
+	reporterType reportdom.ActorType,
 	reporterID string,
 ) string {
 	switch reporterType {
-	case reviewreport.ActorTypeAvatar:
+	case reportdom.ActorTypeAvatar:
 		return q.ResolveAvatarName(ctx, reporterID)
-	case reviewreport.ActorTypeBrand:
+	case reportdom.ActorTypeBrand:
 		return q.ResolveBrandName(ctx, reporterID)
 	default:
 		return ""
@@ -202,13 +202,13 @@ func (q *ReportNameQuery) ResolveReporterName(
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetAuthorName(
 	ctx context.Context,
-	authorType reviewreport.ActorType,
+	authorType reportdom.ActorType,
 	authorID string,
 ) string {
 	switch authorType {
-	case reviewreport.ActorTypeAvatar:
+	case reportdom.ActorTypeAvatar:
 		return q.ResolveAvatarName(ctx, authorID)
-	case reviewreport.ActorTypeBrand:
+	case reportdom.ActorTypeBrand:
 		return q.ResolveMemberName(ctx, authorID)
 	default:
 		return ""
@@ -221,15 +221,15 @@ func (q *ReportNameQuery) ResolveTargetAuthorName(
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetParentName(
 	ctx context.Context,
-	targetType reviewreport.TargetType,
+	targetType reportdom.TargetType,
 	targetParentID string,
 ) string {
 	switch targetType {
-	case reviewreport.TargetTypeProductBlueprintReview:
+	case reportdom.TargetTypeProductBlueprintReview:
 		return q.ResolveProductName(ctx, targetParentID)
-	case reviewreport.TargetTypeTokenBlueprintComment:
+	case reportdom.TargetTypeTokenBlueprintComment:
 		return q.ResolveTokenName(ctx, targetParentID)
-	case reviewreport.TargetTypeAvatar:
+	case reportdom.TargetTypeAvatar:
 		return q.ResolveAvatarName(ctx, targetParentID)
 	default:
 		return ""

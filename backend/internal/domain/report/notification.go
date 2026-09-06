@@ -1,5 +1,5 @@
-// backend/internal/domain/reviewReport/notification.go
-package reviewReport
+// backend/internal/domain/report/notification.go
+package report
 
 import (
 	"crypto/sha256"
@@ -14,28 +14,28 @@ import (
 
 var (
 	ErrInvalidDecisionNotificationID = errors.New(
-		"reviewReport: invalid decision notification id",
+		"report: invalid decision notification id",
 	)
 	ErrInvalidDecisionNotificationKind = errors.New(
-		"reviewReport: invalid decision notification kind",
+		"report: invalid decision notification kind",
 	)
 	ErrDecisionNotificationCaseMismatch = errors.New(
-		"reviewReport: decision notification case mismatch",
+		"report: decision notification case mismatch",
 	)
 	ErrDecisionNotificationCaseNotDecided = errors.New(
-		"reviewReport: decision notification case is not decided",
+		"report: decision notification case is not decided",
 	)
 	ErrInvalidDecisionNotificationCreatedAt = errors.New(
-		"reviewReport: invalid decision notification created at",
+		"report: invalid decision notification created at",
 	)
 	ErrInvalidDecisionNotificationUpdatedAt = errors.New(
-		"reviewReport: invalid decision notification updated at",
+		"report: invalid decision notification updated at",
 	)
 	ErrInvalidDecisionNotificationReadAt = errors.New(
-		"reviewReport: invalid decision notification read at",
+		"report: invalid decision notification read at",
 	)
 	ErrTargetDecisionNotificationReportData = errors.New(
-		"reviewReport: target decision notification must not contain report data",
+		"report: target decision notification must not contain report data",
 	)
 )
 
@@ -103,7 +103,6 @@ func BuildDecisionNotificationID(
 	}
 
 	canonicalDecidedAt := decidedAt.UTC().Truncate(time.Microsecond)
-
 	source := string(caseID) +
 		"|" +
 		string(reportID) +
@@ -112,6 +111,9 @@ func BuildDecisionNotificationID(
 
 	sum := sha256.Sum256([]byte(source))
 
+	// NOTE:
+	// 既存 Firestore データとのID互換性を維持するため、
+	// review_report_decision_ プレフィックスは変更しない。
 	return DecisionNotificationID(
 		"review_report_decision_" + hex.EncodeToString(sum[:]),
 	), nil
@@ -143,7 +145,6 @@ func BuildTargetDecisionNotificationID(
 	}
 
 	canonicalDecidedAt := decidedAt.UTC().Truncate(time.Microsecond)
-
 	source := string(caseID) +
 		"|" +
 		string(recipientType) +
@@ -154,6 +155,9 @@ func BuildTargetDecisionNotificationID(
 
 	sum := sha256.Sum256([]byte(source))
 
+	// NOTE:
+	// 既存 Firestore データとのID互換性を維持するため、
+	// review_report_target_enforcement_ プレフィックスは変更しない。
 	return DecisionNotificationID(
 		"review_report_target_enforcement_" + hex.EncodeToString(sum[:]),
 	), nil
@@ -216,8 +220,6 @@ func (n DecisionNotification) Kind() NotificationKind {
 
 // NewDecisionNotification は裁定済み ReportCase と、そのケースに紐づく
 // 1件の Report から通報者向け通知を生成する。
-//
-// 既存呼び出しとの互換性を維持するため関数名は変更しない。
 func NewDecisionNotification(
 	reportCase ReportCase,
 	report Report,

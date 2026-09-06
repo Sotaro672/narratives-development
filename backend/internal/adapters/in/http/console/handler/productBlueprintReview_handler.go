@@ -12,21 +12,21 @@ import (
 	uc "narratives/internal/application/usecase"
 	domcommon "narratives/internal/domain/common"
 	revdomain "narratives/internal/domain/productBlueprintReview"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 )
 
 type ProductBlueprintReviewHandler struct {
 	ProductBlueprintReviewUC *uc.ProductBlueprintReviewUsecase
-	ReviewReportUC           *uc.ReviewReportUsecase
+	ReportUC                 *uc.ReportUsecase
 }
 
 func NewProductBlueprintReviewHandler(
 	productBlueprintReviewUC *uc.ProductBlueprintReviewUsecase,
-	reviewReportUC *uc.ReviewReportUsecase,
+	reportUC *uc.ReportUsecase,
 ) *ProductBlueprintReviewHandler {
 	return &ProductBlueprintReviewHandler{
 		ProductBlueprintReviewUC: productBlueprintReviewUC,
-		ReviewReportUC:           reviewReportUC,
+		ReportUC:                 reportUC,
 	}
 }
 
@@ -127,7 +127,7 @@ func (h *ProductBlueprintReviewHandler) resolveProductBlueprintBrandID(
 	if productBlueprint.ID != productBlueprintID ||
 		productBlueprint.CompanyID != companyID ||
 		productBlueprint.BrandID == "" {
-		return "", uc.ErrReviewReportForbidden
+		return "", uc.ErrReportForbidden
 	}
 
 	return productBlueprint.BrandID, nil
@@ -166,12 +166,12 @@ type reportProductBlueprintReviewRequest struct {
 }
 
 type reportProductBlueprintReviewResponse struct {
-	CaseID        string                  `json:"caseId"`
-	ReportID      string                  `json:"reportId"`
-	ReportCount   int                     `json:"reportCount"`
-	Status        reviewreport.CaseStatus `json:"status"`
-	CaseCreated   bool                    `json:"caseCreated"`
-	ReportCreated bool                    `json:"reportCreated"`
+	CaseID        string               `json:"caseId"`
+	ReportID      string               `json:"reportId"`
+	ReportCount   int                  `json:"reportCount"`
+	Status        reportdom.CaseStatus `json:"status"`
+	CaseCreated   bool                 `json:"caseCreated"`
+	ReportCreated bool                 `json:"reportCreated"`
 }
 
 func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
@@ -180,11 +180,11 @@ func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
 	productBlueprintID string,
 	reviewID string,
 ) {
-	if h == nil || h.ReviewReportUC == nil {
+	if h == nil || h.ReportUC == nil {
 		writeError(
 			w,
 			http.StatusServiceUnavailable,
-			"ReviewReportHandlerNotInitialized",
+			"ReportHandlerNotInitialized",
 		)
 		return
 	}
@@ -240,7 +240,7 @@ func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
 		return
 	}
 
-	reason := reviewreport.ReportReason(
+	reason := reportdom.ReportReason(
 		strings.ToUpper(
 			trimWS(request.Reason),
 		),
@@ -255,7 +255,7 @@ func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
 	}
 
 	detail := trimWS(request.Detail)
-	if reason == reviewreport.ReportReasonOther &&
+	if reason == reportdom.ReportReasonOther &&
 		detail == "" {
 		writeError(
 			w,
@@ -265,7 +265,7 @@ func (h *ProductBlueprintReviewHandler) ReportReviewAsBrand(
 		return
 	}
 
-	result, err := h.ReviewReportUC.ReportProductBlueprintReviewByBrand(
+	result, err := h.ReportUC.ReportProductBlueprintReviewByBrand(
 		r.Context(),
 		uc.ReportProductBlueprintReviewByBrandInput{
 			ProductBlueprintID: productBlueprintID,
@@ -335,37 +335,37 @@ func writeProductBlueprintReviewReportError(
 	switch {
 	case errors.Is(
 		err,
-		uc.ErrReviewReportUsecaseNotConfigured,
+		uc.ErrReportUsecaseNotConfigured,
 	):
 		writeError(
 			w,
 			http.StatusServiceUnavailable,
-			"ReviewReportUsecaseNotConfigured",
+			"ReportUsecaseNotConfigured",
 		)
 
 	case errors.Is(
 		err,
-		uc.ErrReviewReportForbidden,
+		uc.ErrReportForbidden,
 	):
 		writeError(
 			w,
 			http.StatusForbidden,
-			"ReviewReportForbidden",
+			"ReportForbidden",
 		)
 
 	case errors.Is(
 		err,
-		uc.ErrReviewReportSelfReport,
+		uc.ErrReportSelfReport,
 	):
 		writeError(
 			w,
 			http.StatusForbidden,
-			"ReviewReportSelfReportNotAllowed",
+			"ReportSelfReportNotAllowed",
 		)
 
 	case errors.Is(
 		err,
-		reviewreport.ErrCannotReportRemovedTarget,
+		reportdom.ErrCannotReportRemovedTarget,
 	):
 		writeError(
 			w,
@@ -373,7 +373,7 @@ func writeProductBlueprintReviewReportError(
 			"CannotReportRemovedTarget",
 		)
 
-	case reviewreport.IsInvalid(err):
+	case reportdom.IsInvalid(err):
 		writeError(
 			w,
 			http.StatusBadRequest,

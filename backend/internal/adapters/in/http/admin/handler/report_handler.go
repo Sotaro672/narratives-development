@@ -16,18 +16,18 @@ import (
 	adminquery "narratives/internal/application/query/admin"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 )
 
 const adminReportsPath = "/admin/reports"
 
 type ReportHandler struct {
-	uc        *usecase.ReviewReportUsecase
+	uc        *usecase.ReportUsecase
 	nameQuery *adminquery.ReportNameQuery
 }
 
 func NewReportHandler(
-	uc *usecase.ReviewReportUsecase,
+	uc *usecase.ReportUsecase,
 	nameQuery *adminquery.ReportNameQuery,
 ) http.Handler {
 	return http.HandlerFunc((&ReportHandler{
@@ -36,62 +36,62 @@ func NewReportHandler(
 	}).handle)
 }
 
-type reviewReportCaseResponse struct {
-	ID               string                  `json:"id"`
-	TargetType       reviewreport.TargetType `json:"targetType"`
-	TargetID         string                  `json:"targetId"`
-	TargetParentID   string                  `json:"targetParentId"`
-	TargetParentName string                  `json:"targetParentName,omitempty"`
-	TargetAuthorID   string                  `json:"targetAuthorId"`
-	TargetAuthorName string                  `json:"targetAuthorName,omitempty"`
-	TargetAuthorType reviewreport.ActorType  `json:"targetAuthorType"`
-	SnapshotTitle    string                  `json:"snapshotTitle"`
-	SnapshotBody     string                  `json:"snapshotBody"`
-	SnapshotRating   *int                    `json:"snapshotRating"`
-	ReportCount      int                     `json:"reportCount"`
-	Status           reviewreport.CaseStatus `json:"status"`
-	CreatedAt        string                  `json:"createdAt"`
-	UpdatedAt        string                  `json:"updatedAt"`
-	DecidedAt        *string                 `json:"decidedAt"`
-	DecidedBy        string                  `json:"decidedBy"`
-	DecisionReason   string                  `json:"decisionReason"`
+type reportCaseResponse struct {
+	ID               string               `json:"id"`
+	TargetType       reportdom.TargetType `json:"targetType"`
+	TargetID         string               `json:"targetId"`
+	TargetParentID   string               `json:"targetParentId"`
+	TargetParentName string               `json:"targetParentName,omitempty"`
+	TargetAuthorID   string               `json:"targetAuthorId"`
+	TargetAuthorName string               `json:"targetAuthorName,omitempty"`
+	TargetAuthorType reportdom.ActorType  `json:"targetAuthorType"`
+	SnapshotTitle    string               `json:"snapshotTitle"`
+	SnapshotBody     string               `json:"snapshotBody"`
+	SnapshotRating   *int                 `json:"snapshotRating"`
+	ReportCount      int                  `json:"reportCount"`
+	Status           reportdom.CaseStatus `json:"status"`
+	CreatedAt        string               `json:"createdAt"`
+	UpdatedAt        string               `json:"updatedAt"`
+	DecidedAt        *string              `json:"decidedAt"`
+	DecidedBy        string               `json:"decidedBy"`
+	DecisionReason   string               `json:"decisionReason"`
 }
 
-type reviewReportCaseListResponse struct {
-	Items      []reviewReportCaseResponse `json:"items"`
-	TotalCount int                        `json:"totalCount"`
-	TotalPages int                        `json:"totalPages"`
-	Page       int                        `json:"page"`
-	PerPage    int                        `json:"perPage"`
+type reportCaseListResponse struct {
+	Items      []reportCaseResponse `json:"items"`
+	TotalCount int                  `json:"totalCount"`
+	TotalPages int                  `json:"totalPages"`
+	Page       int                  `json:"page"`
+	PerPage    int                  `json:"perPage"`
 }
 
-type reviewReportItemResponse struct {
-	ID           string                    `json:"id"`
-	CaseID       string                    `json:"caseId"`
-	ReporterType reviewreport.ActorType    `json:"reporterType"`
-	ReporterID   string                    `json:"reporterId"`
-	ReporterName string                    `json:"reporterName"`
-	CompanyID    string                    `json:"companyId"`
-	CompanyName  string                    `json:"companyName"`
-	Reason       reviewreport.ReportReason `json:"reason"`
-	Detail       string                    `json:"detail"`
-	CreatedAt    string                    `json:"createdAt"`
+type reportItemResponse struct {
+	ID           string                 `json:"id"`
+	CaseID       string                 `json:"caseId"`
+	ReporterType reportdom.ActorType    `json:"reporterType"`
+	ReporterID   string                 `json:"reporterId"`
+	ReporterName string                 `json:"reporterName"`
+	CompanyID    string                 `json:"companyId"`
+	CompanyName  string                 `json:"companyName"`
+	Reason       reportdom.ReportReason `json:"reason"`
+	Detail       string                 `json:"detail"`
+	CreatedAt    string                 `json:"createdAt"`
 }
 
-type reviewReportItemsPageResponse struct {
-	Items      []reviewReportItemResponse `json:"items"`
-	TotalCount int                        `json:"totalCount"`
-	TotalPages int                        `json:"totalPages"`
-	Page       int                        `json:"page"`
-	PerPage    int                        `json:"perPage"`
+type reportItemsPageResponse struct {
+	Items      []reportItemResponse `json:"items"`
+	TotalCount int                  `json:"totalCount"`
+	TotalPages int                  `json:"totalPages"`
+	Page       int                  `json:"page"`
+	PerPage    int                  `json:"perPage"`
 }
 
-type reviewReportDetailResponse struct {
-	Case    reviewReportCaseResponse      `json:"case"`
-	Reports reviewReportItemsPageResponse `json:"reports"`
+type reportDetailResponse struct {
+	Case    reportCaseResponse      `json:"case"`
+	Reports reportItemsPageResponse `json:"reports"`
 }
 
-type reviewReportDecisionRequest struct {
+type reportDecisionRequest struct {
 	Decision string `json:"decision"`
 	Reason   string `json:"reason"`
 }
@@ -106,7 +106,7 @@ const (
 
 func (h *ReportHandler) handle(w http.ResponseWriter, r *http.Request) {
 	if h.uc == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "review_report_usecase_not_initialized")
+		writeJSONError(w, http.StatusServiceUnavailable, "report_usecase_not_initialized")
 		return
 	}
 
@@ -123,18 +123,21 @@ func (h *ReportHandler) handle(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.handleList(w, r)
+
 	case reportRouteDetail:
 		if r.Method != http.MethodGet {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 			return
 		}
 		h.handleDetail(w, r, caseID)
+
 	case reportRouteDecision:
 		if r.Method != http.MethodPost {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 			return
 		}
 		h.handleDecision(w, r, caseID)
+
 	default:
 		writeJSONError(w, http.StatusNotFound, "report_not_found")
 	}
@@ -142,14 +145,14 @@ func (h *ReportHandler) handle(w http.ResponseWriter, r *http.Request) {
 
 func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	filter := reviewreport.CaseFilter{
+	filter := reportdom.CaseFilter{
 		TargetID:       strings.TrimSpace(query.Get("targetId")),
 		TargetParentID: strings.TrimSpace(query.Get("targetParentId")),
 		TargetAuthorID: strings.TrimSpace(query.Get("targetAuthorId")),
 	}
 
 	if value := strings.TrimSpace(query.Get("status")); value != "" {
-		statusValue := reviewreport.CaseStatus(strings.ToUpper(value))
+		statusValue := reportdom.CaseStatus(strings.ToUpper(value))
 		if err := statusValue.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_status")
 			return
@@ -158,7 +161,7 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if value := strings.TrimSpace(query.Get("targetType")); value != "" {
-		targetType := reviewreport.TargetType(strings.ToUpper(value))
+		targetType := reportdom.TargetType(strings.ToUpper(value))
 		if err := targetType.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_target_type")
 			return
@@ -167,7 +170,7 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if value := strings.TrimSpace(query.Get("targetAuthorType")); value != "" {
-		actorType := reviewreport.ActorType(strings.ToUpper(value))
+		actorType := reportdom.ActorType(strings.ToUpper(value))
 		if err := actorType.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_target_author_type")
 			return
@@ -175,7 +178,7 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		filter.TargetAuthorType = &actorType
 	}
 
-	sortValue, ok := parseReviewReportCaseSort(query.Get("sort"), query.Get("order"))
+	sortValue, ok := parseReportCaseSort(query.Get("sort"), query.Get("order"))
 	if !ok {
 		writeJSONError(w, http.StatusBadRequest, "invalid_sort")
 		return
@@ -183,21 +186,21 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	page := common.Page{
 		Number:  parsePositiveInt(query.Get("page"), 1),
-		PerPage: reviewReportPerPage(query.Get("perPage")),
+		PerPage: reportPerPage(query.Get("perPage")),
 	}
 
 	result, err := h.uc.ListReportCases(r.Context(), filter, sortValue, page)
 	if err != nil {
-		writeReviewReportError(w, err, "report_list_failed")
+		writeReportError(w, err, "report_list_failed")
 		return
 	}
 
-	items := make([]reviewReportCaseResponse, 0, len(result.Items))
+	items := make([]reportCaseResponse, 0, len(result.Items))
 	for _, item := range result.Items {
-		items = append(items, toReviewReportCaseResponse(item))
+		items = append(items, toReportCaseResponse(item))
 	}
 
-	writeJSON(w, http.StatusOK, reviewReportCaseListResponse{
+	writeJSON(w, http.StatusOK, reportCaseListResponse{
 		Items:      items,
 		TotalCount: result.TotalCount,
 		TotalPages: result.TotalPages,
@@ -209,23 +212,23 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 func (h *ReportHandler) handleDetail(
 	w http.ResponseWriter,
 	r *http.Request,
-	caseID reviewreport.CaseID,
+	caseID reportdom.CaseID,
 ) {
 	reportCase, err := h.uc.GetReportCase(r.Context(), caseID)
 	if err != nil {
-		writeReviewReportError(w, err, "report_get_failed")
+		writeReportError(w, err, "report_get_failed")
 		return
 	}
 
 	query := r.URL.Query()
-	filter := reviewreport.ReportFilter{
+	filter := reportdom.ReportFilter{
 		CaseID:     caseID,
 		ReporterID: strings.TrimSpace(query.Get("reporterId")),
 		CompanyID:  strings.TrimSpace(query.Get("companyId")),
 	}
 
 	if value := strings.TrimSpace(query.Get("reporterType")); value != "" {
-		actorType := reviewreport.ActorType(strings.ToUpper(value))
+		actorType := reportdom.ActorType(strings.ToUpper(value))
 		if err := actorType.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_reporter_type")
 			return
@@ -234,7 +237,7 @@ func (h *ReportHandler) handleDetail(
 	}
 
 	if value := strings.TrimSpace(query.Get("reason")); value != "" {
-		reason := reviewreport.ReportReason(strings.ToUpper(value))
+		reason := reportdom.ReportReason(strings.ToUpper(value))
 		if err := reason.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_reason")
 			return
@@ -242,7 +245,7 @@ func (h *ReportHandler) handleDetail(
 		filter.Reason = &reason
 	}
 
-	sortValue, ok := parseReviewReportItemSort(query.Get("sort"), query.Get("order"))
+	sortValue, ok := parseReportItemSort(query.Get("sort"), query.Get("order"))
 	if !ok {
 		writeJSONError(w, http.StatusBadRequest, "invalid_sort")
 		return
@@ -250,23 +253,23 @@ func (h *ReportHandler) handleDetail(
 
 	page := common.Page{
 		Number:  parsePositiveInt(query.Get("page"), 1),
-		PerPage: reviewReportPerPage(query.Get("perPage")),
+		PerPage: reportPerPage(query.Get("perPage")),
 	}
 
 	reports, err := h.uc.ListReports(r.Context(), caseID, filter, sortValue, page)
 	if err != nil {
-		writeReviewReportError(w, err, "report_items_list_failed")
+		writeReportError(w, err, "report_items_list_failed")
 		return
 	}
 
-	items := make([]reviewReportItemResponse, 0, len(reports.Items))
+	items := make([]reportItemResponse, 0, len(reports.Items))
 	for _, item := range reports.Items {
-		items = append(items, h.toReviewReportItemResponse(r.Context(), item))
+		items = append(items, h.toReportItemResponse(r.Context(), item))
 	}
 
-	writeJSON(w, http.StatusOK, reviewReportDetailResponse{
-		Case: h.toReviewReportDetailCaseResponse(r.Context(), reportCase),
-		Reports: reviewReportItemsPageResponse{
+	writeJSON(w, http.StatusOK, reportDetailResponse{
+		Case: h.toReportDetailCaseResponse(r.Context(), reportCase),
+		Reports: reportItemsPageResponse{
 			Items:      items,
 			TotalCount: reports.TotalCount,
 			TotalPages: reports.TotalPages,
@@ -279,7 +282,7 @@ func (h *ReportHandler) handleDetail(
 func (h *ReportHandler) handleDecision(
 	w http.ResponseWriter,
 	r *http.Request,
-	caseID reviewreport.CaseID,
+	caseID reportdom.CaseID,
 ) {
 	adminUID, ok := middleware.CurrentAdminUID(r)
 	if !ok {
@@ -287,7 +290,7 @@ func (h *ReportHandler) handleDecision(
 		return
 	}
 
-	var request reviewReportDecisionRequest
+	var request reportDecisionRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&request); err != nil {
@@ -301,12 +304,12 @@ func (h *ReportHandler) handleDecision(
 		return
 	}
 
-	var decision usecase.ReviewReportDecision
+	var decision usecase.ReportDecision
 	switch strings.ToUpper(strings.TrimSpace(request.Decision)) {
-	case string(usecase.ReviewReportDecisionKeep):
-		decision = usecase.ReviewReportDecisionKeep
-	case string(usecase.ReviewReportDecisionRemove):
-		decision = usecase.ReviewReportDecisionRemove
+	case string(usecase.ReportDecisionKeep):
+		decision = usecase.ReportDecisionKeep
+	case string(usecase.ReportDecisionRemove):
+		decision = usecase.ReportDecisionRemove
 	default:
 		writeJSONError(w, http.StatusBadRequest, "invalid_decision")
 		return
@@ -314,7 +317,7 @@ func (h *ReportHandler) handleDecision(
 
 	result, err := h.uc.DecideReportCase(
 		r.Context(),
-		usecase.DecideReviewReportCaseInput{
+		usecase.DecideReportCaseInput{
 			CaseID:    caseID,
 			Decision:  decision,
 			Reason:    reason,
@@ -322,16 +325,16 @@ func (h *ReportHandler) handleDecision(
 		},
 	)
 	if err != nil {
-		writeReviewReportError(w, err, "report_decision_failed")
+		writeReportError(w, err, "report_decision_failed")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, h.toReviewReportDetailCaseResponse(r.Context(), result))
+	writeJSON(w, http.StatusOK, h.toReportDetailCaseResponse(r.Context(), result))
 }
 
 func resolveReportPath(
 	requestPath string,
-) (reviewreport.CaseID, reportRouteKind, bool) {
+) (reportdom.CaseID, reportRouteKind, bool) {
 	if requestPath == adminReportsPath || requestPath == adminReportsPath+"/" {
 		return "", reportRouteList, true
 	}
@@ -350,7 +353,7 @@ func resolveReportPath(
 		if caseID == "" {
 			return "", reportRouteList, false
 		}
-		return reviewreport.CaseID(caseID), reportRouteDetail, true
+		return reportdom.CaseID(caseID), reportRouteDetail, true
 	}
 
 	if len(parts) == 2 {
@@ -359,13 +362,13 @@ func resolveReportPath(
 		if caseID == "" || action != "decision" {
 			return "", reportRouteList, false
 		}
-		return reviewreport.CaseID(caseID), reportRouteDecision, true
+		return reportdom.CaseID(caseID), reportRouteDecision, true
 	}
 
 	return "", reportRouteList, false
 }
 
-func parseReviewReportCaseSort(
+func parseReportCaseSort(
 	columnValue string,
 	orderValue string,
 ) (common.Sort, bool) {
@@ -373,11 +376,12 @@ func parseReviewReportCaseSort(
 	if column == "" {
 		column = "updatedAt"
 	}
-	if _, ok := reviewreport.AllowedCaseSortColumns[column]; !ok {
+
+	if _, ok := reportdom.AllowedCaseSortColumns[column]; !ok {
 		return common.Sort{}, false
 	}
 
-	order, ok := parseReviewReportSortOrder(orderValue)
+	order, ok := parseReportSortOrder(orderValue)
 	if !ok {
 		return common.Sort{}, false
 	}
@@ -388,7 +392,7 @@ func parseReviewReportCaseSort(
 	}, true
 }
 
-func parseReviewReportItemSort(
+func parseReportItemSort(
 	columnValue string,
 	orderValue string,
 ) (common.Sort, bool) {
@@ -396,11 +400,12 @@ func parseReviewReportItemSort(
 	if column == "" {
 		column = "createdAt"
 	}
-	if _, ok := reviewreport.AllowedReportSortColumns[column]; !ok {
+
+	if _, ok := reportdom.AllowedReportSortColumns[column]; !ok {
 		return common.Sort{}, false
 	}
 
-	order, ok := parseReviewReportSortOrder(orderValue)
+	order, ok := parseReportSortOrder(orderValue)
 	if !ok {
 		return common.Sort{}, false
 	}
@@ -411,7 +416,7 @@ func parseReviewReportItemSort(
 	}, true
 }
 
-func parseReviewReportSortOrder(value string) (common.SortOrder, bool) {
+func parseReportSortOrder(value string) (common.SortOrder, bool) {
 	value = strings.ToLower(strings.TrimSpace(value))
 	if value == "" {
 		return common.SortDesc, true
@@ -427,7 +432,7 @@ func parseReviewReportSortOrder(value string) (common.SortOrder, bool) {
 	}
 }
 
-func reviewReportPerPage(value string) int {
+func reportPerPage(value string) int {
 	perPage := parsePositiveInt(value, 50)
 	if perPage > 200 {
 		return 200
@@ -435,16 +440,16 @@ func reviewReportPerPage(value string) int {
 	return perPage
 }
 
-func toReviewReportCaseResponse(
-	reportCase reviewreport.ReportCase,
-) reviewReportCaseResponse {
+func toReportCaseResponse(
+	reportCase reportdom.ReportCase,
+) reportCaseResponse {
 	var decidedAt *string
 	if reportCase.DecidedAt != nil && !reportCase.DecidedAt.IsZero() {
 		value := reportCase.DecidedAt.UTC().Format(time.RFC3339Nano)
 		decidedAt = &value
 	}
 
-	return reviewReportCaseResponse{
+	return reportCaseResponse{
 		ID:               string(reportCase.ID),
 		TargetType:       reportCase.TargetType,
 		TargetID:         reportCase.TargetID,
@@ -456,19 +461,19 @@ func toReviewReportCaseResponse(
 		SnapshotRating:   reportCase.SnapshotRating,
 		ReportCount:      reportCase.ReportCount,
 		Status:           reportCase.Status,
-		CreatedAt:        reviewReportTimeString(reportCase.CreatedAt),
-		UpdatedAt:        reviewReportTimeString(reportCase.UpdatedAt),
+		CreatedAt:        reportTimeString(reportCase.CreatedAt),
+		UpdatedAt:        reportTimeString(reportCase.UpdatedAt),
 		DecidedAt:        decidedAt,
 		DecidedBy:        reportCase.DecidedBy,
 		DecisionReason:   reportCase.DecisionReason,
 	}
 }
 
-func (h *ReportHandler) toReviewReportDetailCaseResponse(
+func (h *ReportHandler) toReportDetailCaseResponse(
 	ctx context.Context,
-	reportCase reviewreport.ReportCase,
-) reviewReportCaseResponse {
-	response := toReviewReportCaseResponse(reportCase)
+	reportCase reportdom.ReportCase,
+) reportCaseResponse {
+	response := toReportCaseResponse(reportCase)
 	if h == nil || h.nameQuery == nil {
 		return response
 	}
@@ -486,11 +491,11 @@ func (h *ReportHandler) toReviewReportDetailCaseResponse(
 	return response
 }
 
-func (h *ReportHandler) toReviewReportItemResponse(
+func (h *ReportHandler) toReportItemResponse(
 	ctx context.Context,
-	report reviewreport.Report,
-) reviewReportItemResponse {
-	response := reviewReportItemResponse{
+	report reportdom.Report,
+) reportItemResponse {
+	response := reportItemResponse{
 		ID:           string(report.ID),
 		CaseID:       string(report.CaseID),
 		ReporterType: report.ReporterType,
@@ -498,7 +503,7 @@ func (h *ReportHandler) toReviewReportItemResponse(
 		CompanyID:    report.CompanyID,
 		Reason:       report.Reason,
 		Detail:       report.Detail,
-		CreatedAt:    reviewReportTimeString(report.CreatedAt),
+		CreatedAt:    reportTimeString(report.CreatedAt),
 	}
 
 	if h == nil || h.nameQuery == nil {
@@ -514,14 +519,14 @@ func (h *ReportHandler) toReviewReportItemResponse(
 	return response
 }
 
-func reviewReportTimeString(value time.Time) string {
+func reportTimeString(value time.Time) string {
 	if value.IsZero() {
 		return ""
 	}
 	return value.UTC().Format(time.RFC3339Nano)
 }
 
-func writeReviewReportError(
+func writeReportError(
 	w http.ResponseWriter,
 	err error,
 	fallback string,
@@ -530,17 +535,17 @@ func writeReviewReportError(
 		return
 	}
 
-	if errors.Is(err, usecase.ErrReviewReportUsecaseNotConfigured) {
-		writeJSONError(w, http.StatusServiceUnavailable, "review_report_usecase_not_initialized")
+	if errors.Is(err, usecase.ErrReportUsecaseNotConfigured) {
+		writeJSONError(w, http.StatusServiceUnavailable, "report_usecase_not_initialized")
 		return
 	}
 
-	if errors.Is(err, usecase.ErrReviewReportInvalidDecision) || reviewreport.IsInvalid(err) {
+	if errors.Is(err, usecase.ErrReportInvalidDecision) || reportdom.IsInvalid(err) {
 		writeJSONError(w, http.StatusBadRequest, "invalid_report_request")
 		return
 	}
 
-	if errors.Is(err, reviewreport.ErrCaseAlreadyRemoved) {
+	if errors.Is(err, reportdom.ErrCaseAlreadyRemoved) {
 		writeJSONError(w, http.StatusConflict, "report_case_already_removed")
 		return
 	}

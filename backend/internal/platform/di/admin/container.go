@@ -25,14 +25,14 @@ type Container struct {
 	adminFirebaseUID                     string
 	adminEmail                           string
 	contactUsecase                       *usecase.ContactUsecase
-	reviewReportUsecase                  *usecase.ReviewReportUsecase
+	reviewReportUsecase                  *usecase.ReportUsecase
 	companyRepo                          *fsrepo.CompanyRepositoryFS
 	memberRepo                           *fsrepo.MemberRepositoryFS
 	avatarRepo                           *fsrepo.AvatarRepositoryFS
 	brandRepo                            *fsrepo.BrandRepositoryFS
 	productBlueprintRepo                 *fsrepo.ProductBlueprintRepositoryFS
 	tokenBlueprintRepo                   *fsrepo.TokenBlueprintRepositoryFS
-	reviewReportDecisionNotificationRepo *fsrepo.ReviewReportDecisionNotificationRepositoryFS
+	reviewReportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 	reportNameQuery                      *adminquery.ReportNameQuery
 	gasBalanceQuery                      *adminquery.GasBalanceQuery
 }
@@ -85,12 +85,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		tokenBlueprintRepo,
 	)
 
-	reviewReportRepo := fsrepo.NewReviewReportRepositoryFS(infra.Firestore)
+	reviewReportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
 	if reviewReportRepo == nil {
 		return nil, errors.New("di.admin: review report repository is nil")
 	}
 
-	reviewReportDecisionNotificationRepo := fsrepo.NewReviewReportDecisionNotificationRepositoryFS(infra.Firestore)
+	reviewReportDecisionNotificationRepo := fsrepo.NewReportDecisionNotificationRepositoryFS(infra.Firestore)
 	if reviewReportDecisionNotificationRepo == nil {
 		return nil, errors.New("di.admin: review report decision notification repository is nil")
 	}
@@ -152,8 +152,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.admin: resale usecase is nil")
 	}
 
-	reviewReportUsecase := usecase.NewReviewReportUsecase(
-		usecase.ReviewReportUsecaseDeps{
+	reviewReportUsecase := usecase.NewReportUsecase(
+		usecase.ReportUsecaseDeps{
 			ReportRepo:               reviewReportRepo,
 			DecisionNotificationRepo: reviewReportDecisionNotificationRepo,
 			ProductReviewModerator:   productBlueprintReviewUsecase,

@@ -1,4 +1,4 @@
-// backend/internal/application/usecase/reviewReport_usecase.go
+// backend/internal/application/usecase/report_usecase.go
 package usecase
 
 import (
@@ -10,7 +10,7 @@ import (
 	avatar "narratives/internal/domain/avatar"
 	common "narratives/internal/domain/common"
 	pbr "narratives/internal/domain/productBlueprintReview"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 	tokenblueprint "narratives/internal/domain/tokenBlueprint"
 	tokenreview "narratives/internal/domain/tokenBlueprint_review"
 )
@@ -20,36 +20,36 @@ import (
 // ============================================================
 
 var (
-	ErrReviewReportUsecaseNotConfigured = errors.New("reviewReport_usecase: not configured")
-	ErrReviewReportForbidden            = errors.New("reviewReport_usecase: forbidden")
-	ErrReviewReportSelfReport           = errors.New("reviewReport_usecase: self report is not allowed")
-	ErrReviewReportInvalidDecision      = errors.New("reviewReport_usecase: invalid decision")
+	ErrReportUsecaseNotConfigured = errors.New("report_usecase: not configured")
+	ErrReportForbidden            = errors.New("report_usecase: forbidden")
+	ErrReportSelfReport           = errors.New("report_usecase: self report is not allowed")
+	ErrReportInvalidDecision      = errors.New("report_usecase: invalid decision")
 )
 
 // ============================================================
 // Ports
 // ============================================================
 
-// ReviewReportProductReviewModerator owns Admin moderation of product reviews.
-type ReviewReportProductReviewModerator interface {
+// ReportProductReviewModerator owns Admin moderation of product reviews.
+type ReportProductReviewModerator interface {
 	RemoveProductBlueprintReviewByAdmin(
 		ctx context.Context,
 		in RemoveProductBlueprintReviewByAdminInput,
 	) (pbr.Review, error)
 }
 
-// ReviewReportTokenCommentModerator owns Admin moderation of token comments.
-type ReviewReportTokenCommentModerator interface {
+// ReportTokenCommentModerator owns Admin moderation of token comments.
+type ReportTokenCommentModerator interface {
 	RemoveCommentByAdmin(
 		ctx context.Context,
 		input RemoveCommentByAdminInput,
 	) error
 }
 
-// ReviewReportAvatarResaleModerator owns Admin moderation of avatar resale access.
-// AVATAR + REMOVE in ReviewReport means resale-service suspension only.
+// ReportAvatarResaleModerator owns Admin moderation of avatar resale access.
+// AVATAR + REMOVE in Report means resale-service suspension only.
 // It must not delete or disable the avatar itself.
-type ReviewReportAvatarResaleModerator interface {
+type ReportAvatarResaleModerator interface {
 	SuspendAvatarResaleByAdmin(
 		ctx context.Context,
 		input SuspendAvatarResaleByAdminInput,
@@ -66,53 +66,53 @@ type SuspendAvatarResaleByAdminInput struct {
 // Usecase
 // ============================================================
 
-type ReviewReportUsecase struct {
-	reportRepo               reviewreport.RepositoryPort
-	decisionNotificationRepo reviewreport.DecisionNotificationRepository
+type ReportUsecase struct {
+	reportRepo               reportdom.RepositoryPort
+	decisionNotificationRepo reportdom.DecisionNotificationRepository
 
 	productReviewRepo       pbr.Repository
 	productBlueprintRepo    applicationport.ProductBlueprintGetter
 	productPurchaseResolver applicationport.OwnedProductResolver
-	productReviewModerator  ReviewReportProductReviewModerator
+	productReviewModerator  ReportProductReviewModerator
 
 	tokenCommentRepo      tokenreview.CommentRepository
 	tokenBlueprintRepo    tokenblueprint.RepositoryPort
-	tokenAccessResolver   applicationport.ReviewReportTokenAccessResolver
-	tokenCommentModerator ReviewReportTokenCommentModerator
+	tokenAccessResolver   applicationport.ReportTokenAccessResolver
+	tokenCommentModerator ReportTokenCommentModerator
 
 	avatarRepo            avatar.Repository
-	avatarResaleModerator ReviewReportAvatarResaleModerator
+	avatarResaleModerator ReportAvatarResaleModerator
 
 	now func() time.Time
 }
 
-type ReviewReportUsecaseDeps struct {
-	ReportRepo               reviewreport.RepositoryPort
-	DecisionNotificationRepo reviewreport.DecisionNotificationRepository
+type ReportUsecaseDeps struct {
+	ReportRepo               reportdom.RepositoryPort
+	DecisionNotificationRepo reportdom.DecisionNotificationRepository
 
 	ProductReviewRepo       pbr.Repository
 	ProductBlueprintRepo    applicationport.ProductBlueprintGetter
 	ProductPurchaseResolver applicationport.OwnedProductResolver
-	ProductReviewModerator  ReviewReportProductReviewModerator
+	ProductReviewModerator  ReportProductReviewModerator
 
 	TokenCommentRepo      tokenreview.CommentRepository
 	TokenBlueprintRepo    tokenblueprint.RepositoryPort
-	TokenAccessResolver   applicationport.ReviewReportTokenAccessResolver
-	TokenCommentModerator ReviewReportTokenCommentModerator
+	TokenAccessResolver   applicationport.ReportTokenAccessResolver
+	TokenCommentModerator ReportTokenCommentModerator
 
 	AvatarRepo            avatar.Repository
-	AvatarResaleModerator ReviewReportAvatarResaleModerator
+	AvatarResaleModerator ReportAvatarResaleModerator
 
 	Now func() time.Time
 }
 
-func NewReviewReportUsecase(deps ReviewReportUsecaseDeps) *ReviewReportUsecase {
+func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 	now := deps.Now
 	if now == nil {
 		now = time.Now
 	}
 
-	return &ReviewReportUsecase{
+	return &ReportUsecase{
 		reportRepo:               deps.ReportRepo,
 		decisionNotificationRepo: deps.DecisionNotificationRepo,
 		productReviewRepo:        deps.ProductReviewRepo,
@@ -129,16 +129,16 @@ func NewReviewReportUsecase(deps ReviewReportUsecaseDeps) *ReviewReportUsecase {
 	}
 }
 
-func (u *ReviewReportUsecase) ensureReportRepository() error {
+func (u *ReportUsecase) ensureReportRepository() error {
 	if u == nil || u.reportRepo == nil {
-		return ErrReviewReportUsecaseNotConfigured
+		return ErrReportUsecaseNotConfigured
 	}
 	return nil
 }
 
-func (u *ReviewReportUsecase) ensureDecisionNotificationRepository() error {
+func (u *ReportUsecase) ensureDecisionNotificationRepository() error {
 	if u == nil || u.decisionNotificationRepo == nil {
-		return ErrReviewReportUsecaseNotConfigured
+		return ErrReportUsecaseNotConfigured
 	}
 	return nil
 }
@@ -151,19 +151,19 @@ type ReportProductBlueprintReviewByAvatarInput struct {
 	ProductBlueprintID string
 	ReviewID           string
 	AvatarID           string
-	Reason             reviewreport.ReportReason
+	Reason             reportdom.ReportReason
 	Detail             string
 }
 
-func (u *ReviewReportUsecase) ReportProductBlueprintReviewByAvatar(
+func (u *ReportUsecase) ReportProductBlueprintReviewByAvatar(
 	ctx context.Context,
 	input ReportProductBlueprintReviewByAvatarInput,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if u.productReviewRepo == nil || u.productPurchaseResolver == nil {
-		return reviewreport.AddReportResult{}, ErrReviewReportUsecaseNotConfigured
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
 	}
 
 	review, err := u.productReviewRepo.GetByProductBlueprintID(
@@ -172,16 +172,16 @@ func (u *ReviewReportUsecase) ReportProductBlueprintReviewByAvatar(
 		input.ReviewID,
 	)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if review.ProductBlueprintID != input.ProductBlueprintID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetParentID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetParentID
 	}
 	if review.Status == pbr.ReviewStatusRemoved {
-		return reviewreport.AddReportResult{}, reviewreport.ErrCannotReportRemovedTarget
+		return reportdom.AddReportResult{}, reportdom.ErrCannotReportRemovedTarget
 	}
 	if review.AvatarID == input.AvatarID {
-		return reviewreport.AddReportResult{}, ErrReviewReportSelfReport
+		return reportdom.AddReportResult{}, ErrReportSelfReport
 	}
 
 	allowed, err := u.productPurchaseResolver.HasOwnedProductBlueprint(
@@ -190,16 +190,16 @@ func (u *ReviewReportUsecase) ReportProductBlueprintReviewByAvatar(
 		input.ProductBlueprintID,
 	)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if !allowed {
-		return reviewreport.AddReportResult{}, ErrReviewReportForbidden
+		return reportdom.AddReportResult{}, ErrReportForbidden
 	}
 
 	return u.addProductBlueprintReviewReport(
 		ctx,
 		review,
-		reviewreport.ActorTypeAvatar,
+		reportdom.ActorTypeAvatar,
 		input.AvatarID,
 		"",
 		input.Reason,
@@ -212,29 +212,29 @@ type ReportProductBlueprintReviewByBrandInput struct {
 	ReviewID           string
 	BrandID            string
 	CompanyID          string
-	Reason             reviewreport.ReportReason
+	Reason             reportdom.ReportReason
 	Detail             string
 }
 
-func (u *ReviewReportUsecase) ReportProductBlueprintReviewByBrand(
+func (u *ReportUsecase) ReportProductBlueprintReviewByBrand(
 	ctx context.Context,
 	input ReportProductBlueprintReviewByBrandInput,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if u.productReviewRepo == nil || u.productBlueprintRepo == nil {
-		return reviewreport.AddReportResult{}, ErrReviewReportUsecaseNotConfigured
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
 	}
 
 	productBlueprint, err := u.productBlueprintRepo.GetByID(ctx, input.ProductBlueprintID)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if productBlueprint.ID != input.ProductBlueprintID ||
 		productBlueprint.CompanyID != input.CompanyID ||
 		productBlueprint.BrandID != input.BrandID {
-		return reviewreport.AddReportResult{}, ErrReviewReportForbidden
+		return reportdom.AddReportResult{}, ErrReportForbidden
 	}
 
 	review, err := u.productReviewRepo.GetByProductBlueprintID(
@@ -243,19 +243,19 @@ func (u *ReviewReportUsecase) ReportProductBlueprintReviewByBrand(
 		input.ReviewID,
 	)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if review.ProductBlueprintID != input.ProductBlueprintID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetParentID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetParentID
 	}
 	if review.Status == pbr.ReviewStatusRemoved {
-		return reviewreport.AddReportResult{}, reviewreport.ErrCannotReportRemovedTarget
+		return reportdom.AddReportResult{}, reportdom.ErrCannotReportRemovedTarget
 	}
 
 	return u.addProductBlueprintReviewReport(
 		ctx,
 		review,
-		reviewreport.ActorTypeBrand,
+		reportdom.ActorTypeBrand,
 		input.BrandID,
 		input.CompanyID,
 		input.Reason,
@@ -263,30 +263,30 @@ func (u *ReviewReportUsecase) ReportProductBlueprintReviewByBrand(
 	)
 }
 
-func (u *ReviewReportUsecase) addProductBlueprintReviewReport(
+func (u *ReportUsecase) addProductBlueprintReviewReport(
 	ctx context.Context,
 	review pbr.Review,
-	reporterType reviewreport.ActorType,
+	reporterType reportdom.ActorType,
 	reporterID string,
 	companyID string,
-	reason reviewreport.ReportReason,
+	reason reportdom.ReportReason,
 	detail string,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	now := u.now().UTC()
 	rating := int(review.Rating)
 
-	reportCase, err := reviewreport.NewReportCase(
-		reviewReportNewProductReviewCaseParams(
+	reportCase, err := reportdom.NewReportCase(
+		reportNewProductReviewCaseParams(
 			review,
 			rating,
 			now,
 		),
 	)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 
-	report, err := reviewreport.NewReport(reviewreport.NewReportParams{
+	report, err := reportdom.NewReport(reportdom.NewReportParams{
 		CaseID:       reportCase.ID,
 		ReporterType: reporterType,
 		ReporterID:   reporterID,
@@ -296,23 +296,23 @@ func (u *ReviewReportUsecase) addProductBlueprintReviewReport(
 		CreatedAt:    now,
 	})
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 
 	return u.reportRepo.AddReport(ctx, reportCase, report)
 }
 
-func reviewReportNewProductReviewCaseParams(
+func reportNewProductReviewCaseParams(
 	review pbr.Review,
 	rating int,
 	now time.Time,
-) reviewreport.NewReportCaseParams {
-	return reviewreport.NewReportCaseParams{
-		TargetType:       reviewreport.TargetTypeProductBlueprintReview,
+) reportdom.NewReportCaseParams {
+	return reportdom.NewReportCaseParams{
+		TargetType:       reportdom.TargetTypeProductBlueprintReview,
 		TargetID:         string(review.ID),
 		TargetParentID:   review.ProductBlueprintID,
 		TargetAuthorID:   review.AvatarID,
-		TargetAuthorType: reviewreport.ActorTypeAvatar,
+		TargetAuthorType: reportdom.ActorTypeAvatar,
 		SnapshotTitle:    review.Title,
 		SnapshotBody:     review.Body,
 		SnapshotRating:   &rating,
@@ -328,19 +328,19 @@ type ReportTokenBlueprintCommentByAvatarInput struct {
 	TokenBlueprintID string
 	CommentID        string
 	AvatarID         string
-	Reason           reviewreport.ReportReason
+	Reason           reportdom.ReportReason
 	Detail           string
 }
 
-func (u *ReviewReportUsecase) ReportTokenBlueprintCommentByAvatar(
+func (u *ReportUsecase) ReportTokenBlueprintCommentByAvatar(
 	ctx context.Context,
 	input ReportTokenBlueprintCommentByAvatarInput,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if u.tokenCommentRepo == nil || u.tokenAccessResolver == nil {
-		return reviewreport.AddReportResult{}, ErrReviewReportUsecaseNotConfigured
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
 	}
 
 	comment, err := u.tokenCommentRepo.GetByParentID(
@@ -349,21 +349,21 @@ func (u *ReviewReportUsecase) ReportTokenBlueprintCommentByAvatar(
 		input.CommentID,
 	)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if comment.TokenBlueprintID != input.TokenBlueprintID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetParentID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetParentID
 	}
 	if comment.Deleted {
-		return reviewreport.AddReportResult{}, reviewreport.ErrCannotReportRemovedTarget
+		return reportdom.AddReportResult{}, reportdom.ErrCannotReportRemovedTarget
 	}
 
-	targetAuthorType, err := reviewReportActorTypeFromCommentAuthor(comment.AuthorType)
+	targetAuthorType, err := reportActorTypeFromCommentAuthor(comment.AuthorType)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
-	if targetAuthorType == reviewreport.ActorTypeAvatar && comment.AuthorID == input.AvatarID {
-		return reviewreport.AddReportResult{}, ErrReviewReportSelfReport
+	if targetAuthorType == reportdom.ActorTypeAvatar && comment.AuthorID == input.AvatarID {
+		return reportdom.AddReportResult{}, ErrReportSelfReport
 	}
 
 	allowed, err := u.tokenAccessResolver.CanReportTokenBlueprintComment(
@@ -372,17 +372,17 @@ func (u *ReviewReportUsecase) ReportTokenBlueprintCommentByAvatar(
 		input.TokenBlueprintID,
 	)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if !allowed {
-		return reviewreport.AddReportResult{}, ErrReviewReportForbidden
+		return reportdom.AddReportResult{}, ErrReportForbidden
 	}
 
 	return u.addTokenBlueprintCommentReport(
 		ctx,
 		comment,
 		targetAuthorType,
-		reviewreport.ActorTypeAvatar,
+		reportdom.ActorTypeAvatar,
 		input.AvatarID,
 		"",
 		input.Reason,
@@ -395,30 +395,30 @@ type ReportTokenBlueprintCommentByBrandInput struct {
 	CommentID        string
 	BrandID          string
 	CompanyID        string
-	Reason           reviewreport.ReportReason
+	Reason           reportdom.ReportReason
 	Detail           string
 }
 
-func (u *ReviewReportUsecase) ReportTokenBlueprintCommentByBrand(
+func (u *ReportUsecase) ReportTokenBlueprintCommentByBrand(
 	ctx context.Context,
 	input ReportTokenBlueprintCommentByBrandInput,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if u.tokenCommentRepo == nil || u.tokenBlueprintRepo == nil {
-		return reviewreport.AddReportResult{}, ErrReviewReportUsecaseNotConfigured
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
 	}
 
 	tokenBlueprintEntity, err := u.tokenBlueprintRepo.GetByID(ctx, input.TokenBlueprintID)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if tokenBlueprintEntity == nil ||
 		tokenBlueprintEntity.ID != input.TokenBlueprintID ||
 		tokenBlueprintEntity.CompanyID != input.CompanyID ||
 		tokenBlueprintEntity.BrandID != input.BrandID {
-		return reviewreport.AddReportResult{}, ErrReviewReportForbidden
+		return reportdom.AddReportResult{}, ErrReportForbidden
 	}
 
 	comment, err := u.tokenCommentRepo.GetByParentID(
@@ -427,28 +427,28 @@ func (u *ReviewReportUsecase) ReportTokenBlueprintCommentByBrand(
 		input.CommentID,
 	)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if comment.TokenBlueprintID != input.TokenBlueprintID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetParentID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetParentID
 	}
 	if comment.Deleted {
-		return reviewreport.AddReportResult{}, reviewreport.ErrCannotReportRemovedTarget
+		return reportdom.AddReportResult{}, reportdom.ErrCannotReportRemovedTarget
 	}
 
-	targetAuthorType, err := reviewReportActorTypeFromCommentAuthor(comment.AuthorType)
+	targetAuthorType, err := reportActorTypeFromCommentAuthor(comment.AuthorType)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
-	if targetAuthorType == reviewreport.ActorTypeBrand && comment.AuthorID == input.BrandID {
-		return reviewreport.AddReportResult{}, ErrReviewReportSelfReport
+	if targetAuthorType == reportdom.ActorTypeBrand && comment.AuthorID == input.BrandID {
+		return reportdom.AddReportResult{}, ErrReportSelfReport
 	}
 
 	return u.addTokenBlueprintCommentReport(
 		ctx,
 		comment,
 		targetAuthorType,
-		reviewreport.ActorTypeBrand,
+		reportdom.ActorTypeBrand,
 		input.BrandID,
 		input.CompanyID,
 		input.Reason,
@@ -456,20 +456,20 @@ func (u *ReviewReportUsecase) ReportTokenBlueprintCommentByBrand(
 	)
 }
 
-func (u *ReviewReportUsecase) addTokenBlueprintCommentReport(
+func (u *ReportUsecase) addTokenBlueprintCommentReport(
 	ctx context.Context,
 	comment tokenreview.Comment,
-	targetAuthorType reviewreport.ActorType,
-	reporterType reviewreport.ActorType,
+	targetAuthorType reportdom.ActorType,
+	reporterType reportdom.ActorType,
 	reporterID string,
 	companyID string,
-	reason reviewreport.ReportReason,
+	reason reportdom.ReportReason,
 	detail string,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	now := u.now().UTC()
 
-	reportCase, err := reviewreport.NewReportCase(reviewreport.NewReportCaseParams{
-		TargetType:       reviewreport.TargetTypeTokenBlueprintComment,
+	reportCase, err := reportdom.NewReportCase(reportdom.NewReportCaseParams{
+		TargetType:       reportdom.TargetTypeTokenBlueprintComment,
 		TargetID:         comment.CommentID,
 		TargetParentID:   comment.TokenBlueprintID,
 		TargetAuthorID:   comment.AuthorID,
@@ -480,10 +480,10 @@ func (u *ReviewReportUsecase) addTokenBlueprintCommentReport(
 		CreatedAt:        now,
 	})
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 
-	report, err := reviewreport.NewReport(reviewreport.NewReportParams{
+	report, err := reportdom.NewReport(reportdom.NewReportParams{
 		CaseID:       reportCase.ID,
 		ReporterType: reporterType,
 		ReporterID:   reporterID,
@@ -493,22 +493,22 @@ func (u *ReviewReportUsecase) addTokenBlueprintCommentReport(
 		CreatedAt:    now,
 	})
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 
 	return u.reportRepo.AddReport(ctx, reportCase, report)
 }
 
-func reviewReportActorTypeFromCommentAuthor(
+func reportActorTypeFromCommentAuthor(
 	authorType tokenreview.AuthorType,
-) (reviewreport.ActorType, error) {
+) (reportdom.ActorType, error) {
 	switch authorType {
 	case tokenreview.AuthorTypeAvatar:
-		return reviewreport.ActorTypeAvatar, nil
+		return reportdom.ActorTypeAvatar, nil
 	case tokenreview.AuthorTypeBrand:
-		return reviewreport.ActorTypeBrand, nil
+		return reportdom.ActorTypeBrand, nil
 	default:
-		return "", reviewreport.ErrInvalidActorType
+		return "", reportdom.ErrInvalidActorType
 	}
 }
 
@@ -519,36 +519,36 @@ func reviewReportActorTypeFromCommentAuthor(
 type ReportAvatarByAvatarInput struct {
 	TargetAvatarID   string
 	ReporterAvatarID string
-	Reason           reviewreport.ReportReason
+	Reason           reportdom.ReportReason
 	Detail           string
 }
 
-func (u *ReviewReportUsecase) ReportAvatarByAvatar(
+func (u *ReportUsecase) ReportAvatarByAvatar(
 	ctx context.Context,
 	input ReportAvatarByAvatarInput,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if u.avatarRepo == nil {
-		return reviewreport.AddReportResult{}, ErrReviewReportUsecaseNotConfigured
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
 	}
 	if input.TargetAvatarID == "" {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
 	}
 	if input.ReporterAvatarID == "" {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidReporterID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidReporterID
 	}
 	if input.TargetAvatarID == input.ReporterAvatarID {
-		return reviewreport.AddReportResult{}, ErrReviewReportSelfReport
+		return reportdom.AddReportResult{}, ErrReportSelfReport
 	}
 
 	targetAvatar, err := u.avatarRepo.GetByID(ctx, input.TargetAvatarID)
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 	if targetAvatar.ID != input.TargetAvatarID {
-		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetID
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
 	}
 
 	return u.addAvatarReport(
@@ -560,37 +560,37 @@ func (u *ReviewReportUsecase) ReportAvatarByAvatar(
 	)
 }
 
-func (u *ReviewReportUsecase) addAvatarReport(
+func (u *ReportUsecase) addAvatarReport(
 	ctx context.Context,
 	target avatar.Avatar,
 	reporterAvatarID string,
-	reason reviewreport.ReportReason,
+	reason reportdom.ReportReason,
 	detail string,
-) (reviewreport.AddReportResult, error) {
+) (reportdom.AddReportResult, error) {
 	now := u.now().UTC()
 	snapshotBody := ""
 	if target.Profile != nil {
 		snapshotBody = *target.Profile
 	}
 
-	reportCase, err := reviewreport.NewReportCase(reviewreport.NewReportCaseParams{
-		TargetType:       reviewreport.TargetTypeAvatar,
+	reportCase, err := reportdom.NewReportCase(reportdom.NewReportCaseParams{
+		TargetType:       reportdom.TargetTypeAvatar,
 		TargetID:         target.ID,
 		TargetParentID:   target.ID,
 		TargetAuthorID:   target.ID,
-		TargetAuthorType: reviewreport.ActorTypeAvatar,
+		TargetAuthorType: reportdom.ActorTypeAvatar,
 		SnapshotTitle:    target.AvatarName,
 		SnapshotBody:     snapshotBody,
 		SnapshotRating:   nil,
 		CreatedAt:        now,
 	})
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 
-	report, err := reviewreport.NewReport(reviewreport.NewReportParams{
+	report, err := reportdom.NewReport(reportdom.NewReportParams{
 		CaseID:       reportCase.ID,
-		ReporterType: reviewreport.ActorTypeAvatar,
+		ReporterType: reportdom.ActorTypeAvatar,
 		ReporterID:   reporterAvatarID,
 		CompanyID:    "",
 		Reason:       reason,
@@ -598,7 +598,7 @@ func (u *ReviewReportUsecase) addAvatarReport(
 		CreatedAt:    now,
 	})
 	if err != nil {
-		return reviewreport.AddReportResult{}, err
+		return reportdom.AddReportResult{}, err
 	}
 
 	return u.reportRepo.AddReport(ctx, reportCase, report)
@@ -608,43 +608,43 @@ func (u *ReviewReportUsecase) addAvatarReport(
 // Admin read
 // ============================================================
 
-func (u *ReviewReportUsecase) ListReportCases(
+func (u *ReportUsecase) ListReportCases(
 	ctx context.Context,
-	filter reviewreport.CaseFilter,
+	filter reportdom.CaseFilter,
 	sort common.Sort,
 	page common.Page,
-) (common.PageResult[reviewreport.ReportCase], error) {
+) (common.PageResult[reportdom.ReportCase], error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return common.PageResult[reviewreport.ReportCase]{}, err
+		return common.PageResult[reportdom.ReportCase]{}, err
 	}
 	return u.reportRepo.ListCases(ctx, filter, sort, page)
 }
 
-func (u *ReviewReportUsecase) GetReportCase(
+func (u *ReportUsecase) GetReportCase(
 	ctx context.Context,
-	caseID reviewreport.CaseID,
-) (reviewreport.ReportCase, error) {
+	caseID reportdom.CaseID,
+) (reportdom.ReportCase, error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 	if caseID == "" {
-		return reviewreport.ReportCase{}, reviewreport.ErrInvalidCaseID
+		return reportdom.ReportCase{}, reportdom.ErrInvalidCaseID
 	}
 	return u.reportRepo.GetCase(ctx, caseID)
 }
 
-func (u *ReviewReportUsecase) ListReports(
+func (u *ReportUsecase) ListReports(
 	ctx context.Context,
-	caseID reviewreport.CaseID,
-	filter reviewreport.ReportFilter,
+	caseID reportdom.CaseID,
+	filter reportdom.ReportFilter,
 	sort common.Sort,
 	page common.Page,
-) (common.PageResult[reviewreport.Report], error) {
+) (common.PageResult[reportdom.Report], error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return common.PageResult[reviewreport.Report]{}, err
+		return common.PageResult[reportdom.Report]{}, err
 	}
 	if caseID == "" {
-		return common.PageResult[reviewreport.Report]{}, reviewreport.ErrInvalidCaseID
+		return common.PageResult[reportdom.Report]{}, reportdom.ErrInvalidCaseID
 	}
 	return u.reportRepo.ListReports(ctx, caseID, filter, sort, page)
 }
@@ -653,23 +653,23 @@ func (u *ReviewReportUsecase) ListReports(
 // Decision notifications
 // ============================================================
 
-func (u *ReviewReportUsecase) ListDecisionNotificationsForAvatar(
+func (u *ReportUsecase) ListDecisionNotificationsForAvatar(
 	ctx context.Context,
 	avatarID string,
 	isRead *bool,
 	page common.Page,
-) (common.PageResult[reviewreport.DecisionNotification], error) {
+) (common.PageResult[reportdom.DecisionNotification], error) {
 	if err := u.ensureDecisionNotificationRepository(); err != nil {
-		return common.PageResult[reviewreport.DecisionNotification]{}, err
+		return common.PageResult[reportdom.DecisionNotification]{}, err
 	}
 	if avatarID == "" {
-		return common.PageResult[reviewreport.DecisionNotification]{}, reviewreport.ErrInvalidReporterID
+		return common.PageResult[reportdom.DecisionNotification]{}, reportdom.ErrInvalidReporterID
 	}
 
-	recipientType := reviewreport.ActorTypeAvatar
+	recipientType := reportdom.ActorTypeAvatar
 	return u.decisionNotificationRepo.List(
 		ctx,
-		reviewreport.DecisionNotificationFilter{
+		reportdom.DecisionNotificationFilter{
 			RecipientType: &recipientType,
 			RecipientID:   avatarID,
 			IsRead:        isRead,
@@ -682,56 +682,56 @@ func (u *ReviewReportUsecase) ListDecisionNotificationsForAvatar(
 	)
 }
 
-func (u *ReviewReportUsecase) MarkDecisionNotificationReadForAvatar(
+func (u *ReportUsecase) MarkDecisionNotificationReadForAvatar(
 	ctx context.Context,
-	notificationID reviewreport.DecisionNotificationID,
+	notificationID reportdom.DecisionNotificationID,
 	avatarID string,
-) (reviewreport.DecisionNotification, error) {
+) (reportdom.DecisionNotification, error) {
 	if err := u.ensureDecisionNotificationRepository(); err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 	if notificationID == "" {
-		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidDecisionNotificationID
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidDecisionNotificationID
 	}
 	if avatarID == "" {
-		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidReporterID
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidReporterID
 	}
 
 	notification, err := u.decisionNotificationRepo.GetByID(ctx, notificationID)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
-	if notification.RecipientType != reviewreport.ActorTypeAvatar ||
+	if notification.RecipientType != reportdom.ActorTypeAvatar ||
 		notification.RecipientID != avatarID {
-		return reviewreport.DecisionNotification{}, ErrReviewReportForbidden
+		return reportdom.DecisionNotification{}, ErrReportForbidden
 	}
 
 	return u.decisionNotificationRepo.MarkRead(
 		ctx,
 		notificationID,
-		reviewreport.ActorTypeAvatar,
+		reportdom.ActorTypeAvatar,
 		avatarID,
 		u.now().UTC(),
 	)
 }
 
-func (u *ReviewReportUsecase) ListDecisionNotificationsForCompany(
+func (u *ReportUsecase) ListDecisionNotificationsForCompany(
 	ctx context.Context,
 	companyID string,
 	isRead *bool,
 	page common.Page,
-) (common.PageResult[reviewreport.DecisionNotification], error) {
+) (common.PageResult[reportdom.DecisionNotification], error) {
 	if err := u.ensureDecisionNotificationRepository(); err != nil {
-		return common.PageResult[reviewreport.DecisionNotification]{}, err
+		return common.PageResult[reportdom.DecisionNotification]{}, err
 	}
 	if companyID == "" {
-		return common.PageResult[reviewreport.DecisionNotification]{}, reviewreport.ErrInvalidCompanyID
+		return common.PageResult[reportdom.DecisionNotification]{}, reportdom.ErrInvalidCompanyID
 	}
 
-	recipientType := reviewreport.ActorTypeBrand
+	recipientType := reportdom.ActorTypeBrand
 	return u.decisionNotificationRepo.List(
 		ctx,
-		reviewreport.DecisionNotificationFilter{
+		reportdom.DecisionNotificationFilter{
 			RecipientType: &recipientType,
 			CompanyID:     companyID,
 			IsRead:        isRead,
@@ -744,34 +744,34 @@ func (u *ReviewReportUsecase) ListDecisionNotificationsForCompany(
 	)
 }
 
-func (u *ReviewReportUsecase) MarkDecisionNotificationReadForCompany(
+func (u *ReportUsecase) MarkDecisionNotificationReadForCompany(
 	ctx context.Context,
-	notificationID reviewreport.DecisionNotificationID,
+	notificationID reportdom.DecisionNotificationID,
 	companyID string,
-) (reviewreport.DecisionNotification, error) {
+) (reportdom.DecisionNotification, error) {
 	if err := u.ensureDecisionNotificationRepository(); err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
 	if notificationID == "" {
-		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidDecisionNotificationID
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidDecisionNotificationID
 	}
 	if companyID == "" {
-		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidCompanyID
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidCompanyID
 	}
 
 	notification, err := u.decisionNotificationRepo.GetByID(ctx, notificationID)
 	if err != nil {
-		return reviewreport.DecisionNotification{}, err
+		return reportdom.DecisionNotification{}, err
 	}
-	if notification.RecipientType != reviewreport.ActorTypeBrand ||
+	if notification.RecipientType != reportdom.ActorTypeBrand ||
 		notification.CompanyID != companyID {
-		return reviewreport.DecisionNotification{}, ErrReviewReportForbidden
+		return reportdom.DecisionNotification{}, ErrReportForbidden
 	}
 
 	return u.decisionNotificationRepo.MarkRead(
 		ctx,
 		notificationID,
-		reviewreport.ActorTypeBrand,
+		reportdom.ActorTypeBrand,
 		notification.RecipientID,
 		u.now().UTC(),
 	)
@@ -781,72 +781,72 @@ func (u *ReviewReportUsecase) MarkDecisionNotificationReadForCompany(
 // Admin decision
 // ============================================================
 
-type ReviewReportDecision string
+type ReportDecision string
 
 const (
-	ReviewReportDecisionKeep   ReviewReportDecision = "KEEP"
-	ReviewReportDecisionRemove ReviewReportDecision = "REMOVE"
+	ReportDecisionKeep   ReportDecision = "KEEP"
+	ReportDecisionRemove ReportDecision = "REMOVE"
 )
 
-type DecideReviewReportCaseInput struct {
-	CaseID    reviewreport.CaseID
-	Decision  ReviewReportDecision
+type DecideReportCaseInput struct {
+	CaseID    reportdom.CaseID
+	Decision  ReportDecision
 	Reason    string
 	DecidedBy string
 }
 
-func (u *ReviewReportUsecase) DecideReportCase(
+func (u *ReportUsecase) DecideReportCase(
 	ctx context.Context,
-	input DecideReviewReportCaseInput,
-) (reviewreport.ReportCase, error) {
+	input DecideReportCaseInput,
+) (reportdom.ReportCase, error) {
 	if err := u.ensureReportRepository(); err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 	if input.CaseID == "" {
-		return reviewreport.ReportCase{}, reviewreport.ErrInvalidCaseID
+		return reportdom.ReportCase{}, reportdom.ErrInvalidCaseID
 	}
 
 	switch input.Decision {
-	case ReviewReportDecisionKeep, ReviewReportDecisionRemove:
+	case ReportDecisionKeep, ReportDecisionRemove:
 		if err := u.ensureDecisionNotificationRepository(); err != nil {
-			return reviewreport.ReportCase{}, err
+			return reportdom.ReportCase{}, err
 		}
 	default:
-		return reviewreport.ReportCase{}, ErrReviewReportInvalidDecision
+		return reportdom.ReportCase{}, ErrReportInvalidDecision
 	}
 
 	var (
-		decidedCase reviewreport.ReportCase
+		decidedCase reportdom.ReportCase
 		err         error
 	)
 
 	switch input.Decision {
-	case ReviewReportDecisionKeep:
+	case ReportDecisionKeep:
 		decidedCase, err = u.keepReportCase(ctx, input)
-	case ReviewReportDecisionRemove:
+	case ReportDecisionRemove:
 		decidedCase, err = u.removeReportCase(ctx, input)
 	}
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
-	if decidedCase.Status == reviewreport.CaseStatusKept ||
-		decidedCase.Status == reviewreport.CaseStatusRemoved {
+	if decidedCase.Status == reportdom.CaseStatusKept ||
+		decidedCase.Status == reportdom.CaseStatusRemoved {
 		if err := u.createDecisionNotifications(ctx, decidedCase); err != nil {
-			return reviewreport.ReportCase{}, err
+			return reportdom.ReportCase{}, err
 		}
 	}
 
 	return decidedCase, nil
 }
 
-func (u *ReviewReportUsecase) keepReportCase(
+func (u *ReportUsecase) keepReportCase(
 	ctx context.Context,
-	input DecideReviewReportCaseInput,
-) (reviewreport.ReportCase, error) {
+	input DecideReportCaseInput,
+) (reportdom.ReportCase, error) {
 	reportCase, err := u.reportRepo.GetCase(ctx, input.CaseID)
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	if err := reportCase.Keep(
@@ -854,37 +854,37 @@ func (u *ReviewReportUsecase) keepReportCase(
 		u.now().UTC(),
 		input.DecidedBy,
 	); err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	return u.reportRepo.UpdateCase(
 		ctx,
 		reportCase.ID,
-		reviewreport.NewCasePatchFromEntity(reportCase),
+		reportdom.NewCasePatchFromEntity(reportCase),
 	)
 }
 
-func (u *ReviewReportUsecase) removeReportCase(
+func (u *ReportUsecase) removeReportCase(
 	ctx context.Context,
-	input DecideReviewReportCaseInput,
-) (reviewreport.ReportCase, error) {
+	input DecideReportCaseInput,
+) (reportdom.ReportCase, error) {
 	reportCase, err := u.reportRepo.GetCase(ctx, input.CaseID)
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	// REMOVED 済みの AVATAR 裁定は、再販停止処理だけを再実行できるようにする。
 	// SuspendAvatarResaleByAdmin は冪等なので、前回の裁定直後に競合して残った
 	// listing や、前回の後処理失敗を安全に修復できる。
 	if reportCase.IsRemoved() {
-		if reportCase.TargetType == reviewreport.TargetTypeAvatar {
+		if reportCase.TargetType == reportdom.TargetTypeAvatar {
 			if err := u.suspendAvatarResaleTarget(
 				ctx,
 				reportCase,
 				input.Reason,
 				input.DecidedBy,
 			); err != nil {
-				return reviewreport.ReportCase{}, err
+				return reportdom.ReportCase{}, err
 			}
 		}
 		return reportCase, nil
@@ -895,36 +895,36 @@ func (u *ReviewReportUsecase) removeReportCase(
 	// 商品レビュー/コメントは削除、AVATARは再販サービスのみ利用停止とする。
 	// 対象側処理に失敗した場合、ReportCase を REMOVED にしてはいけない。
 	switch reportCase.TargetType {
-	case reviewreport.TargetTypeProductBlueprintReview:
+	case reportdom.TargetTypeProductBlueprintReview:
 		if err := u.removeProductBlueprintReviewTarget(
 			ctx,
 			reportCase,
 			input.Reason,
 			input.DecidedBy,
 		); err != nil {
-			return reviewreport.ReportCase{}, err
+			return reportdom.ReportCase{}, err
 		}
 
-	case reviewreport.TargetTypeTokenBlueprintComment:
+	case reportdom.TargetTypeTokenBlueprintComment:
 		if err := u.removeTokenBlueprintCommentTarget(
 			ctx,
 			reportCase,
 		); err != nil {
-			return reviewreport.ReportCase{}, err
+			return reportdom.ReportCase{}, err
 		}
 
-	case reviewreport.TargetTypeAvatar:
+	case reportdom.TargetTypeAvatar:
 		if err := u.suspendAvatarResaleTarget(
 			ctx,
 			reportCase,
 			input.Reason,
 			input.DecidedBy,
 		); err != nil {
-			return reviewreport.ReportCase{}, err
+			return reportdom.ReportCase{}, err
 		}
 
 	default:
-		return reviewreport.ReportCase{}, reviewreport.ErrInvalidTargetType
+		return reportdom.ReportCase{}, reportdom.ErrInvalidTargetType
 	}
 
 	if err := reportCase.Remove(
@@ -932,39 +932,39 @@ func (u *ReviewReportUsecase) removeReportCase(
 		u.now().UTC(),
 		input.DecidedBy,
 	); err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	updatedCase, err := u.reportRepo.UpdateCase(
 		ctx,
 		reportCase.ID,
-		reviewreport.NewCasePatchFromEntity(reportCase),
+		reportdom.NewCasePatchFromEntity(reportCase),
 	)
 	if err != nil {
-		return reviewreport.ReportCase{}, err
+		return reportdom.ReportCase{}, err
 	}
 
 	// AVATAR は REMOVED を永続化した後でもう一度スイープする。
 	// 1 回目のスイープと REMOVED 永続化の間に新規 listing が作成される
 	// 競合を閉じるための後処理。失敗した場合はエラーを返し、次回の同じ
 	// REMOVE 裁定で上の REMOVED 済み分岐から再試行できる。
-	if updatedCase.TargetType == reviewreport.TargetTypeAvatar {
+	if updatedCase.TargetType == reportdom.TargetTypeAvatar {
 		if err := u.suspendAvatarResaleTarget(
 			ctx,
 			updatedCase,
 			input.Reason,
 			input.DecidedBy,
 		); err != nil {
-			return reviewreport.ReportCase{}, err
+			return reportdom.ReportCase{}, err
 		}
 	}
 
 	return updatedCase, nil
 }
 
-func (u *ReviewReportUsecase) createDecisionNotifications(
+func (u *ReportUsecase) createDecisionNotifications(
 	ctx context.Context,
-	reportCase reviewreport.ReportCase,
+	reportCase reportdom.ReportCase,
 ) error {
 	if err := u.ensureReportRepository(); err != nil {
 		return err
@@ -973,11 +973,11 @@ func (u *ReviewReportUsecase) createDecisionNotifications(
 		return err
 	}
 	if reportCase.DecidedAt == nil || reportCase.DecidedAt.IsZero() {
-		return reviewreport.ErrDecisionNotificationCaseNotDecided
+		return reportdom.ErrDecisionNotificationCaseNotDecided
 	}
 
 	decidedAt := reportCase.DecidedAt.UTC()
-	filter := reviewreport.ReportFilter{
+	filter := reportdom.ReportFilter{
 		CaseID: reportCase.ID,
 		CreatedAt: common.TimeRange{
 			To: &decidedAt,
@@ -1006,7 +1006,7 @@ func (u *ReviewReportUsecase) createDecisionNotifications(
 		}
 
 		for _, report := range result.Items {
-			notification, err := reviewreport.NewDecisionNotification(
+			notification, err := reportdom.NewDecisionNotification(
 				reportCase,
 				report,
 				decidedAt,
@@ -1035,12 +1035,12 @@ func (u *ReviewReportUsecase) createDecisionNotifications(
 	)
 }
 
-func (u *ReviewReportUsecase) createTargetEnforcementDecisionNotification(
+func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 	ctx context.Context,
-	reportCase reviewreport.ReportCase,
+	reportCase reportdom.ReportCase,
 	createdAt time.Time,
 ) error {
-	if reportCase.Status != reviewreport.CaseStatusRemoved {
+	if reportCase.Status != reportdom.CaseStatusRemoved {
 		return nil
 	}
 
@@ -1048,13 +1048,13 @@ func (u *ReviewReportUsecase) createTargetEnforcementDecisionNotification(
 	// PRODUCT_BLUEPRINT_REVIEW はレビュー削除、AVATAR は再販サービス利用停止。
 	// TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
-	case reviewreport.TargetTypeProductBlueprintReview,
-		reviewreport.TargetTypeAvatar:
+	case reportdom.TargetTypeProductBlueprintReview,
+		reportdom.TargetTypeAvatar:
 	default:
 		return nil
 	}
 
-	notification, err := reviewreport.NewTargetEnforcementNotification(
+	notification, err := reportdom.NewTargetEnforcementNotification(
 		reportCase,
 		createdAt,
 	)
@@ -1069,14 +1069,14 @@ func (u *ReviewReportUsecase) createTargetEnforcementDecisionNotification(
 	return err
 }
 
-func (u *ReviewReportUsecase) removeProductBlueprintReviewTarget(
+func (u *ReportUsecase) removeProductBlueprintReviewTarget(
 	ctx context.Context,
-	reportCase reviewreport.ReportCase,
+	reportCase reportdom.ReportCase,
 	reason string,
 	adminID string,
 ) error {
 	if u.productReviewModerator == nil {
-		return ErrReviewReportUsecaseNotConfigured
+		return ErrReportUsecaseNotConfigured
 	}
 
 	_, err := u.productReviewModerator.RemoveProductBlueprintReviewByAdmin(
@@ -1091,12 +1091,12 @@ func (u *ReviewReportUsecase) removeProductBlueprintReviewTarget(
 	return err
 }
 
-func (u *ReviewReportUsecase) removeTokenBlueprintCommentTarget(
+func (u *ReportUsecase) removeTokenBlueprintCommentTarget(
 	ctx context.Context,
-	reportCase reviewreport.ReportCase,
+	reportCase reportdom.ReportCase,
 ) error {
 	if u.tokenCommentModerator == nil {
-		return ErrReviewReportUsecaseNotConfigured
+		return ErrReportUsecaseNotConfigured
 	}
 
 	return u.tokenCommentModerator.RemoveCommentByAdmin(
@@ -1108,14 +1108,14 @@ func (u *ReviewReportUsecase) removeTokenBlueprintCommentTarget(
 	)
 }
 
-func (u *ReviewReportUsecase) suspendAvatarResaleTarget(
+func (u *ReportUsecase) suspendAvatarResaleTarget(
 	ctx context.Context,
-	reportCase reviewreport.ReportCase,
+	reportCase reportdom.ReportCase,
 	reason string,
 	adminID string,
 ) error {
 	if u.avatarResaleModerator == nil {
-		return ErrReviewReportUsecaseNotConfigured
+		return ErrReportUsecaseNotConfigured
 	}
 
 	return u.avatarResaleModerator.SuspendAvatarResaleByAdmin(

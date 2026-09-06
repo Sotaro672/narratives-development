@@ -1,5 +1,5 @@
-// backend/internal/domain/reviewReport/repository_port.go
-package reviewReport
+// backend/internal/domain/report/repository_port.go
+package report
 
 import (
 	"context"
@@ -154,9 +154,9 @@ type ReportRepository interface {
 //
 // AddReport must execute the following in one storage transaction:
 //
-//  1. Read reviewReportCases/{caseId}.
+//  1. Read the existing ReportCase.
 //  2. Create initialCase when the case does not exist.
-//  3. Read reports/{reporterKey}.
+//  3. Read the existing Report for the reporter.
 //  4. If the reporter already exists, return ReportCreated=false.
 //  5. Otherwise create the Report.
 //  6. Increment ReportCase.ReportCount exactly once.

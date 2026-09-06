@@ -11,7 +11,7 @@ import (
 	appquery "narratives/internal/application/query/mall"
 	appusecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 	tokenBlueprintReview "narratives/internal/domain/tokenBlueprint_review"
 )
 
@@ -52,7 +52,7 @@ type TokenBlueprintCommentReportService interface {
 	ReportTokenBlueprintCommentByAvatar(
 		ctx context.Context,
 		input appusecase.ReportTokenBlueprintCommentByAvatarInput,
-	) (reviewreport.AddReportResult, error)
+	) (reportdom.AddReportResult, error)
 }
 
 type TokenBlueprintReviewHandler struct {
@@ -772,7 +772,7 @@ func (h *TokenBlueprintReviewHandler) reportComment(
 			w,
 			http.StatusServiceUnavailable,
 			map[string]string{
-				"error": "review report service not configured",
+				"error": "report service not configured",
 			},
 		)
 		return
@@ -796,7 +796,7 @@ func (h *TokenBlueprintReviewHandler) reportComment(
 		return
 	}
 
-	reason := reviewreport.ReportReason(
+	reason := reportdom.ReportReason(
 		strings.ToUpper(strings.TrimSpace(request.Reason)),
 	)
 	if err := reason.Validate(); err != nil {
@@ -805,8 +805,8 @@ func (h *TokenBlueprintReviewHandler) reportComment(
 	}
 
 	detail := strings.TrimSpace(request.Detail)
-	if reason == reviewreport.ReportReasonOther && detail == "" {
-		badRequest(w, reviewreport.ErrReportDetailRequired.Error())
+	if reason == reportdom.ReportReasonOther && detail == "" {
+		badRequest(w, reportdom.ErrReportDetailRequired.Error())
 		return
 	}
 
@@ -849,25 +849,25 @@ func writeTokenBlueprintCommentReportError(
 	err error,
 ) {
 	switch {
-	case errors.Is(err, appusecase.ErrReviewReportUsecaseNotConfigured):
+	case errors.Is(err, appusecase.ErrReportUsecaseNotConfigured):
 		writeJSON(
 			w,
 			http.StatusServiceUnavailable,
 			map[string]string{
-				"error": "review report service not configured",
+				"error": "report service not configured",
 			},
 		)
 
-	case errors.Is(err, appusecase.ErrReviewReportForbidden):
+	case errors.Is(err, appusecase.ErrReportForbidden):
 		writeJSON(
 			w,
 			http.StatusForbidden,
 			map[string]string{
-				"error": "review report forbidden",
+				"error": "report forbidden",
 			},
 		)
 
-	case errors.Is(err, appusecase.ErrReviewReportSelfReport):
+	case errors.Is(err, appusecase.ErrReportSelfReport):
 		writeJSON(
 			w,
 			http.StatusForbidden,
@@ -876,7 +876,7 @@ func writeTokenBlueprintCommentReportError(
 			},
 		)
 
-	case errors.Is(err, reviewreport.ErrCannotReportRemovedTarget):
+	case errors.Is(err, reportdom.ErrCannotReportRemovedTarget):
 		writeJSON(
 			w,
 			http.StatusConflict,
@@ -885,7 +885,7 @@ func writeTokenBlueprintCommentReportError(
 			},
 		)
 
-	case reviewreport.IsInvalid(err):
+	case reportdom.IsInvalid(err):
 		badRequest(w, err.Error())
 
 	case isNotFound(err):

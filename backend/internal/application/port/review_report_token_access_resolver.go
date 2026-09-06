@@ -8,7 +8,7 @@ import "context"
 //
 // Authorization details such as purchase / ownership resolution belong to the
 // implementation. Callers only depend on this reporting-access decision.
-type ReviewReportTokenAccessResolver interface {
+type ReportTokenAccessResolver interface {
 	CanReportTokenBlueprintComment(
 		ctx context.Context,
 		avatarID string,

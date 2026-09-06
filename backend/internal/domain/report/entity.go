@@ -1,5 +1,5 @@
-// backend/internal/domain/reviewReport/entity.go
-package reviewReport
+// backend/internal/domain/report/entity.go
+package report
 
 import (
 	"errors"
@@ -13,26 +13,26 @@ import (
 // ============================================================
 
 var (
-	ErrInvalidCaseID             = errors.New("reviewReport: invalid case id")
-	ErrInvalidReportID           = errors.New("reviewReport: invalid report id")
-	ErrInvalidTargetType         = errors.New("reviewReport: invalid target type")
-	ErrInvalidTargetID           = errors.New("reviewReport: invalid target id")
-	ErrInvalidTargetParentID     = errors.New("reviewReport: invalid target parent id")
-	ErrInvalidActorType          = errors.New("reviewReport: invalid actor type")
-	ErrInvalidTargetAuthorID     = errors.New("reviewReport: invalid target author id")
-	ErrInvalidReporterID         = errors.New("reviewReport: invalid reporter id")
-	ErrInvalidCompanyID          = errors.New("reviewReport: invalid company id")
-	ErrInvalidReason             = errors.New("reviewReport: invalid reason")
-	ErrReportDetailRequired      = errors.New("reviewReport: report detail is required")
-	ErrInvalidStatus             = errors.New("reviewReport: invalid status")
-	ErrInvalidReportCount        = errors.New("reviewReport: invalid report count")
-	ErrInvalidSnapshotRating     = errors.New("reviewReport: invalid snapshot rating")
-	ErrInvalidCreatedAt          = errors.New("reviewReport: invalid created at")
-	ErrInvalidUpdatedAt          = errors.New("reviewReport: invalid updated at")
-	ErrDecisionReasonRequired    = errors.New("reviewReport: decision reason is required")
-	ErrDecidedByRequired         = errors.New("reviewReport: decided by is required")
-	ErrCaseAlreadyRemoved        = errors.New("reviewReport: case is already removed")
-	ErrCannotReportRemovedTarget = errors.New("reviewReport: cannot report removed target")
+	ErrInvalidCaseID             = errors.New("report: invalid case id")
+	ErrInvalidReportID           = errors.New("report: invalid report id")
+	ErrInvalidTargetType         = errors.New("report: invalid target type")
+	ErrInvalidTargetID           = errors.New("report: invalid target id")
+	ErrInvalidTargetParentID     = errors.New("report: invalid target parent id")
+	ErrInvalidActorType          = errors.New("report: invalid actor type")
+	ErrInvalidTargetAuthorID     = errors.New("report: invalid target author id")
+	ErrInvalidReporterID         = errors.New("report: invalid reporter id")
+	ErrInvalidCompanyID          = errors.New("report: invalid company id")
+	ErrInvalidReason             = errors.New("report: invalid reason")
+	ErrReportDetailRequired      = errors.New("report: report detail is required")
+	ErrInvalidStatus             = errors.New("report: invalid status")
+	ErrInvalidReportCount        = errors.New("report: invalid report count")
+	ErrInvalidSnapshotRating     = errors.New("report: invalid snapshot rating")
+	ErrInvalidCreatedAt          = errors.New("report: invalid created at")
+	ErrInvalidUpdatedAt          = errors.New("report: invalid updated at")
+	ErrDecisionReasonRequired    = errors.New("report: decision reason is required")
+	ErrDecidedByRequired         = errors.New("report: decided by is required")
+	ErrCaseAlreadyRemoved        = errors.New("report: case is already removed")
+	ErrCannotReportRemovedTarget = errors.New("report: cannot report removed target")
 )
 
 func IsInvalid(err error) bool {
@@ -296,6 +296,7 @@ func NewReportCase(params NewReportCaseParams) (ReportCase, error) {
 	if err := entity.Validate(); err != nil {
 		return ReportCase{}, err
 	}
+
 	return entity, nil
 }
 
@@ -527,6 +528,7 @@ func NewReport(params NewReportParams) (Report, error) {
 	if err := entity.Validate(); err != nil {
 		return Report{}, err
 	}
+
 	return entity, nil
 }
 
@@ -555,6 +557,7 @@ func (r Report) Validate() error {
 	if r.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
+
 	return nil
 }
 
@@ -573,11 +576,13 @@ func validateSnapshotContent(
 			return fmt.Errorf("%w: snapshot body is empty", ErrInvalidTargetID)
 		}
 		return nil
+
 	case TargetTypeAvatar:
 		if title == "" && body == "" {
 			return fmt.Errorf("%w: avatar snapshot is empty", ErrInvalidTargetID)
 		}
 		return nil
+
 	default:
 		return ErrInvalidTargetType
 	}
@@ -592,11 +597,13 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 
 		value := *rating
 		return &value, nil
+
 	case TargetTypeTokenBlueprintComment, TargetTypeAvatar:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}
 		return nil, nil
+
 	default:
 		return nil, ErrInvalidTargetType
 	}

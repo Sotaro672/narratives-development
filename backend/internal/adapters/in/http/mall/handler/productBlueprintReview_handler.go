@@ -13,7 +13,7 @@ import (
 	uc "narratives/internal/application/usecase"
 	domcommon "narratives/internal/domain/common"
 	pbr "narratives/internal/domain/productBlueprintReview"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 )
 
 // ============================================================
@@ -47,7 +47,7 @@ type ProductBlueprintReviewReportService interface {
 	ReportProductBlueprintReviewByAvatar(
 		ctx context.Context,
 		input uc.ReportProductBlueprintReviewByAvatarInput,
-	) (reviewreport.AddReportResult, error)
+	) (reportdom.AddReportResult, error)
 }
 
 // ============================================================
@@ -138,7 +138,7 @@ func (h *ProductBlueprintReviewHandler) handleReviewReport(
 		return
 	}
 	if h.reportSvc == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "review report service not configured")
+		writeJSONError(w, http.StatusServiceUnavailable, "report service not configured")
 		return
 	}
 
@@ -254,7 +254,7 @@ func (h *ProductBlueprintReviewHandler) handleReportMe(
 		return
 	}
 
-	reason := reviewreport.ReportReason(
+	reason := reportdom.ReportReason(
 		strings.ToUpper(strings.TrimSpace(req.Reason)),
 	)
 	if err := reason.Validate(); err != nil {
@@ -262,7 +262,7 @@ func (h *ProductBlueprintReviewHandler) handleReportMe(
 		return
 	}
 
-	if reason == reviewreport.ReportReasonOther && strings.TrimSpace(req.Detail) == "" {
+	if reason == reportdom.ReportReasonOther && strings.TrimSpace(req.Detail) == "" {
 		writeJSONError(w, http.StatusBadRequest, "report detail required")
 		return
 	}
@@ -278,7 +278,7 @@ func (h *ProductBlueprintReviewHandler) handleReportMe(
 		},
 	)
 	if err != nil {
-		writeReviewReportError(w, err)
+		writeReportError(w, err)
 		return
 	}
 
@@ -318,12 +318,12 @@ type catalogReviewDTO struct {
 }
 
 type productBlueprintReviewReportResponse struct {
-	CaseID        string                  `json:"caseId"`
-	ReportID      string                  `json:"reportId"`
-	ReportCount   int                     `json:"reportCount"`
-	Status        reviewreport.CaseStatus `json:"status"`
-	CaseCreated   bool                    `json:"caseCreated"`
-	ReportCreated bool                    `json:"reportCreated"`
+	CaseID        string               `json:"caseId"`
+	ReportID      string               `json:"reportId"`
+	ReportCount   int                  `json:"reportCount"`
+	Status        reportdom.CaseStatus `json:"status"`
+	CaseCreated   bool                 `json:"caseCreated"`
+	ReportCreated bool                 `json:"reportCreated"`
 }
 
 func toCatalogReviewPageDTOWithAvatar(
@@ -408,7 +408,7 @@ func toCatalogReviewDTO(v pbr.Review) catalogReviewDTO {
 }
 
 func toProductBlueprintReviewReportResponse(
-	result reviewreport.AddReportResult,
+	result reportdom.AddReportResult,
 ) productBlueprintReviewReportResponse {
 	return productBlueprintReviewReportResponse{
 		CaseID:        string(result.Case.ID),
@@ -557,22 +557,22 @@ func writeDomainError(w http.ResponseWriter, err error) {
 	}
 }
 
-func writeReviewReportError(w http.ResponseWriter, err error) {
+func writeReportError(w http.ResponseWriter, err error) {
 	if err == nil {
 		writeJSONError(w, http.StatusInternalServerError, "unknown error")
 		return
 	}
 
 	switch {
-	case errors.Is(err, uc.ErrReviewReportUsecaseNotConfigured):
-		writeJSONError(w, http.StatusServiceUnavailable, "review report service not configured")
-	case errors.Is(err, uc.ErrReviewReportForbidden):
-		writeJSONError(w, http.StatusForbidden, "review report forbidden")
-	case errors.Is(err, uc.ErrReviewReportSelfReport):
+	case errors.Is(err, uc.ErrReportUsecaseNotConfigured):
+		writeJSONError(w, http.StatusServiceUnavailable, "report service not configured")
+	case errors.Is(err, uc.ErrReportForbidden):
+		writeJSONError(w, http.StatusForbidden, "report forbidden")
+	case errors.Is(err, uc.ErrReportSelfReport):
 		writeJSONError(w, http.StatusForbidden, "self report is not allowed")
-	case errors.Is(err, reviewreport.ErrCannotReportRemovedTarget):
+	case errors.Is(err, reportdom.ErrCannotReportRemovedTarget):
 		writeJSONError(w, http.StatusConflict, "cannot report removed target")
-	case reviewreport.IsInvalid(err):
+	case reportdom.IsInvalid(err):
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, pbr.ErrNotFound):
 		writeJSONError(w, http.StatusNotFound, err.Error())

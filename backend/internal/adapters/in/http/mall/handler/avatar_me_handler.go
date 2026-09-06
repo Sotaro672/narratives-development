@@ -12,7 +12,7 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
-	reviewreport "narratives/internal/domain/reviewReport"
+	reportdom "narratives/internal/domain/report"
 )
 
 // Policy (me-only):
@@ -29,9 +29,9 @@ type MeAvatarResolver interface {
 }
 
 type MeAvatarHandler struct {
-	Repo           MeAvatarResolver
-	AvatarUC       *avataruc.AvatarUsecase
-	ReviewReportUC *avataruc.ReviewReportUsecase
+	Repo     MeAvatarResolver
+	AvatarUC *avataruc.AvatarUsecase
+	ReportUC *avataruc.ReportUsecase
 }
 
 type meAvatarResponse struct {
@@ -50,23 +50,23 @@ type meAvatarReportRequest struct {
 }
 
 type meAvatarReportResponse struct {
-	CaseID        string                  `json:"caseId"`
-	ReportID      string                  `json:"reportId"`
-	ReportCount   int                     `json:"reportCount"`
-	Status        reviewreport.CaseStatus `json:"status"`
-	CaseCreated   bool                    `json:"caseCreated"`
-	ReportCreated bool                    `json:"reportCreated"`
+	CaseID        string               `json:"caseId"`
+	ReportID      string               `json:"reportId"`
+	ReportCount   int                  `json:"reportCount"`
+	Status        reportdom.CaseStatus `json:"status"`
+	CaseCreated   bool                 `json:"caseCreated"`
+	ReportCreated bool                 `json:"reportCreated"`
 }
 
 func NewMeAvatarHandler(
 	repo MeAvatarResolver,
 	avatarUC *avataruc.AvatarUsecase,
-	reviewReportUC *avataruc.ReviewReportUsecase,
+	reportUC *avataruc.ReportUsecase,
 ) http.Handler {
 	return &MeAvatarHandler{
-		Repo:           repo,
-		AvatarUC:       avatarUC,
-		ReviewReportUC: reviewReportUC,
+		Repo:     repo,
+		AvatarUC: avatarUC,
+		ReportUC: reportUC,
 	}
 }
 
@@ -433,8 +433,8 @@ func (h *MeAvatarHandler) handleReport(
 	uid string,
 	targetAvatarID string,
 ) {
-	if h == nil || h.ReviewReportUC == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "review report service not configured")
+	if h == nil || h.ReportUC == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "report service not configured")
 		return
 	}
 
@@ -463,7 +463,7 @@ func (h *MeAvatarHandler) handleReport(
 		return
 	}
 
-	reason := reviewreport.ReportReason(
+	reason := reportdom.ReportReason(
 		strings.ToUpper(strings.TrimSpace(req.Reason)),
 	)
 	if err := reason.Validate(); err != nil {
@@ -472,12 +472,12 @@ func (h *MeAvatarHandler) handleReport(
 	}
 
 	req.Detail = strings.TrimSpace(req.Detail)
-	if reason == reviewreport.ReportReasonOther && req.Detail == "" {
+	if reason == reportdom.ReportReasonOther && req.Detail == "" {
 		writeJSONError(w, http.StatusBadRequest, "report detail required")
 		return
 	}
 
-	result, err := h.ReviewReportUC.ReportAvatarByAvatar(
+	result, err := h.ReportUC.ReportAvatarByAvatar(
 		r.Context(),
 		avataruc.ReportAvatarByAvatarInput{
 			TargetAvatarID:   targetAvatarID,
@@ -526,7 +526,7 @@ func writeMeAvatarReportErr(w http.ResponseWriter, err error) {
 		return
 	}
 
-	writeReviewReportError(w, err)
+	writeReportError(w, err)
 }
 
 func meAvatarHTTPStatus(err error) int {

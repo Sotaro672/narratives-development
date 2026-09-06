@@ -58,7 +58,7 @@ type usecases struct {
 	tokenBlueprintCreateOperationUC *uc.TokenBlueprintCreateOperationUsecase
 	tokenBlueprintReviewUC          *uc.TokenBlueprintReviewUsecase
 	productBlueprintReviewUC        *uc.ProductBlueprintReviewUsecase
-	reviewReportUC                  *uc.ReviewReportUsecase
+	reviewReportUC                  *uc.ReportUsecase
 	userUC                          *uc.UserUsecase
 	walletUC                        *uc.WalletUsecase
 	cartUC                          *uc.CartUsecase
@@ -589,13 +589,13 @@ func buildUsecases(
 		return nil, resources.CloseWithError(errors.New("di.console: product blueprint review usecase is nil"))
 	}
 
-	reviewReportRepo := fsrepo.NewReviewReportRepositoryFS(c.fsClient)
+	reviewReportRepo := fsrepo.NewReportRepositoryFS(c.fsClient)
 	if reviewReportRepo == nil {
 		return nil, resources.CloseWithError(errors.New("di.console: review report repository is nil"))
 	}
 
-	reviewReportUC := uc.NewReviewReportUsecase(
-		uc.ReviewReportUsecaseDeps{
+	reviewReportUC := uc.NewReportUsecase(
+		uc.ReportUsecaseDeps{
 			ReportRepo:               reviewReportRepo,
 			DecisionNotificationRepo: r.reviewReportDecisionNotificationRepo,
 			ProductReviewRepo:        r.productBlueprintReviewRepo,

@@ -94,7 +94,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 
 	if c.ReviewReportUC != nil {
 		reviewReportDecisionNotificationsH =
-			consoleHandler.NewReviewReportDecisionNotificationHandler(
+			consoleHandler.NewReportDecisionNotificationHandler(
 				c.ReviewReportUC,
 			)
 	}

@@ -63,7 +63,7 @@ type Container struct {
 	ProductBlueprintUC              *uc.ProductBlueprintUsecase
 	ProductBlueprintCategoryUC      *uc.ProductBlueprintCategoryUsecase
 	ProductBlueprintReviewUC        *uc.ProductBlueprintReviewUsecase
-	ReviewReportUC                  *uc.ReviewReportUsecase
+	ReviewReportUC                  *uc.ReportUsecase
 	ShippingAddressUC               *uc.ShippingAddressUsecase
 	TransportationUC                *uc.TransportationUsecase
 	TokenUC                         *uc.TokenUsecase

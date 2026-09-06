@@ -85,7 +85,7 @@ func NewWalletUsecase(
 }
 
 var _ applicationport.OwnedProductResolver = (*WalletUsecase)(nil)
-var _ applicationport.ReviewReportTokenAccessResolver = (*WalletUsecase)(nil)
+var _ applicationport.ReportTokenAccessResolver = (*WalletUsecase)(nil)
 
 var (
 	ErrWalletUsecaseNotConfigured     = errors.New("wallet usecase: not configured")

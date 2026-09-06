@@ -187,7 +187,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// /mall/me/review-report-decision-notifications
 	if cont.ReviewReportUC != nil {
 		reviewReportDecisionNotificationH =
-			mallhandler.NewReviewReportDecisionNotificationHandler(
+			mallhandler.NewReportDecisionNotificationHandler(
 				cont.ReviewReportUC,
 			)
 	}
