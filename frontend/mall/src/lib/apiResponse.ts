@@ -1,4 +1,4 @@
-// frontend/amol/src/lib/apiResponse.ts
+// frontend/mall/src/lib/apiResponse.ts
 
 import {
   HttpError,
@@ -9,6 +9,11 @@ export type ReadJsonResponseOptions<T> = {
   nonJsonErrorMessage: string;
   invalidJsonErrorMessage?: string;
   fallbackValue?: T;
+};
+
+const API_ERROR_MESSAGES: Record<string, string> = {
+  resale_service_suspended:
+    "運営による裁定のため、現在は再販サービスを利用できません。",
 };
 
 function isRecord(
@@ -49,10 +54,26 @@ export function unwrapApiData<T>(
   return value as T;
 }
 
+function resolveApiErrorMessage(
+  message: string,
+): string {
+  const normalizedMessage = message.trim();
+
+  if (!normalizedMessage) {
+    return "";
+  }
+
+  return (
+    API_ERROR_MESSAGES[normalizedMessage] ??
+    normalizedMessage
+  );
+}
+
 /**
  * APIのエラーレスポンスから表示用メッセージを取得します。
  *
  * errorMessage、detail、message、errorの順で確認します。
+ * 既知のAPIエラーコードはユーザー向けメッセージへ変換します。
  */
 function extractApiErrorMessage(
   value: unknown,
@@ -80,7 +101,9 @@ function extractApiErrorMessage(
       candidate.trim();
 
     if (normalizedCandidate) {
-      return normalizedCandidate;
+      return resolveApiErrorMessage(
+        normalizedCandidate,
+      );
     }
   }
 
@@ -100,6 +123,7 @@ function hasFallbackValue<T>(
  * ResponseをJSONとして読み込みます。
  *
  * - HTTPエラー時はAPIレスポンスからメッセージを抽出
+ * - 既知のAPIエラーコードはユーザー向けメッセージへ変換
  * - JSON以外の正常レスポンスはエラー
  * - 空レスポンスが許可される場合はfallbackValueを使用
  * - response.text()は一度だけ実行
@@ -146,10 +170,15 @@ export async function readJsonResponse<T>(
           )
         : null;
 
+    const fallbackErrorMessage =
+      resolveApiErrorMessage(
+        text.trim(),
+      );
+
     throw new HttpError({
       message:
         apiErrorMessage ||
-        text.trim() ||
+        fallbackErrorMessage ||
         options.requestErrorMessage,
 
       status:
