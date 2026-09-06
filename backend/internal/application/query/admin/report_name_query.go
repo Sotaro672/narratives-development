@@ -197,7 +197,7 @@ func (q *ReportNameQuery) ResolveReporterName(
 	}
 }
 
-// ResolveTargetAuthorName は通報対象コンテンツの投稿者表示名を解決する。
+// ResolveTargetAuthorName は通報対象の投稿者または対象アバターの表示名を解決する。
 // AVATAR は avatarName、BRAND は memberName として解決を試みる。
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetAuthorName(
@@ -216,7 +216,8 @@ func (q *ReportNameQuery) ResolveTargetAuthorName(
 }
 
 // ResolveTargetParentName は通報対象の親リソース名を解決する。
-// 商品レビューでは productName、トークンコメントでは tokenName を返す。
+// 商品レビューでは productName、トークンコメントでは tokenName、
+// アバター通報では avatarName を返す。
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetParentName(
 	ctx context.Context,
@@ -228,6 +229,8 @@ func (q *ReportNameQuery) ResolveTargetParentName(
 		return q.ResolveProductName(ctx, targetParentID)
 	case reviewreport.TargetTypeTokenBlueprintComment:
 		return q.ResolveTokenName(ctx, targetParentID)
+	case reviewreport.TargetTypeAvatar:
+		return q.ResolveAvatarName(ctx, targetParentID)
 	default:
 		return ""
 	}

@@ -16,14 +16,17 @@ import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./ReportsPage.css";
 
-function getStatusLabel(status: ReviewReportCaseStatus): string {
+function getStatusLabel(
+  status: ReviewReportCaseStatus,
+  targetType: ReviewReportTargetType,
+): string {
   switch (status) {
     case "PENDING":
       return "未対応";
     case "KEPT":
       return "維持";
     case "REMOVED":
-      return "削除";
+      return targetType === "AVATAR" ? "利用停止" : "削除";
     default:
       return status;
   }
@@ -35,6 +38,8 @@ function getTargetTypeLabel(targetType: ReviewReportTargetType): string {
       return "商品レビュー";
     case "TOKEN_BLUEPRINT_COMMENT":
       return "トークンコメント";
+    case "AVATAR":
+      return "アバター";
     default:
       return targetType;
   }
@@ -69,6 +74,7 @@ function getSnapshotSummary(reportCase: ReviewReportCase): string {
 
 export default function ReportsPage() {
   const navigate = useNavigate();
+
   const {
     items,
     loading,
@@ -101,7 +107,10 @@ export default function ReportsPage() {
         key: "status",
         header: "対応状況",
         render: (reportCase) =>
-          getStatusLabel(reportCase.status),
+          getStatusLabel(
+            reportCase.status,
+            reportCase.targetType,
+          ),
         sortValue: (reportCase) =>
           reportCase.status,
         nowrap: true,
@@ -124,7 +133,7 @@ export default function ReportsPage() {
       },
       {
         key: "targetAuthorType",
-        header: "投稿者種別",
+        header: "対象者種別",
         render: (reportCase) =>
           getAuthorTypeLabel(
             reportCase.targetAuthorType,
@@ -196,7 +205,7 @@ export default function ReportsPage() {
                 維持
               </option>
               <option value="REMOVED">
-                削除
+                削除・利用停止
               </option>
             </select>
 
@@ -221,6 +230,9 @@ export default function ReportsPage() {
               </option>
               <option value="TOKEN_BLUEPRINT_COMMENT">
                 トークンコメント
+              </option>
+              <option value="AVATAR">
+                アバター
               </option>
             </select>
 

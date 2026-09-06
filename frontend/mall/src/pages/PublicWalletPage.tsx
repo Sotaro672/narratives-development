@@ -9,13 +9,13 @@ import "../styles/wallet-page/resale-panel.css";
 import "../styles/avatar-review-page.css";
 
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
+import { fetchAvatarReviews, type AvatarReviewPageResponse } from "../features/avatar-review/api/avatarReviewApi";
+import ReviewReportModal from "../features/review-report/components/ReviewReportModal";
+import { useReviewReport } from "../features/review-report/hooks/useReviewReport";
 import WalletProfile from "../features/wallet/components/WalletProfile";
 import WalletResalePanel from "../features/wallet/components/WalletResalePanel";
 import { useWalletPage } from "../features/wallet/hooks/useWalletPage";
-import {
-  fetchAvatarReviews,
-  type AvatarReviewPageResponse,
-} from "../features/avatar-review/api/avatarReviewApi";
 
 export default function PublicWalletPage() {
   const navigate = useNavigate();
@@ -26,20 +26,34 @@ export default function PublicWalletPage() {
     avatarName,
     avatarIcon,
     profile,
+    isOwnAvatar,
     loading,
     error,
     pageTitle,
   } = useWalletPage();
 
-  const targetAvatarId =
-    viewedAvatarId || avatarId;
+  const {
+    target: reportTarget,
+    isOpen: reportOpen,
+    reason: reportReason,
+    detail: reportDetail,
+    submitting: reportSubmitting,
+    error: reportError,
+    result: reportResult,
+    canSubmit: canSubmitReport,
+    openAvatarReport,
+    close: closeReport,
+    setReason: setReportReason,
+    setDetail: setReportDetail,
+    submit: submitReport,
+  } = useReviewReport();
 
-  const [reviewSummary, setReviewSummary] =
-    useState<AvatarReviewPageResponse | null>(
-      null,
-    );
-  const [reviewLoading, setReviewLoading] =
-    useState(false);
+  const targetAvatarId = viewedAvatarId || avatarId;
+  const normalizedTargetAvatarId = targetAvatarId.trim();
+  const canReportAvatar = Boolean(normalizedTargetAvatarId) && !isOwnAvatar;
+
+  const [reviewSummary, setReviewSummary] = useState<AvatarReviewPageResponse | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
 
   useEffect(() => {
     const id = targetAvatarId.trim();
@@ -55,12 +69,11 @@ export default function PublicWalletPage() {
       setReviewLoading(true);
 
       try {
-        const result =
-          await fetchAvatarReviews({
-            avatarId: id,
-            page: 1,
-            perPage: 1,
-          });
+        const result = await fetchAvatarReviews({
+          avatarId: id,
+          page: 1,
+          perPage: 1,
+        });
 
         if (active) {
           setReviewSummary(result);
@@ -81,24 +94,16 @@ export default function PublicWalletPage() {
     return () => {
       active = false;
     };
-  }, [
-    error,
-    loading,
-    targetAvatarId,
-  ]);
+  }, [error, loading, targetAvatarId]);
 
-  const handleOpenMarketDetail = (
-    resaleId: string,
-  ) => {
+  const handleOpenMarketDetail = (resaleId: string) => {
     const id = resaleId.trim();
 
     if (!id) {
       return;
     }
 
-    navigate(
-      `/market/${encodeURIComponent(id)}`,
-    );
+    navigate(`/market/${encodeURIComponent(id)}`);
   };
 
   const handleOpenAvatarReviews = () => {
@@ -108,111 +113,132 @@ export default function PublicWalletPage() {
       return;
     }
 
-    navigate(
-      `/avatars/${encodeURIComponent(id)}/reviews`,
-    );
+    navigate(`/avatars/${encodeURIComponent(id)}/reviews`);
+  };
+
+  const handleOpenAvatarReport = () => {
+    if (!canReportAvatar) {
+      return;
+    }
+
+    openAvatarReport({
+      avatarId: normalizedTargetAvatarId,
+    });
   };
 
   return (
-    <Layout
-      title={pageTitle || "AMOL"}
-      mode="mypage"
-      showBackButton
-      onBackButtonClick={() =>
-        navigate(-1)
-      }
-    >
-      <section className="content-page-section wallet-page">
-        <div className="wallet-page-layout">
-          <aside className="wallet-page-layout__profile">
-            {loading ? (
-              <p className="wallet-page__message">
-                読み込み中です...
-              </p>
-            ) : null}
+    <>
+      <Layout
+        title={pageTitle || "AMOL"}
+        mode="mypage"
+        showBackButton
+        onBackButtonClick={() => navigate(-1)}
+      >
+        <section className="content-page-section wallet-page">
+          <div className="wallet-page-layout">
+            <aside className="wallet-page-layout__profile">
+              {loading ? (
+                <p className="wallet-page__message">
+                  読み込み中です...
+                </p>
+              ) : null}
 
-            {!loading && error ? (
-              <div
-                role="alert"
-                className="wallet-page__message"
-              >
-                <p>{error}</p>
-              </div>
-            ) : null}
+              {!loading && error ? (
+                <div role="alert" className="wallet-page__message">
+                  <p>{error}</p>
+                </div>
+              ) : null}
 
-            {!loading && !error ? (
-              <>
-                <WalletProfile
-                  avatarName={avatarName}
-                  avatarIcon={avatarIcon}
-                  profile={profile}
-                  isOwnAvatar={false}
-                />
+              {!loading && !error ? (
+                <>
+                  <WalletProfile
+                    avatarName={avatarName}
+                    avatarIcon={avatarIcon}
+                    profile={profile}
+                    isOwnAvatar={isOwnAvatar}
+                  />
 
-                <button
-                  type="button"
-                  className="avatar-review-summary"
-                  onClick={
-                    handleOpenAvatarReviews
-                  }
-                  disabled={
-                    !targetAvatarId ||
-                    reviewLoading
-                  }
-                >
-                  <span className="avatar-review-summary__item">
-                    <span className="avatar-review-summary__label">
-                      良かった
-                    </span>
-                    <strong className="avatar-review-summary__count">
-                      {reviewLoading
-                        ? "-"
-                        : reviewSummary
-                            ?.goodCount ??
-                          0}
-                    </strong>
-                  </span>
-
-                  <span className="avatar-review-summary__divider" />
-
-                  <span className="avatar-review-summary__item">
-                    <span className="avatar-review-summary__label">
-                      残念だった
-                    </span>
-                    <strong className="avatar-review-summary__count">
-                      {reviewLoading
-                        ? "-"
-                        : reviewSummary
-                            ?.disappointedCount ??
-                          0}
-                    </strong>
-                  </span>
-
-                  <span
-                    className="avatar-review-summary__arrow"
-                    aria-hidden="true"
+                  <button
+                    type="button"
+                    className="avatar-review-summary"
+                    onClick={handleOpenAvatarReviews}
+                    disabled={!targetAvatarId || reviewLoading}
                   >
-                    ›
-                  </span>
-                </button>
-              </>
-            ) : null}
-          </aside>
+                    <span className="avatar-review-summary__item">
+                      <span className="avatar-review-summary__label">
+                        良かった
+                      </span>
+                      <strong className="avatar-review-summary__count">
+                        {reviewLoading ? "-" : reviewSummary?.goodCount ?? 0}
+                      </strong>
+                    </span>
 
-          <div className="wallet-page-layout__main">
-            {!loading && !error ? (
-              <WalletResalePanel
-                avatarId={
-                  targetAvatarId
-                }
-                onItemClick={
-                  handleOpenMarketDetail
-                }
-              />
-            ) : null}
+                    <span className="avatar-review-summary__divider" />
+
+                    <span className="avatar-review-summary__item">
+                      <span className="avatar-review-summary__label">
+                        残念だった
+                      </span>
+                      <strong className="avatar-review-summary__count">
+                        {reviewLoading ? "-" : reviewSummary?.disappointedCount ?? 0}
+                      </strong>
+                    </span>
+
+                    <span
+                      className="avatar-review-summary__arrow"
+                      aria-hidden="true"
+                    >
+                      ›
+                    </span>
+                  </button>
+
+                  {canReportAvatar ? (
+                    <div className="wallet-page-profile-actions-bar">
+                      <div className="wallet-page-profile-actions-bar__inner">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          fullWidth
+                          disabled={reportSubmitting}
+                          aria-label={`${avatarName || "アバター"}を通報`}
+                          onClick={handleOpenAvatarReport}
+                        >
+                          通報
+                        </Button>
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+            </aside>
+
+            <div className="wallet-page-layout__main">
+              {!loading && !error ? (
+                <WalletResalePanel
+                  avatarId={targetAvatarId}
+                  onItemClick={handleOpenMarketDetail}
+                />
+              ) : null}
+            </div>
           </div>
-        </div>
-      </section>
-    </Layout>
+        </section>
+      </Layout>
+
+      <ReviewReportModal
+        open={reportOpen}
+        targetType={reportTarget?.type}
+        reason={reportReason}
+        detail={reportDetail}
+        submitting={reportSubmitting}
+        error={reportError}
+        result={reportResult}
+        canSubmit={canSubmitReport}
+        onReasonChange={setReportReason}
+        onDetailChange={setReportDetail}
+        onSubmit={submitReport}
+        onClose={closeReport}
+      />
+    </>
   );
 }

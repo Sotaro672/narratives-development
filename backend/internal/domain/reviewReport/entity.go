@@ -77,6 +77,8 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 		prefix = "productBlueprintReview"
 	case TargetTypeTokenBlueprintComment:
 		prefix = "tokenBlueprintComment"
+	case TargetTypeAvatar:
+		prefix = "avatar"
 	default:
 		return "", ErrInvalidTargetType
 	}
@@ -114,11 +116,12 @@ type TargetType string
 const (
 	TargetTypeProductBlueprintReview TargetType = "PRODUCT_BLUEPRINT_REVIEW"
 	TargetTypeTokenBlueprintComment  TargetType = "TOKEN_BLUEPRINT_COMMENT"
+	TargetTypeAvatar                 TargetType = "AVATAR"
 )
 
 func (t TargetType) Validate() error {
 	switch t {
-	case TargetTypeProductBlueprintReview, TargetTypeTokenBlueprintComment:
+	case TargetTypeProductBlueprintReview, TargetTypeTokenBlueprintComment, TargetTypeAvatar:
 		return nil
 	default:
 		return ErrInvalidTargetType
@@ -249,8 +252,12 @@ func NewReportCase(params NewReportCaseParams) (ReportCase, error) {
 	if params.TargetAuthorID == "" {
 		return ReportCase{}, ErrInvalidTargetAuthorID
 	}
-	if params.SnapshotBody == "" {
-		return ReportCase{}, fmt.Errorf("%w: snapshot body is empty", ErrInvalidTargetID)
+	if err := validateSnapshotContent(
+		params.TargetType,
+		params.SnapshotTitle,
+		params.SnapshotBody,
+	); err != nil {
+		return ReportCase{}, err
 	}
 	if params.CreatedAt.IsZero() {
 		return ReportCase{}, ErrInvalidCreatedAt
@@ -311,8 +318,12 @@ func (c ReportCase) Validate() error {
 	if c.TargetAuthorID == "" {
 		return ErrInvalidTargetAuthorID
 	}
-	if c.SnapshotBody == "" {
-		return fmt.Errorf("%w: snapshot body is empty", ErrInvalidTargetID)
+	if err := validateSnapshotContent(
+		c.TargetType,
+		c.SnapshotTitle,
+		c.SnapshotBody,
+	); err != nil {
+		return err
 	}
 	if _, err := normalizeSnapshotRating(c.TargetType, c.SnapshotRating); err != nil {
 		return err
@@ -551,6 +562,27 @@ func (r Report) Validate() error {
 // Helpers
 // ============================================================
 
+func validateSnapshotContent(
+	targetType TargetType,
+	title string,
+	body string,
+) error {
+	switch targetType {
+	case TargetTypeProductBlueprintReview, TargetTypeTokenBlueprintComment:
+		if body == "" {
+			return fmt.Errorf("%w: snapshot body is empty", ErrInvalidTargetID)
+		}
+		return nil
+	case TargetTypeAvatar:
+		if title == "" && body == "" {
+			return fmt.Errorf("%w: avatar snapshot is empty", ErrInvalidTargetID)
+		}
+		return nil
+	default:
+		return ErrInvalidTargetType
+	}
+}
+
 func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 	switch targetType {
 	case TargetTypeProductBlueprintReview:
@@ -560,11 +592,10 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 
 		value := *rating
 		return &value, nil
-	case TargetTypeTokenBlueprintComment:
+	case TargetTypeTokenBlueprintComment, TargetTypeAvatar:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}
-
 		return nil, nil
 	default:
 		return nil, ErrInvalidTargetType

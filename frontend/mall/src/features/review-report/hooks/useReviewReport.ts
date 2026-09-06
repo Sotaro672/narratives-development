@@ -7,6 +7,7 @@ import type {
   ReviewReportResponse,
 } from "../../shared/types/reviewReport";
 import {
+  reportAvatar,
   reportProductBlueprintReview,
   reportTokenBlueprintComment,
 } from "../api/reviewReportApi";
@@ -21,6 +22,10 @@ export type ReviewReportTarget =
       type: "TOKEN_BLUEPRINT_COMMENT";
       tokenBlueprintId: string;
       commentId: string;
+    }
+  | {
+      type: "AVATAR";
+      avatarId: string;
     };
 
 type OpenProductBlueprintReviewReportInput = {
@@ -31,6 +36,10 @@ type OpenProductBlueprintReviewReportInput = {
 type OpenTokenBlueprintCommentReportInput = {
   tokenBlueprintId: string;
   commentId: string;
+};
+
+type OpenAvatarReportInput = {
+  avatarId: string;
 };
 
 const DEFAULT_REASON: ReviewReportReason = "SPAM";
@@ -96,6 +105,19 @@ export function useReviewReport() {
         type: "TOKEN_BLUEPRINT_COMMENT",
         tokenBlueprintId,
         commentId,
+      });
+    },
+    [resetForm],
+  );
+
+  const openAvatarReport = useCallback(
+    (input: OpenAvatarReportInput) => {
+      const avatarId = normalizeId(input.avatarId, "avatarId");
+
+      resetForm();
+      setTarget({
+        type: "AVATAR",
+        avatarId,
       });
     },
     [resetForm],
@@ -167,6 +189,14 @@ export function useReviewReport() {
             detail: normalizedDetail || undefined,
           });
           break;
+
+        case "AVATAR":
+          response = await reportAvatar({
+            avatarId: target.avatarId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
       }
 
       setResult(response);
@@ -211,6 +241,7 @@ export function useReviewReport() {
     canSubmit,
     openProductBlueprintReviewReport,
     openTokenBlueprintCommentReport,
+    openAvatarReport,
     close,
     setReason,
     setDetail,

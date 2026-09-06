@@ -161,10 +161,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 	}
 
 	// /mall/me/avatars
-	if cont.MeAvatarResolver != nil && cont.AvatarUC != nil {
+	if cont.MeAvatarResolver != nil &&
+		cont.AvatarUC != nil &&
+		cont.ReviewReportUC != nil {
+
 		meAvatarsH = mallhandler.NewMeAvatarHandler(
 			cont.MeAvatarResolver,
 			cont.AvatarUC,
+			cont.ReviewReportUC,
 		)
 	}
 

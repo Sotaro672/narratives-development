@@ -12,6 +12,7 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
+	reviewreport "narratives/internal/domain/reviewReport"
 )
 
 // Policy (me-only):
@@ -22,13 +23,15 @@ import (
 // - GET    /mall/me/avatars
 // - PATCH  /mall/me/avatars
 // - DELETE /mall/me/avatars
+// - POST   /mall/me/avatars/{targetAvatarId}/reports
 type MeAvatarResolver interface {
 	ResolveAvatarByUID(ctx context.Context, uid string) (avatarID string, walletAddress string, err error)
 }
 
 type MeAvatarHandler struct {
-	Repo     MeAvatarResolver
-	AvatarUC *avataruc.AvatarUsecase
+	Repo           MeAvatarResolver
+	AvatarUC       *avataruc.AvatarUsecase
+	ReviewReportUC *avataruc.ReviewReportUsecase
 }
 
 type meAvatarResponse struct {
@@ -41,13 +44,29 @@ type meAvatarResponse struct {
 	ExternalLink  *string `json:"externalLink,omitempty"`
 }
 
+type meAvatarReportRequest struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
+}
+
+type meAvatarReportResponse struct {
+	CaseID        string                  `json:"caseId"`
+	ReportID      string                  `json:"reportId"`
+	ReportCount   int                     `json:"reportCount"`
+	Status        reviewreport.CaseStatus `json:"status"`
+	CaseCreated   bool                    `json:"caseCreated"`
+	ReportCreated bool                    `json:"reportCreated"`
+}
+
 func NewMeAvatarHandler(
 	repo MeAvatarResolver,
 	avatarUC *avataruc.AvatarUsecase,
+	reviewReportUC *avataruc.ReviewReportUsecase,
 ) http.Handler {
 	return &MeAvatarHandler{
-		Repo:     repo,
-		AvatarUC: avatarUC,
+		Repo:           repo,
+		AvatarUC:       avatarUC,
+		ReviewReportUC: reviewReportUC,
 	}
 }
 
@@ -93,6 +112,18 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handleDelete(w, r, uid)
 		return
 
+	case r.Method == http.MethodPost:
+		targetAvatarID, ok := parseMeAvatarReportPath(path0)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error": "not_found",
+			})
+			return
+		}
+		h.handleReport(w, r, uid, targetAvatarID)
+		return
+
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -100,6 +131,25 @@ func (h *MeAvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+}
+
+func parseMeAvatarReportPath(path string) (string, bool) {
+	const prefix = meAvatarsPath + "/"
+
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+
+	relative := strings.TrimPrefix(path, prefix)
+	parts := strings.Split(relative, "/")
+
+	if len(parts) != 2 ||
+		parts[0] == "" ||
+		parts[1] != "reports" {
+		return "", false
+	}
+
+	return parts[0], true
 }
 
 func httpAvatarIcon(value *string) *string {
@@ -377,6 +427,85 @@ func (h *MeAvatarHandler) handleDelete(
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *MeAvatarHandler) handleReport(
+	w http.ResponseWriter,
+	r *http.Request,
+	uid string,
+	targetAvatarID string,
+) {
+	if h == nil || h.ReviewReportUC == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "review report service not configured")
+		return
+	}
+
+	targetAvatarID = strings.TrimSpace(targetAvatarID)
+	if targetAvatarID == "" {
+		writeJSONError(w, http.StatusBadRequest, "target avatarId is required")
+		return
+	}
+
+	reporterAvatarID, _, _, err := h.ResolveAvatarByUID(r.Context(), uid)
+	if err != nil {
+		writeMeAvatarErr(w, err)
+		return
+	}
+	if reporterAvatarID == "" {
+		writeJSONError(w, http.StatusUnauthorized, "missing avatarId")
+		return
+	}
+
+	var req meAvatarReportRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	reason := reviewreport.ReportReason(
+		strings.ToUpper(strings.TrimSpace(req.Reason)),
+	)
+	if err := reason.Validate(); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid report reason")
+		return
+	}
+
+	req.Detail = strings.TrimSpace(req.Detail)
+	if reason == reviewreport.ReportReasonOther && req.Detail == "" {
+		writeJSONError(w, http.StatusBadRequest, "report detail required")
+		return
+	}
+
+	result, err := h.ReviewReportUC.ReportAvatarByAvatar(
+		r.Context(),
+		avataruc.ReportAvatarByAvatarInput{
+			TargetAvatarID:   targetAvatarID,
+			ReporterAvatarID: reporterAvatarID,
+			Reason:           reason,
+			Detail:           req.Detail,
+		},
+	)
+	if err != nil {
+		writeMeAvatarReportErr(w, err)
+		return
+	}
+
+	statusCode := http.StatusCreated
+	if !result.ReportCreated {
+		statusCode = http.StatusOK
+	}
+
+	writeJSON(w, statusCode, meAvatarReportResponse{
+		CaseID:        string(result.Case.ID),
+		ReportID:      string(result.Report.ID),
+		ReportCount:   result.Case.ReportCount,
+		Status:        result.Case.Status,
+		CaseCreated:   result.CaseCreated,
+		ReportCreated: result.ReportCreated,
+	})
+}
+
 func writeMeAvatarErr(w http.ResponseWriter, err error) {
 	code := meAvatarHTTPStatus(err)
 	message := meAvatarErrorMessage(err)
@@ -384,6 +513,20 @@ func writeMeAvatarErr(w http.ResponseWriter, err error) {
 	writeJSON(w, code, map[string]string{
 		"error": message,
 	})
+}
+
+func writeMeAvatarReportErr(w http.ResponseWriter, err error) {
+	if err == nil {
+		writeJSONError(w, http.StatusInternalServerError, "unknown error")
+		return
+	}
+
+	if isNotFound(err) {
+		writeJSONError(w, http.StatusNotFound, "target avatar not found")
+		return
+	}
+
+	writeReviewReportError(w, err)
 }
 
 func meAvatarHTTPStatus(err error) int {

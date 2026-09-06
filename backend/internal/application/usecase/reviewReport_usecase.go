@@ -7,6 +7,7 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
+	avatar "narratives/internal/domain/avatar"
 	common "narratives/internal/domain/common"
 	pbr "narratives/internal/domain/productBlueprintReview"
 	reviewreport "narratives/internal/domain/reviewReport"
@@ -45,6 +46,21 @@ type ReviewReportTokenCommentModerator interface {
 	) error
 }
 
+// ReviewReportAvatarModerator owns Admin moderation of avatars.
+// Avatar removal in ReviewReport means service-level suspension, not physical deletion.
+type ReviewReportAvatarModerator interface {
+	SuspendAvatarByAdmin(
+		ctx context.Context,
+		input SuspendAvatarByAdminInput,
+	) error
+}
+
+type SuspendAvatarByAdminInput struct {
+	AvatarID string
+	Reason   string
+	AdminID  string
+}
+
 // ============================================================
 // Usecase
 // ============================================================
@@ -63,6 +79,9 @@ type ReviewReportUsecase struct {
 	tokenAccessResolver   applicationport.ReviewReportTokenAccessResolver
 	tokenCommentModerator ReviewReportTokenCommentModerator
 
+	avatarRepo      avatar.Repository
+	avatarModerator ReviewReportAvatarModerator
+
 	now func() time.Time
 }
 
@@ -79,6 +98,9 @@ type ReviewReportUsecaseDeps struct {
 	TokenBlueprintRepo    tokenblueprint.RepositoryPort
 	TokenAccessResolver   applicationport.ReviewReportTokenAccessResolver
 	TokenCommentModerator ReviewReportTokenCommentModerator
+
+	AvatarRepo      avatar.Repository
+	AvatarModerator ReviewReportAvatarModerator
 
 	Now func() time.Time
 }
@@ -100,6 +122,8 @@ func NewReviewReportUsecase(deps ReviewReportUsecaseDeps) *ReviewReportUsecase {
 		tokenBlueprintRepo:       deps.TokenBlueprintRepo,
 		tokenAccessResolver:      deps.TokenAccessResolver,
 		tokenCommentModerator:    deps.TokenCommentModerator,
+		avatarRepo:               deps.AvatarRepo,
+		avatarModerator:          deps.AvatarModerator,
 		now:                      now,
 	}
 }
@@ -488,6 +512,98 @@ func reviewReportActorTypeFromCommentAuthor(
 }
 
 // ============================================================
+// Avatar report
+// ============================================================
+
+type ReportAvatarByAvatarInput struct {
+	TargetAvatarID   string
+	ReporterAvatarID string
+	Reason           reviewreport.ReportReason
+	Detail           string
+}
+
+func (u *ReviewReportUsecase) ReportAvatarByAvatar(
+	ctx context.Context,
+	input ReportAvatarByAvatarInput,
+) (reviewreport.AddReportResult, error) {
+	if err := u.ensureReportRepository(); err != nil {
+		return reviewreport.AddReportResult{}, err
+	}
+	if u.avatarRepo == nil {
+		return reviewreport.AddReportResult{}, ErrReviewReportUsecaseNotConfigured
+	}
+	if input.TargetAvatarID == "" {
+		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetID
+	}
+	if input.ReporterAvatarID == "" {
+		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidReporterID
+	}
+	if input.TargetAvatarID == input.ReporterAvatarID {
+		return reviewreport.AddReportResult{}, ErrReviewReportSelfReport
+	}
+
+	targetAvatar, err := u.avatarRepo.GetByID(ctx, input.TargetAvatarID)
+	if err != nil {
+		return reviewreport.AddReportResult{}, err
+	}
+	if targetAvatar.ID != input.TargetAvatarID {
+		return reviewreport.AddReportResult{}, reviewreport.ErrInvalidTargetID
+	}
+
+	return u.addAvatarReport(
+		ctx,
+		targetAvatar,
+		input.ReporterAvatarID,
+		input.Reason,
+		input.Detail,
+	)
+}
+
+func (u *ReviewReportUsecase) addAvatarReport(
+	ctx context.Context,
+	target avatar.Avatar,
+	reporterAvatarID string,
+	reason reviewreport.ReportReason,
+	detail string,
+) (reviewreport.AddReportResult, error) {
+	now := u.now().UTC()
+	snapshotBody := ""
+	if target.Profile != nil {
+		snapshotBody = *target.Profile
+	}
+
+	reportCase, err := reviewreport.NewReportCase(reviewreport.NewReportCaseParams{
+		TargetType:       reviewreport.TargetTypeAvatar,
+		TargetID:         target.ID,
+		TargetParentID:   target.ID,
+		TargetAuthorID:   target.ID,
+		TargetAuthorType: reviewreport.ActorTypeAvatar,
+		SnapshotTitle:    target.AvatarName,
+		SnapshotBody:     snapshotBody,
+		SnapshotRating:   nil,
+		CreatedAt:        now,
+	})
+	if err != nil {
+		return reviewreport.AddReportResult{}, err
+	}
+
+	report, err := reviewreport.NewReport(reviewreport.NewReportParams{
+		CaseID:       reportCase.ID,
+		ReporterType: reviewreport.ActorTypeAvatar,
+		ReporterID:   reporterAvatarID,
+		CompanyID:    "",
+		Reason:       reason,
+		Detail:       detail,
+		CreatedAt:    now,
+	})
+	if err != nil {
+		return reviewreport.AddReportResult{}, err
+	}
+
+	return u.reportRepo.AddReport(ctx, reportCase, report)
+}
+
+// ============================================================
 // Admin read
 // ============================================================
 
@@ -688,10 +804,14 @@ func (u *ReviewReportUsecase) DecideReportCase(
 	if input.CaseID == "" {
 		return reviewreport.ReportCase{}, reviewreport.ErrInvalidCaseID
 	}
-	if input.Decision == ReviewReportDecisionRemove {
+
+	switch input.Decision {
+	case ReviewReportDecisionKeep, ReviewReportDecisionRemove:
 		if err := u.ensureDecisionNotificationRepository(); err != nil {
 			return reviewreport.ReportCase{}, err
 		}
+	default:
+		return reviewreport.ReportCase{}, ErrReviewReportInvalidDecision
 	}
 
 	var (
@@ -704,14 +824,13 @@ func (u *ReviewReportUsecase) DecideReportCase(
 		decidedCase, err = u.keepReportCase(ctx, input)
 	case ReviewReportDecisionRemove:
 		decidedCase, err = u.removeReportCase(ctx, input)
-	default:
-		return reviewreport.ReportCase{}, ErrReviewReportInvalidDecision
 	}
 	if err != nil {
 		return reviewreport.ReportCase{}, err
 	}
 
-	if decidedCase.Status == reviewreport.CaseStatusRemoved {
+	if decidedCase.Status == reviewreport.CaseStatusKept ||
+		decidedCase.Status == reviewreport.CaseStatusRemoved {
 		if err := u.createDecisionNotifications(ctx, decidedCase); err != nil {
 			return reviewreport.ReportCase{}, err
 		}
@@ -775,6 +894,16 @@ func (u *ReviewReportUsecase) removeReportCase(
 		if err := u.removeTokenBlueprintCommentTarget(
 			ctx,
 			reportCase,
+		); err != nil {
+			return reviewreport.ReportCase{}, err
+		}
+
+	case reviewreport.TargetTypeAvatar:
+		if err := u.suspendAvatarTarget(
+			ctx,
+			reportCase,
+			input.Reason,
+			input.DecidedBy,
 		); err != nil {
 			return reviewreport.ReportCase{}, err
 		}
@@ -900,6 +1029,26 @@ func (u *ReviewReportUsecase) removeTokenBlueprintCommentTarget(
 		RemoveCommentByAdminInput{
 			TokenBlueprintID: reportCase.TargetParentID,
 			CommentID:        reportCase.TargetID,
+		},
+	)
+}
+
+func (u *ReviewReportUsecase) suspendAvatarTarget(
+	ctx context.Context,
+	reportCase reviewreport.ReportCase,
+	reason string,
+	adminID string,
+) error {
+	if u.avatarModerator == nil {
+		return ErrReviewReportUsecaseNotConfigured
+	}
+
+	return u.avatarModerator.SuspendAvatarByAdmin(
+		ctx,
+		SuspendAvatarByAdminInput{
+			AvatarID: reportCase.TargetID,
+			Reason:   reason,
+			AdminID:  adminID,
 		},
 	)
 }

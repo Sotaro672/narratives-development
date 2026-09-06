@@ -21,14 +21,17 @@ import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./ReportDetailPage.css";
 
-function getStatusLabel(status: ReviewReportCaseStatus): string {
+function getStatusLabel(
+  status: ReviewReportCaseStatus,
+  targetType: ReviewReportTargetType,
+): string {
   switch (status) {
     case "PENDING":
       return "未対応";
     case "KEPT":
       return "維持";
     case "REMOVED":
-      return "削除";
+      return targetType === "AVATAR" ? "利用停止" : "削除";
     default:
       return status;
   }
@@ -53,6 +56,8 @@ function getTargetTypeLabel(targetType: ReviewReportTargetType): string {
       return "商品レビュー";
     case "TOKEN_BLUEPRINT_COMMENT":
       return "トークンコメント";
+    case "AVATAR":
+      return "アバター";
     default:
       return targetType;
   }
@@ -84,6 +89,26 @@ function getReasonLabel(reason: ReviewReportReason): string {
     default:
       return reason;
   }
+}
+
+function getSnapshotTitleLabel(targetType: ReviewReportTargetType): string {
+  return targetType === "AVATAR" ? "アバター名" : "タイトル";
+}
+
+function getSnapshotBodyLabel(targetType: ReviewReportTargetType): string {
+  return targetType === "AVATAR" ? "プロフィール" : "本文";
+}
+
+function getTargetParentLabel(targetType: ReviewReportTargetType): string {
+  return targetType === "AVATAR" ? "対象アバター" : "親";
+}
+
+function getTargetAuthorTypeLabel(targetType: ReviewReportTargetType): string {
+  return targetType === "AVATAR" ? "対象種別" : "投稿者種別";
+}
+
+function getTargetAuthorLabel(targetType: ReviewReportTargetType): string {
+  return targetType === "AVATAR" ? "対象アバター" : "投稿者";
 }
 
 function DetailField({
@@ -226,9 +251,12 @@ export default function ReportDetailPage() {
                 <span>通報 {reportCase.reportCount}件</span>
                 <Tab
                   tone={getStatusTone(reportCase.status)}
-                  aria-label={`対応状況 ${getStatusLabel(reportCase.status)}`}
+                  aria-label={`対応状況 ${getStatusLabel(
+                    reportCase.status,
+                    reportCase.targetType,
+                  )}`}
                 >
-                  {getStatusLabel(reportCase.status)}
+                  {getStatusLabel(reportCase.status, reportCase.targetType)}
                 </Tab>
               </>
             ) : undefined
@@ -306,13 +334,13 @@ export default function ReportDetailPage() {
 
                     {reportCase.snapshotTitle ? (
                       <DetailField
-                        label="タイトル"
+                        label={getSnapshotTitleLabel(reportCase.targetType)}
                         value={reportCase.snapshotTitle}
                       />
                     ) : null}
 
                     <DetailField
-                      label="本文"
+                      label={getSnapshotBodyLabel(reportCase.targetType)}
                       value={
                         <div className="report-detail-page__body-text">
                           {reportCase.snapshotBody || "-"}
@@ -386,29 +414,33 @@ export default function ReportDetailPage() {
 
                   <dl className="report-detail-page__fields report-detail-page__fields--compact">
                     <DetailField
-                      label="親"
+                      label={getTargetParentLabel(reportCase.targetType)}
                       value={
                         reportCase.targetParentName ||
                         reportCase.targetParentId ||
                         "-"
                       }
                     />
+
                     <DetailField
-                      label="投稿者種別"
+                      label={getTargetAuthorTypeLabel(reportCase.targetType)}
                       value={getActorTypeLabel(reportCase.targetAuthorType)}
                     />
+
                     <DetailField
-                      label="投稿者"
+                      label={getTargetAuthorLabel(reportCase.targetType)}
                       value={
                         reportCase.targetAuthorName ||
                         reportCase.targetAuthorId ||
                         "-"
                       }
                     />
+
                     <DetailField
                       label="初回通報"
                       value={formatDateTime(reportCase.createdAt)}
                     />
+
                     <DetailField
                       label="最終更新"
                       value={formatDateTime(reportCase.updatedAt)}

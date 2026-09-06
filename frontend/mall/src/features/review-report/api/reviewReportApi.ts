@@ -1,7 +1,9 @@
 // frontend/mall/src/features/review-report/api/reviewReportApi.ts
 
 import { getFirebaseIdToken } from "../../../lib/authToken";
+
 import type {
+  ReportAvatarInput,
   ReportProductBlueprintReviewInput,
   ReportTokenBlueprintCommentInput,
   ReviewReportRequest,
@@ -15,21 +17,17 @@ type ReviewReportErrorResponse = {
 
 function getApiBaseUrl(): string {
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
-
   if (!apiBaseUrl) {
     throw new Error("VITE_API_BASE_URLが設定されていません。");
   }
-
   return apiBaseUrl.replace(/\/+$/, "");
 }
 
 function requireId(value: string, fieldName: string): string {
   const normalized = value.trim();
-
   if (!normalized) {
     throw new Error(`${fieldName}が指定されていません。`);
   }
-
   return normalized;
 }
 
@@ -38,7 +36,6 @@ function createRequest(
   detail?: string,
 ): ReviewReportRequest {
   const normalizedDetail = detail?.trim() ?? "";
-
   if (reason === "OTHER" && !normalizedDetail) {
     throw new Error("「その他」を選択した場合は詳細を入力してください。");
   }
@@ -49,17 +46,13 @@ function createRequest(
   };
 }
 
-async function readResponseBody(
-  response: Response,
-): Promise<unknown> {
+async function readResponseBody(response: Response): Promise<unknown> {
   const text = await response.text();
-
   if (!text.trim()) {
     return null;
   }
 
   const contentType = response.headers.get("content-type") ?? "";
-
   if (!contentType.includes("application/json")) {
     return text;
   }
@@ -81,11 +74,9 @@ function getErrorMessage(body: unknown): string {
   }
 
   const errorBody = body as ReviewReportErrorResponse;
-
   if (typeof errorBody.error === "string" && errorBody.error.trim()) {
     return errorBody.error.trim();
   }
-
   if (typeof errorBody.message === "string" && errorBody.message.trim()) {
     return errorBody.message.trim();
   }
@@ -101,7 +92,6 @@ function isReviewReportResponse(
   }
 
   const response = value as Partial<ReviewReportResponse>;
-
   return (
     typeof response.caseId === "string" &&
     typeof response.reportId === "string" &&
@@ -135,10 +125,8 @@ async function postReviewReport(
   });
 
   const body = await readResponseBody(response);
-
   if (!response.ok) {
     const message = getErrorMessage(body);
-
     throw new Error(
       message || `通報の送信に失敗しました。status=${response.status}`,
     );
@@ -179,6 +167,18 @@ export async function reportTokenBlueprintComment(
 
   return postReviewReport(
     `/mall/me/token-blueprints/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}/reports`,
+    request,
+  );
+}
+
+export async function reportAvatar(
+  input: ReportAvatarInput,
+): Promise<ReviewReportResponse> {
+  const avatarId = requireId(input.avatarId, "avatarId");
+  const request = createRequest(input.reason, input.detail);
+
+  return postReviewReport(
+    `/mall/me/avatars/${encodeURIComponent(avatarId)}/reports`,
     request,
   );
 }

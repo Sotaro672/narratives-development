@@ -36,8 +36,24 @@ function getTargetLabel(targetType?: ReviewReportTargetType): string {
       return "レビュー";
     case "TOKEN_BLUEPRINT_COMMENT":
       return "コメント";
+    case "AVATAR":
+      return "アバター";
     default:
       return "投稿";
+  }
+}
+
+function getDescription(
+  targetType?: ReviewReportTargetType,
+): string {
+  switch (targetType) {
+    case "AVATAR":
+      return "このアバターが不適切だと思う理由を選択してください。通報しただけではアバターの利用が自動的に停止されることはありません。";
+    case "PRODUCT_BLUEPRINT_REVIEW":
+    case "TOKEN_BLUEPRINT_COMMENT":
+      return `この${getTargetLabel(targetType)}が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。`;
+    default:
+      return "この投稿が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。";
   }
 }
 
@@ -80,6 +96,7 @@ export default function ReviewReportModal({
   }
 
   const targetLabel = getTargetLabel(targetType);
+  const description = getDescription(targetType);
   const submitted = result !== null;
   const alreadyReported = result !== null && !result.reportCreated;
 
@@ -177,7 +194,7 @@ export default function ReviewReportModal({
               id="review-report-modal-description"
               className="review-report-modal__description"
             >
-              この{targetLabel}が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。
+              {description}
             </p>
 
             <div className="review-report-modal__body">

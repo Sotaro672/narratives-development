@@ -2,7 +2,8 @@
 
 export type ReviewReportTargetType =
   | "PRODUCT_BLUEPRINT_REVIEW"
-  | "TOKEN_BLUEPRINT_COMMENT";
+  | "TOKEN_BLUEPRINT_COMMENT"
+  | "AVATAR";
 
 export type ReviewReportActorType =
   | "AVATAR"
