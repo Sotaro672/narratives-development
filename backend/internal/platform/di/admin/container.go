@@ -28,6 +28,9 @@ type Container struct {
 	reviewReportUsecase *usecase.ReviewReportUsecase
 	companyRepo         *fsrepo.CompanyRepositoryFS
 	memberRepo          *fsrepo.MemberRepositoryFS
+	avatarRepo          *fsrepo.AvatarRepositoryFS
+	brandRepo           *fsrepo.BrandRepositoryFS
+	reportNameQuery     *adminquery.ReportNameQuery
 	gasBalanceQuery     *adminquery.GasBalanceQuery
 }
 
@@ -64,6 +67,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	contactUsecase := usecase.NewContactUsecase(contactRepo, nil, nil)
 	companyRepo := fsrepo.NewCompanyRepositoryFS(infra.Firestore)
 	memberRepo := fsrepo.NewMemberRepositoryFS(infra.Firestore)
+	avatarRepo := fsrepo.NewAvatarRepositoryFS(infra.Firestore)
+	brandRepo := fsrepo.NewBrandRepositoryFS(infra.Firestore)
+	reportNameQuery := adminquery.NewReportNameQuery(avatarRepo, brandRepo, companyRepo, memberRepo)
 
 	reviewReportRepo := fsrepo.NewReviewReportRepositoryFS(infra.Firestore)
 	if reviewReportRepo == nil {
@@ -144,6 +150,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		reviewReportUsecase: reviewReportUsecase,
 		companyRepo:         companyRepo,
 		memberRepo:          memberRepo,
+		avatarRepo:          avatarRepo,
+		brandRepo:           brandRepo,
+		reportNameQuery:     reportNameQuery,
 		gasBalanceQuery:     gasBalanceQuery,
 	}, nil
 }

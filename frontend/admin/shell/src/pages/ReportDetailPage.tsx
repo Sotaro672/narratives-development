@@ -139,8 +139,8 @@ export default function ReportDetailPage() {
       },
       {
         key: "reporterId",
-        header: "通報者ID",
-        render: (report) => report.reporterId || "-",
+        header: "通報者",
+        render: (report) => report.reporterName || report.reporterId || "-",
         minWidth: "180px",
       },
       {
@@ -167,8 +167,8 @@ export default function ReportDetailPage() {
       },
       {
         key: "companyId",
-        header: "会社ID",
-        render: (report) => report.companyId || "-",
+        header: "会社",
+        render: (report) => report.companyName || report.companyId || "-",
         minWidth: "160px",
       },
     ],
@@ -288,9 +288,7 @@ export default function ReportDetailPage() {
         ) : null}
 
         {!loading && !error && !reportCase ? (
-          <p role="alert">
-            通報情報を取得できませんでした。
-          </p>
+          <p role="alert">通報情報を取得できませんでした。</p>
         ) : null}
 
         {reportCase ? (
@@ -393,13 +391,15 @@ export default function ReportDetailPage() {
                     />
                     <DetailField
                       label="投稿者種別"
-                      value={getActorTypeLabel(
-                        reportCase.targetAuthorType,
-                      )}
+                      value={getActorTypeLabel(reportCase.targetAuthorType)}
                     />
                     <DetailField
-                      label="投稿者ID"
-                      value={reportCase.targetAuthorId}
+                      label="投稿者"
+                      value={
+                        reportCase.targetAuthorName ||
+                        reportCase.targetAuthorId ||
+                        "-"
+                      }
                     />
                     <DetailField
                       label="初回通報"
@@ -423,11 +423,7 @@ export default function ReportDetailPage() {
           status={reportCase.status}
           decisionReason={decisionReason}
           deciding={deciding}
-          decisionError={
-            decisionAttempted
-              ? decisionError
-              : null
-          }
+          decisionError={decisionAttempted ? decisionError : null}
           canKeep={canKeep}
           canRemove={canRemove}
           onChangeDecisionReason={setDecisionReason}

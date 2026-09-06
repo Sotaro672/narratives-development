@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"narratives/internal/adapters/in/http/middleware"
+	adminquery "narratives/internal/application/query/admin"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	reviewreport "narratives/internal/domain/reviewReport"
@@ -20,11 +22,18 @@ import (
 const adminReportsPath = "/admin/reports"
 
 type ReportHandler struct {
-	uc *usecase.ReviewReportUsecase
+	uc        *usecase.ReviewReportUsecase
+	nameQuery *adminquery.ReportNameQuery
 }
 
-func NewReportHandler(uc *usecase.ReviewReportUsecase) http.Handler {
-	return http.HandlerFunc((&ReportHandler{uc: uc}).handle)
+func NewReportHandler(
+	uc *usecase.ReviewReportUsecase,
+	nameQuery *adminquery.ReportNameQuery,
+) http.Handler {
+	return http.HandlerFunc((&ReportHandler{
+		uc:        uc,
+		nameQuery: nameQuery,
+	}).handle)
 }
 
 type reviewReportCaseResponse struct {
@@ -33,6 +42,7 @@ type reviewReportCaseResponse struct {
 	TargetID         string                  `json:"targetId"`
 	TargetParentID   string                  `json:"targetParentId"`
 	TargetAuthorID   string                  `json:"targetAuthorId"`
+	TargetAuthorName string                  `json:"targetAuthorName,omitempty"`
 	TargetAuthorType reviewreport.ActorType  `json:"targetAuthorType"`
 	SnapshotTitle    string                  `json:"snapshotTitle"`
 	SnapshotBody     string                  `json:"snapshotBody"`
@@ -59,7 +69,9 @@ type reviewReportItemResponse struct {
 	CaseID       string                    `json:"caseId"`
 	ReporterType reviewreport.ActorType    `json:"reporterType"`
 	ReporterID   string                    `json:"reporterId"`
+	ReporterName string                    `json:"reporterName"`
 	CompanyID    string                    `json:"companyId"`
+	CompanyName  string                    `json:"companyName"`
 	Reason       reviewreport.ReportReason `json:"reason"`
 	Detail       string                    `json:"detail"`
 	CreatedAt    string                    `json:"createdAt"`
@@ -162,10 +174,7 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		filter.TargetAuthorType = &actorType
 	}
 
-	sortValue, ok := parseReviewReportCaseSort(
-		query.Get("sort"),
-		query.Get("order"),
-	)
+	sortValue, ok := parseReviewReportCaseSort(query.Get("sort"), query.Get("order"))
 	if !ok {
 		writeJSONError(w, http.StatusBadRequest, "invalid_sort")
 		return
@@ -176,12 +185,7 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		PerPage: reviewReportPerPage(query.Get("perPage")),
 	}
 
-	result, err := h.uc.ListReportCases(
-		r.Context(),
-		filter,
-		sortValue,
-		page,
-	)
+	result, err := h.uc.ListReportCases(r.Context(), filter, sortValue, page)
 	if err != nil {
 		writeReviewReportError(w, err, "report_list_failed")
 		return
@@ -237,10 +241,7 @@ func (h *ReportHandler) handleDetail(
 		filter.Reason = &reason
 	}
 
-	sortValue, ok := parseReviewReportItemSort(
-		query.Get("sort"),
-		query.Get("order"),
-	)
+	sortValue, ok := parseReviewReportItemSort(query.Get("sort"), query.Get("order"))
 	if !ok {
 		writeJSONError(w, http.StatusBadRequest, "invalid_sort")
 		return
@@ -251,13 +252,7 @@ func (h *ReportHandler) handleDetail(
 		PerPage: reviewReportPerPage(query.Get("perPage")),
 	}
 
-	reports, err := h.uc.ListReports(
-		r.Context(),
-		caseID,
-		filter,
-		sortValue,
-		page,
-	)
+	reports, err := h.uc.ListReports(r.Context(), caseID, filter, sortValue, page)
 	if err != nil {
 		writeReviewReportError(w, err, "report_items_list_failed")
 		return
@@ -265,11 +260,11 @@ func (h *ReportHandler) handleDetail(
 
 	items := make([]reviewReportItemResponse, 0, len(reports.Items))
 	for _, item := range reports.Items {
-		items = append(items, toReviewReportItemResponse(item))
+		items = append(items, h.toReviewReportItemResponse(r.Context(), item))
 	}
 
 	writeJSON(w, http.StatusOK, reviewReportDetailResponse{
-		Case: toReviewReportCaseResponse(reportCase),
+		Case: h.toReviewReportDetailCaseResponse(r.Context(), reportCase),
 		Reports: reviewReportItemsPageResponse{
 			Items:      items,
 			TotalCount: reports.TotalCount,
@@ -294,7 +289,6 @@ func (h *ReportHandler) handleDecision(
 	var request reviewReportDecisionRequest
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-
 	if err := decoder.Decode(&request); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid_request")
 		return
@@ -331,7 +325,7 @@ func (h *ReportHandler) handleDecision(
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toReviewReportCaseResponse(result))
+	writeJSON(w, http.StatusOK, h.toReviewReportDetailCaseResponse(r.Context(), result))
 }
 
 func resolveReportPath(
@@ -340,15 +334,11 @@ func resolveReportPath(
 	if requestPath == adminReportsPath || requestPath == adminReportsPath+"/" {
 		return "", reportRouteList, true
 	}
-
 	if !strings.HasPrefix(requestPath, adminReportsPath+"/") {
 		return "", reportRouteList, false
 	}
 
-	remaining := strings.Trim(
-		strings.TrimPrefix(requestPath, adminReportsPath+"/"),
-		"/",
-	)
+	remaining := strings.Trim(strings.TrimPrefix(requestPath, adminReportsPath+"/"), "/")
 	if remaining == "" {
 		return "", reportRouteList, true
 	}
@@ -473,10 +463,28 @@ func toReviewReportCaseResponse(
 	}
 }
 
-func toReviewReportItemResponse(
+func (h *ReportHandler) toReviewReportDetailCaseResponse(
+	ctx context.Context,
+	reportCase reviewreport.ReportCase,
+) reviewReportCaseResponse {
+	response := toReviewReportCaseResponse(reportCase)
+	if h == nil || h.nameQuery == nil {
+		return response
+	}
+
+	response.TargetAuthorName = h.nameQuery.ResolveTargetAuthorName(
+		ctx,
+		reportCase.TargetAuthorType,
+		reportCase.TargetAuthorID,
+	)
+	return response
+}
+
+func (h *ReportHandler) toReviewReportItemResponse(
+	ctx context.Context,
 	report reviewreport.Report,
 ) reviewReportItemResponse {
-	return reviewReportItemResponse{
+	response := reviewReportItemResponse{
 		ID:           string(report.ID),
 		CaseID:       string(report.CaseID),
 		ReporterType: report.ReporterType,
@@ -486,6 +494,18 @@ func toReviewReportItemResponse(
 		Detail:       report.Detail,
 		CreatedAt:    reviewReportTimeString(report.CreatedAt),
 	}
+
+	if h == nil || h.nameQuery == nil {
+		return response
+	}
+
+	response.ReporterName = h.nameQuery.ResolveReporterName(
+		ctx,
+		report.ReporterType,
+		report.ReporterID,
+	)
+	response.CompanyName = h.nameQuery.ResolveCompanyName(ctx, report.CompanyID)
+	return response
 }
 
 func reviewReportTimeString(value time.Time) string {
@@ -509,8 +529,7 @@ func writeReviewReportError(
 		return
 	}
 
-	if errors.Is(err, usecase.ErrReviewReportInvalidDecision) ||
-		reviewreport.IsInvalid(err) {
+	if errors.Is(err, usecase.ErrReviewReportInvalidDecision) || reviewreport.IsInvalid(err) {
 		writeJSONError(w, http.StatusBadRequest, "invalid_report_request")
 		return
 	}

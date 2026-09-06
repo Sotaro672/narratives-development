@@ -45,6 +45,7 @@ export type ReviewReportCase = {
   targetId: string;
   targetParentId: string;
   targetAuthorId: string;
+  targetAuthorName?: string;
   targetAuthorType: ReviewReportActorType;
   snapshotTitle: string;
   snapshotBody: string;
@@ -71,7 +72,9 @@ export type ReviewReportItem = {
   caseId: string;
   reporterType: ReviewReportActorType;
   reporterId: string;
+  reporterName: string;
   companyId: string;
+  companyName: string;
   reason: ReviewReportReason;
   detail: string;
   createdAt: string;
@@ -119,5 +122,4 @@ export type ReviewReportDecisionInput = {
   reason: string;
 };
 
-export type ReviewReportDecisionResponse =
-  ReviewReportCase;
+export type ReviewReportDecisionResponse = ReviewReportCase;
