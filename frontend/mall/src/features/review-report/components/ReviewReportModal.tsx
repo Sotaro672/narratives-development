@@ -43,12 +43,10 @@ function getTargetLabel(targetType?: ReviewReportTargetType): string {
   }
 }
 
-function getDescription(
-  targetType?: ReviewReportTargetType,
-): string {
+function getDescription(targetType?: ReviewReportTargetType): string {
   switch (targetType) {
     case "AVATAR":
-      return "このアバターが不適切だと思う理由を選択してください。通報しただけではアバターの利用が自動的に停止されることはありません。";
+      return "このアバターが不適切だと思う理由を選択してください。通報しただけでは再販サービスの利用が自動的に停止されることはありません。";
     case "PRODUCT_BLUEPRINT_REVIEW":
     case "TOKEN_BLUEPRINT_COMMENT":
       return `この${getTargetLabel(targetType)}が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。`;

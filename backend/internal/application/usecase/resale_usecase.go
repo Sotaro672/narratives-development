@@ -163,16 +163,28 @@ func (uc *ResaleUsecase) Update(
 	}
 
 	if item.Status == resaledom.StatusListing {
-		if item.AvatarID == "" {
+		// 再公開時の所有Avatarは呼び出し側から渡された値を信用せず、
+		// 永続化済みResaleから取得したcanonical値を使用する。
+		existing, err := uc.resaleRepo.GetByID(ctx, id)
+		if err != nil {
+			return resaledom.Resale{}, err
+		}
+		if existing.ID != id {
+			return resaledom.Resale{}, resaledom.ErrInvalidID
+		}
+		if existing.AvatarID == "" {
 			return resaledom.Resale{}, resaledom.ErrInvalidAvatarID
 		}
+
 		if err := checkAvatarResaleAccess(
 			ctx,
 			uc.avatarResaleAccessChecker,
-			item.AvatarID,
+			existing.AvatarID,
 		); err != nil {
 			return resaledom.Resale{}, err
 		}
+
+		item.AvatarID = existing.AvatarID
 	}
 
 	if item.Status == resaledom.StatusSuspended && uc.cartItemCleanup == nil {
