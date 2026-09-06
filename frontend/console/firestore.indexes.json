@@ -254,6 +254,52 @@
       "density": "SPARSE_ALL"
     },
     {
+      "collectionGroup": "reviewReportDecisionNotifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientType", "order": "ASCENDING" },
+        { "fieldPath": "recipientId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "reviewReportDecisionNotifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientType", "order": "ASCENDING" },
+        { "fieldPath": "recipientId", "order": "ASCENDING" },
+        { "fieldPath": "isRead", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "reviewReportDecisionNotifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientType", "order": "ASCENDING" },
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "reviewReportDecisionNotifications",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientType", "order": "ASCENDING" },
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "isRead", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
       "collectionGroup": "products",
       "queryScope": "COLLECTION",
       "fields": [

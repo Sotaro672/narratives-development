@@ -101,6 +101,9 @@ func buildMallUsecases(
 	if r.reviewReportRepo == nil {
 		return nil, errors.New("di.mall: review report repository is nil")
 	}
+	if r.reviewReportDecisionNotificationRepo == nil {
+		return nil, errors.New("di.mall: review report decision notification repository is nil")
+	}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
 
@@ -247,15 +250,16 @@ func buildMallUsecases(
 
 	reviewReportUC := usecase.NewReviewReportUsecase(
 		usecase.ReviewReportUsecaseDeps{
-			ReportRepo:              r.reviewReportRepo,
-			ProductReviewRepo:       r.productBlueprintReviewRepo,
-			ProductBlueprintRepo:    r.productBlueprintRepoFS,
-			ProductPurchaseResolver: walletUC,
-			ProductReviewModerator:  productBlueprintReviewUC,
-			TokenCommentRepo:        r.tokenBlueprintReviewRepo.Comments(),
-			TokenBlueprintRepo:      r.tokenBlueprintRepo,
-			TokenAccessResolver:     walletUC,
-			TokenCommentModerator:   tokenBlueprintReviewUC,
+			ReportRepo:               r.reviewReportRepo,
+			DecisionNotificationRepo: r.reviewReportDecisionNotificationRepo,
+			ProductReviewRepo:        r.productBlueprintReviewRepo,
+			ProductBlueprintRepo:     r.productBlueprintRepoFS,
+			ProductPurchaseResolver:  walletUC,
+			ProductReviewModerator:   productBlueprintReviewUC,
+			TokenCommentRepo:         r.tokenBlueprintReviewRepo.Comments(),
+			TokenBlueprintRepo:       r.tokenBlueprintRepo,
+			TokenAccessResolver:      walletUC,
+			TokenCommentModerator:    tokenBlueprintReviewUC,
 		},
 	)
 	if reviewReportUC == nil {

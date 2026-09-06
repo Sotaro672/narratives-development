@@ -32,6 +32,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		authBootstrapH                                http.Handler
 		accountsH                                     http.Handler
 		announcementsH                                http.Handler
+		reviewReportDecisionNotificationsH            http.Handler
 		permissionsH                                  http.Handler
 		brandsH                                       http.Handler
 		companiesH                                    http.Handler
@@ -89,6 +90,13 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.AnnouncementManagementQuery,
 			c.AnnouncementDetailQuery,
 		)
+	}
+
+	if c.ReviewReportUC != nil {
+		reviewReportDecisionNotificationsH =
+			consoleHandler.NewReviewReportDecisionNotificationHandler(
+				c.ReviewReportUC,
+			)
 	}
 
 	if c.PermissionUC != nil {
@@ -433,36 +441,37 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	return httpin.RouterDeps{
-		AuthMw:                         authMw,
-		BootstrapMw:                    bootstrapMw,
-		AuthBootstrap:                  authBootstrapH,
-		Accounts:                       accountsH,
-		Announcements:                  announcementsH,
-		Permissions:                    permissionsH,
-		Brands:                         brandsH,
-		Companies:                      companiesH,
-		CompanyShippingAddresses:       companyShippingAddressesH,
-		Transportation:                 transportationH,
-		Inquiries:                      inquiriesH,
-		Inventories:                    inventoriesH,
-		Lists:                          listsH,
-		ListSaveOperations:             listSaveOperationsH,
-		ProductsPrint:                  productsPrintH,
-		ProductBP:                      productBPH,
-		ProductBPCategories:            productBPCategoriesH,
-		TokenBP:                        tokenBPH,
-		TokenBPCreateOperations:        tokenBPCreateOperationsH,
-		Messages:                       messagesH,
-		Orders:                         ordersH,
-		Transactions:                   transactionsH,
-		Wallets:                        walletsH,
-		Members:                        membersH,
-		Productions:                    productionsH,
-		Models:                         modelsH,
-		Inspector:                      inspectorH,
-		Mint:                           mintH,
-		InternalMintTasks:              internalMintTasksH,
-		InternalListSaveOperationTasks: internalListSaveOperationTasksH,
+		AuthMw:                            authMw,
+		BootstrapMw:                       bootstrapMw,
+		AuthBootstrap:                     authBootstrapH,
+		Accounts:                          accountsH,
+		Announcements:                     announcementsH,
+		ReviewReportDecisionNotifications: reviewReportDecisionNotificationsH,
+		Permissions:                       permissionsH,
+		Brands:                            brandsH,
+		Companies:                         companiesH,
+		CompanyShippingAddresses:          companyShippingAddressesH,
+		Transportation:                    transportationH,
+		Inquiries:                         inquiriesH,
+		Inventories:                       inventoriesH,
+		Lists:                             listsH,
+		ListSaveOperations:                listSaveOperationsH,
+		ProductsPrint:                     productsPrintH,
+		ProductBP:                         productBPH,
+		ProductBPCategories:               productBPCategoriesH,
+		TokenBP:                           tokenBPH,
+		TokenBPCreateOperations:           tokenBPCreateOperationsH,
+		Messages:                          messagesH,
+		Orders:                            ordersH,
+		Transactions:                      transactionsH,
+		Wallets:                           walletsH,
+		Members:                           membersH,
+		Productions:                       productionsH,
+		Models:                            modelsH,
+		Inspector:                         inspectorH,
+		Mint:                              mintH,
+		InternalMintTasks:                 internalMintTasksH,
+		InternalListSaveOperationTasks:    internalListSaveOperationTasksH,
 		InternalTokenBlueprintCreateOperationTasks:   internalTokenBlueprintCreateOperationTasksH,
 		InternalInvitationDeliveryProcess:            internalInvitationDeliveryProcessH,
 		InternalInvitationDeliveryDispatch:           internalInvitationDeliveryDispatchH,

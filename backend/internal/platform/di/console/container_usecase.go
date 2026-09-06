@@ -593,18 +593,22 @@ func buildUsecases(
 	if reviewReportRepo == nil {
 		return nil, resources.CloseWithError(errors.New("di.console: review report repository is nil"))
 	}
+	if r.reviewReportDecisionNotificationRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: review report decision notification repository is nil"))
+	}
 
 	reviewReportUC := uc.NewReviewReportUsecase(
 		uc.ReviewReportUsecaseDeps{
-			ReportRepo:              reviewReportRepo,
-			ProductReviewRepo:       r.productBlueprintReviewRepo,
-			ProductBlueprintRepo:    r.productBlueprintRepo,
-			ProductPurchaseResolver: walletUC,
-			ProductReviewModerator:  productBlueprintReviewUC,
-			TokenCommentRepo:        tbReviewRepo.Comments(),
-			TokenBlueprintRepo:      r.tokenBlueprintRepo,
-			TokenAccessResolver:     walletUC,
-			TokenCommentModerator:   tokenBlueprintReviewUC,
+			ReportRepo:               reviewReportRepo,
+			DecisionNotificationRepo: r.reviewReportDecisionNotificationRepo,
+			ProductReviewRepo:        r.productBlueprintReviewRepo,
+			ProductBlueprintRepo:     r.productBlueprintRepo,
+			ProductPurchaseResolver:  walletUC,
+			ProductReviewModerator:   productBlueprintReviewUC,
+			TokenCommentRepo:         tbReviewRepo.Comments(),
+			TokenBlueprintRepo:       r.tokenBlueprintRepo,
+			TokenAccessResolver:      walletUC,
+			TokenCommentModerator:    tokenBlueprintReviewUC,
 		},
 	)
 	if reviewReportUC == nil {

@@ -529,8 +529,135 @@ func (u *ReviewReportUsecase) ListReports(
 	if caseID == "" {
 		return common.PageResult[reviewreport.Report]{}, reviewreport.ErrInvalidCaseID
 	}
-
 	return u.reportRepo.ListReports(ctx, caseID, filter, sort, page)
+}
+
+// ============================================================
+// Decision notifications
+// ============================================================
+
+func (u *ReviewReportUsecase) ListDecisionNotificationsForAvatar(
+	ctx context.Context,
+	avatarID string,
+	isRead *bool,
+	page common.Page,
+) (common.PageResult[reviewreport.DecisionNotification], error) {
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return common.PageResult[reviewreport.DecisionNotification]{}, err
+	}
+	if avatarID == "" {
+		return common.PageResult[reviewreport.DecisionNotification]{}, reviewreport.ErrInvalidReporterID
+	}
+
+	recipientType := reviewreport.ActorTypeAvatar
+	return u.decisionNotificationRepo.List(
+		ctx,
+		reviewreport.DecisionNotificationFilter{
+			RecipientType: &recipientType,
+			RecipientID:   avatarID,
+			IsRead:        isRead,
+		},
+		common.Sort{
+			Column: "createdAt",
+			Order:  common.SortDesc,
+		},
+		page,
+	)
+}
+
+func (u *ReviewReportUsecase) MarkDecisionNotificationReadForAvatar(
+	ctx context.Context,
+	notificationID reviewreport.DecisionNotificationID,
+	avatarID string,
+) (reviewreport.DecisionNotification, error) {
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return reviewreport.DecisionNotification{}, err
+	}
+	if notificationID == "" {
+		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidDecisionNotificationID
+	}
+	if avatarID == "" {
+		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidReporterID
+	}
+
+	notification, err := u.decisionNotificationRepo.GetByID(ctx, notificationID)
+	if err != nil {
+		return reviewreport.DecisionNotification{}, err
+	}
+	if notification.RecipientType != reviewreport.ActorTypeAvatar ||
+		notification.RecipientID != avatarID {
+		return reviewreport.DecisionNotification{}, ErrReviewReportForbidden
+	}
+
+	return u.decisionNotificationRepo.MarkRead(
+		ctx,
+		notificationID,
+		reviewreport.ActorTypeAvatar,
+		avatarID,
+		u.now().UTC(),
+	)
+}
+
+func (u *ReviewReportUsecase) ListDecisionNotificationsForCompany(
+	ctx context.Context,
+	companyID string,
+	isRead *bool,
+	page common.Page,
+) (common.PageResult[reviewreport.DecisionNotification], error) {
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return common.PageResult[reviewreport.DecisionNotification]{}, err
+	}
+	if companyID == "" {
+		return common.PageResult[reviewreport.DecisionNotification]{}, reviewreport.ErrInvalidCompanyID
+	}
+
+	recipientType := reviewreport.ActorTypeBrand
+	return u.decisionNotificationRepo.List(
+		ctx,
+		reviewreport.DecisionNotificationFilter{
+			RecipientType: &recipientType,
+			CompanyID:     companyID,
+			IsRead:        isRead,
+		},
+		common.Sort{
+			Column: "createdAt",
+			Order:  common.SortDesc,
+		},
+		page,
+	)
+}
+
+func (u *ReviewReportUsecase) MarkDecisionNotificationReadForCompany(
+	ctx context.Context,
+	notificationID reviewreport.DecisionNotificationID,
+	companyID string,
+) (reviewreport.DecisionNotification, error) {
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return reviewreport.DecisionNotification{}, err
+	}
+	if notificationID == "" {
+		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidDecisionNotificationID
+	}
+	if companyID == "" {
+		return reviewreport.DecisionNotification{}, reviewreport.ErrInvalidCompanyID
+	}
+
+	notification, err := u.decisionNotificationRepo.GetByID(ctx, notificationID)
+	if err != nil {
+		return reviewreport.DecisionNotification{}, err
+	}
+	if notification.RecipientType != reviewreport.ActorTypeBrand ||
+		notification.CompanyID != companyID {
+		return reviewreport.DecisionNotification{}, ErrReviewReportForbidden
+	}
+
+	return u.decisionNotificationRepo.MarkRead(
+		ctx,
+		notificationID,
+		reviewreport.ActorTypeBrand,
+		notification.RecipientID,
+		u.now().UTC(),
+	)
 }
 
 // ============================================================

@@ -1,13 +1,16 @@
 // frontend/console/shell/src/auth/presentation/components/Header.tsx
 
 import {
+  Bell,
   ChevronDown,
   ChevronUp,
   UserRound,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 import "../../../styles/auth.css";
 
+import { useReviewReportDecisionNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useReviewReportDecisionNotificationUnreadCount";
 import AdminPanel from "./AdminPanel";
 import { useHeader } from "../hook/useHeader";
 
@@ -17,6 +20,8 @@ interface HeaderProps {
 }
 
 export default function Header(props: HeaderProps) {
+  const navigate = useNavigate();
+
   const {
     openAdmin,
     panelContainerRef,
@@ -31,6 +36,23 @@ export default function Header(props: HeaderProps) {
     username: props.username ?? "ログインできていません",
     email: props.email ?? "ログインできていません",
   });
+
+  const {
+    unreadCount,
+  } = useReviewReportDecisionNotificationUnreadCount();
+
+  const handleOpenNotifications = () => {
+    if (openAdmin) {
+      handleToggleAdmin();
+    }
+
+    navigate("/notifications");
+  };
+
+  const notificationAriaLabel =
+    unreadCount > 0
+      ? `通知を開く。未読${unreadCount}件`
+      : "通知を開く";
 
   return (
     <header className="app-header">
@@ -51,14 +73,45 @@ export default function Header(props: HeaderProps) {
       </button>
 
       <div className="actions">
-        <div className="relative" ref={panelContainerRef}>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label={notificationAriaLabel}
+          title="通知"
+          onClick={handleOpenNotifications}
+        >
+          <Bell
+            className="icon"
+            aria-hidden
+          />
+
+          {unreadCount > 0 ? (
+            <span
+              className="badge"
+              aria-hidden
+            >
+              {unreadCount > 99
+                ? "99+"
+                : unreadCount}
+            </span>
+          ) : null}
+        </button>
+
+        <div
+          className="relative"
+          ref={panelContainerRef}
+        >
           <button
             ref={triggerRef}
             type="button"
             className="icon-btn user-trigger"
             aria-haspopup="menu"
             aria-expanded={openAdmin}
-            aria-controls={openAdmin ? "admin-dropdown" : undefined}
+            aria-controls={
+              openAdmin
+                ? "admin-dropdown"
+                : undefined
+            }
             aria-label={
               openAdmin
                 ? "アカウントメニューを閉じる"
@@ -66,7 +119,10 @@ export default function Header(props: HeaderProps) {
             }
             onClick={handleToggleAdmin}
           >
-            <UserRound className="icon" aria-hidden />
+            <UserRound
+              className="icon"
+              aria-hidden
+            />
 
             {openAdmin ? (
               <ChevronUp
