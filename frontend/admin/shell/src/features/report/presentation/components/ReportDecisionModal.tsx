@@ -5,8 +5,8 @@ import { useEffect } from "react";
 import type {
   ReviewReportCaseStatus,
   ReviewReportTargetType,
-} from "../../../shared/type/reviewReport";
-import Button from "../../../shared/ui/Button/Button";
+} from "../../../../shared/type/reviewReport";
+import Button from "../../../../shared/ui/Button/Button";
 
 import "./ReportDecisionModal.css";
 
