@@ -13,6 +13,7 @@ import type {
 } from "../shared/type/reviewReport";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
+import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
 import Table, { type TableColumn } from "../shared/ui/Table/Table";
 import { formatDateTime } from "../shared/util/dateFormat";
 
@@ -28,6 +29,19 @@ function getStatusLabel(status: ReviewReportCaseStatus): string {
       return "削除";
     default:
       return status;
+  }
+}
+
+function getStatusTone(status: ReviewReportCaseStatus): TabTone {
+  switch (status) {
+    case "PENDING":
+      return "warning";
+    case "KEPT":
+      return "success";
+    case "REMOVED":
+      return "danger";
+    default:
+      return "neutral";
   }
 }
 
@@ -70,13 +84,7 @@ function getReasonLabel(reason: ReviewReportReason): string {
   }
 }
 
-function DetailField({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="report-detail-page__field">
       <dt className="report-detail-page__field-label">{label}</dt>
@@ -172,29 +180,33 @@ export default function ReportDetailPage() {
 
   const handleKeep = async () => {
     const result = await keep(decisionReason);
-
-    if (result) {
-      setDecisionReason("");
-    }
+    if (result) setDecisionReason("");
   };
 
   const handleRemove = async () => {
     const result = await remove(decisionReason);
-
-    if (result) {
-      setDecisionReason("");
-    }
+    if (result) setDecisionReason("");
   };
 
-  const pageTitle = reportCase
-    ? getTargetTypeLabel(reportCase.targetType)
-    : "通報詳細";
+  const pageTitle = reportCase ? getTargetTypeLabel(reportCase.targetType) : "通報詳細";
 
   return (
     <Page>
       <PageHeader
         title={pageTitle}
-        meta={reportCase ? `通報 ${reportCase.reportCount}件` : undefined}
+        meta={
+          reportCase ? (
+            <>
+              <span>通報 {reportCase.reportCount}件</span>
+              <Tab
+                tone={getStatusTone(reportCase.status)}
+                aria-label={`対応状況 ${getStatusLabel(reportCase.status)}`}
+              >
+                {getStatusLabel(reportCase.status)}
+              </Tab>
+            </>
+          ) : undefined
+        }
         leading={
           <button
             type="button"
@@ -228,20 +240,14 @@ export default function ReportDetailPage() {
         }
       />
 
-      {loading && !reportCase ? (
-        <p>通報情報を読み込んでいます。</p>
-      ) : null}
+      {loading && !reportCase ? <p>通報情報を読み込んでいます。</p> : null}
 
       {!loading && error ? (
-        <p role="alert">
-          通報情報を取得できませんでした。{error}
-        </p>
+        <p role="alert">通報情報を取得できませんでした。{error}</p>
       ) : null}
 
       {!loading && !error && !reportCase ? (
-        <p role="alert">
-          通報情報を取得できませんでした。
-        </p>
+        <p role="alert">通報情報を取得できませんでした。</p>
       ) : null}
 
       {reportCase ? (
@@ -250,9 +256,7 @@ export default function ReportDetailPage() {
             <div className="report-detail-page__main">
               <section className="report-detail-page__section">
                 <div>
-                  <h2 className="report-detail-page__section-title">
-                    通報対象
-                  </h2>
+                  <h2 className="report-detail-page__section-title">通報対象</h2>
                   <p className="report-detail-page__description">
                     通報が最初に作成された時点の投稿内容です。
                   </p>
@@ -287,9 +291,7 @@ export default function ReportDetailPage() {
               <section className="report-detail-page__section">
                 <div className="report-detail-page__reports-header">
                   <div>
-                    <h2 className="report-detail-page__section-title">
-                      通報内容
-                    </h2>
+                    <h2 className="report-detail-page__section-title">通報内容</h2>
                     <p className="report-detail-page__description">
                       {totalCount}件の通報があります。
                     </p>
@@ -347,15 +349,9 @@ export default function ReportDetailPage() {
           aside={
             <div className="report-detail-page__aside">
               <section className="report-detail-page__section">
-                <h2 className="report-detail-page__section-title">
-                  ケース情報
-                </h2>
+                <h2 className="report-detail-page__section-title">ケース情報</h2>
 
                 <dl className="report-detail-page__fields report-detail-page__fields--compact">
-                  <DetailField
-                    label="対応状況"
-                    value={getStatusLabel(reportCase.status)}
-                  />
                   <DetailField
                     label="対象種別"
                     value={getTargetTypeLabel(reportCase.targetType)}
@@ -393,9 +389,7 @@ export default function ReportDetailPage() {
 
               {reportCase.status !== "PENDING" ? (
                 <section className="report-detail-page__section">
-                  <h2 className="report-detail-page__section-title">
-                    裁定結果
-                  </h2>
+                  <h2 className="report-detail-page__section-title">裁定結果</h2>
 
                   <dl className="report-detail-page__fields report-detail-page__fields--compact">
                     <DetailField
