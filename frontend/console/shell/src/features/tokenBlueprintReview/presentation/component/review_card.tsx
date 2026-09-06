@@ -56,7 +56,6 @@ export default function ReviewCard({
     brandIcon,
     likeCount,
     dislikeCount,
-    childCount,
     createdAt,
     deleted,
     isOwnerComment,
@@ -81,16 +80,12 @@ export default function ReviewCard({
     isSubmittingDelete ||
     isSubmittingReaction;
 
-  const canInteract = !deleted;
-
   const canDelete =
-    canInteract &&
     authorType === "brand" &&
     isOwnerComment &&
     onDelete !== undefined;
 
   const canReport =
-    canInteract &&
     Boolean(normalizedCommentId) &&
     !(authorType === "brand" && isOwnerComment) &&
     onReport !== undefined;
@@ -104,15 +99,19 @@ export default function ReviewCard({
   }, [repliesByParentId, commentId]);
 
   const sortedReplies = useMemo(() => {
-    return [...replies].sort(
-      (a, b) =>
-        Date.parse(a.createdAt) -
-        Date.parse(b.createdAt),
-    );
+    return replies
+      .filter((reply) => !reply.deleted)
+      .sort(
+        (a, b) =>
+          Date.parse(a.createdAt) -
+          Date.parse(b.createdAt),
+      );
   }, [replies]);
 
+  const visibleReplyCount = sortedReplies.length;
+
   const toggleReplyForm = () => {
-    if (!canInteract || disabled) {
+    if (disabled) {
       return;
     }
 
@@ -120,10 +119,7 @@ export default function ReviewCard({
   };
 
   const toggleRepliesAccordion = () => {
-    if (
-      childCount <= 0 &&
-      sortedReplies.length <= 0
-    ) {
+    if (visibleReplyCount <= 0) {
       return;
     }
 
@@ -145,7 +141,6 @@ export default function ReviewCard({
     if (
       !content ||
       !onReply ||
-      !canInteract ||
       disabled ||
       !normalizedCommentId
     ) {
@@ -194,7 +189,6 @@ export default function ReviewCard({
   ) => {
     if (
       !onReact ||
-      !canInteract ||
       disabled ||
       !normalizedCommentId
     ) {
@@ -222,6 +216,10 @@ export default function ReviewCard({
     onReport(normalizedCommentId);
   };
 
+  if (deleted) {
+    return null;
+  }
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl shadow-sm tbrd-review-item-card">
       <div className="tbrd-author-row">
@@ -247,16 +245,10 @@ export default function ReviewCard({
       </div>
 
       <div className="tbrd-body">
-        {deleted ? (
+        {body || (
           <span className="tbrd-body-empty">
-            このコメントは削除されました
+            （本文なし）
           </span>
-        ) : (
-          body || (
-            <span className="tbrd-body-empty">
-              （本文なし）
-            </span>
-          )
         )}
       </div>
 
@@ -266,7 +258,7 @@ export default function ReviewCard({
           variant="outline"
           size="sm"
           className="tbrd-reaction-button"
-          disabled={!canInteract || disabled}
+          disabled={disabled}
           onClick={() => {
             void handleReaction("like");
           }}
@@ -279,7 +271,7 @@ export default function ReviewCard({
           variant="outline"
           size="sm"
           className="tbrd-reaction-button"
-          disabled={!canInteract || disabled}
+          disabled={disabled}
           onClick={() => {
             void handleReaction("dislike");
           }}
@@ -292,7 +284,7 @@ export default function ReviewCard({
           variant="outline"
           size="sm"
           className="tbrd-reply-button"
-          disabled={!canInteract || disabled}
+          disabled={disabled}
           onClick={toggleReplyForm}
         >
           {isReplyFormOpen
@@ -300,7 +292,7 @@ export default function ReviewCard({
             : "返信"}
         </Button>
 
-        {childCount > 0 || sortedReplies.length > 0 ? (
+        {visibleReplyCount > 0 ? (
           <Button
             type="button"
             variant="outline"
@@ -310,8 +302,8 @@ export default function ReviewCard({
             onClick={toggleRepliesAccordion}
           >
             {isRepliesOpen
-              ? `返信を隠す (${childCount})`
-              : `返信を表示 (${childCount})`}
+              ? `返信を隠す (${visibleReplyCount})`
+              : `返信を表示 (${visibleReplyCount})`}
           </Button>
         ) : null}
 
@@ -344,12 +336,10 @@ export default function ReviewCard({
               : "削除"}
           </Button>
         ) : null}
-
-        {deleted ? <span>削除済み</span> : null}
       </div>
 
       <div className="tbrd-meta-row">
-        <span>返信数: {childCount}</span>
+        <span>返信数: {visibleReplyCount}</span>
       </div>
 
       {isReplyFormOpen ? (
@@ -394,32 +384,26 @@ export default function ReviewCard({
         </div>
       ) : null}
 
-      {isRepliesOpen ? (
+      {isRepliesOpen && visibleReplyCount > 0 ? (
         <div className="mt-3 border-t border-slate-200 pt-3">
-          {sortedReplies.length === 0 ? (
-            <div className="text-sm text-slate-500">
-              返信はありません
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {sortedReplies.map((reply) => (
-                <div
-                  key={reply.commentId}
-                  className="ml-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
-                >
-                  <ReviewCard
-                    item={reply}
-                    repliesByParentId={repliesByParentId}
-                    submitting={submitting}
-                    onReply={onReply}
-                    onDelete={onDelete}
-                    onReact={onReact}
-                    onReport={onReport}
-                  />
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="flex flex-col gap-3">
+            {sortedReplies.map((reply) => (
+              <div
+                key={reply.commentId}
+                className="ml-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
+              >
+                <ReviewCard
+                  item={reply}
+                  repliesByParentId={repliesByParentId}
+                  submitting={submitting}
+                  onReply={onReply}
+                  onDelete={onDelete}
+                  onReact={onReact}
+                  onReport={onReport}
+                />
+              </div>
+            ))}
+          </div>
         </div>
       ) : null}
     </div>

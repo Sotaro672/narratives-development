@@ -3,19 +3,15 @@
 import { useNavigate } from "react-router-dom";
 
 import { formatDateTime } from "../../../components/utils/date";
-
 import type {
   TokenComment,
   TokenCommentTreeNode,
 } from "../../shared/types/tokenCommentTypes";
-
 import {
   getTokenCommentDisplayIconUrl,
   getTokenCommentDisplayName,
 } from "../../shared/types/tokenCommentTypes";
-
 import { hasTokenCommentChildren } from "../utils/commentTree";
-
 import TokenCommentReplyForm from "./TokenCommentReplyForm";
 
 type TokenCommentItemProps = {
@@ -37,10 +33,6 @@ type TokenCommentItemProps = {
 };
 
 function getAuthorAvatarId(comment: TokenComment): string {
-  if (comment.deleted) {
-    return "";
-  }
-
   return comment.authorId?.trim() || "";
 }
 
@@ -121,11 +113,15 @@ export default function TokenCommentItem({
   onReport,
 }: TokenCommentItemProps) {
   const comment = node.comment;
+
+  if (comment.deleted) {
+    return null;
+  }
+
   const commentId = comment.commentId?.trim() || "";
   const authorAvatarId = getAuthorAvatarId(comment);
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const normalizedCurrentAvatarId = currentAvatarId.trim();
-
   const isExpanded = expandedIds.has(commentId);
   const isReplying = replyingCommentId === commentId;
   const hasChildren = hasTokenCommentChildren(node);
@@ -138,17 +134,12 @@ export default function TokenCommentItem({
     normalizedTokenBlueprintId &&
     normalizedCurrentAvatarId &&
     commentId &&
-    !comment.deleted &&
     !isOwnComment,
   );
-
-  const indent = Math.min(
-    Math.max(comment.depth * 16, 0),
-    48,
-  );
+  const indent = Math.min(Math.max(comment.depth * 16, 0), 48);
 
   const handleLike = () => {
-    if (comment.deleted || !commentId) {
+    if (!commentId) {
       return;
     }
 
@@ -156,7 +147,7 @@ export default function TokenCommentItem({
   };
 
   const handleDislike = () => {
-    if (comment.deleted || !commentId) {
+    if (!commentId) {
       return;
     }
 
@@ -164,7 +155,7 @@ export default function TokenCommentItem({
   };
 
   const handleStartReply = () => {
-    if (comment.deleted || !commentId) {
+    if (!commentId) {
       return;
     }
 
@@ -215,16 +206,13 @@ export default function TokenCommentItem({
         </div>
 
         <p className="token-comment-item__text">
-          {comment.deleted
-            ? "このコメントは削除されました"
-            : comment.body}
+          {comment.body}
         </p>
 
         <div className="token-comment-item__actions">
           <button
             type="button"
             className="token-comment-item__action"
-            disabled={comment.deleted}
             onClick={handleLike}
           >
             👍 {comment.likeCount}
@@ -233,7 +221,6 @@ export default function TokenCommentItem({
           <button
             type="button"
             className="token-comment-item__action"
-            disabled={comment.deleted}
             onClick={handleDislike}
           >
             👎 {comment.dislikeCount}
@@ -242,7 +229,6 @@ export default function TokenCommentItem({
           <button
             type="button"
             className="token-comment-item__action"
-            disabled={comment.deleted}
             onClick={handleStartReply}
           >
             返信
