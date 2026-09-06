@@ -4,6 +4,11 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useReports } from "../features/report/presentation/hooks/useReports";
+import {
+  getActorTypeLabel,
+  getStatusLabel,
+  getTargetTypeLabel,
+} from "../features/report/presentation/model/reportLabels";
 import type {
   ReviewReportCase,
   ReviewReportCaseStatus,
@@ -16,56 +21,12 @@ import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./ReportsPage.css";
 
-function getStatusLabel(
-  status: ReviewReportCaseStatus,
-  targetType: ReviewReportTargetType,
-): string {
-  switch (status) {
-    case "PENDING":
-      return "未対応";
-    case "KEPT":
-      return targetType === "AVATAR" ? "変化なし" : "維持";
-    case "REMOVED":
-      return targetType === "AVATAR" ? "再販利用停止" : "削除";
-    default:
-      return status;
-  }
-}
-
-function getTargetTypeLabel(targetType: ReviewReportTargetType): string {
-  switch (targetType) {
-    case "PRODUCT_BLUEPRINT_REVIEW":
-      return "商品レビュー";
-    case "TOKEN_BLUEPRINT_COMMENT":
-      return "トークンコメント";
-    case "AVATAR":
-      return "アバター";
-    default:
-      return targetType;
-  }
-}
-
-function getAuthorTypeLabel(
-  authorType: ReviewReportCase["targetAuthorType"],
-): string {
-  switch (authorType) {
-    case "AVATAR":
-      return "ユーザー";
-    case "BRAND":
-      return "ブランド";
-    default:
-      return authorType;
-  }
-}
-
 function getSnapshotSummary(reportCase: ReviewReportCase): string {
   const title = reportCase.snapshotTitle.trim();
   const body = reportCase.snapshotBody.trim();
   const value = title || body;
 
-  if (!value) {
-    return "-";
-  }
+  if (!value) return "-";
 
   return value.length > 80 ? `${value.slice(0, 80)}…` : value;
 }
@@ -102,8 +63,7 @@ export default function ReportsPage() {
       {
         key: "status",
         header: "対応状況",
-        render: (reportCase) =>
-          getStatusLabel(reportCase.status, reportCase.targetType),
+        render: (reportCase) => getStatusLabel(reportCase.status, reportCase.targetType),
         filter: {
           getValue: (reportCase) => reportCase.status,
           options: [
@@ -121,18 +81,9 @@ export default function ReportsPage() {
         filter: {
           getValue: (reportCase) => reportCase.targetType,
           options: [
-            {
-              value: "PRODUCT_BLUEPRINT_REVIEW",
-              label: "商品レビュー",
-            },
-            {
-              value: "TOKEN_BLUEPRINT_COMMENT",
-              label: "トークンコメント",
-            },
-            {
-              value: "AVATAR",
-              label: "アバター",
-            },
+            { value: "PRODUCT_BLUEPRINT_REVIEW", label: "商品レビュー" },
+            { value: "TOKEN_BLUEPRINT_COMMENT", label: "トークンコメント" },
+            { value: "AVATAR", label: "アバター" },
           ],
         },
         nowrap: true,
@@ -146,8 +97,7 @@ export default function ReportsPage() {
       {
         key: "targetAuthorType",
         header: "対象者種別",
-        render: (reportCase) =>
-          getAuthorTypeLabel(reportCase.targetAuthorType),
+        render: (reportCase) => getActorTypeLabel(reportCase.targetAuthorType),
         nowrap: true,
       },
       {
@@ -178,25 +128,15 @@ export default function ReportsPage() {
   const handleFilterChange = (key: string, value: string) => {
     switch (key) {
       case "status":
-        setStatus(
-          value
-            ? (value as ReviewReportCaseStatus)
-            : undefined,
-        );
+        setStatus(value ? (value as ReviewReportCaseStatus) : undefined);
         break;
       case "targetType":
-        setTargetType(
-          value
-            ? (value as ReviewReportTargetType)
-            : undefined,
-        );
+        setTargetType(value ? (value as ReviewReportTargetType) : undefined);
         break;
     }
   };
 
-  const hasActiveFilter =
-    status !== undefined ||
-    targetType !== undefined;
+  const hasActiveFilter = status !== undefined || targetType !== undefined;
 
   return (
     <Page>
@@ -212,9 +152,7 @@ export default function ReportsPage() {
         }
       />
 
-      {loading && items.length === 0 ? (
-        <p>通報を読み込んでいます。</p>
-      ) : null}
+      {loading && items.length === 0 ? <p>通報を読み込んでいます。</p> : null}
 
       {!loading && error ? (
         <p role="alert">
@@ -225,15 +163,10 @@ export default function ReportsPage() {
       {!error && (items.length > 0 || !loading) ? (
         <>
           <div className="reports-page__summary">
-            <p className="reports-page__count">
-              {totalCount}件
-            </p>
+            <p className="reports-page__count">{totalCount}件</p>
 
             {loading ? (
-              <span
-                className="reports-page__updating"
-                aria-live="polite"
-              >
+              <span className="reports-page__updating" aria-live="polite">
                 更新中...
               </span>
             ) : null}
@@ -258,10 +191,7 @@ export default function ReportsPage() {
           />
 
           {totalPages > 1 ? (
-            <nav
-              className="reports-page__pagination"
-              aria-label="通報一覧のページ送り"
-            >
+            <nav className="reports-page__pagination" aria-label="通報一覧のページ送り">
               <button
                 type="button"
                 className="reports-page__pagination-button"

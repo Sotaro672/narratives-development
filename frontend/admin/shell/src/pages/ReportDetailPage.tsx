@@ -1,137 +1,28 @@
 // frontend/admin/shell/src/pages/ReportDetailPage.tsx
 
-import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import ReportCaseInfoSection from "../features/report/presentation/components/ReportCaseInfoSection";
 import ReportDecisionModal from "../features/report/presentation/components/ReportDecisionModal";
+import ReportItemsSection from "../features/report/presentation/components/ReportItemsSection";
+import ReportTargetSnapshotSection from "../features/report/presentation/components/ReportTargetSnapshotSection";
+import { useReportDecisionModal } from "../features/report/presentation/hooks/useReportDecisionModal";
 import { useReportDetail } from "../features/report/presentation/hooks/useReportDetail";
-import type {
-  ReviewReportActorType,
-  ReviewReportCaseStatus,
-  ReviewReportItem,
-  ReviewReportReason,
-  ReviewReportTargetType,
-} from "../shared/type/reviewReport";
+import {
+  getStatusLabel,
+  getStatusTone,
+  getTargetTypeLabel,
+} from "../features/report/presentation/model/reportLabels";
 import Button from "../shared/ui/Button/Button";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
-import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
-import Table, { type TableColumn } from "../shared/ui/Table/Table";
-import { formatDateTime } from "../shared/util/dateFormat";
+import Tab from "../shared/ui/Tab/Tab";
 
 import "./ReportDetailPage.css";
-
-function getStatusLabel(
-  status: ReviewReportCaseStatus,
-  targetType: ReviewReportTargetType,
-): string {
-  switch (status) {
-    case "PENDING":
-      return "未対応";
-    case "KEPT":
-      return targetType === "AVATAR" ? "変化なし" : "維持";
-    case "REMOVED":
-      return targetType === "AVATAR" ? "再販利用停止" : "削除";
-    default:
-      return status;
-  }
-}
-
-function getStatusTone(status: ReviewReportCaseStatus): TabTone {
-  switch (status) {
-    case "PENDING":
-      return "warning";
-    case "KEPT":
-      return "success";
-    case "REMOVED":
-      return "danger";
-    default:
-      return "neutral";
-  }
-}
-
-function getTargetTypeLabel(targetType: ReviewReportTargetType): string {
-  switch (targetType) {
-    case "PRODUCT_BLUEPRINT_REVIEW":
-      return "商品レビュー";
-    case "TOKEN_BLUEPRINT_COMMENT":
-      return "トークンコメント";
-    case "AVATAR":
-      return "アバター";
-    default:
-      return targetType;
-  }
-}
-
-function getActorTypeLabel(actorType: ReviewReportActorType): string {
-  switch (actorType) {
-    case "AVATAR":
-      return "ユーザー";
-    case "BRAND":
-      return "ブランド";
-    default:
-      return actorType;
-  }
-}
-
-function getReasonLabel(reason: ReviewReportReason): string {
-  switch (reason) {
-    case "SPAM":
-      return "スパム";
-    case "HARASSMENT":
-      return "嫌がらせ";
-    case "INAPPROPRIATE":
-      return "不適切な内容";
-    case "FALSE_INFORMATION":
-      return "虚偽情報";
-    case "OTHER":
-      return "その他";
-    default:
-      return reason;
-  }
-}
-
-function getSnapshotTitleLabel(targetType: ReviewReportTargetType): string {
-  return targetType === "AVATAR" ? "アバター名" : "タイトル";
-}
-
-function getSnapshotBodyLabel(targetType: ReviewReportTargetType): string {
-  return targetType === "AVATAR" ? "プロフィール" : "本文";
-}
-
-function getTargetParentLabel(targetType: ReviewReportTargetType): string {
-  return targetType === "AVATAR" ? "対象アバター" : "親";
-}
-
-function getTargetAuthorTypeLabel(targetType: ReviewReportTargetType): string {
-  return targetType === "AVATAR" ? "対象種別" : "投稿者種別";
-}
-
-function getTargetAuthorLabel(targetType: ReviewReportTargetType): string {
-  return targetType === "AVATAR" ? "対象アバター" : "投稿者";
-}
-
-function DetailField({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="report-detail-page__field">
-      <dt className="report-detail-page__field-label">{label}</dt>
-      <dd className="report-detail-page__field-value">{value}</dd>
-    </div>
-  );
-}
 
 export default function ReportDetailPage() {
   const navigate = useNavigate();
   const { reportId } = useParams();
-  const [decisionReason, setDecisionReason] = useState("");
-  const [decisionModalOpen, setDecisionModalOpen] = useState(false);
-  const [decisionAttempted, setDecisionAttempted] = useState(false);
 
   const {
     reportCase,
@@ -153,88 +44,21 @@ export default function ReportDetailPage() {
     remove,
   } = useReportDetail(reportId);
 
-  const columns = useMemo<TableColumn<ReviewReportItem>[]>(
-    () => [
-      {
-        key: "createdAt",
-        header: "通報日時",
-        render: (report) => formatDateTime(report.createdAt),
-        sortValue: (report) => new Date(report.createdAt).getTime(),
-        nowrap: true,
-      },
-      {
-        key: "reporterId",
-        header: "通報者",
-        render: (report) => report.reporterName || report.reporterId || "-",
-        minWidth: "180px",
-      },
-      {
-        key: "reason",
-        header: "理由",
-        render: (report) => getReasonLabel(report.reason),
-        filter: {
-          getValue: (report) => getReasonLabel(report.reason),
-          options: [
-            { value: "スパム", label: "スパム" },
-            { value: "嫌がらせ", label: "嫌がらせ" },
-            { value: "不適切な内容", label: "不適切な内容" },
-            { value: "虚偽情報", label: "虚偽情報" },
-            { value: "その他", label: "その他" },
-          ],
-        },
-        nowrap: true,
-      },
-      {
-        key: "detail",
-        header: "詳細",
-        render: (report) => report.detail || "-",
-        minWidth: "260px",
-      },
-      {
-        key: "companyId",
-        header: "会社",
-        render: (report) => report.companyName || report.companyId || "-",
-        minWidth: "160px",
-      },
-    ],
-    [],
-  );
-
-  const openDecisionModal = () => {
-    if (!canDecide) return;
-    setDecisionReason("");
-    setDecisionAttempted(false);
-    setDecisionModalOpen(true);
-  };
-
-  const closeDecisionModal = () => {
-    if (deciding) return;
-    setDecisionModalOpen(false);
-    setDecisionReason("");
-    setDecisionAttempted(false);
-  };
-
-  const handleKeep = async () => {
-    setDecisionAttempted(true);
-    const result = await keep(decisionReason);
-
-    if (result) {
-      setDecisionModalOpen(false);
-      setDecisionReason("");
-      setDecisionAttempted(false);
-    }
-  };
-
-  const handleRemove = async () => {
-    setDecisionAttempted(true);
-    const result = await remove(decisionReason);
-
-    if (result) {
-      setDecisionModalOpen(false);
-      setDecisionReason("");
-      setDecisionAttempted(false);
-    }
-  };
+  const {
+    decisionReason,
+    decisionModalOpen,
+    decisionAttempted,
+    setDecisionReason,
+    openDecisionModal,
+    closeDecisionModal,
+    handleKeep,
+    handleRemove,
+  } = useReportDecisionModal({
+    canDecide,
+    deciding,
+    keep,
+    remove,
+  });
 
   const pageTitle = reportCase
     ? getTargetTypeLabel(reportCase.targetType)
@@ -251,15 +75,9 @@ export default function ReportDetailPage() {
                 <span>通報 {reportCase.reportCount}件</span>
                 <Tab
                   tone={getStatusTone(reportCase.status)}
-                  aria-label={`対応状況 ${getStatusLabel(
-                    reportCase.status,
-                    reportCase.targetType,
-                  )}`}
+                  aria-label={`対応状況 ${getStatusLabel(reportCase.status, reportCase.targetType)}`}
                 >
-                  {getStatusLabel(
-                    reportCase.status,
-                    reportCase.targetType,
-                  )}
+                  {getStatusLabel(reportCase.status, reportCase.targetType)}
                 </Tab>
               </>
             ) : undefined
@@ -326,130 +144,22 @@ export default function ReportDetailPage() {
           <DetailPageBody
             main={
               <div className="report-detail-page__main">
-                <section className="report-detail-page__section">
-                  <dl className="report-detail-page__fields">
-                    {reportCase.snapshotRating !== null ? (
-                      <DetailField
-                        label="評価"
-                        value={`${reportCase.snapshotRating} / 5`}
-                      />
-                    ) : null}
+                <ReportTargetSnapshotSection reportCase={reportCase} />
 
-                    {reportCase.snapshotTitle ? (
-                      <DetailField
-                        label={getSnapshotTitleLabel(reportCase.targetType)}
-                        value={reportCase.snapshotTitle}
-                      />
-                    ) : null}
-
-                    <DetailField
-                      label={getSnapshotBodyLabel(reportCase.targetType)}
-                      value={
-                        <div className="report-detail-page__body-text">
-                          {reportCase.snapshotBody || "-"}
-                        </div>
-                      }
-                    />
-                  </dl>
-                </section>
-
-                <section className="report-detail-page__section">
-                  <div className="report-detail-page__reports-header">
-                    <h2 className="report-detail-page__section-title">
-                      通報内容
-                    </h2>
-
-                    {loading ? (
-                      <span
-                        className="report-detail-page__updating"
-                        aria-live="polite"
-                      >
-                        更新中...
-                      </span>
-                    ) : null}
-                  </div>
-
-                  <Table
-                    columns={columns}
-                    rows={reports}
-                    getRowKey={(report) => report.id}
-                    emptyMessage="通報内容はありません。"
-                    filteredEmptyMessage="条件に一致する通報はありません。"
-                  />
-
-                  {totalPages > 1 ? (
-                    <nav
-                      className="report-detail-page__pagination"
-                      aria-label="通報内容のページ送り"
-                    >
-                      <button
-                        type="button"
-                        className="report-detail-page__pagination-button"
-                        disabled={!hasPreviousPage || loading}
-                        onClick={() => setPage(page - 1)}
-                      >
-                        前へ
-                      </button>
-
-                      <span className="report-detail-page__pagination-label">
-                        {page} / {totalPages}
-                      </span>
-
-                      <button
-                        type="button"
-                        className="report-detail-page__pagination-button"
-                        disabled={!hasNextPage || loading}
-                        onClick={() => setPage(page + 1)}
-                      >
-                        次へ
-                      </button>
-                    </nav>
-                  ) : null}
-                </section>
+                <ReportItemsSection
+                  reports={reports}
+                  loading={loading}
+                  page={page}
+                  totalPages={totalPages}
+                  hasPreviousPage={hasPreviousPage}
+                  hasNextPage={hasNextPage}
+                  onPageChange={setPage}
+                />
               </div>
             }
             aside={
               <div className="report-detail-page__aside">
-                <section className="report-detail-page__section">
-                  <h2 className="report-detail-page__section-title">
-                    ケース情報
-                  </h2>
-
-                  <dl className="report-detail-page__fields report-detail-page__fields--compact">
-                    <DetailField
-                      label={getTargetParentLabel(reportCase.targetType)}
-                      value={
-                        reportCase.targetParentName ||
-                        reportCase.targetParentId ||
-                        "-"
-                      }
-                    />
-
-                    <DetailField
-                      label={getTargetAuthorTypeLabel(reportCase.targetType)}
-                      value={getActorTypeLabel(reportCase.targetAuthorType)}
-                    />
-
-                    <DetailField
-                      label={getTargetAuthorLabel(reportCase.targetType)}
-                      value={
-                        reportCase.targetAuthorName ||
-                        reportCase.targetAuthorId ||
-                        "-"
-                      }
-                    />
-
-                    <DetailField
-                      label="初回通報"
-                      value={formatDateTime(reportCase.createdAt)}
-                    />
-
-                    <DetailField
-                      label="最終更新"
-                      value={formatDateTime(reportCase.updatedAt)}
-                    />
-                  </dl>
-                </section>
+                <ReportCaseInfoSection reportCase={reportCase} />
               </div>
             }
           />
