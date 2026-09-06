@@ -69,6 +69,19 @@ function getReviewReportTargetLabel(
 function getDecisionBody(
   notification: ReviewReportDecisionNotification,
 ): string {
+  if (notification.notificationKind === "TARGET_ENFORCEMENT") {
+    switch (notification.targetType) {
+      case "PRODUCT_BLUEPRINT_REVIEW":
+        return "運営の裁定により、あなたの商品レビューを削除しました。";
+      case "AVATAR":
+        return "運営の裁定により、再販サービスの利用を停止しました。";
+      case "TOKEN_BLUEPRINT_COMMENT":
+        return "運営の裁定により、あなたのトークンコメントを削除しました。";
+      default:
+        return "運営の裁定により、対象コンテンツに措置を行いました。";
+    }
+  }
+
   if (notification.targetType === "AVATAR") {
     switch (notification.decisionStatus) {
       case "REMOVED":
@@ -82,9 +95,9 @@ function getDecisionBody(
 
   switch (notification.decisionStatus) {
     case "REMOVED":
-      return "通報いただいた内容を確認し、対象コンテンツを非表示にしました。";
+      return "通報いただいた内容を確認し、対象コンテンツを削除しました。";
     case "KEPT":
-      return "通報いただいた内容を確認しました。審査の結果、掲載を継続します。";
+      return "通報いただいた内容を確認しました。審査の結果、対象コンテンツを維持します。";
     default:
       return "通報いただいた内容の確認が完了しました。";
   }
@@ -106,12 +119,33 @@ function getDecisionStatusLabel(
 
   switch (notification.decisionStatus) {
     case "REMOVED":
-      return "非表示";
+      return "削除";
     case "KEPT":
-      return "掲載継続";
+      return "維持";
     default:
       return notification.decisionStatus;
   }
+}
+
+function getDecisionCardLabel(
+  notification: ReviewReportDecisionNotification,
+  targetLabel: string,
+): string {
+  if (notification.notificationKind === "TARGET_ENFORCEMENT") {
+    return `運営からのお知らせ・${targetLabel}`;
+  }
+
+  return `通報結果・${targetLabel}`;
+}
+
+function getDecisionCardTitle(
+  notification: ReviewReportDecisionNotification,
+): string {
+  if (notification.notificationKind === "TARGET_ENFORCEMENT") {
+    return "運営による措置のお知らせ";
+  }
+
+  return "通報内容の確認が完了しました";
 }
 
 export default function AnnouncementPage() {
@@ -446,11 +480,6 @@ export default function AnnouncementPage() {
                   notification.targetType,
                 );
 
-              const reportReasonLabel =
-                getReviewReportReasonLabel(
-                  notification.reportReason,
-                );
-
               const decisionStatusLabel =
                 getDecisionStatusLabel(
                   notification,
@@ -465,6 +494,28 @@ export default function AnnouncementPage() {
                 getDecisionBody(
                   notification,
                 );
+
+              const cardLabel =
+                getDecisionCardLabel(
+                  notification,
+                  targetLabel,
+                );
+
+              const cardTitle =
+                getDecisionCardTitle(
+                  notification,
+                );
+
+              const isReporterDecision =
+                notification.notificationKind ===
+                "REPORTER_DECISION";
+
+              const reportReasonLabel =
+                isReporterDecision
+                  ? getReviewReportReasonLabel(
+                      notification.reportReason,
+                    )
+                  : "";
 
               return (
                 <article
@@ -484,7 +535,10 @@ export default function AnnouncementPage() {
                   }
                   aria-label={
                     isUnread
-                      ? "通報結果通知を既読にする"
+                      ? notification.notificationKind ===
+                        "TARGET_ENFORCEMENT"
+                        ? "運営からの措置通知を既読にする"
+                        : "通報結果通知を既読にする"
                       : undefined
                   }
                   aria-busy={isMarkingRead}
@@ -515,7 +569,7 @@ export default function AnnouncementPage() {
                   <div className="announcement-page__card-head">
                     <div className="announcement-page__card-meta">
                       <span className="announcement-page__token">
-                        通報結果・{targetLabel}
+                        {cardLabel}
                       </span>
 
                       <time
@@ -543,22 +597,26 @@ export default function AnnouncementPage() {
                   </div>
 
                   <h2 className="announcement-page__card-title">
-                    通報内容の確認が完了しました
+                    {cardTitle}
                   </h2>
 
                   <div className="announcement-page__detail-content">
                     {body}
                   </div>
 
-                  <div className="announcement-page__attachments">
-                    通報理由: {reportReasonLabel}
-                  </div>
+                  {isReporterDecision ? (
+                    <>
+                      <div className="announcement-page__attachments">
+                        通報理由: {reportReasonLabel}
+                      </div>
 
-                  {notification.reportDetail ? (
-                    <div className="announcement-page__attachments">
-                      通報詳細:{" "}
-                      {notification.reportDetail}
-                    </div>
+                      {notification.reportDetail ? (
+                        <div className="announcement-page__attachments">
+                          通報詳細:{" "}
+                          {notification.reportDetail}
+                        </div>
+                      ) : null}
+                    </>
                   ) : null}
 
                   <div className="announcement-page__attachments">

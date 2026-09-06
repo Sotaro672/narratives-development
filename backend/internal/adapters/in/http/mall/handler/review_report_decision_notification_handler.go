@@ -139,24 +139,25 @@ func (h *ReviewReportDecisionNotificationHandler) ServeHTTP(
 // ============================================================
 
 type reviewReportDecisionNotificationResponse struct {
-	ID             string                    `json:"id"`
-	CaseID         string                    `json:"caseId"`
-	ReportID       string                    `json:"reportId"`
-	RecipientType  reviewreport.ActorType    `json:"recipientType"`
-	RecipientID    string                    `json:"recipientId"`
-	CompanyID      string                    `json:"companyId"`
-	TargetType     reviewreport.TargetType   `json:"targetType"`
-	TargetID       string                    `json:"targetId"`
-	TargetParentID string                    `json:"targetParentId"`
-	ReportReason   reviewreport.ReportReason `json:"reportReason"`
-	ReportDetail   string                    `json:"reportDetail"`
-	DecisionStatus reviewreport.CaseStatus   `json:"decisionStatus"`
-	DecisionReason string                    `json:"decisionReason"`
-	DecidedAt      time.Time                 `json:"decidedAt"`
-	CreatedAt      time.Time                 `json:"createdAt"`
-	UpdatedAt      time.Time                 `json:"updatedAt"`
-	ReadAt         *time.Time                `json:"readAt"`
-	IsRead         bool                      `json:"isRead"`
+	ID               string                        `json:"id"`
+	NotificationKind reviewreport.NotificationKind `json:"notificationKind"`
+	CaseID           string                        `json:"caseId"`
+	ReportID         string                        `json:"reportId"`
+	RecipientType    reviewreport.ActorType        `json:"recipientType"`
+	RecipientID      string                        `json:"recipientId"`
+	CompanyID        string                        `json:"companyId"`
+	TargetType       reviewreport.TargetType       `json:"targetType"`
+	TargetID         string                        `json:"targetId"`
+	TargetParentID   string                        `json:"targetParentId"`
+	ReportReason     reviewreport.ReportReason     `json:"reportReason"`
+	ReportDetail     string                        `json:"reportDetail"`
+	DecisionStatus   reviewreport.CaseStatus       `json:"decisionStatus"`
+	DecisionReason   string                        `json:"decisionReason"`
+	DecidedAt        time.Time                     `json:"decidedAt"`
+	CreatedAt        time.Time                     `json:"createdAt"`
+	UpdatedAt        time.Time                     `json:"updatedAt"`
+	ReadAt           *time.Time                    `json:"readAt"`
+	IsRead           bool                          `json:"isRead"`
 }
 
 // ============================================================
@@ -372,24 +373,25 @@ func toMallReviewReportDecisionNotificationResponse(
 	notification reviewreport.DecisionNotification,
 ) reviewReportDecisionNotificationResponse {
 	return reviewReportDecisionNotificationResponse{
-		ID:             string(notification.ID),
-		CaseID:         string(notification.CaseID),
-		ReportID:       string(notification.ReportID),
-		RecipientType:  notification.RecipientType,
-		RecipientID:    notification.RecipientID,
-		CompanyID:      notification.CompanyID,
-		TargetType:     notification.TargetType,
-		TargetID:       notification.TargetID,
-		TargetParentID: notification.TargetParentID,
-		ReportReason:   notification.ReportReason,
-		ReportDetail:   notification.ReportDetail,
-		DecisionStatus: notification.DecisionStatus,
-		DecisionReason: notification.DecisionReason,
-		DecidedAt:      notification.DecidedAt,
-		CreatedAt:      notification.CreatedAt,
-		UpdatedAt:      notification.UpdatedAt,
-		ReadAt:         notification.ReadAt,
-		IsRead:         notification.IsRead(),
+		ID:               string(notification.ID),
+		NotificationKind: notification.Kind(),
+		CaseID:           string(notification.CaseID),
+		ReportID:         string(notification.ReportID),
+		RecipientType:    notification.RecipientType,
+		RecipientID:      notification.RecipientID,
+		CompanyID:        notification.CompanyID,
+		TargetType:       notification.TargetType,
+		TargetID:         notification.TargetID,
+		TargetParentID:   notification.TargetParentID,
+		ReportReason:     notification.ReportReason,
+		ReportDetail:     notification.ReportDetail,
+		DecisionStatus:   notification.DecisionStatus,
+		DecisionReason:   notification.DecisionReason,
+		DecidedAt:        notification.DecidedAt,
+		CreatedAt:        notification.CreatedAt,
+		UpdatedAt:        notification.UpdatedAt,
+		ReadAt:           notification.ReadAt,
+		IsRead:           notification.IsRead(),
 	}
 }
 
@@ -461,6 +463,10 @@ func writeMallReviewReportDecisionNotificationError(
 		),
 		errors.Is(
 			err,
+			reviewreport.ErrInvalidDecisionNotificationKind,
+		),
+		errors.Is(
+			err,
 			reviewreport.ErrDecisionNotificationCaseMismatch,
 		),
 		errors.Is(
@@ -478,6 +484,10 @@ func writeMallReviewReportDecisionNotificationError(
 		errors.Is(
 			err,
 			reviewreport.ErrInvalidDecisionNotificationReadAt,
+		),
+		errors.Is(
+			err,
+			reviewreport.ErrTargetDecisionNotificationReportData,
 		):
 		writeJSON(
 			w,

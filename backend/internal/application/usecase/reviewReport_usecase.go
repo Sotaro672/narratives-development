@@ -1024,9 +1024,49 @@ func (u *ReviewReportUsecase) createDecisionNotifications(
 		}
 
 		if pageNumber >= result.TotalPages {
-			return nil
+			break
 		}
 	}
+
+	return u.createTargetEnforcementDecisionNotification(
+		ctx,
+		reportCase,
+		decidedAt,
+	)
+}
+
+func (u *ReviewReportUsecase) createTargetEnforcementDecisionNotification(
+	ctx context.Context,
+	reportCase reviewreport.ReportCase,
+	createdAt time.Time,
+) error {
+	if reportCase.Status != reviewreport.CaseStatusRemoved {
+		return nil
+	}
+
+	// 裁定対象者への通知は、実際に対象者へ措置が発生するケースだけ生成する。
+	// PRODUCT_BLUEPRINT_REVIEW はレビュー削除、AVATAR は再販サービス利用停止。
+	// TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
+	switch reportCase.TargetType {
+	case reviewreport.TargetTypeProductBlueprintReview,
+		reviewreport.TargetTypeAvatar:
+	default:
+		return nil
+	}
+
+	notification, err := reviewreport.NewTargetEnforcementNotification(
+		reportCase,
+		createdAt,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = u.decisionNotificationRepo.CreateIfAbsent(
+		ctx,
+		notification,
+	)
+	return err
 }
 
 func (u *ReviewReportUsecase) removeProductBlueprintReviewTarget(

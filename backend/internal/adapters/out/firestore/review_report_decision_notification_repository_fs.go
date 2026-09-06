@@ -428,23 +428,24 @@ func encodeReviewReportDecisionNotification(
 	entity reviewreport.DecisionNotification,
 ) map[string]any {
 	out := map[string]any{
-		"id":             string(entity.ID),
-		"caseId":         string(entity.CaseID),
-		"reportId":       string(entity.ReportID),
-		"recipientType":  string(entity.RecipientType),
-		"recipientId":    entity.RecipientID,
-		"companyId":      entity.CompanyID,
-		"targetType":     string(entity.TargetType),
-		"targetId":       entity.TargetID,
-		"targetParentId": entity.TargetParentID,
-		"reportReason":   string(entity.ReportReason),
-		"reportDetail":   entity.ReportDetail,
-		"decisionStatus": string(entity.DecisionStatus),
-		"decisionReason": entity.DecisionReason,
-		"decidedAt":      entity.DecidedAt.UTC(),
-		"createdAt":      entity.CreatedAt.UTC(),
-		"updatedAt":      entity.UpdatedAt.UTC(),
-		"isRead":         entity.IsRead(),
+		"id":               string(entity.ID),
+		"notificationKind": string(entity.Kind()),
+		"caseId":           string(entity.CaseID),
+		"reportId":         string(entity.ReportID),
+		"recipientType":    string(entity.RecipientType),
+		"recipientId":      entity.RecipientID,
+		"companyId":        entity.CompanyID,
+		"targetType":       string(entity.TargetType),
+		"targetId":         entity.TargetID,
+		"targetParentId":   entity.TargetParentID,
+		"reportReason":     string(entity.ReportReason),
+		"reportDetail":     entity.ReportDetail,
+		"decisionStatus":   string(entity.DecisionStatus),
+		"decisionReason":   entity.DecisionReason,
+		"decidedAt":        entity.DecidedAt.UTC(),
+		"createdAt":        entity.CreatedAt.UTC(),
+		"updatedAt":        entity.UpdatedAt.UTC(),
+		"isRead":           entity.IsRead(),
 	}
 
 	if entity.ReadAt != nil {
@@ -458,6 +459,23 @@ func decodeReviewReportDecisionNotification(
 	id string,
 	data map[string]any,
 ) (reviewreport.DecisionNotification, error) {
+	// notificationKind導入前の既存通知にはフィールドが存在しないため、
+	// 欠損時は従来どおりREPORTER_DECISIONとして復元する。
+	notificationKind := reviewreport.NotificationKindReporterDecision
+	notificationKindValue, err := firestoreOptionalString(
+		data,
+		"notificationKind",
+	)
+	if err != nil {
+		return reviewreport.DecisionNotification{}, err
+	}
+	if notificationKindValue != nil {
+		notificationKind = reviewreport.NotificationKind(*notificationKindValue)
+		if err := notificationKind.Validate(); err != nil {
+			return reviewreport.DecisionNotification{}, err
+		}
+	}
+
 	caseIDValue, err := firestoreRequiredString(
 		data,
 		"caseId",
@@ -466,7 +484,9 @@ func decodeReviewReportDecisionNotification(
 		return reviewreport.DecisionNotification{}, err
 	}
 
-	reportIDValue, err := firestoreRequiredString(
+	// REPORTER_DECISIONではValidateで必須、
+	// TARGET_ENFORCEMENTでは空文字を許可する。
+	reportIDValue, err := firestoreString(
 		data,
 		"reportId",
 	)
@@ -522,7 +542,9 @@ func decodeReviewReportDecisionNotification(
 		return reviewreport.DecisionNotification{}, err
 	}
 
-	reportReasonValue, err := firestoreRequiredString(
+	// REPORTER_DECISIONではValidateで有効なReportReasonが必須、
+	// TARGET_ENFORCEMENTでは空文字を許可する。
+	reportReasonValue, err := firestoreString(
 		data,
 		"reportReason",
 	)
@@ -587,7 +609,8 @@ func decodeReviewReportDecisionNotification(
 	}
 
 	entity := reviewreport.DecisionNotification{
-		ID: reviewreport.DecisionNotificationID(id),
+		ID:               reviewreport.DecisionNotificationID(id),
+		NotificationKind: notificationKind,
 
 		CaseID:   reviewreport.CaseID(caseIDValue),
 		ReportID: reviewreport.ReportID(reportIDValue),

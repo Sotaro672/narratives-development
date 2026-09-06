@@ -1,9 +1,6 @@
 // frontend/mall/src/features/notification/infrastructure/reviewReportDecisionNotificationApi.ts
 
-import {
-  HttpError,
-  requestJson,
-} from "../../../lib/http";
+import { HttpError, requestJson } from "../../../lib/http";
 import { getOptionalAuthHeaders } from "../../../lib/authHeaders";
 
 import type {
@@ -19,23 +16,24 @@ export type ReviewReportDecisionNotificationRecipientType =
   | "AVATAR"
   | "BRAND";
 
+export type ReviewReportDecisionNotificationKind =
+  | "REPORTER_DECISION"
+  | "TARGET_ENFORCEMENT";
+
 export type ReviewReportDecisionStatus = Exclude<
   ReviewReportCaseStatus,
   "PENDING"
 >;
 
-export type ReviewReportDecisionNotification = {
+type ReviewReportDecisionNotificationBase = {
   id: string;
   caseId: string;
-  reportId: string;
   recipientType: ReviewReportDecisionNotificationRecipientType;
   recipientId: string;
   companyId: string;
   targetType: ReviewReportTargetType;
   targetId: string;
   targetParentId: string;
-  reportReason: ReviewReportReason;
-  reportDetail: string;
   decisionStatus: ReviewReportDecisionStatus;
   decisionReason: string;
   decidedAt: string;
@@ -44,6 +42,26 @@ export type ReviewReportDecisionNotification = {
   readAt: string | null;
   isRead: boolean;
 };
+
+export type ReviewReportReporterDecisionNotification =
+  ReviewReportDecisionNotificationBase & {
+    notificationKind: "REPORTER_DECISION";
+    reportId: string;
+    reportReason: ReviewReportReason;
+    reportDetail: string;
+  };
+
+export type ReviewReportTargetEnforcementNotification =
+  ReviewReportDecisionNotificationBase & {
+    notificationKind: "TARGET_ENFORCEMENT";
+    reportId: "";
+    reportReason: "";
+    reportDetail: "";
+  };
+
+export type ReviewReportDecisionNotification =
+  | ReviewReportReporterDecisionNotification
+  | ReviewReportTargetEnforcementNotification;
 
 export type ReviewReportDecisionNotificationPage = {
   items: ReviewReportDecisionNotification[];
@@ -122,48 +140,30 @@ export async function fetchMeReviewReportDecisionNotifications(
     );
 
     return {
-      items: Array.isArray(json.items)
-        ? json.items
-        : [],
+      items: Array.isArray(json.items) ? json.items : [],
       totalCount: Math.max(
         0,
-        normalizeFiniteNumber(
-          json.totalCount,
-          0,
-        ),
+        normalizeFiniteNumber(json.totalCount, 0),
       ),
       totalPages: Math.max(
         0,
-        normalizeFiniteNumber(
-          json.totalPages,
-          0,
-        ),
+        normalizeFiniteNumber(json.totalPages, 0),
       ),
       page: Math.max(
         1,
-        normalizeFiniteNumber(
-          json.page,
-          page,
-        ),
+        normalizeFiniteNumber(json.page, page),
       ),
       perPage: Math.max(
         1,
-        normalizeFiniteNumber(
-          json.perPage,
-          perPage,
-        ),
+        normalizeFiniteNumber(json.perPage, perPage),
       ),
     };
   } catch (error) {
     if (
       error instanceof HttpError &&
-      (error.status === 401 ||
-        error.status === 403)
+      (error.status === 401 || error.status === 403)
     ) {
-      return createEmptyPage(
-        page,
-        perPage,
-      );
+      return createEmptyPage(page, perPage);
     }
 
     throw error;
@@ -174,18 +174,13 @@ export async function markMeReviewReportDecisionNotificationRead(
   notificationId: string,
 ): Promise<ReviewReportDecisionNotification> {
   if (!notificationId) {
-    throw new Error(
-      "notificationId is required",
-    );
+    throw new Error("notificationId is required");
   }
 
-  const headers =
-    await getOptionalAuthHeaders();
+  const headers = await getOptionalAuthHeaders();
 
   if (!headers) {
-    throw new Error(
-      "authentication is required",
-    );
+    throw new Error("authentication is required");
   }
 
   return requestJson<ReviewReportDecisionNotification>(
@@ -209,8 +204,6 @@ export async function markMeReviewReportDecisionNotificationRead(
 }
 
 export const reviewReportDecisionNotificationApi = {
-  list:
-    fetchMeReviewReportDecisionNotifications,
-  markRead:
-    markMeReviewReportDecisionNotificationRead,
+  list: fetchMeReviewReportDecisionNotifications,
+  markRead: markMeReviewReportDecisionNotificationRead,
 };
