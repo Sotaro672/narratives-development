@@ -38,6 +38,8 @@ type TableProps<T> = {
   getRowKey: (row: T) => string;
   emptyMessage?: ReactNode;
   filteredEmptyMessage?: ReactNode;
+  filterValues?: Record<string, string>;
+  onFilterChange?: (key: string, value: string) => void;
   onRowClick?: (row: T) => void;
 };
 
@@ -52,11 +54,15 @@ export default function Table<T>({
   getRowKey,
   emptyMessage = "データはありません。",
   filteredEmptyMessage = "条件に一致するデータはありません。",
+  filterValues,
+  onFilterChange,
   onRowClick,
 }: TableProps<T>) {
   const [sortState, setSortState] = useState<SortState>(null);
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [internalFilters, setInternalFilters] = useState<Record<string, string>>({});
   const [openFilterKey, setOpenFilterKey] = useState<string | null>(null);
+
+  const filters = filterValues ?? internalFilters;
 
   const visibleRows = useMemo(() => {
     const filteredRows = rows.filter((row) =>
@@ -122,17 +128,21 @@ export default function Table<T>({
   };
 
   const handleFilterChange = (key: string, value: string) => {
-    setFilters((current) => {
-      const next = { ...current };
+    if (filterValues === undefined) {
+      setInternalFilters((current) => {
+        const next = { ...current };
 
-      if (value) {
-        next[key] = value;
-      } else {
-        delete next[key];
-      }
+        if (value) {
+          next[key] = value;
+        } else {
+          delete next[key];
+        }
 
-      return next;
-    });
+        return next;
+      });
+    }
+
+    onFilterChange?.(key, value);
   };
 
   const handleRowClick = (

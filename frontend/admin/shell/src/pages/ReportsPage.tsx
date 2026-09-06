@@ -104,14 +104,37 @@ export default function ReportsPage() {
         header: "対応状況",
         render: (reportCase) =>
           getStatusLabel(reportCase.status, reportCase.targetType),
-        sortValue: (reportCase) => reportCase.status,
+        filter: {
+          getValue: (reportCase) => reportCase.status,
+          options: [
+            { value: "PENDING", label: "未対応" },
+            { value: "KEPT", label: "維持・変化なし" },
+            { value: "REMOVED", label: "削除・再販利用停止" },
+          ],
+        },
         nowrap: true,
       },
       {
         key: "targetType",
         header: "対象",
         render: (reportCase) => getTargetTypeLabel(reportCase.targetType),
-        sortValue: (reportCase) => reportCase.targetType,
+        filter: {
+          getValue: (reportCase) => reportCase.targetType,
+          options: [
+            {
+              value: "PRODUCT_BLUEPRINT_REVIEW",
+              label: "商品レビュー",
+            },
+            {
+              value: "TOKEN_BLUEPRINT_COMMENT",
+              label: "トークンコメント",
+            },
+            {
+              value: "AVATAR",
+              label: "アバター",
+            },
+          ],
+        },
         nowrap: true,
       },
       {
@@ -152,70 +175,59 @@ export default function ReportsPage() {
     });
   };
 
+  const handleFilterChange = (key: string, value: string) => {
+    switch (key) {
+      case "status":
+        setStatus(
+          value
+            ? (value as ReviewReportCaseStatus)
+            : undefined,
+        );
+        break;
+      case "targetType":
+        setTargetType(
+          value
+            ? (value as ReviewReportTargetType)
+            : undefined,
+        );
+        break;
+    }
+  };
+
+  const hasActiveFilter =
+    status !== undefined ||
+    targetType !== undefined;
+
   return (
     <Page>
       <PageHeader
         title="通報"
         actions={
-          <div className="reports-page__header-actions">
-            <select
-              className="reports-page__select"
-              value={status ?? ""}
-              aria-label="対応状況で絞り込む"
-              disabled={loading}
-              onChange={(event) =>
-                setStatus(
-                  event.target.value
-                    ? (event.target.value as ReviewReportCaseStatus)
-                    : undefined,
-                )
-              }
-            >
-              <option value="">すべての対応状況</option>
-              <option value="PENDING">未対応</option>
-              <option value="KEPT">維持・変化なし</option>
-              <option value="REMOVED">削除・再販利用停止</option>
-            </select>
-
-            <select
-              className="reports-page__select"
-              value={targetType ?? ""}
-              aria-label="通報対象で絞り込む"
-              disabled={loading}
-              onChange={(event) =>
-                setTargetType(
-                  event.target.value
-                    ? (event.target.value as ReviewReportTargetType)
-                    : undefined,
-                )
-              }
-            >
-              <option value="">すべての対象</option>
-              <option value="PRODUCT_BLUEPRINT_REVIEW">商品レビュー</option>
-              <option value="TOKEN_BLUEPRINT_COMMENT">トークンコメント</option>
-              <option value="AVATAR">アバター</option>
-            </select>
-
-            <RefreshButton
-              onClick={reload}
-              loading={loading}
-              title="リフレッシュ"
-              ariaLabel="通報一覧をリフレッシュ"
-            />
-          </div>
+          <RefreshButton
+            onClick={reload}
+            loading={loading}
+            title="リフレッシュ"
+            ariaLabel="通報一覧をリフレッシュ"
+          />
         }
       />
 
-      {loading && items.length === 0 ? <p>通報を読み込んでいます。</p> : null}
+      {loading && items.length === 0 ? (
+        <p>通報を読み込んでいます。</p>
+      ) : null}
 
       {!loading && error ? (
-        <p role="alert">通報の取得に失敗しました。{error}</p>
+        <p role="alert">
+          通報の取得に失敗しました。{error}
+        </p>
       ) : null}
 
       {!error && (items.length > 0 || !loading) ? (
         <>
           <div className="reports-page__summary">
-            <p className="reports-page__count">{totalCount}件</p>
+            <p className="reports-page__count">
+              {totalCount}件
+            </p>
 
             {loading ? (
               <span
@@ -231,8 +243,17 @@ export default function ReportsPage() {
             columns={columns}
             rows={items}
             getRowKey={(reportCase) => reportCase.id}
-            emptyMessage="通報はありません。"
+            emptyMessage={
+              hasActiveFilter
+                ? "条件に一致する通報はありません。"
+                : "通報はありません。"
+            }
             filteredEmptyMessage="条件に一致する通報はありません。"
+            filterValues={{
+              status: status ?? "",
+              targetType: targetType ?? "",
+            }}
+            onFilterChange={handleFilterChange}
             onRowClick={handleRowClick}
           />
 
