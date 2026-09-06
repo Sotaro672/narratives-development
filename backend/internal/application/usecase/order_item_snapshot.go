@@ -309,6 +309,16 @@ func (u *OrderUsecase) resolveResaleOrderItem(
 		return orderdom.OrderItemSnapshot{}, orderdom.ErrInvalidItemSnapshot
 	}
 
+	// 出品者Avatarが運営裁定による再販利用停止中の場合、
+	// listingが競合等で残っていても新たなResale注文を成立させない。
+	if err := checkAvatarResaleAccess(
+		ctx,
+		u.avatarResaleAccessChecker,
+		resale.AvatarID,
+	); err != nil {
+		return orderdom.OrderItemSnapshot{}, err
+	}
+
 	productBlueprintCategoryPath, consumptionTaxRate, err := u.resolveProductBlueprintTaxSnapshot(
 		ctx,
 		resale.ProductBlueprintID,

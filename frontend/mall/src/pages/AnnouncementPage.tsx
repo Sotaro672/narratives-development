@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/AnnouncementPage.tsx
+// frontend/mall/src/pages/AnnouncementPage.tsx
 
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -59,6 +59,8 @@ function getReviewReportTargetLabel(
       return "商品レビュー";
     case "TOKEN_BLUEPRINT_COMMENT":
       return "トークンコメント";
+    case "AVATAR":
+      return "アバター";
     default:
       return "投稿内容";
   }
@@ -67,6 +69,17 @@ function getReviewReportTargetLabel(
 function getDecisionBody(
   notification: ReviewReportDecisionNotification,
 ): string {
+  if (notification.targetType === "AVATAR") {
+    switch (notification.decisionStatus) {
+      case "REMOVED":
+        return "通報いただいた内容を確認し、対象アバターの再販サービス利用を停止しました。";
+      case "KEPT":
+        return "通報いただいた内容を確認しました。審査の結果、対象アバターへの変更は行いませんでした。";
+      default:
+        return "通報いただいた内容の確認が完了しました。";
+    }
+  }
+
   switch (notification.decisionStatus) {
     case "REMOVED":
       return "通報いただいた内容を確認し、対象コンテンツを非表示にしました。";
@@ -80,6 +93,17 @@ function getDecisionBody(
 function getDecisionStatusLabel(
   notification: ReviewReportDecisionNotification,
 ): string {
+  if (notification.targetType === "AVATAR") {
+    switch (notification.decisionStatus) {
+      case "REMOVED":
+        return "再販利用停止";
+      case "KEPT":
+        return "変化なし";
+      default:
+        return notification.decisionStatus;
+    }
+  }
+
   switch (notification.decisionStatus) {
     case "REMOVED":
       return "非表示";

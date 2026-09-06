@@ -873,7 +873,20 @@ func (u *ReviewReportUsecase) removeReportCase(
 		return reviewreport.ReportCase{}, err
 	}
 
+	// REMOVED 済みの AVATAR 裁定は、再販停止処理だけを再実行できるようにする。
+	// SuspendAvatarResaleByAdmin は冪等なので、前回の裁定直後に競合して残った
+	// listing や、前回の後処理失敗を安全に修復できる。
 	if reportCase.IsRemoved() {
+		if reportCase.TargetType == reviewreport.TargetTypeAvatar {
+			if err := u.suspendAvatarResaleTarget(
+				ctx,
+				reportCase,
+				input.Reason,
+				input.DecidedBy,
+			); err != nil {
+				return reviewreport.ReportCase{}, err
+			}
+		}
 		return reportCase, nil
 	}
 
@@ -922,11 +935,31 @@ func (u *ReviewReportUsecase) removeReportCase(
 		return reviewreport.ReportCase{}, err
 	}
 
-	return u.reportRepo.UpdateCase(
+	updatedCase, err := u.reportRepo.UpdateCase(
 		ctx,
 		reportCase.ID,
 		reviewreport.NewCasePatchFromEntity(reportCase),
 	)
+	if err != nil {
+		return reviewreport.ReportCase{}, err
+	}
+
+	// AVATAR は REMOVED を永続化した後でもう一度スイープする。
+	// 1 回目のスイープと REMOVED 永続化の間に新規 listing が作成される
+	// 競合を閉じるための後処理。失敗した場合はエラーを返し、次回の同じ
+	// REMOVE 裁定で上の REMOVED 済み分岐から再試行できる。
+	if updatedCase.TargetType == reviewreport.TargetTypeAvatar {
+		if err := u.suspendAvatarResaleTarget(
+			ctx,
+			updatedCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reviewreport.ReportCase{}, err
+		}
+	}
+
+	return updatedCase, nil
 }
 
 func (u *ReviewReportUsecase) createDecisionNotifications(
