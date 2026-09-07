@@ -1,15 +1,15 @@
-// frontend/console/shell/src/features/notification/presentation/model/reviewReportDecisionNotification.ts
+// frontend/console/shell/src/features/notification/presentation/model/reportDecisionNotification.ts
 
 import type {
-  ReviewReportDecisionNotification,
-  ReviewReportDecisionStatus,
-} from "../../infrastructure/reviewReportDecisionNotificationApi";
+  ReportDecisionNotification,
+  ReportDecisionStatus,
+} from "../../infrastructure/reportDecisionNotificationApi";
 import {
-  getReviewReportReasonLabel,
-  type ReviewReportTargetType,
+  getReportReasonLabel,
+  type ReportTargetType,
 } from "../../../../shared/types/report";
 
-export type ReviewReportDecisionNotificationViewModel = {
+export type ReportDecisionNotificationViewModel = {
   id: string;
   category: "通報結果";
   title: string;
@@ -17,17 +17,17 @@ export type ReviewReportDecisionNotificationViewModel = {
   targetLabel: string;
   reportReasonLabel: string;
   reportDetail: string;
-  decisionStatus: ReviewReportDecisionStatus;
+  decisionStatus: ReportDecisionStatus;
   decisionStatusLabel: string;
   decisionReason: string;
   occurredAt: string;
   readAt: string | null;
   isRead: boolean;
-  notification: ReviewReportDecisionNotification;
+  notification: ReportDecisionNotification;
 };
 
-export function getReviewReportDecisionStatusLabel(
-  status: ReviewReportDecisionStatus,
+export function getReportDecisionStatusLabel(
+  status: ReportDecisionStatus,
 ): string {
   switch (status) {
     case "REMOVED":
@@ -39,8 +39,8 @@ export function getReviewReportDecisionStatusLabel(
   }
 }
 
-export function getReviewReportDecisionNotificationTargetLabel(
-  targetType: ReviewReportTargetType,
+export function getReportDecisionNotificationTargetLabel(
+  targetType: ReportTargetType,
 ): string {
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
@@ -52,14 +52,14 @@ export function getReviewReportDecisionNotificationTargetLabel(
   }
 }
 
-export function getReviewReportDecisionNotificationTitle(
-  _notification: ReviewReportDecisionNotification,
+export function getReportDecisionNotificationTitle(
+  _notification: ReportDecisionNotification,
 ): string {
   return "通報内容の確認が完了しました";
 }
 
-export function getReviewReportDecisionNotificationBody(
-  notification: ReviewReportDecisionNotification,
+export function getReportDecisionNotificationBody(
+  notification: ReportDecisionNotification,
 ): string {
   switch (notification.decisionStatus) {
     case "REMOVED":
@@ -71,63 +71,36 @@ export function getReviewReportDecisionNotificationBody(
   }
 }
 
-export function toReviewReportDecisionNotificationViewModel(
-  notification: ReviewReportDecisionNotification,
-): ReviewReportDecisionNotificationViewModel {
+export function toReportDecisionNotificationViewModel(
+  notification: ReportDecisionNotification,
+): ReportDecisionNotificationViewModel {
   return {
     id: notification.id,
     category: "通報結果",
-    title:
-      getReviewReportDecisionNotificationTitle(
-        notification,
-      ),
-    body:
-      getReviewReportDecisionNotificationBody(
-        notification,
-      ),
-    targetLabel:
-      getReviewReportDecisionNotificationTargetLabel(
-        notification.targetType,
-      ),
-    reportReasonLabel:
-      getReviewReportReasonLabel(
-        notification.reportReason,
-      ),
+    title: getReportDecisionNotificationTitle(notification),
+    body: getReportDecisionNotificationBody(notification),
+    targetLabel: getReportDecisionNotificationTargetLabel(notification.targetType),
+    reportReasonLabel: getReportReasonLabel(notification.reportReason),
     reportDetail: notification.reportDetail,
     decisionStatus: notification.decisionStatus,
-    decisionStatusLabel:
-      getReviewReportDecisionStatusLabel(
-        notification.decisionStatus,
-      ),
+    decisionStatusLabel: getReportDecisionStatusLabel(notification.decisionStatus),
     decisionReason: notification.decisionReason,
-    occurredAt:
-      notification.decidedAt ||
-      notification.createdAt,
+    occurredAt: notification.decidedAt || notification.createdAt,
     readAt: notification.readAt,
     isRead: notification.isRead,
     notification,
   };
 }
 
-export function toReviewReportDecisionNotificationViewModels(
-  notifications: readonly ReviewReportDecisionNotification[],
-): ReviewReportDecisionNotificationViewModel[] {
+export function toReportDecisionNotificationViewModels(
+  notifications: readonly ReportDecisionNotification[],
+): ReportDecisionNotificationViewModel[] {
   return notifications
-    .map(
-      toReviewReportDecisionNotificationViewModel,
-    )
-    .sort(
-      (a, b) =>
-        toTimestamp(b.occurredAt) -
-        toTimestamp(a.occurredAt),
-    );
+    .map(toReportDecisionNotificationViewModel)
+    .sort((a, b) => toTimestamp(b.occurredAt) - toTimestamp(a.occurredAt));
 }
 
-function toTimestamp(
-  value: string,
-): number {
+function toTimestamp(value: string): number {
   const timestamp = Date.parse(value);
-  return Number.isNaN(timestamp)
-    ? 0
-    : timestamp;
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 }

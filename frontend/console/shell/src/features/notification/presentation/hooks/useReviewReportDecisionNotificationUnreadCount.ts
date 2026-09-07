@@ -1,35 +1,25 @@
-// frontend/console/shell/src/features/notification/presentation/hooks/useReviewReportDecisionNotificationUnreadCount.ts
+// frontend/console/shell/src/features/notification/presentation/hooks/useReportDecisionNotificationUnreadCount.ts
 
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import {
-  listReviewReportDecisionNotificationsApi,
-} from "../../infrastructure/reviewReportDecisionNotificationApi";
-import {
-  subscribeReviewReportDecisionNotificationChanged,
-} from "../notificationEvent";
+import { listReportDecisionNotificationsApi } from "../../infrastructure/reportDecisionNotificationApi";
+import { subscribeReportDecisionNotificationChanged } from "../notificationEvent";
 
 const UNREAD_COUNT_PAGE = 1;
 const UNREAD_COUNT_PER_PAGE = 1;
 
-export type UseReviewReportDecisionNotificationUnreadCountParams = {
+export type UseReportDecisionNotificationUnreadCountParams = {
   enabled?: boolean;
 };
 
-export type UseReviewReportDecisionNotificationUnreadCountResult = {
+export type UseReportDecisionNotificationUnreadCountResult = {
   unreadCount: number;
   loading: boolean;
   error: string | null;
   reload: () => Promise<void>;
 };
 
-function resolveErrorMessage(
-  error: unknown,
-): string {
+function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -37,9 +27,9 @@ function resolveErrorMessage(
   return "未読通知件数の取得に失敗しました。";
 }
 
-export function useReviewReportDecisionNotificationUnreadCount(
-  params: UseReviewReportDecisionNotificationUnreadCountParams = {},
-): UseReviewReportDecisionNotificationUnreadCountResult {
+export function useReportDecisionNotificationUnreadCount(
+  params: UseReportDecisionNotificationUnreadCountParams = {},
+): UseReportDecisionNotificationUnreadCountResult {
   const enabled = params.enabled ?? true;
 
   const [unreadCount, setUnreadCount] = useState(0);
@@ -57,24 +47,16 @@ export function useReviewReportDecisionNotificationUnreadCount(
     setError(null);
 
     try {
-      const result =
-        await listReviewReportDecisionNotificationsApi({
-          isRead: false,
-          page: UNREAD_COUNT_PAGE,
-          perPage: UNREAD_COUNT_PER_PAGE,
-        });
+      const result = await listReportDecisionNotificationsApi({
+        isRead: false,
+        page: UNREAD_COUNT_PAGE,
+        perPage: UNREAD_COUNT_PER_PAGE,
+      });
 
-      setUnreadCount(
-        Math.max(
-          0,
-          result.totalCount,
-        ),
-      );
+      setUnreadCount(Math.max(0, result.totalCount));
     } catch (loadError) {
       setUnreadCount(0);
-      setError(
-        resolveErrorMessage(loadError),
-      );
+      setError(resolveErrorMessage(loadError));
     } finally {
       setLoading(false);
     }
@@ -83,7 +65,7 @@ export function useReviewReportDecisionNotificationUnreadCount(
   useEffect(() => {
     void load();
 
-    return subscribeReviewReportDecisionNotificationChanged(() => {
+    return subscribeReportDecisionNotificationChanged(() => {
       void load();
     });
   }, [load]);
@@ -96,4 +78,4 @@ export function useReviewReportDecisionNotificationUnreadCount(
   };
 }
 
-export default useReviewReportDecisionNotificationUnreadCount;
+export default useReportDecisionNotificationUnreadCount;

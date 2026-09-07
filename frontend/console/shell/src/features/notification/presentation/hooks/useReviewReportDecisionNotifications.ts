@@ -1,33 +1,27 @@
-// frontend/console/shell/src/features/notification/presentation/hooks/useReviewReportDecisionNotifications.ts
+// frontend/console/shell/src/features/notification/presentation/hooks/useReportDecisionNotifications.ts
+
+import { useCallback, useEffect, useState } from "react";
 
 import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-
-import {
-  listReviewReportDecisionNotificationsApi,
-  markReviewReportDecisionNotificationReadApi,
-  type ReviewReportDecisionNotification,
-  type ReviewReportDecisionNotificationPage,
-} from "../../infrastructure/reviewReportDecisionNotificationApi";
-import {
-  emitReviewReportDecisionNotificationChanged,
-} from "../notificationEvent";
+  listReportDecisionNotificationsApi,
+  markReportDecisionNotificationReadApi,
+  type ReportDecisionNotification,
+  type ReportDecisionNotificationPage,
+} from "../../infrastructure/reportDecisionNotificationApi";
+import { emitReportDecisionNotificationChanged } from "../notificationEvent";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;
 
-export type UseReviewReportDecisionNotificationsParams = {
+export type UseReportDecisionNotificationsParams = {
   page?: number;
   perPage?: number;
   isRead?: boolean;
   enabled?: boolean;
 };
 
-export type UseReviewReportDecisionNotificationsResult = {
-  notifications: ReviewReportDecisionNotification[];
+export type UseReportDecisionNotificationsResult = {
+  notifications: ReportDecisionNotification[];
   totalCount: number;
   totalPages: number;
   page: number;
@@ -36,15 +30,13 @@ export type UseReviewReportDecisionNotificationsResult = {
   error: string | null;
   markingReadId: string | null;
   reload: () => Promise<void>;
-  markRead: (
-    notificationId: string,
-  ) => Promise<ReviewReportDecisionNotification | null>;
+  markRead: (notificationId: string) => Promise<ReportDecisionNotification | null>;
 };
 
 function createEmptyResult(
   page: number,
   perPage: number,
-): ReviewReportDecisionNotificationPage {
+): ReportDecisionNotificationPage {
   return {
     items: [],
     totalCount: 0,
@@ -54,9 +46,7 @@ function createEmptyResult(
   };
 }
 
-function resolveErrorMessage(
-  error: unknown,
-): string {
+function resolveErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -64,24 +54,20 @@ function resolveErrorMessage(
   return "裁定結果通知の取得に失敗しました。";
 }
 
-export function useReviewReportDecisionNotifications(
-  params: UseReviewReportDecisionNotificationsParams = {},
-): UseReviewReportDecisionNotificationsResult {
+export function useReportDecisionNotifications(
+  params: UseReportDecisionNotificationsParams = {},
+): UseReportDecisionNotificationsResult {
   const page = params.page ?? DEFAULT_PAGE;
   const perPage = params.perPage ?? DEFAULT_PER_PAGE;
   const enabled = params.enabled ?? true;
   const isRead = params.isRead;
 
-  const [result, setResult] =
-    useState<ReviewReportDecisionNotificationPage>(
-      () => createEmptyResult(page, perPage),
-    );
-
+  const [result, setResult] = useState<ReportDecisionNotificationPage>(
+    () => createEmptyResult(page, perPage),
+  );
   const [loading, setLoading] = useState(false);
-  const [error, setError] =
-    useState<string | null>(null);
-  const [markingReadId, setMarkingReadId] =
-    useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [markingReadId, setMarkingReadId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!enabled) {
@@ -94,14 +80,11 @@ export function useReviewReportDecisionNotifications(
     setError(null);
 
     try {
-      const response =
-        await listReviewReportDecisionNotificationsApi({
-          page,
-          perPage,
-          ...(isRead !== undefined
-            ? { isRead }
-            : {}),
-        });
+      const response = await listReportDecisionNotificationsApi({
+        page,
+        perPage,
+        ...(isRead !== undefined ? { isRead } : {}),
+      });
 
       setResult(response);
     } catch (loadError) {
@@ -110,12 +93,7 @@ export function useReviewReportDecisionNotifications(
     } finally {
       setLoading(false);
     }
-  }, [
-    enabled,
-    isRead,
-    page,
-    perPage,
-  ]);
+  }, [enabled, isRead, page, perPage]);
 
   useEffect(() => {
     void load();
@@ -124,7 +102,7 @@ export function useReviewReportDecisionNotifications(
   const markRead = useCallback(
     async (
       notificationId: string,
-    ): Promise<ReviewReportDecisionNotification | null> => {
+    ): Promise<ReportDecisionNotification | null> => {
       if (!notificationId || markingReadId !== null) {
         return null;
       }
@@ -133,22 +111,19 @@ export function useReviewReportDecisionNotifications(
       setError(null);
 
       try {
-        const updated =
-          await markReviewReportDecisionNotificationReadApi(
-            notificationId,
-          );
+        const updated = await markReportDecisionNotificationReadApi(
+          notificationId,
+        );
 
         setResult((current) => ({
           ...current,
           items: current.items.map((notification) =>
-            notification.id === updated.id
-              ? updated
-              : notification,
+            notification.id === updated.id ? updated : notification,
           ),
         }));
 
         await load();
-        emitReviewReportDecisionNotificationChanged();
+        emitReportDecisionNotificationChanged();
 
         return updated;
       } catch (markReadError) {
@@ -158,10 +133,7 @@ export function useReviewReportDecisionNotifications(
         setMarkingReadId(null);
       }
     },
-    [
-      load,
-      markingReadId,
-    ],
+    [load, markingReadId],
   );
 
   return {
@@ -178,4 +150,4 @@ export function useReviewReportDecisionNotifications(
   };
 }
 
-export default useReviewReportDecisionNotifications;
+export default useReportDecisionNotifications;

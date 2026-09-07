@@ -1,39 +1,31 @@
-// frontend/console/shell/src/features/notification/infrastructure/reviewReportDecisionNotificationApi.ts
+// frontend/console/shell/src/features/notification/infrastructure/reportDecisionNotificationApi.ts
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
+import type { PageParams, PageResult } from "../../../shared/types/common/common";
 import type {
-  PageParams,
-  PageResult,
-} from "../../../shared/types/common/common";
-import type {
-  ReviewReportCaseStatus,
-  ReviewReportReason,
-  ReviewReportTargetType,
+  ReportCaseStatus,
+  ReportReason,
+  ReportTargetType,
 } from "../../../shared/types/report";
 
-export type ReviewReportDecisionNotificationRecipientType =
-  | "AVATAR"
-  | "BRAND";
+export type ReportDecisionNotificationRecipientType = "AVATAR" | "BRAND";
 
-export type ReviewReportDecisionStatus = Exclude<
-  ReviewReportCaseStatus,
-  "PENDING"
->;
+export type ReportDecisionStatus = Exclude<ReportCaseStatus, "PENDING">;
 
-export type ReviewReportDecisionNotification = {
+export type ReportDecisionNotification = {
   id: string;
   caseId: string;
   reportId: string;
-  recipientType: ReviewReportDecisionNotificationRecipientType;
+  recipientType: ReportDecisionNotificationRecipientType;
   recipientId: string;
   companyId: string;
-  targetType: ReviewReportTargetType;
+  targetType: ReportTargetType;
   targetId: string;
   targetParentId: string;
-  reportReason: ReviewReportReason;
+  reportReason: ReportReason;
   reportDetail: string;
-  decisionStatus: ReviewReportDecisionStatus;
+  decisionStatus: ReportDecisionStatus;
   decisionReason: string;
   decidedAt: string;
   createdAt: string;
@@ -42,13 +34,11 @@ export type ReviewReportDecisionNotification = {
   isRead: boolean;
 };
 
-export type ListReviewReportDecisionNotificationsParams =
-  PageParams & {
-    isRead?: boolean;
-  };
+export type ListReportDecisionNotificationsParams = PageParams & {
+  isRead?: boolean;
+};
 
-export type ReviewReportDecisionNotificationPage =
-  PageResult<ReviewReportDecisionNotification>;
+export type ReportDecisionNotificationPage = PageResult<ReportDecisionNotification>;
 
 type ErrorResponse = {
   error?: string;
@@ -126,7 +116,7 @@ async function requestJson<T>(
 }
 
 function buildListQuery(
-  params?: ListReviewReportDecisionNotificationsParams,
+  params?: ListReportDecisionNotificationsParams,
 ): string {
   const searchParams = new URLSearchParams();
 
@@ -147,54 +137,46 @@ function buildListQuery(
 }
 
 /**
- * GET /review-report-decision-notifications
+ * GET /report-decision-notifications
  *
  * ログイン中メンバーのCompanyに属するBRAND宛て裁定結果通知を取得する。
  * companyIdはFrontendから送らず、Backendの認証コンテキストから解決する。
  */
-export async function listReviewReportDecisionNotificationsApi(
-  params?: ListReviewReportDecisionNotificationsParams,
-): Promise<ReviewReportDecisionNotificationPage> {
+export async function listReportDecisionNotificationsApi(
+  params?: ListReportDecisionNotificationsParams,
+): Promise<ReportDecisionNotificationPage> {
   const query = buildListQuery(params);
-  const url = `${API_BASE}/review-report-decision-notifications${query}`;
+  const url = `${API_BASE}/report-decision-notifications${query}`;
 
-  return requestJson<ReviewReportDecisionNotificationPage>(
-    url,
-    {
-      method: "GET",
-    },
-  );
+  return requestJson<ReportDecisionNotificationPage>(url, {
+    method: "GET",
+  });
 }
 
 /**
- * POST /review-report-decision-notifications/{notificationId}/read
+ * POST /report-decision-notifications/{notificationId}/read
  *
  * 指定した裁定結果通知を既読にする。
  * Backend側でCompany所有権を再検証する。
  */
-export async function markReviewReportDecisionNotificationReadApi(
+export async function markReportDecisionNotificationReadApi(
   notificationId: string,
-): Promise<ReviewReportDecisionNotification> {
+): Promise<ReportDecisionNotification> {
   if (!notificationId) {
     throw new Error("notificationId is required");
   }
 
-  const encodedNotificationId =
-    encodeURIComponent(notificationId);
-
+  const encodedNotificationId = encodeURIComponent(notificationId);
   const url =
-    `${API_BASE}/review-report-decision-notifications/` +
+    `${API_BASE}/report-decision-notifications/` +
     `${encodedNotificationId}/read`;
 
-  return requestJson<ReviewReportDecisionNotification>(
-    url,
-    {
-      method: "POST",
-    },
-  );
+  return requestJson<ReportDecisionNotification>(url, {
+    method: "POST",
+  });
 }
 
-export const reviewReportDecisionNotificationApi = {
-  list: listReviewReportDecisionNotificationsApi,
-  markRead: markReviewReportDecisionNotificationReadApi,
+export const reportDecisionNotificationApi = {
+  list: listReportDecisionNotificationsApi,
+  markRead: markReportDecisionNotificationReadApi,
 };
