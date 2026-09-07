@@ -1,44 +1,32 @@
 // frontend/console/shell/src/pages/tokenBlueprintReviewDetail.tsx
 
 import { useMemo, useRef, useState } from "react";
-
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
 import LogCard from "../features/log/presentation/LogCard";
-import ReviewReportModal from "../features/report/presentation/components/ReportModal";
+import ReportModal from "../features/report/presentation/components/ReportModal";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { Button } from "../shared/ui/button";
-
 import ReviewAggregateCard from "../features/tokenBlueprintReview/presentation/component/review_aggregate_card";
 import ReviewCard from "../features/tokenBlueprintReview/presentation/component/review_card";
-
 import { useTokenBlueprintReviewDetail } from "../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail";
 import type { Comment } from "../shared/types/tokenBlueprintReview";
-import type {
-  ReviewReportReason,
-  ReviewReportResponse,
-} from "../shared/types/report";
-import { requiresReviewReportDetail } from "../shared/types/report";
-
+import type { ReportReason, ReportResponse } from "../shared/types/report";
+import { requiresReportDetail } from "../shared/types/report";
 import "../styles/tokenBlueprintReview.css";
 
-const DEFAULT_REPORT_REASON: ReviewReportReason = "INAPPROPRIATE";
+const DEFAULT_REPORT_REASON: ReportReason = "INAPPROPRIATE";
 
 export default function TokenBlueprintReviewDetail() {
   const { vm, handlers } = useTokenBlueprintReviewDetail();
   const [commentBody, setCommentBody] = useState("");
-
   const [reportTargetCommentId, setReportTargetCommentId] = useState("");
-  const [reportReason, setReportReason] = useState<ReviewReportReason>(
-    DEFAULT_REPORT_REASON,
-  );
+  const [reportReason, setReportReason] = useState<ReportReason>(DEFAULT_REPORT_REASON);
   const [reportDetail, setReportDetail] = useState("");
   const [reportSubmitting, setReportSubmitting] = useState(false);
   const [reportErrorMessage, setReportErrorMessage] = useState("");
-  const [reportResult, setReportResult] = useState<ReviewReportResponse | null>(
-    null,
-  );
+  const [reportResult, setReportResult] = useState<ReportResponse | null>(null);
   const reportSubmittingRef = useRef(false);
 
   const {
@@ -115,7 +103,7 @@ export default function TokenBlueprintReviewDetail() {
     setReportResult(null);
   };
 
-  const handleReportReasonChange = (reason: ReviewReportReason) => {
+  const handleReportReasonChange = (reason: ReportReason) => {
     if (reportSubmittingRef.current) {
       return;
     }
@@ -123,7 +111,7 @@ export default function TokenBlueprintReviewDetail() {
     setReportReason(reason);
     setReportErrorMessage("");
 
-    if (!requiresReviewReportDetail(reason)) {
+    if (!requiresReportDetail(reason)) {
       setReportDetail("");
     }
   };
@@ -149,10 +137,7 @@ export default function TokenBlueprintReviewDetail() {
       return;
     }
 
-    if (
-      requiresReviewReportDetail(reportReason) &&
-      !normalizedDetail
-    ) {
+    if (requiresReportDetail(reportReason) && !normalizedDetail) {
       setReportErrorMessage(
         "「その他」を選択した場合は詳細を入力してください。",
       );
@@ -315,7 +300,7 @@ export default function TokenBlueprintReviewDetail() {
         </div>
       </PageStyle>
 
-      <ReviewReportModal
+      <ReportModal
         open={isReportOpen}
         targetType="TOKEN_BLUEPRINT_COMMENT"
         reason={reportReason}

@@ -1,10 +1,7 @@
 // frontend/console/shell/src/features/productBlueprintReview/presentation/hook/useProductBlueprintReviewDetail.tsx
 
 import * as React from "react";
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import {
   FetchProductBlueprintReviewDetailRows,
@@ -16,46 +13,39 @@ import type {
   ReviewStatus,
 } from "../../../../shared/types/productBlueprintReview";
 import type {
-  ReviewReportReason,
-  ReviewReportResponse,
+  ReportReason,
+  ReportResponse,
 } from "../../../../shared/types/report";
 import {
-  requiresReviewReportDetail,
+  requiresReportDetail,
 } from "../../../../shared/types/report";
 
 const PER_PAGE = 20;
-const DEFAULT_REPORT_REASON: ReviewReportReason = "INAPPROPRIATE";
+const DEFAULT_REPORT_REASON: ReportReason = "INAPPROPRIATE";
 
 export type UseProductBlueprintReviewDetailResult = {
   ProductBlueprintID: string;
-
   Status: ReviewStatus;
   Page: number;
-
   Items: Review[];
   TotalPages: number;
-
   IsLoading: boolean;
   ErrorMessage: string;
-
   IsReportOpen: boolean;
   ReportTargetReviewID: string;
-  ReportReason: ReviewReportReason;
+  ReportReason: ReportReason;
   ReportDetail: string;
   ReportSubmitting: boolean;
   ReportErrorMessage: string;
-  ReportResult: ReviewReportResponse | null;
+  ReportResult: ReportResponse | null;
   CanSubmitReport: boolean;
-
   OnBack: () => void;
   OnReload: () => void;
-
   SetStatus: (Next: ReviewStatus) => void;
   SetPage: (Next: number) => void;
-
   OpenReport: (ReviewID: string) => void;
   CloseReport: () => void;
-  SetReportReason: (Next: ReviewReportReason) => void;
+  SetReportReason: (Next: ReportReason) => void;
   SetReportDetail: (Next: string) => void;
   SubmitReport: () => Promise<void>;
 };
@@ -71,42 +61,30 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
 
   const [Status, SetStatusState] =
     React.useState<ReviewStatus>("PUBLISHED");
-
   const [Page, SetPageState] =
     React.useState<number>(1);
-
   const [Items, SetItems] =
     React.useState<Review[]>([]);
-
   const [TotalPages, SetTotalPages] =
     React.useState<number>(0);
-
   const [IsLoading, SetIsLoading] =
     React.useState<boolean>(false);
-
   const [ErrorMessage, SetErrorMessage] =
     React.useState<string>("");
-
   const [IsReportOpen, SetIsReportOpen] =
     React.useState<boolean>(false);
-
   const [ReportTargetReviewID, SetReportTargetReviewID] =
     React.useState<string>("");
-
   const [ReportReason, SetReportReasonState] =
-    React.useState<ReviewReportReason>(DEFAULT_REPORT_REASON);
-
+    React.useState<ReportReason>(DEFAULT_REPORT_REASON);
   const [ReportDetail, SetReportDetailState] =
     React.useState<string>("");
-
   const [ReportSubmitting, SetReportSubmitting] =
     React.useState<boolean>(false);
-
   const [ReportErrorMessage, SetReportErrorMessage] =
     React.useState<string>("");
-
   const [ReportResult, SetReportResult] =
-    React.useState<ReviewReportResponse | null>(null);
+    React.useState<ReportResponse | null>(null);
 
   const Load = React.useCallback(async () => {
     if (!ProductBlueprintID) {
@@ -218,7 +196,7 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
   }, []);
 
   const SetReportReason = React.useCallback(
-    (Next: ReviewReportReason) => {
+    (Next: ReportReason) => {
       if (ReportSubmittingRef.current) {
         return;
       }
@@ -226,7 +204,7 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
       SetReportReasonState(Next);
       SetReportErrorMessage("");
 
-      if (!requiresReviewReportDetail(Next)) {
+      if (!requiresReportDetail(Next)) {
         SetReportDetailState("");
       }
     },
@@ -252,7 +230,7 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
       !ReportSubmitting &&
       !ReportResult &&
       (
-        !requiresReviewReportDetail(ReportReason) ||
+        !requiresReportDetail(ReportReason) ||
         ReportDetail.trim()
       ),
   );
@@ -260,10 +238,8 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
   const SubmitReport = React.useCallback(async (): Promise<void> => {
     const NormalizedProductBlueprintID =
       ProductBlueprintID.trim();
-
     const NormalizedReviewID =
       ReportTargetReviewID.trim();
-
     const NormalizedDetail =
       ReportDetail.trim();
 
@@ -278,7 +254,7 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
     }
 
     if (
-      requiresReviewReportDetail(ReportReason) &&
+      requiresReportDetail(ReportReason) &&
       !NormalizedDetail
     ) {
       SetReportErrorMessage(
@@ -328,16 +304,12 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
 
   return {
     ProductBlueprintID,
-
     Status,
     Page,
-
     Items,
     TotalPages,
-
     IsLoading,
     ErrorMessage,
-
     IsReportOpen,
     ReportTargetReviewID,
     ReportReason,
@@ -346,13 +318,10 @@ export function useProductBlueprintReviewDetail(): UseProductBlueprintReviewDeta
     ReportErrorMessage,
     ReportResult,
     CanSubmitReport,
-
     OnBack,
     OnReload,
-
     SetStatus,
     SetPage,
-
     OpenReport,
     CloseReport,
     SetReportReason,

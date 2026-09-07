@@ -9,8 +9,8 @@ import type {
   ReviewStatus,
 } from "../../../shared/types/productBlueprintReview";
 import type {
-  ReviewReportReason,
-  ReviewReportResponse,
+  ReportReason,
+  ReportResponse,
 } from "../../../shared/types/report";
 import type {
   PageResult,
@@ -67,9 +67,9 @@ export async function FetchProductBlueprintReviewDetailRows(
 export async function ReportProductBlueprintReview(
   ProductBlueprintID: string,
   ReviewID: string,
-  Reason: ReviewReportReason,
+  Reason: ReportReason,
   Detail?: string,
-): Promise<ReviewReportResponse> {
+): Promise<ReportResponse> {
   const NormalizedProductBlueprintID =
     ProductBlueprintID.trim();
   const NormalizedReviewID =

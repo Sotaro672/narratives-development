@@ -7,8 +7,8 @@ import type {
   ReactionType,
 } from "../../../shared/types/tokenBlueprintReview";
 import type {
-  ReviewReportReason,
-  ReviewReportResponse,
+  ReportReason,
+  ReportResponse,
 } from "../../../shared/types/report";
 
 import {
@@ -158,9 +158,9 @@ export async function reactBrandToComment(
 export async function reportBrandTokenBlueprintComment(
   tokenBlueprintId: string,
   commentId: string,
-  reason: ReviewReportReason,
+  reason: ReportReason,
   detail?: string,
-): Promise<ReviewReportResponse> {
+): Promise<ReportResponse> {
   const normalizedTokenBlueprintId =
     tokenBlueprintId.trim();
 

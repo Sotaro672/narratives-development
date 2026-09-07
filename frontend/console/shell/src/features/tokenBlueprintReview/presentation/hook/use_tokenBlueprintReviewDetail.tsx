@@ -25,8 +25,8 @@ import type {
   ReactionType,
 } from "../../../../shared/types/tokenBlueprintReview";
 import type {
-  ReviewReportReason,
-  ReviewReportResponse,
+  ReportReason,
+  ReportResponse,
 } from "../../../../shared/types/report";
 
 type UseTokenBlueprintReviewDetailVM = {
@@ -63,9 +63,9 @@ type UseTokenBlueprintReviewDetailHandlers = {
   ) => Promise<Comment>;
   reportComment: (
     commentId: string,
-    reason: ReviewReportReason,
+    reason: ReportReason,
     detail?: string,
-  ) => Promise<ReviewReportResponse>;
+  ) => Promise<ReportResponse>;
 };
 
 export type UseTokenBlueprintReviewDetailResult = {
@@ -298,8 +298,7 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
 
         setComments((current) =>
           current.map((comment) =>
-            comment.commentId ===
-            updated.commentId
+            comment.commentId === updated.commentId
               ? updated
               : comment,
           ),
@@ -316,9 +315,9 @@ export function useTokenBlueprintReviewDetail(): UseTokenBlueprintReviewDetailRe
   const handleReportComment = useCallback(
     async (
       commentId: string,
-      reason: ReviewReportReason,
+      reason: ReportReason,
       detail?: string,
-    ): Promise<ReviewReportResponse> => {
+    ): Promise<ReportResponse> => {
       if (!normalizedTokenBlueprintReviewId) {
         throw new Error(
           "tokenBlueprintReviewId is required",

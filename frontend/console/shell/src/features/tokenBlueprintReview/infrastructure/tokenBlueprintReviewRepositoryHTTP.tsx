@@ -7,11 +7,11 @@ import type {
 } from "../../../shared/types/tokenBlueprintReview";
 import type {
   ReportTokenBlueprintCommentInput,
-  ReviewReportRequest,
-  ReviewReportResponse,
+  ReportRequest,
+  ReportResponse,
 } from "../../../shared/types/report";
 import {
-  requiresReviewReportDetail,
+  requiresReportDetail,
 } from "../../../shared/types/report";
 
 import { API_BASE } from "../../../shared/http/apiBase";
@@ -326,7 +326,7 @@ export async function reactToCommentAsBrand(
  */
 export async function reportTokenBlueprintCommentAsBrand(
   input: ReportTokenBlueprintCommentInput,
-): Promise<ReviewReportResponse> {
+): Promise<ReportResponse> {
   const tokenBlueprintId = input.tokenBlueprintId.trim();
   const commentId = input.commentId.trim();
   const detail = input.detail?.trim() ?? "";
@@ -339,16 +339,16 @@ export async function reportTokenBlueprintCommentAsBrand(
     throw new Error("commentId is required");
   }
 
-  if (requiresReviewReportDetail(input.reason) && !detail) {
+  if (requiresReportDetail(input.reason) && !detail) {
     throw new Error("「その他」を選択した場合は詳細を入力してください。");
   }
 
-  const request: ReviewReportRequest = {
+  const request: ReportRequest = {
     reason: input.reason,
     ...(detail ? { detail } : {}),
   };
 
-  return apiPostJson<ReviewReportResponse>(
+  return apiPostJson<ReportResponse>(
     `/token-blueprint-reviews/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}/reports`,
     request,
   );
