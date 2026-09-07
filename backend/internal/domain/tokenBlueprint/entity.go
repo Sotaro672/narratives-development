@@ -23,6 +23,13 @@ const (
 	ContentDocument ContentFileType = "document"
 )
 
+type ModerationStatus string
+
+const (
+	ModerationStatusActive             ModerationStatus = "ACTIVE"
+	ModerationStatusHiddenByModeration ModerationStatus = "HIDDEN_BY_MODERATION"
+)
+
 var (
 	ErrNotFound = errors.New("tokenBlueprint: not found")
 	ErrConflict = errors.New("tokenBlueprint: conflict")
@@ -52,6 +59,22 @@ func WrapNotFound(err error, msg string) error {
 		return fmt.Errorf("%w: %s", ErrNotFound, msg)
 	}
 	return fmt.Errorf("%w: %s: %v", ErrNotFound, msg, err)
+}
+
+func NormalizeModerationStatus(status ModerationStatus) ModerationStatus {
+	if status == "" {
+		return ModerationStatusActive
+	}
+	return status
+}
+
+func IsValidModerationStatus(status ModerationStatus) bool {
+	switch NormalizeModerationStatus(status) {
+	case ModerationStatusActive, ModerationStatusHiddenByModeration:
+		return true
+	default:
+		return false
+	}
 }
 
 // ============================================================
@@ -181,8 +204,15 @@ func ValidateContentFiles(files []ContentFile) error {
 // - contentFiles[].objectPath には Firebase Storage 上の objectPath を保存する
 // - objectPath は差し替え・削除・cleanup のための正規キーとして扱う
 //
+// moderationStatus:
+// - ACTIVE: AMOL上で通常表示する
+// - HIDDEN_BY_MODERATION: 運営裁定によりAMOL上のコンテンツ表示を停止する
+// - 既存データで空の場合は ACTIVE として扱う
+// - moderation による非表示では TokenBlueprint / Storage / オンチェーン資産を削除しない
+//
 // create 時:
 // - minted は常に false
+// - moderationStatus は ACTIVE
 // - metadataUri は作成直後は空でもよい
 // - icon は未登録状態を許容する
 // - assignee / createdBy / updatedBy は member id を保持する
@@ -201,13 +231,14 @@ type TokenBlueprint struct {
 	IconContentType string `json:"iconContentType,omitempty"`
 	IconSize        int64  `json:"iconSize,omitempty"`
 
-	ContentFiles []ContentFile `json:"contentFiles"`
-	AssigneeID   string        `json:"assigneeId"`
-	Minted       bool          `json:"minted"`
-	CreatedAt    time.Time     `json:"createdAt"`
-	CreatedBy    string        `json:"createdBy"`
-	UpdatedAt    time.Time     `json:"updatedAt"`
-	UpdatedBy    string        `json:"updatedBy"`
+	ContentFiles     []ContentFile    `json:"contentFiles"`
+	AssigneeID       string           `json:"assigneeId"`
+	Minted           bool             `json:"minted"`
+	ModerationStatus ModerationStatus `json:"moderationStatus,omitempty"`
+	CreatedAt        time.Time        `json:"createdAt"`
+	CreatedBy        string           `json:"createdBy"`
+	UpdatedAt        time.Time        `json:"updatedAt"`
+	UpdatedBy        string           `json:"updatedBy"`
 
 	MetadataURI string `json:"metadataUri,omitempty"`
 }
@@ -216,12 +247,13 @@ type TokenBlueprint struct {
 var (
 	ErrNilTokenBlueprint = errors.New("tokenBlueprint: nil receiver")
 
-	ErrInvalidID         = errors.New("tokenBlueprint: invalid id")
-	ErrInvalidName       = errors.New("tokenBlueprint: invalid name")
-	ErrInvalidSymbol     = errors.New("tokenBlueprint: invalid symbol")
-	ErrInvalidBrandID    = errors.New("tokenBlueprint: invalid brandId")
-	ErrInvalidCompanyID  = errors.New("tokenBlueprint: invalid companyId")
-	ErrInvalidAssigneeID = errors.New("tokenBlueprint: invalid assigneeId")
+	ErrInvalidID               = errors.New("tokenBlueprint: invalid id")
+	ErrInvalidName             = errors.New("tokenBlueprint: invalid name")
+	ErrInvalidSymbol           = errors.New("tokenBlueprint: invalid symbol")
+	ErrInvalidBrandID          = errors.New("tokenBlueprint: invalid brandId")
+	ErrInvalidCompanyID        = errors.New("tokenBlueprint: invalid companyId")
+	ErrInvalidAssigneeID       = errors.New("tokenBlueprint: invalid assigneeId")
+	ErrInvalidModerationStatus = errors.New("tokenBlueprint: invalid moderationStatus")
 
 	ErrInvalidCreatedAt = errors.New("tokenBlueprint: invalid createdAt")
 	ErrInvalidCreatedBy = errors.New("tokenBlueprint: invalid createdBy")
@@ -265,6 +297,9 @@ func (t TokenBlueprint) validate() error {
 	}
 	if t.AssigneeID == "" {
 		return ErrInvalidAssigneeID
+	}
+	if !IsValidModerationStatus(t.ModerationStatus) {
+		return ErrInvalidModerationStatus
 	}
 
 	if err := t.validateIcon(); err != nil {
@@ -346,9 +381,10 @@ func New(
 		IconContentType: "",
 		IconSize:        0,
 
-		ContentFiles: contentFiles,
-		AssigneeID:   assigneeID,
-		Minted:       false,
+		ContentFiles:     contentFiles,
+		AssigneeID:       assigneeID,
+		Minted:           false,
+		ModerationStatus: ModerationStatusActive,
 
 		CreatedAt: createdAt.UTC(),
 		CreatedBy: createdBy,
@@ -376,6 +412,72 @@ func (t *TokenBlueprint) ensureMutableCoreOrDeletable() error {
 		return ErrAlreadyMinted
 	}
 	return nil
+}
+
+// ============================================================
+// Moderation
+// ============================================================
+
+// EffectiveModerationStatus returns ACTIVE for legacy records that do not yet
+// have moderationStatus persisted.
+func (t TokenBlueprint) EffectiveModerationStatus() ModerationStatus {
+	return NormalizeModerationStatus(t.ModerationStatus)
+}
+
+func (t TokenBlueprint) IsHiddenByModeration() bool {
+	return t.EffectiveModerationStatus() == ModerationStatusHiddenByModeration
+}
+
+// SetModerationStatus changes only AMOL-side moderation state.
+// It intentionally does not modify Minted, MetadataURI, ContentFiles or any
+// on-chain state. Moderation therefore remains available after minting.
+func (t *TokenBlueprint) SetModerationStatus(
+	status ModerationStatus,
+	actorID string,
+	now time.Time,
+) error {
+	if t == nil {
+		return ErrNilTokenBlueprint
+	}
+
+	normalizedStatus := NormalizeModerationStatus(status)
+	if !IsValidModerationStatus(normalizedStatus) {
+		return ErrInvalidModerationStatus
+	}
+	if actorID == "" {
+		return ErrInvalidUpdatedBy
+	}
+	if now.IsZero() {
+		return ErrInvalidUpdatedAt
+	}
+
+	t.ModerationStatus = normalizedStatus
+	t.UpdatedAt = now.UTC()
+	t.UpdatedBy = actorID
+
+	return nil
+}
+
+func (t *TokenBlueprint) HideByModeration(
+	actorID string,
+	now time.Time,
+) error {
+	return t.SetModerationStatus(
+		ModerationStatusHiddenByModeration,
+		actorID,
+		now,
+	)
+}
+
+func (t *TokenBlueprint) RestoreFromModeration(
+	actorID string,
+	now time.Time,
+) error {
+	return t.SetModerationStatus(
+		ModerationStatusActive,
+		actorID,
+		now,
+	)
 }
 
 // ============================================================
@@ -568,6 +670,7 @@ func (t *TokenBlueprint) ReplaceContentFiles(files []ContentFile) error {
 	if err := ValidateContentFiles(files); err != nil {
 		return err
 	}
+
 	t.ContentFiles = files
 	return nil
 }
@@ -605,7 +708,10 @@ func (t *TokenBlueprint) RemoveContentFile(contentID string) (*ContentFile, erro
 	return removed, nil
 }
 
-func (t *TokenBlueprint) ReplaceContentFile(contentID string, nextFile ContentFile) (*ContentFile, error) {
+func (t *TokenBlueprint) ReplaceContentFile(
+	contentID string,
+	nextFile ContentFile,
+) (*ContentFile, error) {
 	if t == nil {
 		return nil, ErrNilTokenBlueprint
 	}

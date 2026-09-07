@@ -16,10 +16,21 @@ type arweaveUploader interface {
 	UploadMetadata(ctx context.Context, data []byte) (string, error)
 }
 
+type tokenBlueprintModerationRepository interface {
+	UpdateModerationStatus(
+		ctx context.Context,
+		id string,
+		moderationStatus tbdom.ModerationStatus,
+		updatedBy string,
+		updatedAt time.Time,
+	) (*tbdom.TokenBlueprint, error)
+}
+
 type TokenBlueprintUsecase struct {
-	tbRepo       tbdom.RepositoryPort
-	tbReviewRepo tbReview.RepositoryPort
-	assetStorage applicationport.TokenBlueprintAssetStorage
+	tbRepo         tbdom.RepositoryPort
+	tbReviewRepo   tbReview.RepositoryPort
+	assetStorage   applicationport.TokenBlueprintAssetStorage
+	moderationRepo tokenBlueprintModerationRepository
 
 	metadata *tokenBlueprintMetadataUsecase
 	command  *tokenBlueprintCommandUsecase
@@ -35,12 +46,15 @@ func NewTokenBlueprintUsecase(
 		panic(fmt.Errorf("NewTokenBlueprintUsecase: tbRepo is nil"))
 	}
 
+	moderationRepo, _ := tbRepo.(tokenBlueprintModerationRepository)
+
 	return &TokenBlueprintUsecase{
-		tbRepo:       tbRepo,
-		tbReviewRepo: tbReviewRepo,
-		assetStorage: assetStorage,
-		metadata:     newTokenBlueprintMetadataUsecase(tbRepo, uploader),
-		command:      newTokenBlueprintCommandUsecase(tbRepo),
+		tbRepo:         tbRepo,
+		tbReviewRepo:   tbReviewRepo,
+		assetStorage:   assetStorage,
+		moderationRepo: moderationRepo,
+		metadata:       newTokenBlueprintMetadataUsecase(tbRepo, uploader),
+		command:        newTokenBlueprintCommandUsecase(tbRepo),
 	}
 }
 
@@ -255,6 +269,63 @@ func (u *TokenBlueprintUsecase) Delete(ctx context.Context, id string) error {
 	return u.tbRepo.Delete(ctx, current.ID)
 }
 
+// HideTokenBlueprintByAdmin hides a TokenBlueprint only on AMOL.
+//
+// This operation intentionally preserves:
+// - TokenBlueprint Firestore document
+// - Firebase Storage assets
+// - metadataUri
+// - minted state
+// - on-chain token / metadata
+//
+// It is also valid after minting.
+func (u *TokenBlueprintUsecase) HideTokenBlueprintByAdmin(
+	ctx context.Context,
+	input HideTokenBlueprintByAdminInput,
+) error {
+	if u == nil || u.tbRepo == nil {
+		return tbdom.ErrInvalid
+	}
+	if u.moderationRepo == nil {
+		return fmt.Errorf("tokenBlueprint moderation repository is not configured")
+	}
+	if input.TokenBlueprintID == "" {
+		return tbdom.ErrInvalidID
+	}
+	if input.AdminID == "" {
+		return tbdom.ErrInvalidUpdatedBy
+	}
+
+	current, err := u.tbRepo.GetByID(ctx, input.TokenBlueprintID)
+	if err != nil {
+		return err
+	}
+	if current == nil {
+		return tbdom.ErrNotFound
+	}
+
+	// Retry-safe. The ReportUsecase may retry enforcement when a case is
+	// already REMOVED, so an already-hidden TokenBlueprint is a success.
+	if current.IsHiddenByModeration() {
+		return nil
+	}
+
+	now := time.Now().UTC()
+
+	_, err = u.moderationRepo.UpdateModerationStatus(
+		ctx,
+		current.ID,
+		tbdom.ModerationStatusHiddenByModeration,
+		input.AdminID,
+		now,
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (u *TokenBlueprintUsecase) EnsureMetadataURI(
 	ctx context.Context,
 	tb *tbdom.TokenBlueprint,
@@ -407,12 +478,18 @@ func buildTokenBlueprintMetadataJSON(tb *tbdom.TokenBlueprint) ([]byte, error) {
 
 		uri := f.URL
 		if uri == "" {
-			return nil, fmt.Errorf("tokenBlueprint.contentFiles[%s].url is empty", cid)
+			return nil, fmt.Errorf(
+				"tokenBlueprint.contentFiles[%s].url is empty",
+				cid,
+			)
 		}
 
 		objectPath := f.ObjectPath
 		if objectPath == "" {
-			return nil, fmt.Errorf("tokenBlueprint.contentFiles[%s].objectPath is empty", cid)
+			return nil, fmt.Errorf(
+				"tokenBlueprint.contentFiles[%s].objectPath is empty",
+				cid,
+			)
 		}
 
 		ct := f.ContentType
@@ -456,8 +533,12 @@ type tokenBlueprintCommandUsecase struct {
 	tbRepo tbdom.RepositoryPort
 }
 
-func newTokenBlueprintCommandUsecase(tbRepo tbdom.RepositoryPort) *tokenBlueprintCommandUsecase {
-	return &tokenBlueprintCommandUsecase{tbRepo: tbRepo}
+func newTokenBlueprintCommandUsecase(
+	tbRepo tbdom.RepositoryPort,
+) *tokenBlueprintCommandUsecase {
+	return &tokenBlueprintCommandUsecase{
+		tbRepo: tbRepo,
+	}
 }
 
 func (u *tokenBlueprintCommandUsecase) MarkTokenBlueprintMinted(

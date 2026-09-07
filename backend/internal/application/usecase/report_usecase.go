@@ -374,6 +374,9 @@ func (u *ReportUsecase) ReportTokenBlueprintByAvatar(
 	if tokenBlueprintEntity == nil || tokenBlueprintEntity.ID != input.TokenBlueprintID {
 		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
 	}
+	if tokenBlueprintEntity.IsHiddenByModeration() {
+		return reportdom.AddReportResult{}, reportdom.ErrCannotReportRemovedTarget
+	}
 
 	allowed, err := u.tokenAccessResolver.CanReportTokenBlueprint(
 		ctx,

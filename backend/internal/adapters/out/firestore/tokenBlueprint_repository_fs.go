@@ -72,7 +72,13 @@ func (r *TokenBlueprintRepositoryFS) ListByCompanyID(ctx context.Context, compan
 		}, nil
 	}
 
-	q := r.col().Where("companyId", "==", companyID).OrderBy("createdAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc).Offset(offset).Limit(perPage)
+	q := r.col().
+		Where("companyId", "==", companyID).
+		OrderBy("createdAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc).
+		Offset(offset).
+		Limit(perPage)
+
 	it := q.Documents(ctx)
 	defer it.Stop()
 
@@ -110,7 +116,13 @@ func (r *TokenBlueprintRepositoryFS) ListByBrandID(ctx context.Context, brandID 
 		}, nil
 	}
 
-	q := r.col().Where("brandId", "==", brandID).OrderBy("createdAt", firestore.Desc).OrderBy(firestore.DocumentID, firestore.Desc).Offset(offset).Limit(perPage)
+	q := r.col().
+		Where("brandId", "==", brandID).
+		OrderBy("createdAt", firestore.Desc).
+		OrderBy(firestore.DocumentID, firestore.Desc).
+		Offset(offset).
+		Limit(perPage)
+
 	it := q.Documents(ctx)
 	defer it.Stop()
 
@@ -169,49 +181,51 @@ func (r *TokenBlueprintRepositoryFS) Create(ctx context.Context, in tbdom.Create
 
 	docRef := r.col().NewDoc()
 	candidate := tbdom.TokenBlueprint{
-		ID:              docRef.ID,
-		Name:            in.Name,
-		Symbol:          in.Symbol,
-		BrandID:         in.BrandID,
-		CompanyID:       in.CompanyID,
-		Description:     in.Description,
-		IconURL:         in.IconURL,
-		IconObjectPath:  in.IconObjectPath,
-		IconFileName:    in.IconFileName,
-		IconContentType: in.IconContentType,
-		IconSize:        in.IconSize,
-		ContentFiles:    in.ContentFiles,
-		AssigneeID:      in.AssigneeID,
-		Minted:          false,
-		CreatedAt:       createdAt,
-		CreatedBy:       in.CreatedBy,
-		UpdatedAt:       updatedAt,
-		UpdatedBy:       in.UpdatedBy,
-		MetadataURI:     in.MetadataURI,
+		ID:               docRef.ID,
+		Name:             in.Name,
+		Symbol:           in.Symbol,
+		BrandID:          in.BrandID,
+		CompanyID:        in.CompanyID,
+		Description:      in.Description,
+		IconURL:          in.IconURL,
+		IconObjectPath:   in.IconObjectPath,
+		IconFileName:     in.IconFileName,
+		IconContentType:  in.IconContentType,
+		IconSize:         in.IconSize,
+		ContentFiles:     in.ContentFiles,
+		AssigneeID:       in.AssigneeID,
+		Minted:           false,
+		ModerationStatus: tbdom.ModerationStatusActive,
+		CreatedAt:        createdAt,
+		CreatedBy:        in.CreatedBy,
+		UpdatedAt:        updatedAt,
+		UpdatedBy:        in.UpdatedBy,
+		MetadataURI:      in.MetadataURI,
 	}
 	if err := validatePersistedTokenBlueprint(candidate); err != nil {
 		return nil, err
 	}
 
 	data := map[string]any{
-		"name":            in.Name,
-		"symbol":          in.Symbol,
-		"brandId":         in.BrandID,
-		"companyId":       in.CompanyID,
-		"description":     in.Description,
-		"iconUrl":         in.IconURL,
-		"iconObjectPath":  in.IconObjectPath,
-		"iconFileName":    in.IconFileName,
-		"iconContentType": in.IconContentType,
-		"iconSize":        in.IconSize,
-		"contentFiles":    toFSContentFiles(in.ContentFiles),
-		"assigneeId":      in.AssigneeID,
-		"minted":          false,
-		"createdAt":       createdAt,
-		"createdBy":       in.CreatedBy,
-		"updatedAt":       updatedAt,
-		"updatedBy":       in.UpdatedBy,
-		"metadataUri":     in.MetadataURI,
+		"name":             in.Name,
+		"symbol":           in.Symbol,
+		"brandId":          in.BrandID,
+		"companyId":        in.CompanyID,
+		"description":      in.Description,
+		"iconUrl":          in.IconURL,
+		"iconObjectPath":   in.IconObjectPath,
+		"iconFileName":     in.IconFileName,
+		"iconContentType":  in.IconContentType,
+		"iconSize":         in.IconSize,
+		"contentFiles":     toFSContentFiles(in.ContentFiles),
+		"assigneeId":       in.AssigneeID,
+		"minted":           false,
+		"moderationStatus": string(tbdom.ModerationStatusActive),
+		"createdAt":        createdAt,
+		"createdBy":        in.CreatedBy,
+		"updatedAt":        updatedAt,
+		"updatedBy":        in.UpdatedBy,
+		"metadataUri":      in.MetadataURI,
 	}
 
 	if _, err := docRef.Create(ctx, data); err != nil {
@@ -339,10 +353,14 @@ func (r *TokenBlueprintRepositoryFS) Update(ctx context.Context, id string, in t
 		if err := tbdom.ValidateContentFiles(*in.ContentFiles); err != nil {
 			return nil, err
 		}
-		updates = append(updates, firestore.Update{Path: "contentFiles", Value: toFSContentFiles(*in.ContentFiles)})
+		updates = append(updates, firestore.Update{
+			Path:  "contentFiles",
+			Value: toFSContentFiles(*in.ContentFiles),
+		})
 	}
 
-	updates = append(updates,
+	updates = append(
+		updates,
 		firestore.Update{Path: "updatedAt", Value: in.UpdatedAt.UTC()},
 		firestore.Update{Path: "updatedBy", Value: *in.UpdatedBy},
 	)
@@ -355,6 +373,85 @@ func (r *TokenBlueprintRepositoryFS) Update(ctx context.Context, id string, in t
 	}
 
 	snap, err = ref.Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, tbdom.ErrNotFound
+		}
+		return nil, err
+	}
+
+	tb, err := docToTokenBlueprint(snap)
+	if err != nil {
+		return nil, err
+	}
+	return &tb, nil
+}
+
+// UpdateModerationStatus updates only AMOL-side moderation state.
+// TokenBlueprint document, Firebase Storage assets, metadataUri and on-chain state
+// are intentionally preserved.
+func (r *TokenBlueprintRepositoryFS) UpdateModerationStatus(
+	ctx context.Context,
+	id string,
+	moderationStatus tbdom.ModerationStatus,
+	updatedBy string,
+	updatedAt time.Time,
+) (*tbdom.TokenBlueprint, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+	if id == "" {
+		return nil, tbdom.ErrInvalidID
+	}
+	if !tbdom.IsValidModerationStatus(moderationStatus) {
+		return nil, tbdom.ErrInvalidModerationStatus
+	}
+	if updatedBy == "" {
+		return nil, tbdom.ErrInvalidUpdatedBy
+	}
+	if updatedAt.IsZero() {
+		return nil, tbdom.ErrInvalidUpdatedAt
+	}
+
+	current, err := r.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := current.SetModerationStatus(
+		moderationStatus,
+		updatedBy,
+		updatedAt,
+	); err != nil {
+		return nil, err
+	}
+
+	if err := validatePersistedTokenBlueprint(*current); err != nil {
+		return nil, err
+	}
+
+	ref := r.col().Doc(id)
+	if _, err := ref.Update(ctx, []firestore.Update{
+		{
+			Path:  "moderationStatus",
+			Value: string(current.EffectiveModerationStatus()),
+		},
+		{
+			Path:  "updatedAt",
+			Value: current.UpdatedAt,
+		},
+		{
+			Path:  "updatedBy",
+			Value: current.UpdatedBy,
+		},
+	}); err != nil {
+		if status.Code(err) == codes.NotFound {
+			return nil, tbdom.ErrNotFound
+		}
+		return nil, err
+	}
+
+	snap, err := ref.Get(ctx)
 	if err != nil {
 		if status.Code(err) == codes.NotFound {
 			return nil, tbdom.ErrNotFound
@@ -450,24 +547,25 @@ func (r *TokenBlueprintRepositoryFS) IsNameUnique(ctx context.Context, name stri
 // ========================================
 
 type tokenBlueprintRepositoryDoc struct {
-	Name            string                                   `firestore:"name"`
-	Symbol          string                                   `firestore:"symbol"`
-	BrandID         string                                   `firestore:"brandId"`
-	CompanyID       string                                   `firestore:"companyId"`
-	Description     string                                   `firestore:"description"`
-	IconURL         string                                   `firestore:"iconUrl"`
-	IconObjectPath  string                                   `firestore:"iconObjectPath"`
-	IconFileName    string                                   `firestore:"iconFileName"`
-	IconContentType string                                   `firestore:"iconContentType"`
-	IconSize        *int64                                   `firestore:"iconSize"`
-	ContentFiles    []tokenBlueprintRepositoryContentFileDoc `firestore:"contentFiles"`
-	AssigneeID      string                                   `firestore:"assigneeId"`
-	Minted          *bool                                    `firestore:"minted"`
-	CreatedAt       time.Time                                `firestore:"createdAt"`
-	CreatedBy       string                                   `firestore:"createdBy"`
-	UpdatedAt       time.Time                                `firestore:"updatedAt"`
-	UpdatedBy       string                                   `firestore:"updatedBy"`
-	MetadataURI     string                                   `firestore:"metadataUri"`
+	Name             string                                   `firestore:"name"`
+	Symbol           string                                   `firestore:"symbol"`
+	BrandID          string                                   `firestore:"brandId"`
+	CompanyID        string                                   `firestore:"companyId"`
+	Description      string                                   `firestore:"description"`
+	IconURL          string                                   `firestore:"iconUrl"`
+	IconObjectPath   string                                   `firestore:"iconObjectPath"`
+	IconFileName     string                                   `firestore:"iconFileName"`
+	IconContentType  string                                   `firestore:"iconContentType"`
+	IconSize         *int64                                   `firestore:"iconSize"`
+	ContentFiles     []tokenBlueprintRepositoryContentFileDoc `firestore:"contentFiles"`
+	AssigneeID       string                                   `firestore:"assigneeId"`
+	Minted           *bool                                    `firestore:"minted"`
+	ModerationStatus string                                   `firestore:"moderationStatus"`
+	CreatedAt        time.Time                                `firestore:"createdAt"`
+	CreatedBy        string                                   `firestore:"createdBy"`
+	UpdatedAt        time.Time                                `firestore:"updatedAt"`
+	UpdatedBy        string                                   `firestore:"updatedBy"`
+	MetadataURI      string                                   `firestore:"metadataUri"`
 }
 
 type tokenBlueprintRepositoryContentFileDoc struct {
@@ -492,18 +590,32 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 
 	var raw tokenBlueprintRepositoryDoc
 	if err := doc.DataTo(&raw); err != nil {
-		return tbdom.TokenBlueprint{}, fmt.Errorf("decode token_blueprints document %q: %w", doc.Ref.ID, err)
+		return tbdom.TokenBlueprint{}, fmt.Errorf(
+			"decode token_blueprints document %q: %w",
+			doc.Ref.ID,
+			err,
+		)
 	}
 	if raw.IconSize == nil {
-		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: iconSize is missing", doc.Ref.ID)
+		return tbdom.TokenBlueprint{}, fmt.Errorf(
+			"invalid token_blueprints document %q: iconSize is missing",
+			doc.Ref.ID,
+		)
 	}
 	if raw.Minted == nil {
-		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: minted is missing", doc.Ref.ID)
+		return tbdom.TokenBlueprint{}, fmt.Errorf(
+			"invalid token_blueprints document %q: minted is missing",
+			doc.Ref.ID,
+		)
 	}
 
 	files, err := fromFSContentFiles(raw.ContentFiles)
 	if err != nil {
-		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: %w", doc.Ref.ID, err)
+		return tbdom.TokenBlueprint{}, fmt.Errorf(
+			"invalid token_blueprints document %q: %w",
+			doc.Ref.ID,
+			err,
+		)
 	}
 
 	tb := tbdom.TokenBlueprint{
@@ -521,15 +633,22 @@ func docToTokenBlueprint(doc *firestore.DocumentSnapshot) (tbdom.TokenBlueprint,
 		ContentFiles:    files,
 		AssigneeID:      raw.AssigneeID,
 		Minted:          *raw.Minted,
-		CreatedAt:       raw.CreatedAt,
-		CreatedBy:       raw.CreatedBy,
-		UpdatedAt:       raw.UpdatedAt,
-		UpdatedBy:       raw.UpdatedBy,
-		MetadataURI:     raw.MetadataURI,
+		ModerationStatus: tbdom.NormalizeModerationStatus(
+			tbdom.ModerationStatus(raw.ModerationStatus),
+		),
+		CreatedAt:   raw.CreatedAt,
+		CreatedBy:   raw.CreatedBy,
+		UpdatedAt:   raw.UpdatedAt,
+		UpdatedBy:   raw.UpdatedBy,
+		MetadataURI: raw.MetadataURI,
 	}
 
 	if err := validatePersistedTokenBlueprint(tb); err != nil {
-		return tbdom.TokenBlueprint{}, fmt.Errorf("invalid token_blueprints document %q: %w", doc.Ref.ID, err)
+		return tbdom.TokenBlueprint{}, fmt.Errorf(
+			"invalid token_blueprints document %q: %w",
+			doc.Ref.ID,
+			err,
+		)
 	}
 	return tb, nil
 }
@@ -559,10 +678,18 @@ func fromFSContentFiles(xs []tokenBlueprintRepositoryContentFileDoc) ([]tbdom.Co
 	out := make([]tbdom.ContentFile, 0, len(xs))
 	for i, raw := range xs {
 		if raw.IsPublic == nil {
-			return nil, fmt.Errorf("%w: contentFiles[%d].isPublic is missing", tbdom.ErrInvalidContentFile, i)
+			return nil, fmt.Errorf(
+				"%w: contentFiles[%d].isPublic is missing",
+				tbdom.ErrInvalidContentFile,
+				i,
+			)
 		}
 		if raw.Size == nil {
-			return nil, fmt.Errorf("%w: contentFiles[%d].size is missing", tbdom.ErrInvalidContentFile, i)
+			return nil, fmt.Errorf(
+				"%w: contentFiles[%d].size is missing",
+				tbdom.ErrInvalidContentFile,
+				i,
+			)
 		}
 
 		out = append(out, tbdom.ContentFile{
@@ -606,11 +733,20 @@ func validatePersistedTokenBlueprint(tb tbdom.TokenBlueprint) error {
 	if tb.UpdatedBy == "" {
 		return tbdom.ErrInvalidUpdatedBy
 	}
+	if !tbdom.IsValidModerationStatus(tb.ModerationStatus) {
+		return tbdom.ErrInvalidModerationStatus
+	}
 	if tb.IconSize < 0 {
 		return tbdom.ErrInvalidIconSize
 	}
 
-	hasAnyIconField := tb.IconURL != "" || tb.IconObjectPath != "" || tb.IconFileName != "" || tb.IconContentType != "" || tb.IconSize != 0
+	hasAnyIconField :=
+		tb.IconURL != "" ||
+			tb.IconObjectPath != "" ||
+			tb.IconFileName != "" ||
+			tb.IconContentType != "" ||
+			tb.IconSize != 0
+
 	if hasAnyIconField {
 		if tb.IconURL == "" {
 			return tbdom.ErrInvalidIconURL
