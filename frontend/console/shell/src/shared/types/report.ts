@@ -1,31 +1,31 @@
-// frontend/console/shell/src/shared/types/reviewReport.ts
+// frontend/console/shell/src/shared/types/report.ts
 
-export type ReviewReportTargetType =
+export type ReportTargetType =
   | "PRODUCT_BLUEPRINT_REVIEW"
   | "TOKEN_BLUEPRINT_COMMENT";
 
-export type ReviewReportReason =
+export type ReportReason =
   | "SPAM"
   | "HARASSMENT"
   | "INAPPROPRIATE"
   | "FALSE_INFORMATION"
   | "OTHER";
 
-export type ReviewReportCaseStatus =
+export type ReportCaseStatus =
   | "PENDING"
   | "KEPT"
   | "REMOVED";
 
-export type ReviewReportRequest = {
-  reason: ReviewReportReason;
+export type ReportRequest = {
+  reason: ReportReason;
   detail?: string;
 };
 
-export type ReviewReportResponse = {
+export type ReportResponse = {
   caseId: string;
   reportId: string;
   reportCount: number;
-  status: ReviewReportCaseStatus;
+  status: ReportCaseStatus;
   caseCreated: boolean;
   reportCreated: boolean;
 };
@@ -33,18 +33,18 @@ export type ReviewReportResponse = {
 export type ReportProductBlueprintReviewInput = {
   productBlueprintId: string;
   reviewId: string;
-  reason: ReviewReportReason;
+  reason: ReportReason;
   detail?: string;
 };
 
 export type ReportTokenBlueprintCommentInput = {
   tokenBlueprintId: string;
   commentId: string;
-  reason: ReviewReportReason;
+  reason: ReportReason;
   detail?: string;
 };
 
-export const REVIEW_REPORT_REASONS: readonly ReviewReportReason[] = [
+export const REPORT_REASONS: readonly ReportReason[] = [
   "SPAM",
   "HARASSMENT",
   "INAPPROPRIATE",
@@ -52,8 +52,8 @@ export const REVIEW_REPORT_REASONS: readonly ReviewReportReason[] = [
   "OTHER",
 ];
 
-export function getReviewReportReasonLabel(
-  reason: ReviewReportReason,
+export function getReportReasonLabel(
+  reason: ReportReason,
 ): string {
   switch (reason) {
     case "SPAM":
@@ -71,8 +71,8 @@ export function getReviewReportReasonLabel(
   }
 }
 
-export function requiresReviewReportDetail(
-  reason: ReviewReportReason,
+export function requiresReportDetail(
+  reason: ReportReason,
 ): boolean {
   return reason === "OTHER";
 }

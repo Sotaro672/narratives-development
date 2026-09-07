@@ -3,7 +3,7 @@ package port
 
 import "context"
 
-// ReviewReportTokenAccessResolver determines whether an avatar is allowed to
+// ReportTokenAccessResolver determines whether an avatar is allowed to
 // report a comment under the specified token blueprint.
 //
 // Authorization details such as purchase / ownership resolution belong to the

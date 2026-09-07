@@ -27,7 +27,7 @@ import type {
 import type {
   ReviewReportReason,
   ReviewReportResponse,
-} from "../../../../shared/types/reviewReport";
+} from "../../../../shared/types/report";
 
 type UseTokenBlueprintReviewDetailVM = {
   blueprint: TokenBlueprint | null;

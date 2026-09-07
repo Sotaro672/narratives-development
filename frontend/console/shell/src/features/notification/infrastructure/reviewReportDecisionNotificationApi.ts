@@ -10,7 +10,7 @@ import type {
   ReviewReportCaseStatus,
   ReviewReportReason,
   ReviewReportTargetType,
-} from "../../../shared/types/reviewReport";
+} from "../../../shared/types/report";
 
 export type ReviewReportDecisionNotificationRecipientType =
   | "AVATAR"

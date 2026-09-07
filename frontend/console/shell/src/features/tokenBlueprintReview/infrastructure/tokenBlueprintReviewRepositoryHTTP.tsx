@@ -9,10 +9,10 @@ import type {
   ReportTokenBlueprintCommentInput,
   ReviewReportRequest,
   ReviewReportResponse,
-} from "../../../shared/types/reviewReport";
+} from "../../../shared/types/report";
 import {
   requiresReviewReportDetail,
-} from "../../../shared/types/reviewReport";
+} from "../../../shared/types/report";
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../shared/http/authHeaders";

@@ -7,7 +7,7 @@ import type {
 import {
   getReviewReportReasonLabel,
   type ReviewReportTargetType,
-} from "../../../../shared/types/reviewReport";
+} from "../../../../shared/types/report";
 
 export type ReviewReportDecisionNotificationViewModel = {
   id: string;

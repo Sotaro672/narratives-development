@@ -11,7 +11,7 @@ import type {
 import type {
   ReviewReportReason,
   ReviewReportResponse,
-} from "../../../shared/types/reviewReport";
+} from "../../../shared/types/report";
 import type {
   PageResult,
 } from "../../../shared/types/common/common";

@@ -13,8 +13,8 @@ import type {
   ReportProductBlueprintReviewInput,
   ReviewReportRequest,
   ReviewReportResponse,
-} from "../../../shared/types/reviewReport";
-import { requiresReviewReportDetail } from "../../../shared/types/reviewReport";
+} from "../../../shared/types/report";
+import { requiresReviewReportDetail } from "../../../shared/types/report";
 
 // ==============================
 // Query builder (PascalCase keys)

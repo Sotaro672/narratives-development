@@ -18,10 +18,10 @@ import type {
 import type {
   ReviewReportReason,
   ReviewReportResponse,
-} from "../../../../shared/types/reviewReport";
+} from "../../../../shared/types/report";
 import {
   requiresReviewReportDetail,
-} from "../../../../shared/types/reviewReport";
+} from "../../../../shared/types/report";
 
 const PER_PAGE = 20;
 const DEFAULT_REPORT_REASON: ReviewReportReason = "INAPPROPRIATE";

@@ -6,7 +6,7 @@ import { useLocation } from "react-router-dom";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
-import ReviewReportModal from "../features/reviewReport/presentation/components/ReviewReportModal";
+import ReviewReportModal from "../features/report/presentation/components/ReportModal";
 
 import Pagination from "../shared/ui/pagination";
 import RefreshButton from "../shared/ui/refresh";

@@ -6,7 +6,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
 import LogCard from "../features/log/presentation/LogCard";
-import ReviewReportModal from "../features/reviewReport/presentation/components/ReviewReportModal";
+import ReviewReportModal from "../features/report/presentation/components/ReportModal";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { Button } from "../shared/ui/button";
 
@@ -18,8 +18,8 @@ import type { Comment } from "../shared/types/tokenBlueprintReview";
 import type {
   ReviewReportReason,
   ReviewReportResponse,
-} from "../shared/types/reviewReport";
-import { requiresReviewReportDetail } from "../shared/types/reviewReport";
+} from "../shared/types/report";
+import { requiresReviewReportDetail } from "../shared/types/report";
 
 import "../styles/tokenBlueprintReview.css";
 

@@ -96,7 +96,7 @@ func (h *ProductBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http
 	case productBlueprintReviewRouteCollection:
 		h.handleReviewCollection(w, r, route.ProductBlueprintID, isMe)
 	case productBlueprintReviewRouteReport:
-		h.handleReviewReport(w, r, route.ProductBlueprintID, route.ReviewID, isMe)
+		h.handleReport(w, r, route.ProductBlueprintID, route.ReviewID, isMe)
 	default:
 		http.NotFound(w, r)
 	}
@@ -122,7 +122,7 @@ func (h *ProductBlueprintReviewHandler) handleReviewCollection(
 	}
 }
 
-func (h *ProductBlueprintReviewHandler) handleReviewReport(
+func (h *ProductBlueprintReviewHandler) handleReport(
 	w http.ResponseWriter,
 	r *http.Request,
 	productBlueprintID string,
