@@ -67,19 +67,20 @@ type Container struct {
 
 	NameResolver *appresolver.NameResolver
 
-	BrandQ        *mallquery.BrandQuery
-	ListQ         *mallquery.ListQuery
-	CatalogQ      *mallquery.CatalogQuery
-	CartQ         *mallquery.CartQuery
-	PreviewQ      *mallquery.PreviewQuery
-	InquiryQ      *mallquery.InquiryQuery
-	AnnouncementQ *mallquery.AnnouncementQueryService
-	ResaleQ       *mallquery.ResaleQuery
-	MarketQ       *mallquery.MarketQuery
-	OrderQ        *mallquery.OrderQuery
-	HistoryQ      *mallquery.HistoryQuery
-	OrderDetailQ  *mallquery.OrderDetailQuery
-	TradeQ        *mallquery.TradeQuery
+	BrandQ                    *mallquery.BrandQuery
+	ListQ                     *mallquery.ListQuery
+	CatalogQ                  *mallquery.CatalogQuery
+	CartQ                     *mallquery.CartQuery
+	PreviewQ                  *mallquery.PreviewQuery
+	InquiryQ                  *mallquery.InquiryQuery
+	AnnouncementQ             *mallquery.AnnouncementQueryService
+	ResaleQ                   *mallquery.ResaleQuery
+	MarketQ                   *mallquery.MarketQuery
+	OrderQ                    *mallquery.OrderQuery
+	HistoryQ                  *mallquery.HistoryQuery
+	OrderDetailQ              *mallquery.OrderDetailQuery
+	TradeQ                    *mallquery.TradeQuery
+	TokenBlueprintModerationQ *mallquery.TokenBlueprintModerationQuery
 
 	OwnerResolveQ *sharedquery.OwnerResolveQuery
 }

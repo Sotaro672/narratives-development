@@ -18,19 +18,20 @@ type mallQueries struct {
 	nameResolver  *appresolver.NameResolver
 	ownerResolveQ *sharedquery.OwnerResolveQuery
 
-	brandQ        *mallquery.BrandQuery
-	listQ         *mallquery.ListQuery
-	catalogQ      *mallquery.CatalogQuery
-	cartQ         *mallquery.CartQuery
-	previewQ      *mallquery.PreviewQuery
-	inquiryQ      *mallquery.InquiryQuery
-	announcementQ *mallquery.AnnouncementQueryService
-	resaleQ       *mallquery.ResaleQuery
-	marketQ       *mallquery.MarketQuery
-	orderQ        *mallquery.OrderQuery
-	historyQ      *mallquery.HistoryQuery
-	orderDetailQ  *mallquery.OrderDetailQuery
-	tradeQ        *mallquery.TradeQuery
+	brandQ                    *mallquery.BrandQuery
+	listQ                     *mallquery.ListQuery
+	catalogQ                  *mallquery.CatalogQuery
+	cartQ                     *mallquery.CartQuery
+	previewQ                  *mallquery.PreviewQuery
+	inquiryQ                  *mallquery.InquiryQuery
+	announcementQ             *mallquery.AnnouncementQueryService
+	resaleQ                   *mallquery.ResaleQuery
+	marketQ                   *mallquery.MarketQuery
+	orderQ                    *mallquery.OrderQuery
+	historyQ                  *mallquery.HistoryQuery
+	orderDetailQ              *mallquery.OrderDetailQuery
+	tradeQ                    *mallquery.TradeQuery
+	tokenBlueprintModerationQ *mallquery.TokenBlueprintModerationQuery
 }
 
 func buildMallQueries(
@@ -52,6 +53,12 @@ func buildMallQueries(
 	}
 	if u.paymentUC == nil {
 		return nil, errors.New("di.mall: payment usecase is nil")
+	}
+	if u.walletUC == nil {
+		return nil, errors.New("di.mall: wallet usecase is nil")
+	}
+	if r.tokenBlueprintRepo == nil {
+		return nil, errors.New("di.mall: token blueprint repository is nil")
 	}
 	if r.tradeRepo == nil {
 		return nil, errors.New("di.mall: trade repository is nil")
@@ -96,6 +103,11 @@ func buildMallQueries(
 		brandReader,
 		r.avatarRepo,
 		r.brandRepo,
+	)
+
+	tokenBlueprintModerationQ := mallquery.NewTokenBlueprintModerationQuery(
+		r.tokenBlueprintRepo,
+		u.walletUC,
 	)
 
 	inquiryQ := mallquery.NewInquiryQuery(
@@ -220,19 +232,20 @@ func buildMallQueries(
 		nameResolver:  nameResolver,
 		ownerResolveQ: ownerResolveQ,
 
-		brandQ:        brandQ,
-		listQ:         listQ,
-		catalogQ:      catalogQ,
-		cartQ:         cartQ,
-		previewQ:      previewQ,
-		inquiryQ:      inquiryQ,
-		announcementQ: announcementQ,
-		resaleQ:       resaleQ,
-		marketQ:       marketQ,
-		orderQ:        orderQ,
-		historyQ:      historyQ,
-		orderDetailQ:  orderDetailQ,
-		tradeQ:        tradeQ,
+		brandQ:                    brandQ,
+		listQ:                     listQ,
+		catalogQ:                  catalogQ,
+		cartQ:                     cartQ,
+		previewQ:                  previewQ,
+		inquiryQ:                  inquiryQ,
+		announcementQ:             announcementQ,
+		resaleQ:                   resaleQ,
+		marketQ:                   marketQ,
+		orderQ:                    orderQ,
+		historyQ:                  historyQ,
+		orderDetailQ:              orderDetailQ,
+		tradeQ:                    tradeQ,
+		tokenBlueprintModerationQ: tokenBlueprintModerationQ,
 	}, nil
 }
 
@@ -257,4 +270,5 @@ func (q *mallQueries) applyToContainer(c *Container) {
 	c.HistoryQ = q.historyQ
 	c.OrderDetailQ = q.orderDetailQ
 	c.TradeQ = q.tradeQ
+	c.TokenBlueprintModerationQ = q.tokenBlueprintModerationQ
 }
