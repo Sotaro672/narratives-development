@@ -184,12 +184,13 @@ export default function MarketDetailContent({
                 avatarIcon={avatarIcon}
                 onClick={onOpenSeller}
               />
-
-              <ProductDescription
-                description={item.description}
-                className="product-detail__description--standalone"
-              />
             </>
+          }
+          contentFooter={
+            <ProductDescription
+              description={item.description}
+              className="product-detail__description--standalone"
+            />
           }
         >
           <ProductIdentity
