@@ -66,8 +66,8 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var previewMeH http.Handler
 	var setupStatusH http.Handler
 
-	// TokenBlueprintには現時点でreview以外のMall handlerがないため、
-	// review対象外のpathは404へ委譲する。
+	// TokenBlueprint の base handler。
+	// report/review のいずれにも該当しない path は 404 とする。
 	var tbH http.Handler = http.NotFoundHandler()
 
 	orderScanTransferH := transferUsecaseNotConfiguredHandler()
@@ -115,6 +115,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 			cont.AvatarUC,
 			cont.AvatarRegistrationUC,
 		)
+	}
+
+	// TokenBlueprint report
+	// POST /mall/me/token-blueprints/{tokenBlueprintId}/reports
+	if cont.ReportUC != nil {
+		tbH = mallhandler.NewTokenBlueprintReportHandler(cont.ReportUC)
 	}
 
 	// TokenBlueprintReview

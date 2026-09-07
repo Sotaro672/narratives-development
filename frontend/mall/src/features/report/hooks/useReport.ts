@@ -9,6 +9,7 @@ import type {
 import {
   reportAvatar,
   reportProductBlueprintReview,
+  reportTokenBlueprint,
   reportTokenBlueprintComment,
 } from "../api/reportApi";
 
@@ -17,6 +18,10 @@ export type ReportTarget =
       type: "PRODUCT_BLUEPRINT_REVIEW";
       productBlueprintId: string;
       reviewId: string;
+    }
+  | {
+      type: "TOKEN_BLUEPRINT";
+      tokenBlueprintId: string;
     }
   | {
       type: "TOKEN_BLUEPRINT_COMMENT";
@@ -31,6 +36,10 @@ export type ReportTarget =
 type OpenProductBlueprintReviewReportInput = {
   productBlueprintId: string;
   reviewId: string;
+};
+
+type OpenTokenBlueprintReportInput = {
+  tokenBlueprintId: string;
 };
 
 type OpenTokenBlueprintCommentReportInput = {
@@ -87,6 +96,22 @@ export function useReport() {
         type: "PRODUCT_BLUEPRINT_REVIEW",
         productBlueprintId,
         reviewId,
+      });
+    },
+    [resetForm],
+  );
+
+  const openTokenBlueprintReport = useCallback(
+    (input: OpenTokenBlueprintReportInput) => {
+      const tokenBlueprintId = normalizeId(
+        input.tokenBlueprintId,
+        "tokenBlueprintId",
+      );
+
+      resetForm();
+      setTarget({
+        type: "TOKEN_BLUEPRINT",
+        tokenBlueprintId,
       });
     },
     [resetForm],
@@ -181,6 +206,14 @@ export function useReport() {
           });
           break;
 
+        case "TOKEN_BLUEPRINT":
+          response = await reportTokenBlueprint({
+            tokenBlueprintId: target.tokenBlueprintId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
+
         case "TOKEN_BLUEPRINT_COMMENT":
           response = await reportTokenBlueprintComment({
             tokenBlueprintId: target.tokenBlueprintId,
@@ -236,6 +269,7 @@ export function useReport() {
     requiresDetail,
     canSubmit,
     openProductBlueprintReviewReport,
+    openTokenBlueprintReport,
     openTokenBlueprintCommentReport,
     openAvatarReport,
     close,

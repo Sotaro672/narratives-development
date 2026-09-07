@@ -69,7 +69,7 @@ export default function ReportsPage() {
           options: [
             { value: "PENDING", label: "未対応" },
             { value: "KEPT", label: "維持・変化なし" },
-            { value: "REMOVED", label: "削除・再販利用停止" },
+            { value: "REMOVED", label: "削除・非表示・再販利用停止" },
           ],
         },
         nowrap: true,
@@ -82,6 +82,7 @@ export default function ReportsPage() {
           getValue: (reportCase) => reportCase.targetType,
           options: [
             { value: "PRODUCT_BLUEPRINT_REVIEW", label: "商品レビュー" },
+            { value: "TOKEN_BLUEPRINT", label: "トークン" },
             { value: "TOKEN_BLUEPRINT_COMMENT", label: "トークンコメント" },
             { value: "AVATAR", label: "アバター" },
           ],

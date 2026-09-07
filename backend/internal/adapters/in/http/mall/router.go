@@ -8,9 +8,14 @@ import (
 
 // Deps is a buyer-facing (mall) handler set.
 type Deps struct {
-	List           http.Handler
-	Catalog        http.Handler
-	TokenBlueprint http.Handler // patch
+	List    http.Handler
+	Catalog http.Handler
+
+	// TokenBlueprint routes
+	// - public: /mall/token-blueprints/**
+	// - me:     /mall/me/token-blueprints/**
+	// - report: POST /mall/me/token-blueprints/{tokenBlueprintId}/reports
+	TokenBlueprint http.Handler
 
 	// ProductBlueprint reviews (catalog + me/catalog)
 	// - public: GET /mall/catalog/product-blueprints/{pbId}/reviews
@@ -117,6 +122,7 @@ func handleSafe(mux *http.ServeMux, pattern string, h http.Handler, name string)
 		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
 		h = http.NotFoundHandler()
 	}
+
 	mux.Handle(pattern, h)
 }
 
@@ -141,11 +147,13 @@ func handleSafeAuth(
 		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
 		h = http.NotFoundHandler()
 	}
+
 	if auth == nil {
 		log.Printf("[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)", name, pattern)
 		handleSafe(mux, pattern, mallRouterUnavailableHandler("auth_middleware_not_configured"), name)
 		return
 	}
+
 	handleSafe(mux, pattern, auth(h), name)
 }
 
@@ -167,16 +175,19 @@ func handleSafeAuthAvatar(
 		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
 		h = http.NotFoundHandler()
 	}
+
 	if auth == nil {
 		log.Printf("[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)", name, pattern)
 		handleSafe(mux, pattern, mallRouterUnavailableHandler("auth_middleware_not_configured"), name)
 		return
 	}
+
 	if avatar == nil {
 		log.Printf("[mall.router] ERROR: nil avatar context middleware: %s pattern=%s (failing closed)", name, pattern)
 		handleSafe(mux, pattern, mallRouterUnavailableHandler("avatar_context_middleware_not_configured"), name)
 		return
 	}
+
 	handleSafe(mux, pattern, auth(avatar(h)), name)
 }
 
@@ -187,6 +198,7 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 	if h == nil {
 		return nil
 	}
+
 	if auth == nil {
 		log.Printf("[mall.router] ERROR: nil auth middleware: Avatar(create) (failing closed for POST)")
 		unavailable := mallRouterUnavailableHandler("auth_middleware_not_configured")
@@ -198,6 +210,7 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 			h.ServeHTTP(w, r)
 		})
 	}
+
 	authed := auth(h)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && (r.URL.Path == "/mall/avatars" || r.URL.Path == "/mall/avatars/") {
@@ -216,11 +229,13 @@ func paymentReadOnlyHandler(h http.Handler) http.Handler {
 	if h == nil {
 		return nil
 	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodOptions {
 			h.ServeHTTP(w, r)
 			return
 		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Allow", "GET, OPTIONS")
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -359,6 +374,7 @@ func Register(
 	)
 
 	// token blueprints (me)
+	// Includes POST /mall/me/token-blueprints/{tokenBlueprintId}/reports.
 	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
 

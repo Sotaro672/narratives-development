@@ -38,6 +38,22 @@ type ReportProductReviewModerator interface {
 	) (pbr.Review, error)
 }
 
+// ReportTokenBlueprintModerator owns Admin moderation of token blueprints.
+// TOKEN_BLUEPRINT + REMOVE in Report means hiding the token blueprint from AMOL UI.
+// It must not delete on-chain metadata or physically delete the token blueprint.
+type ReportTokenBlueprintModerator interface {
+	HideTokenBlueprintByAdmin(
+		ctx context.Context,
+		input HideTokenBlueprintByAdminInput,
+	) error
+}
+
+type HideTokenBlueprintByAdminInput struct {
+	TokenBlueprintID string
+	Reason           string
+	AdminID          string
+}
+
 // ReportTokenCommentModerator owns Admin moderation of token comments.
 type ReportTokenCommentModerator interface {
 	RemoveCommentByAdmin(
@@ -75,10 +91,11 @@ type ReportUsecase struct {
 	productPurchaseResolver applicationport.OwnedProductResolver
 	productReviewModerator  ReportProductReviewModerator
 
-	tokenCommentRepo      tokenreview.CommentRepository
-	tokenBlueprintRepo    tokenblueprint.RepositoryPort
-	tokenAccessResolver   applicationport.ReportTokenAccessResolver
-	tokenCommentModerator ReportTokenCommentModerator
+	tokenCommentRepo        tokenreview.CommentRepository
+	tokenBlueprintRepo      tokenblueprint.RepositoryPort
+	tokenAccessResolver     applicationport.ReportTokenAccessResolver
+	tokenBlueprintModerator ReportTokenBlueprintModerator
+	tokenCommentModerator   ReportTokenCommentModerator
 
 	avatarRepo            avatar.Repository
 	avatarResaleModerator ReportAvatarResaleModerator
@@ -95,10 +112,11 @@ type ReportUsecaseDeps struct {
 	ProductPurchaseResolver applicationport.OwnedProductResolver
 	ProductReviewModerator  ReportProductReviewModerator
 
-	TokenCommentRepo      tokenreview.CommentRepository
-	TokenBlueprintRepo    tokenblueprint.RepositoryPort
-	TokenAccessResolver   applicationport.ReportTokenAccessResolver
-	TokenCommentModerator ReportTokenCommentModerator
+	TokenCommentRepo        tokenreview.CommentRepository
+	TokenBlueprintRepo      tokenblueprint.RepositoryPort
+	TokenAccessResolver     applicationport.ReportTokenAccessResolver
+	TokenBlueprintModerator ReportTokenBlueprintModerator
+	TokenCommentModerator   ReportTokenCommentModerator
 
 	AvatarRepo            avatar.Repository
 	AvatarResaleModerator ReportAvatarResaleModerator
@@ -122,6 +140,7 @@ func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 		tokenCommentRepo:         deps.TokenCommentRepo,
 		tokenBlueprintRepo:       deps.TokenBlueprintRepo,
 		tokenAccessResolver:      deps.TokenAccessResolver,
+		tokenBlueprintModerator:  deps.TokenBlueprintModerator,
 		tokenCommentModerator:    deps.TokenCommentModerator,
 		avatarRepo:               deps.AvatarRepo,
 		avatarResaleModerator:    deps.AvatarResaleModerator,
@@ -321,6 +340,103 @@ func reportNewProductReviewCaseParams(
 }
 
 // ============================================================
+// TokenBlueprint report
+// ============================================================
+
+type ReportTokenBlueprintByAvatarInput struct {
+	TokenBlueprintID string
+	AvatarID         string
+	Reason           reportdom.ReportReason
+	Detail           string
+}
+
+func (u *ReportUsecase) ReportTokenBlueprintByAvatar(
+	ctx context.Context,
+	input ReportTokenBlueprintByAvatarInput,
+) (reportdom.AddReportResult, error) {
+	if err := u.ensureReportRepository(); err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+	if u.tokenBlueprintRepo == nil || u.tokenAccessResolver == nil {
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
+	}
+	if input.TokenBlueprintID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
+	}
+	if input.AvatarID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidReporterID
+	}
+
+	tokenBlueprintEntity, err := u.tokenBlueprintRepo.GetByID(ctx, input.TokenBlueprintID)
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+	if tokenBlueprintEntity == nil || tokenBlueprintEntity.ID != input.TokenBlueprintID {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
+	}
+
+	allowed, err := u.tokenAccessResolver.CanReportTokenBlueprint(
+		ctx,
+		input.AvatarID,
+		input.TokenBlueprintID,
+	)
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+	if !allowed {
+		return reportdom.AddReportResult{}, ErrReportForbidden
+	}
+
+	return u.addTokenBlueprintReport(
+		ctx,
+		*tokenBlueprintEntity,
+		input.AvatarID,
+		input.Reason,
+		input.Detail,
+	)
+}
+
+func (u *ReportUsecase) addTokenBlueprintReport(
+	ctx context.Context,
+	target tokenblueprint.TokenBlueprint,
+	reporterAvatarID string,
+	reason reportdom.ReportReason,
+	detail string,
+) (reportdom.AddReportResult, error) {
+	now := u.now().UTC()
+
+	reportCase, err := reportdom.NewReportCase(reportdom.NewReportCaseParams{
+		TargetType:       reportdom.TargetTypeTokenBlueprint,
+		TargetID:         target.ID,
+		TargetParentID:   target.ID,
+		TargetAuthorID:   target.CreatedBy,
+		TargetAuthorType: reportdom.ActorTypeBrand,
+		SnapshotTitle:    target.Name,
+		SnapshotBody:     target.Description,
+		SnapshotRating:   nil,
+		CreatedAt:        now,
+	})
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	report, err := reportdom.NewReport(reportdom.NewReportParams{
+		CaseID:       reportCase.ID,
+		ReporterType: reportdom.ActorTypeAvatar,
+		ReporterID:   reporterAvatarID,
+		CompanyID:    "",
+		Reason:       reason,
+		Detail:       detail,
+		CreatedAt:    now,
+	})
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	return u.reportRepo.AddReport(ctx, reportCase, report)
+}
+
+// ============================================================
 // TokenBlueprint comment report
 // ============================================================
 
@@ -366,7 +482,7 @@ func (u *ReportUsecase) ReportTokenBlueprintCommentByAvatar(
 		return reportdom.AddReportResult{}, ErrReportSelfReport
 	}
 
-	allowed, err := u.tokenAccessResolver.CanReportTokenBlueprintComment(
+	allowed, err := u.tokenAccessResolver.CanReportTokenBlueprint(
 		ctx,
 		input.AvatarID,
 		input.TokenBlueprintID,
@@ -873,11 +989,20 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
-	// REMOVED 済みの AVATAR 裁定は、再販停止処理だけを再実行できるようにする。
-	// SuspendAvatarResaleByAdmin は冪等なので、前回の裁定直後に競合して残った
-	// listing や、前回の後処理失敗を安全に修復できる。
+	// REMOVED 済みの TOKEN_BLUEPRINT / AVATAR 裁定は、対象側の措置だけを
+	// 再実行できるようにする。各 moderator は冪等に実装する。
 	if reportCase.IsRemoved() {
-		if reportCase.TargetType == reportdom.TargetTypeAvatar {
+		switch reportCase.TargetType {
+		case reportdom.TargetTypeTokenBlueprint:
+			if err := u.hideTokenBlueprintTarget(
+				ctx,
+				reportCase,
+				input.Reason,
+				input.DecidedBy,
+			); err != nil {
+				return reportdom.ReportCase{}, err
+			}
+		case reportdom.TargetTypeAvatar:
 			if err := u.suspendAvatarResaleTarget(
 				ctx,
 				reportCase,
@@ -892,11 +1017,22 @@ func (u *ReportUsecase) removeReportCase(
 
 	// IMPORTANT:
 	// REMOVE の対象側処理を先に完了する。
-	// 商品レビュー/コメントは削除、AVATARは再販サービスのみ利用停止とする。
+	// 商品レビュー/コメントは削除、TOKEN_BLUEPRINT は AMOL UI 上で非表示、
+	// AVATAR は再販サービスのみ利用停止とする。
 	// 対象側処理に失敗した場合、ReportCase を REMOVED にしてはいけない。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview:
 		if err := u.removeProductBlueprintReviewTarget(
+			ctx,
+			reportCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
+	case reportdom.TargetTypeTokenBlueprint:
+		if err := u.hideTokenBlueprintTarget(
 			ctx,
 			reportCase,
 			input.Reason,
@@ -1044,9 +1180,9 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 		return nil
 	}
 
-	// 裁定対象者への通知は、実際に対象者へ措置が発生するケースだけ生成する。
+	// 裁定対象者への通知は、現在の通知ドメインが直接扱えるケースだけ生成する。
 	// PRODUCT_BLUEPRINT_REVIEW はレビュー削除、AVATAR は再販サービス利用停止。
-	// TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
+	// TOKEN_BLUEPRINT / TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview,
 		reportdom.TargetTypeAvatar:
@@ -1089,6 +1225,26 @@ func (u *ReportUsecase) removeProductBlueprintReviewTarget(
 		},
 	)
 	return err
+}
+
+func (u *ReportUsecase) hideTokenBlueprintTarget(
+	ctx context.Context,
+	reportCase reportdom.ReportCase,
+	reason string,
+	adminID string,
+) error {
+	if u.tokenBlueprintModerator == nil {
+		return ErrReportUsecaseNotConfigured
+	}
+
+	return u.tokenBlueprintModerator.HideTokenBlueprintByAdmin(
+		ctx,
+		HideTokenBlueprintByAdminInput{
+			TokenBlueprintID: reportCase.TargetID,
+			Reason:           reason,
+			AdminID:          adminID,
+		},
+	)
 }
 
 func (u *ReportUsecase) removeTokenBlueprintCommentTarget(

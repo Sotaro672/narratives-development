@@ -23,12 +23,16 @@ type ReportDecisionModalProps = {
 };
 
 function getDescription(status: ReportCaseStatus, targetType?: ReportTargetType): string {
-  const isAvatar = targetType === "AVATAR";
-
-  if (isAvatar) {
+  if (targetType === "AVATAR") {
     return status === "KEPT"
       ? "このアバターは変化なしで裁定済みです。必要な場合は再販サービス利用停止へ変更できます。"
       : "アバターに変化を加えないか、再販サービスのみ利用停止にするかを決定します。";
+  }
+
+  if (targetType === "TOKEN_BLUEPRINT") {
+    return status === "KEPT"
+      ? "このトークンは維持済みです。必要な場合はAMOL上で非表示へ変更できます。"
+      : "トークンを維持するか、AMOL上で非表示にするかを決定します。";
   }
 
   return status === "KEPT"
@@ -43,15 +47,28 @@ function getPlaceholder(status: ReportCaseStatus, targetType?: ReportTargetType)
       : "裁定の根拠を入力してください。";
   }
 
+  if (targetType === "TOKEN_BLUEPRINT") {
+    return status === "KEPT"
+      ? "AMOL上で非表示へ変更する根拠を入力してください。"
+      : "裁定の根拠を入力してください。";
+  }
+
   return status === "KEPT"
     ? "削除へ変更する根拠を入力してください。"
     : "裁定の根拠を入力してください。";
 }
 
 function getNote(targetType?: ReportTargetType): string {
-  return targetType === "AVATAR"
-    ? "「再販利用停止」を選択すると、アバター自体は削除・停止せず、対象アバターの再販サービスのみ利用停止にします。"
-    : "「削除する」を選択すると、対象コンテンツの削除に成功した後でケースが削除済みとして確定します。";
+  switch (targetType) {
+    case "AVATAR":
+      return "「再販利用停止」を選択すると、アバター自体は削除・停止せず、対象アバターの再販サービスのみ利用停止にします。";
+
+    case "TOKEN_BLUEPRINT":
+      return "「非表示にする」を選択すると、対象トークンをAMOL上で非表示にします。TokenBlueprint自体やオンチェーン上のトークン・メタデータは削除されません。";
+
+    default:
+      return "「削除する」を選択すると、対象コンテンツの削除に成功した後でケースが削除済みとして確定します。";
+  }
 }
 
 function getKeepLabel(targetType?: ReportTargetType): string {
@@ -59,7 +76,16 @@ function getKeepLabel(targetType?: ReportTargetType): string {
 }
 
 function getRemoveLabel(targetType?: ReportTargetType): string {
-  return targetType === "AVATAR" ? "再販利用停止" : "削除する";
+  switch (targetType) {
+    case "AVATAR":
+      return "再販利用停止";
+
+    case "TOKEN_BLUEPRINT":
+      return "非表示にする";
+
+    default:
+      return "削除する";
+  }
 }
 
 export default function ReportDecisionModal({

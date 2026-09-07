@@ -34,6 +34,8 @@ function getTargetLabel(targetType?: ReportTargetType): string {
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "レビュー";
+    case "TOKEN_BLUEPRINT":
+      return "トークン";
     case "TOKEN_BLUEPRINT_COMMENT":
       return "コメント";
     case "AVATAR":
@@ -45,11 +47,16 @@ function getTargetLabel(targetType?: ReportTargetType): string {
 
 function getDescription(targetType?: ReportTargetType): string {
   switch (targetType) {
+    case "TOKEN_BLUEPRINT":
+      return "このトークンのコンテンツが不適切だと思う理由を選択してください。通報しただけではコンテンツは自動的に非表示になりません。";
+
     case "AVATAR":
       return "このアバターが不適切だと思う理由を選択してください。通報しただけでは再販サービスの利用が自動的に停止されることはありません。";
+
     case "PRODUCT_BLUEPRINT_REVIEW":
     case "TOKEN_BLUEPRINT_COMMENT":
       return `この${getTargetLabel(targetType)}が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。`;
+
     default:
       return "この投稿が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。";
   }

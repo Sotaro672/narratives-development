@@ -110,7 +110,7 @@ var (
 )
 
 // HasOwnedProductBlueprint は avatar が指定 productBlueprint の token を
-// on-chain 上で現在保有しているかを判定します.
+// on-chain 上で現在保有しているかを判定します。
 //
 // 判定順:
 // 1. avatarId から wallet を取得
@@ -142,7 +142,6 @@ func (uc *WalletUsecase) HasOwnedProductBlueprint(
 	if uc.modelProductBlueprintID == nil {
 		return false, ErrWalletModelProductBlueprintNotConfigured
 	}
-
 	if avatarID == "" {
 		return false, ErrWalletSyncAvatarIDEmpty
 	}
@@ -154,7 +153,6 @@ func (uc *WalletUsecase) HasOwnedProductBlueprint(
 	if err != nil {
 		return false, err
 	}
-
 	if w.WalletAddress == "" {
 		return false, ErrWalletSyncWalletAddressEmpty
 	}
@@ -208,8 +206,8 @@ func (uc *WalletUsecase) HasOwnedProductBlueprint(
 	return false, nil
 }
 
-// CanReportTokenBlueprintComment は avatar が指定 TokenBlueprint 配下の
-// コメントを通報できるか判定します.
+// CanReportTokenBlueprint は avatar が指定 TokenBlueprint に関連するコンテンツを
+// 通報できるか判定します。
 //
 // 現在の判定ルール:
 // - avatar の wallet が on-chain 上で現在保有している assetId を正とする。
@@ -218,7 +216,7 @@ func (uc *WalletUsecase) HasOwnedProductBlueprint(
 //
 // Firestore wallet.assetIds は同期用 read model / cache であり、
 // この権限判定では使用しません。
-func (uc *WalletUsecase) CanReportTokenBlueprintComment(
+func (uc *WalletUsecase) CanReportTokenBlueprint(
 	ctx context.Context,
 	avatarID string,
 	tokenBlueprintID string,

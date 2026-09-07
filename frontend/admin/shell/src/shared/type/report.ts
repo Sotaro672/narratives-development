@@ -2,6 +2,7 @@
 
 export type ReportTargetType =
   | "PRODUCT_BLUEPRINT_REVIEW"
+  | "TOKEN_BLUEPRINT"
   | "TOKEN_BLUEPRINT_COMMENT"
   | "AVATAR";
 

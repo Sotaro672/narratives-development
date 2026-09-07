@@ -75,6 +75,8 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 	switch targetType {
 	case TargetTypeProductBlueprintReview:
 		prefix = "productBlueprintReview"
+	case TargetTypeTokenBlueprint:
+		prefix = "tokenBlueprint"
 	case TargetTypeTokenBlueprintComment:
 		prefix = "tokenBlueprintComment"
 	case TargetTypeAvatar:
@@ -115,13 +117,17 @@ type TargetType string
 
 const (
 	TargetTypeProductBlueprintReview TargetType = "PRODUCT_BLUEPRINT_REVIEW"
+	TargetTypeTokenBlueprint         TargetType = "TOKEN_BLUEPRINT"
 	TargetTypeTokenBlueprintComment  TargetType = "TOKEN_BLUEPRINT_COMMENT"
 	TargetTypeAvatar                 TargetType = "AVATAR"
 )
 
 func (t TargetType) Validate() error {
 	switch t {
-	case TargetTypeProductBlueprintReview, TargetTypeTokenBlueprintComment, TargetTypeAvatar:
+	case TargetTypeProductBlueprintReview,
+		TargetTypeTokenBlueprint,
+		TargetTypeTokenBlueprintComment,
+		TargetTypeAvatar:
 		return nil
 	default:
 		return ErrInvalidTargetType
@@ -164,7 +170,11 @@ const (
 
 func (r ReportReason) Validate() error {
 	switch r {
-	case ReportReasonSpam, ReportReasonHarassment, ReportReasonInappropriate, ReportReasonFalseInformation, ReportReasonOther:
+	case ReportReasonSpam,
+		ReportReasonHarassment,
+		ReportReasonInappropriate,
+		ReportReasonFalseInformation,
+		ReportReasonOther:
 		return nil
 	default:
 		return ErrInvalidReason
@@ -577,6 +587,12 @@ func validateSnapshotContent(
 		}
 		return nil
 
+	case TargetTypeTokenBlueprint:
+		if title == "" && body == "" {
+			return fmt.Errorf("%w: token blueprint snapshot is empty", ErrInvalidTargetID)
+		}
+		return nil
+
 	case TargetTypeAvatar:
 		if title == "" && body == "" {
 			return fmt.Errorf("%w: avatar snapshot is empty", ErrInvalidTargetID)
@@ -598,7 +614,7 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		value := *rating
 		return &value, nil
 
-	case TargetTypeTokenBlueprintComment, TargetTypeAvatar:
+	case TargetTypeTokenBlueprint, TargetTypeTokenBlueprintComment, TargetTypeAvatar:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}
