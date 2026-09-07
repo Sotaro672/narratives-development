@@ -1,4 +1,4 @@
-// frontend\console\shell\src\features\notification\infrastructure\reportDecisionNotificationApi.ts
+// frontend/console/shell/src/features/notification/infrastructure/reportDecisionNotificationApi.ts
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
@@ -11,10 +11,15 @@ import type {
 
 export type ReportDecisionNotificationRecipientType = "AVATAR" | "BRAND";
 
+export type ReportDecisionNotificationKind =
+  | "REPORTER_DECISION"
+  | "TARGET_ENFORCEMENT";
+
 export type ReportDecisionStatus = Exclude<ReportCaseStatus, "PENDING">;
 
 export type ReportDecisionNotification = {
   id: string;
+  notificationKind: ReportDecisionNotificationKind;
   caseId: string;
   reportId: string;
   recipientType: ReportDecisionNotificationRecipientType;
@@ -38,7 +43,8 @@ export type ListReportDecisionNotificationsParams = PageParams & {
   isRead?: boolean;
 };
 
-export type ReportDecisionNotificationPage = PageResult<ReportDecisionNotification>;
+export type ReportDecisionNotificationPage =
+  PageResult<ReportDecisionNotification>;
 
 type ErrorResponse = {
   error?: string;
@@ -140,6 +146,7 @@ function buildListQuery(
  * GET /report-decision-notifications
  *
  * ログイン中メンバーのCompanyに属するBRAND宛て裁定結果通知を取得する。
+ * REPORTER_DECISION / TARGET_ENFORCEMENT の両方を取得する。
  * companyIdはFrontendから送らず、Backendの認証コンテキストから解決する。
  */
 export async function listReportDecisionNotificationsApi(

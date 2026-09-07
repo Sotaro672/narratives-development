@@ -2,7 +2,9 @@
 
 export type ReportTargetType =
   | "PRODUCT_BLUEPRINT_REVIEW"
-  | "TOKEN_BLUEPRINT_COMMENT";
+  | "TOKEN_BLUEPRINT"
+  | "TOKEN_BLUEPRINT_COMMENT"
+  | "AVATAR";
 
 export type ReportReason =
   | "SPAM"
@@ -37,9 +39,21 @@ export type ReportProductBlueprintReviewInput = {
   detail?: string;
 };
 
+export type ReportTokenBlueprintInput = {
+  tokenBlueprintId: string;
+  reason: ReportReason;
+  detail?: string;
+};
+
 export type ReportTokenBlueprintCommentInput = {
   tokenBlueprintId: string;
   commentId: string;
+  reason: ReportReason;
+  detail?: string;
+};
+
+export type ReportAvatarInput = {
+  avatarId: string;
   reason: ReportReason;
   detail?: string;
 };
