@@ -3,8 +3,8 @@
 import { useState } from "react";
 
 import { formatDateTime } from "../../../../components/utils/date";
-import ReviewReportModal from "../../../report/components/ReportModal";
-import { useReviewReport } from "../../../report/hooks/useReport";
+import ReportModal from "../../../report/components/ReportModal";
+import { useReport } from "../../../report/hooks/useReport";
 
 import "../../styles/product-review.css";
 
@@ -58,6 +58,7 @@ export default function ProductReviewSection({
   className,
 }: ProductReviewSectionProps) {
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
+
   const {
     target,
     isOpen,
@@ -72,7 +73,7 @@ export default function ProductReviewSection({
     setReason,
     setDetail,
     submit,
-  } = useReviewReport();
+  } = useReport();
 
   const safeItems = Array.isArray(items) ? items : [];
   const safeErrorMessage = errorMessage?.trim() || "";
@@ -111,7 +112,9 @@ export default function ProductReviewSection({
         {hasSummary ? (
           <div className="product-review__summary">
             {Number.isFinite(averageRating) ? (
-              <strong className="product-review__average">{Number(averageRating).toFixed(1)}</strong>
+              <strong className="product-review__average">
+                {Number(averageRating).toFixed(1)}
+              </strong>
             ) : null}
             {Number.isFinite(totalCount) ? (
               <span className="product-review__count">{Number(totalCount)}件</span>
@@ -159,7 +162,7 @@ export default function ProductReviewSection({
         ) : null}
       </section>
 
-      <ReviewReportModal
+      <ReportModal
         open={isOpen}
         targetType={target?.type}
         reason={reason}
@@ -201,8 +204,18 @@ function ProductReviewItemView({
   const reviewedAt = review.reviewedAt?.trim() || "";
   const reviewedAtLabel = reviewedAt ? formatDateTime(reviewedAt) : "-";
   const canOpenAvatar = Boolean(avatarId && onAvatarClick);
-  const isOwnReview = Boolean(currentAvatarId && avatarId && currentAvatarId === avatarId);
-  const canReport = Boolean(productBlueprintId && currentAvatarId && reviewId && !isOwnReview && onReport);
+  const isOwnReview = Boolean(
+    currentAvatarId &&
+    avatarId &&
+    currentAvatarId === avatarId,
+  );
+  const canReport = Boolean(
+    productBlueprintId &&
+    currentAvatarId &&
+    reviewId &&
+    !isOwnReview &&
+    onReport,
+  );
 
   const avatarContent = (
     <>
@@ -256,8 +269,13 @@ function ProductReviewItemView({
         ) : null}
       </div>
 
-      {reviewTitle ? <h3 className="product-review__title">{reviewTitle}</h3> : null}
-      {reviewBody ? <p className="product-review__body">{reviewBody}</p> : null}
+      {reviewTitle ? (
+        <h3 className="product-review__title">{reviewTitle}</h3>
+      ) : null}
+
+      {reviewBody ? (
+        <p className="product-review__body">{reviewBody}</p>
+      ) : null}
 
       {showHelpfulVotes &&
       Number.isFinite(review.helpfulVotes) &&

@@ -6,7 +6,7 @@ import { useLocation } from "react-router-dom";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
-import ReviewReportModal from "../features/report/presentation/components/ReportModal";
+import ReportModal from "../features/report/presentation/components/ReportModal";
 
 import Pagination from "../shared/ui/pagination";
 import RefreshButton from "../shared/ui/refresh";
@@ -352,7 +352,7 @@ export default function ProductBlueprintReviewDetail() {
         </div>
       </PageStyle>
 
-      <ReviewReportModal
+      <ReportModal
         open={IsReportOpen}
         targetType="PRODUCT_BLUEPRINT_REVIEW"
         reason={ReportReason}

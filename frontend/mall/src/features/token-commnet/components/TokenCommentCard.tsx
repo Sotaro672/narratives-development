@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { getMyAvatar } from "../../avatar/api/avatarApi";
-import ReviewReportModal from "../../report/components/ReportModal";
-import { useReviewReport } from "../../report/hooks/useReport";
+import ReportModal from "../../report/components/ReportModal";
+import { useReport } from "../../report/hooks/useReport";
 import { useAuthState } from "../../shared/hooks/useAuthState";
 import type { TokenCommentTreeNode } from "../../shared/types/tokenCommentTypes";
 
@@ -75,7 +75,7 @@ export default function TokenCommentCard({
     setReason,
     setDetail,
     submit,
-  } = useReviewReport();
+  } = useReport();
 
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
 
@@ -190,7 +190,7 @@ export default function TokenCommentCard({
         )}
       </section>
 
-      <ReviewReportModal
+      <ReportModal
         open={isOpen}
         targetType={target?.type}
         reason={reason}
