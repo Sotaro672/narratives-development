@@ -128,6 +128,19 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.admin: token blueprint review usecase is nil")
 	}
 
+	// Admin側のTokenBlueprintUsecaseは通報裁定によるAMOL上の非表示専用。
+	// TokenBlueprint本体、Firebase Storage、metadataUri、
+	// オンチェーン上のトークン・メタデータは削除しない。
+	tokenBlueprintUsecase := usecase.NewTokenBlueprintUsecase(
+		tokenBlueprintRepo,
+		nil,
+		nil,
+		nil,
+	)
+	if tokenBlueprintUsecase == nil {
+		return nil, errors.New("di.admin: token blueprint usecase is nil")
+	}
+
 	resaleRepo := fsrepo.NewResaleRepositoryFS(infra.Firestore)
 	if resaleRepo == nil {
 		return nil, errors.New("di.admin: resale repository is nil")
@@ -157,6 +170,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			ReportRepo:               reportRepo,
 			DecisionNotificationRepo: reportDecisionNotificationRepo,
 			ProductReviewModerator:   productBlueprintReviewUsecase,
+			TokenBlueprintModerator:  tokenBlueprintUsecase,
 			TokenCommentModerator:    tokenBlueprintReviewUsecase,
 			AvatarRepo:               avatarRepo,
 			AvatarResaleModerator:    resaleUsecase,

@@ -1,9 +1,18 @@
-// frontend/amol/src/features/contents/api/contentsApi.ts
+// frontend/mall/src/features/contents/api/contentsApi.ts
 
 import { requestJson } from "../../../lib/http";
 import type { ContentsMetadata } from "../../shared/types/contents";
 
 const METADATA_PROXY_PATH = "/mall/me/wallets/metadata/proxy";
+
+export type TokenBlueprintModerationStatus =
+  | "ACTIVE"
+  | "HIDDEN_BY_MODERATION";
+
+export type TokenBlueprintModerationStatusResponse = {
+  tokenBlueprintId: string;
+  status: TokenBlueprintModerationStatus;
+};
 
 type MetadataProxyResponse = {
   name: string;
@@ -16,6 +25,32 @@ type MetadataProxyResponse = {
     }>;
   };
 };
+
+export async function fetchTokenBlueprintModerationStatus(
+  tokenBlueprintId: string,
+): Promise<TokenBlueprintModerationStatusResponse> {
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+
+  if (!normalizedTokenBlueprintId) {
+    throw new Error("tokenBlueprintId is required.");
+  }
+
+  return requestJson<TokenBlueprintModerationStatusResponse>(
+    `/mall/me/token-blueprints/${encodeURIComponent(
+      normalizedTokenBlueprintId,
+    )}/moderation-status`,
+    {
+      method: "GET",
+      auth: "required",
+      messages: {
+        requestErrorMessage:
+          "token blueprint moderation status fetch failed.",
+        nonJsonErrorMessage:
+          "TokenBlueprint moderation API が JSON 以外を返しました。",
+      },
+    },
+  );
+}
 
 export async function fetchContentsMetadata(
   metadataUri: string,

@@ -1,4 +1,4 @@
-// frontend/amol/src/features/contents/hooks/useContentsPage.ts
+// frontend/mall/src/features/contents/hooks/useContentsPage.ts
 
 import { useEffect, useMemo, useState } from "react";
 import { getAuth } from "firebase/auth";
@@ -13,7 +13,10 @@ import type {
   ContentsSearchParams,
 } from "../../shared/types/contents";
 import { useTokenCommentCard } from "../../token-commnet/hooks/useTokenCommentCard";
-import { fetchContentsMetadata } from "../api/contentsApi";
+import {
+  fetchContentsMetadata,
+  fetchTokenBlueprintModerationStatus,
+} from "../api/contentsApi";
 
 function buildContentsSearchParams(
   searchParams: URLSearchParams,
@@ -45,6 +48,7 @@ export function useContentsPage() {
   });
 
   const [metadata, setMetadata] = useState<ContentsMetadata | null>(null);
+  const [moderationHidden, setModerationHidden] = useState(false);
   const [activeFileIndex, setActiveFileIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -68,10 +72,11 @@ export function useContentsPage() {
   };
 
   useEffect(() => {
-    if (!contents.metadataUri) {
+    if (!contents.tokenBlueprintId) {
       setMetadata(null);
+      setModerationHidden(false);
       setActiveFileIndex(0);
-      setError("");
+      setError("tokenBlueprintId が指定されていません。");
       setLoading(false);
       return;
     }
@@ -81,9 +86,34 @@ export function useContentsPage() {
     const load = async () => {
       setLoading(true);
       setError("");
+      setMetadata(null);
+      setModerationHidden(false);
+      setActiveFileIndex(0);
 
       try {
-        const result = await fetchContentsMetadata(contents.metadataUri);
+        const moderation =
+          await fetchTokenBlueprintModerationStatus(
+            contents.tokenBlueprintId,
+          );
+
+        if (!isMounted) return;
+
+        if (moderation.status === "HIDDEN_BY_MODERATION") {
+          setModerationHidden(true);
+          setMetadata(null);
+          setActiveFileIndex(0);
+          return;
+        }
+
+        if (!contents.metadataUri) {
+          setMetadata(null);
+          setActiveFileIndex(0);
+          return;
+        }
+
+        const result = await fetchContentsMetadata(
+          contents.metadataUri,
+        );
 
         if (!isMounted) return;
 
@@ -93,6 +123,7 @@ export function useContentsPage() {
         if (!isMounted) return;
 
         setMetadata(null);
+        setModerationHidden(false);
         setActiveFileIndex(0);
         setError(
           err instanceof Error
@@ -100,7 +131,9 @@ export function useContentsPage() {
             : "トークンコンテンツの取得に失敗しました。",
         );
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
@@ -109,7 +142,10 @@ export function useContentsPage() {
     return () => {
       isMounted = false;
     };
-  }, [contents.metadataUri]);
+  }, [
+    contents.metadataUri,
+    contents.tokenBlueprintId,
+  ]);
 
   useEffect(() => {
     if (!contents.productId) {
@@ -161,7 +197,7 @@ export function useContentsPage() {
   const pageTitle = tokenName || "トークン詳細";
 
   const mediaItems = useMemo<MediaGalleryItem[]>(() => {
-    if (!metadata) return [];
+    if (!metadata || moderationHidden) return [];
 
     return metadata.files
       .filter((file) => file.uri !== metadata.image)
@@ -170,7 +206,7 @@ export function useContentsPage() {
         url: file.uri,
         type: file.type,
       }));
-  }, [metadata]);
+  }, [metadata, moderationHidden]);
 
   useEffect(() => {
     if (activeFileIndex >= mediaItems.length) {
@@ -273,6 +309,7 @@ export function useContentsPage() {
     contents,
     commentCard,
     metadata,
+    moderationHidden,
     mediaItems,
     activeFileIndex,
     setActiveFileIndex,

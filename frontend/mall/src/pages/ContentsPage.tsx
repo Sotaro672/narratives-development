@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/ContentsPage.tsx
+// frontend/mall/src/pages/ContentsPage.tsx
 
 import "../styles/page-layout.css";
 import "../styles/contents-page.css";
@@ -48,6 +48,7 @@ export default function ContentsPage() {
             loading={page.loading}
             error={page.error}
             metadataUri={page.contents.metadataUri}
+            moderationHidden={page.moderationHidden}
             hasMediaItems={page.hasMediaItems}
             mediaItems={page.mediaItems}
             activeFileIndex={page.activeFileIndex}
