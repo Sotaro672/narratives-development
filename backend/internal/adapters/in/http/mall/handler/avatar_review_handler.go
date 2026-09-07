@@ -4,6 +4,7 @@ package mallHandler
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
@@ -11,24 +12,24 @@ import (
 )
 
 const (
+	mallAvatarReviewsPath   = "/mall/avatar-reviews"
 	mallMeAvatarReviewsPath = "/mall/me/avatar-reviews"
 )
 
-// AvatarReviewHandler handles post-transfer Avatar reviews in Mall.
-//
-// Avatar Review is available only for completed Avatar-to-Avatar Resale
-// transactions.
+// AvatarReviewHandler handles public Avatar review reads and authenticated
+// post-transfer Avatar review creation in Mall.
 //
 // Supported:
 //
+//	GET  /mall/avatar-reviews/{avatarId}
 //	POST /mall/me/avatar-reviews
 //
-// Reviewer Avatar identity is always resolved from AvatarContextMiddleware.
-// It is never accepted from the request body.
+// Public GET returns reviews received by the specified Avatar.
 //
-// Reviewee Avatar identity is also never accepted from the request body.
-// AvatarReviewUsecase resolves the seller from the authoritative Trade and
-// Order snapshots.
+// POST is available only for completed Avatar-to-Avatar Resale transactions.
+// Reviewer identity is resolved from AvatarContextMiddleware and is never
+// accepted from the request body. Reviewee identity is resolved from the
+// authoritative Trade and Order snapshots.
 type AvatarReviewHandler struct {
 	uc *usecase.AvatarReviewUsecase
 }
@@ -45,32 +46,13 @@ func NewAvatarReviewHandler(
 //
 // Supported:
 //
+//	GET  /mall/avatar-reviews/{avatarId}?page=1&perPage=20
 //	POST /mall/me/avatar-reviews
-//
-// Request body:
-//
-//	{
-//	  "orderId": "...",
-//	  "orderItemIndex": 0,
-//	  "evaluation": "good",
-//	  "comment": "丁寧に対応していただきました"
-//	}
-//
-// evaluation:
-//
-//	"good"
-//	"disappointed"
-//
-// orderId + orderItemIndex identify the Trade indirectly.
-// tradeId and revieweeAvatarId are intentionally not accepted from the client.
 func (h *AvatarReviewHandler) ServeHTTP(
 	w http.ResponseWriter,
 	r *http.Request,
 ) {
-	w.Header().Set(
-		"Content-Type",
-		"application/json",
-	)
+	w.Header().Set("Content-Type", "application/json")
 
 	if h == nil || h.uc == nil {
 		writeJSON(
@@ -83,22 +65,32 @@ func (h *AvatarReviewHandler) ServeHTTP(
 		return
 	}
 
-	if r.URL.Path != mallMeAvatarReviewsPath &&
-		r.URL.Path != mallMeAvatarReviewsPath+"/" {
-		notFound(w)
+	if avatarID, ok := publicAvatarReviewIDFromPath(r.URL.Path); ok {
+		switch r.Method {
+		case http.MethodGet:
+			h.listByAvatar(w, r, avatarID)
+		case http.MethodOptions:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			methodNotAllowed(w)
+		}
 		return
 	}
 
-	switch r.Method {
-	case http.MethodPost:
-		h.create(w, r)
-
-	case http.MethodOptions:
-		w.WriteHeader(http.StatusNoContent)
-
-	default:
-		methodNotAllowed(w)
+	if r.URL.Path == mallMeAvatarReviewsPath ||
+		r.URL.Path == mallMeAvatarReviewsPath+"/" {
+		switch r.Method {
+		case http.MethodPost:
+			h.create(w, r)
+		case http.MethodOptions:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			methodNotAllowed(w)
+		}
+		return
 	}
+
+	notFound(w)
 }
 
 // ============================================================
@@ -121,6 +113,105 @@ type createAvatarReviewRequest struct {
 
 	Evaluation avatarreviewdom.Evaluation `json:"evaluation"`
 	Comment    string                     `json:"comment"`
+}
+
+// ============================================================
+// Public list
+// ============================================================
+
+// GET /mall/avatar-reviews/{avatarId}?page=1&perPage=20
+//
+// Returns one page of reviews received by the specified Avatar together with
+// public aggregate evaluation counts.
+func (h *AvatarReviewHandler) listByAvatar(
+	w http.ResponseWriter,
+	r *http.Request,
+	avatarID string,
+) {
+	page, ok := parseAvatarReviewPositiveIntQuery(
+		w,
+		r,
+		"page",
+	)
+	if !ok {
+		return
+	}
+
+	perPage, ok := parseAvatarReviewPositiveIntQuery(
+		w,
+		r,
+		"perPage",
+	)
+	if !ok {
+		return
+	}
+
+	result, err := h.uc.ListByRevieweeAvatarID(
+		r.Context(),
+		usecase.ListAvatarReviewsInput{
+			RevieweeAvatarID: avatarID,
+			Page:             page,
+			PerPage:          perPage,
+		},
+	)
+	if err != nil {
+		writeAvatarReviewErr(w, err)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{
+			"data": result,
+		},
+	)
+}
+
+func publicAvatarReviewIDFromPath(
+	path string,
+) (string, bool) {
+	prefix := mallAvatarReviewsPath + "/"
+
+	if !strings.HasPrefix(path, prefix) {
+		return "", false
+	}
+
+	avatarID := strings.TrimSpace(
+		strings.TrimPrefix(path, prefix),
+	)
+	if avatarID == "" || strings.Contains(avatarID, "/") {
+		return "", false
+	}
+
+	return avatarID, true
+}
+
+// parseAvatarReviewPositiveIntQuery parses an optional positive integer query
+// parameter. An omitted value is returned as zero so the usecase can apply its
+// default value.
+func parseAvatarReviewPositiveIntQuery(
+	w http.ResponseWriter,
+	r *http.Request,
+	name string,
+) (int, bool) {
+	raw := strings.TrimSpace(
+		r.URL.Query().Get(name),
+	)
+	if raw == "" {
+		return 0, true
+	}
+
+	value, err := strconv.Atoi(raw)
+	if err != nil || value <= 0 {
+		badRequest(
+			w,
+			"invalid_"+name,
+		)
+		return 0, false
+	}
+
+	return value, true
 }
 
 // ============================================================
@@ -168,9 +259,7 @@ func (h *AvatarReviewHandler) create(
 		return
 	}
 
-	req.OrderID = strings.TrimSpace(
-		req.OrderID,
-	)
+	req.OrderID = strings.TrimSpace(req.OrderID)
 
 	if req.OrderID == "" {
 		badRequest(
@@ -199,20 +288,15 @@ func (h *AvatarReviewHandler) create(
 	created, err := h.uc.Create(
 		r.Context(),
 		usecase.CreateAvatarReviewInput{
-			OrderID:        req.OrderID,
-			OrderItemIndex: *req.OrderItemIndex,
-
+			OrderID:          req.OrderID,
+			OrderItemIndex:   *req.OrderItemIndex,
 			ReviewerAvatarID: avatarID,
-
-			Evaluation: req.Evaluation,
-			Comment:    req.Comment,
+			Evaluation:       req.Evaluation,
+			Comment:          req.Comment,
 		},
 	)
 	if err != nil {
-		writeAvatarReviewErr(
-			w,
-			err,
-		)
+		writeAvatarReviewErr(w, err)
 		return
 	}
 
@@ -375,6 +459,34 @@ func writeAvatarReviewErr(
 			http.StatusConflict,
 			map[string]string{
 				"error": "avatar_review_transfer_incomplete",
+			},
+		)
+
+	// --------------------------------------------------------
+	// Public read validation
+	// --------------------------------------------------------
+
+	case errors.Is(
+		err,
+		avatarreviewdom.ErrInvalidRevieweeAvatarID,
+	):
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid_avatar_id",
+			},
+		)
+
+	case errors.Is(
+		err,
+		avatarreviewdom.ErrInvalidPagination,
+	):
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid_pagination",
 			},
 		)
 

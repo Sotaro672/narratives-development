@@ -72,8 +72,9 @@ type Deps struct {
 	// - GET  /mall/me/trades/{tradeId}/unread-count
 	Trade http.Handler
 
-	// avatar reviews (me)
-	// - POST /mall/me/avatar-reviews
+	// avatar reviews
+	// - public: GET /mall/avatar-reviews/{avatarId}
+	// - me:     POST /mall/me/avatar-reviews
 	AvatarReview http.Handler
 
 	// market resales (auth + avatar required)
@@ -211,6 +212,7 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 				unavailable.ServeHTTP(w, r)
 				return
 			}
+
 			h.ServeHTTP(w, r)
 		})
 	}
@@ -221,6 +223,7 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 			authed.ServeHTTP(w, r)
 			return
 		}
+
 		h.ServeHTTP(w, r)
 	})
 }
@@ -301,6 +304,11 @@ func Register(
 	avatarHandler := avatarPublicHandler(deps.Avatar, auth)
 	handleSafe(mux, "/mall/avatars", avatarHandler, "Avatar")
 	handleSafe(mux, "/mall/avatars/", avatarHandler, "Avatar")
+
+	// avatar reviews (public)
+	// - GET /mall/avatar-reviews/{avatarId}
+	handleSafe(mux, "/mall/avatar-reviews", deps.AvatarReview, "AvatarReview(public)")
+	handleSafe(mux, "/mall/avatar-reviews/", deps.AvatarReview, "AvatarReview(public)")
 
 	// preview (public)
 	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
@@ -451,6 +459,7 @@ func Register(
 	handleSafeAuthAvatar(mux, "/mall/me/trades/", deps.Trade, "Trade(me)", auth, avatar)
 
 	// avatar reviews (me)
+	// - POST /mall/me/avatar-reviews
 	handleSafeAuthAvatar(mux, "/mall/me/avatar-reviews", deps.AvatarReview, "AvatarReview(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/avatar-reviews/", deps.AvatarReview, "AvatarReview(me)", auth, avatar)
 

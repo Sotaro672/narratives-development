@@ -13,6 +13,16 @@ import (
 )
 
 // ============================================================
+// Constants
+// ============================================================
+
+const (
+	DefaultAvatarReviewPage    = 1
+	DefaultAvatarReviewPerPage = 20
+	MaxAvatarReviewPerPage     = 100
+)
+
+// ============================================================
 // Errors
 // ============================================================
 
@@ -54,26 +64,17 @@ var (
 // Usecase
 // ============================================================
 
-// AvatarReviewUsecase coordinates creation of a buyer-to-seller Avatar review.
+// AvatarReviewUsecase coordinates public reads and creation of buyer-to-seller
+// Avatar reviews.
 //
 // Avatar Review is available only for Avatar-to-Avatar Resale transactions.
 //
-// The client provides:
-//
-//   - orderId
-//   - orderItemIndex
-//   - evaluation
-//   - comment
+// Public reads expose reviews received by a target Avatar. Review creation is
+// restricted to the authenticated buyer after token transfer completion.
 //
 // Reviewer identity is taken from the authenticated Avatar context by the HTTP
-// layer and passed as ReviewerAvatarID.
-//
-// RevieweeAvatarID must never be trusted from the client.
-// The seller Avatar is resolved from the authoritative Trade and Order
-// snapshots.
-//
-// A review can be created only after token transfer for the corresponding
-// Order item has completed.
+// layer. Reviewee identity for creation is resolved from authoritative Trade and
+// Order snapshots and must never be trusted from client input.
 //
 // One Trade can have at most one Avatar Review. The repository is responsible
 // for enforcing that persistence constraint.
@@ -93,6 +94,109 @@ func NewAvatarReviewUsecase(
 		tradeRepo:  tradeRepo,
 		orderRepo:  orderRepo,
 	}
+}
+
+// ============================================================
+// Public list
+// ============================================================
+
+type ListAvatarReviewsInput struct {
+	RevieweeAvatarID string
+	Page             int
+	PerPage          int
+}
+
+type ListAvatarReviewsResult struct {
+	AvatarID          string                   `json:"avatarId"`
+	GoodCount         int64                    `json:"goodCount"`
+	DisappointedCount int64                    `json:"disappointedCount"`
+	Total             int64                    `json:"total"`
+	Page              int                      `json:"page"`
+	PerPage           int                      `json:"perPage"`
+	HasNext           bool                     `json:"hasNext"`
+	Items             []avatarreviewdom.Review `json:"items"`
+}
+
+// ListByRevieweeAvatarID returns one public page of reviews received by an
+// Avatar together with the current aggregate evaluation counts.
+//
+// No reviews is a normal result. In that case Items is an empty slice and all
+// summary counts are zero.
+func (u *AvatarReviewUsecase) ListByRevieweeAvatarID(
+	ctx context.Context,
+	input ListAvatarReviewsInput,
+) (ListAvatarReviewsResult, error) {
+	if u == nil || u.reviewRepo == nil {
+		return ListAvatarReviewsResult{}, ErrAvatarReviewUsecaseNotConfigured
+	}
+
+	revieweeAvatarID := strings.TrimSpace(input.RevieweeAvatarID)
+	if revieweeAvatarID == "" ||
+		len(revieweeAvatarID) > avatarreviewdom.MaxReferenceIDLength ||
+		strings.Contains(revieweeAvatarID, "/") {
+		return ListAvatarReviewsResult{}, avatarreviewdom.ErrInvalidRevieweeAvatarID
+	}
+
+	page := input.Page
+	if page == 0 {
+		page = DefaultAvatarReviewPage
+	}
+
+	perPage := input.PerPage
+	if perPage == 0 {
+		perPage = DefaultAvatarReviewPerPage
+	}
+
+	if page < 1 || perPage < 1 || perPage > MaxAvatarReviewPerPage {
+		return ListAvatarReviewsResult{}, avatarreviewdom.ErrInvalidPagination
+	}
+
+	offset := (page - 1) * perPage
+	if offset < 0 {
+		return ListAvatarReviewsResult{}, avatarreviewdom.ErrInvalidPagination
+	}
+
+	// Fetch one additional record so HasNext can be determined without a
+	// separate count query.
+	reviews, err := u.reviewRepo.ListByRevieweeAvatarID(
+		ctx,
+		avatarreviewdom.ListByRevieweeAvatarIDParams{
+			RevieweeAvatarID: revieweeAvatarID,
+			Limit:            perPage + 1,
+			Offset:           offset,
+		},
+	)
+	if err != nil {
+		return ListAvatarReviewsResult{}, err
+	}
+
+	hasNext := len(reviews) > perPage
+	if hasNext {
+		reviews = reviews[:perPage]
+	}
+
+	if reviews == nil {
+		reviews = []avatarreviewdom.Review{}
+	}
+
+	summary, err := u.reviewRepo.GetSummaryByRevieweeAvatarID(
+		ctx,
+		revieweeAvatarID,
+	)
+	if err != nil {
+		return ListAvatarReviewsResult{}, err
+	}
+
+	return ListAvatarReviewsResult{
+		AvatarID:          revieweeAvatarID,
+		GoodCount:         summary.GoodCount,
+		DisappointedCount: summary.DisappointedCount,
+		Total:             summary.Total,
+		Page:              page,
+		PerPage:           perPage,
+		HasNext:           hasNext,
+		Items:             reviews,
+	}, nil
 }
 
 // ============================================================
@@ -133,26 +237,22 @@ func (u *AvatarReviewUsecase) Create(
 		u.reviewRepo == nil ||
 		u.tradeRepo == nil ||
 		u.orderRepo == nil {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewUsecaseNotConfigured
+		return avatarreviewdom.Review{}, ErrAvatarReviewUsecaseNotConfigured
 	}
 
 	orderID := strings.TrimSpace(input.OrderID)
 	reviewerAvatarID := strings.TrimSpace(input.ReviewerAvatarID)
 
 	if reviewerAvatarID == "" {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewReviewerRequired
+		return avatarreviewdom.Review{}, ErrAvatarReviewReviewerRequired
 	}
 
 	if orderID == "" {
-		return avatarreviewdom.Review{},
-			avatarreviewdom.ErrInvalidOrderID
+		return avatarreviewdom.Review{}, avatarreviewdom.ErrInvalidOrderID
 	}
 
 	if input.OrderItemIndex < 0 {
-		return avatarreviewdom.Review{},
-			avatarreviewdom.ErrInvalidOrderItemIndex
+		return avatarreviewdom.Review{}, avatarreviewdom.ErrInvalidOrderItemIndex
 	}
 
 	// ------------------------------------------------------------
@@ -166,8 +266,7 @@ func (u *AvatarReviewUsecase) Create(
 	)
 	if err != nil {
 		if errors.Is(err, tradedom.ErrNotFound) {
-			return avatarreviewdom.Review{},
-				ErrAvatarReviewTradeNotFound
+			return avatarreviewdom.Review{}, ErrAvatarReviewTradeNotFound
 		}
 
 		return avatarreviewdom.Review{}, err
@@ -177,14 +276,12 @@ func (u *AvatarReviewUsecase) Create(
 	// defensively before using the Trade as the review target.
 	if trade.OrderID != orderID ||
 		trade.OrderItemIndex != input.OrderItemIndex {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewOrderMismatch
+		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
 
 	// Only the Trade buyer can submit the post-transfer review.
 	if trade.BuyerAvatarID != reviewerAvatarID {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewForbidden
+		return avatarreviewdom.Review{}, ErrAvatarReviewForbidden
 	}
 
 	// Avatar Review is only for secondary-market Avatar-to-Avatar Trades.
@@ -192,13 +289,11 @@ func (u *AvatarReviewUsecase) Create(
 	// Primary List transactions use a company seller and are not eligible.
 	if trade.SellerType != tradedom.SellerTypeAvatar ||
 		strings.TrimSpace(trade.SellerAvatarID) == "" {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewUnsupportedTrade
+		return avatarreviewdom.Review{}, ErrAvatarReviewUnsupportedTrade
 	}
 
 	if trade.SellerAvatarID == reviewerAvatarID {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewUnsupportedTrade
+		return avatarreviewdom.Review{}, ErrAvatarReviewUnsupportedTrade
 	}
 
 	// ------------------------------------------------------------
@@ -211,8 +306,7 @@ func (u *AvatarReviewUsecase) Create(
 	)
 	if err != nil {
 		if errors.Is(err, orderdom.ErrNotFound) {
-			return avatarreviewdom.Review{},
-				ErrAvatarReviewOrderNotFound
+			return avatarreviewdom.Review{}, ErrAvatarReviewOrderNotFound
 		}
 
 		return avatarreviewdom.Review{}, err
@@ -220,39 +314,33 @@ func (u *AvatarReviewUsecase) Create(
 
 	// The Order itself must belong to the same authenticated buyer.
 	if order.AvatarID != reviewerAvatarID {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewForbidden
+		return avatarreviewdom.Review{}, ErrAvatarReviewForbidden
 	}
 
 	// Trade buyer and Order buyer must describe the same transaction.
 	if order.AvatarID != trade.BuyerAvatarID {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewOrderMismatch
+		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
 
 	if input.OrderItemIndex >= len(order.Items) {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewOrderMismatch
+		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
 
 	item := order.Items[input.OrderItemIndex]
 
 	// Avatar Review is explicitly a Resale transaction review.
 	if item.Type != orderdom.OrderItemTypeResale {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewUnsupportedTrade
+		return avatarreviewdom.Review{}, ErrAvatarReviewUnsupportedTrade
 	}
 
 	// A Resale Order item must snapshot the actual seller Avatar.
 	if strings.TrimSpace(item.SellerSnapshot.AvatarID) == "" {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewOrderMismatch
+		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
 
 	// Trade seller and immutable Order seller snapshot must agree.
 	if item.SellerSnapshot.AvatarID != trade.SellerAvatarID {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewOrderMismatch
+		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
 
 	// ------------------------------------------------------------
@@ -266,8 +354,7 @@ func (u *AvatarReviewUsecase) Create(
 	if !item.Transferred ||
 		item.TransferredAt == nil ||
 		item.TransferredAt.IsZero() {
-		return avatarreviewdom.Review{},
-			ErrAvatarReviewTransferIncomplete
+		return avatarreviewdom.Review{}, ErrAvatarReviewTransferIncomplete
 	}
 
 	// ------------------------------------------------------------
