@@ -1,10 +1,11 @@
-// frontend/amol/src/pages/SignInPage.tsx
+// frontend/mall/src/pages/SignInPage.tsx
 
 import { useState } from "react";
 import {
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
+import { FirebaseError } from "firebase/app";
 import { signInWithEmailAndPassword } from "firebase/auth";
 
 import "../styles/page-layout.css";
@@ -28,6 +29,37 @@ function resolveRedirectPath(
   }
 
   return redirect;
+}
+
+function resolveSignInErrorMessage(
+  error: unknown,
+): string {
+  if (!(error instanceof FirebaseError)) {
+    return "ログインに失敗しました。もう一度お試しください。";
+  }
+
+  switch (error.code) {
+    case "auth/invalid-credential":
+    case "auth/invalid-login-credentials":
+    case "auth/user-not-found":
+    case "auth/wrong-password":
+      return "メールアドレスまたはパスワードが正しくありません。";
+
+    case "auth/invalid-email":
+      return "メールアドレスの形式が正しくありません。";
+
+    case "auth/user-disabled":
+      return "このアカウントは現在利用できません。";
+
+    case "auth/too-many-requests":
+      return "ログイン試行回数が多すぎます。しばらく時間をおいてから、もう一度お試しください。";
+
+    case "auth/network-request-failed":
+      return "通信に失敗しました。インターネット接続を確認して、もう一度お試しください。";
+
+    default:
+      return "ログインに失敗しました。もう一度お試しください。";
+  }
 }
 
 export default function SignInPage() {
@@ -64,11 +96,7 @@ export default function SignInPage() {
         replace: true,
       });
     } catch (e) {
-      if (e instanceof Error) {
-        setError(e.message);
-      } else {
-        setError("ログインに失敗しました。");
-      }
+      setError(resolveSignInErrorMessage(e));
     } finally {
       setLoading(false);
     }
