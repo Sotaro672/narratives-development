@@ -1,40 +1,40 @@
-// frontend/mall/src/features/notification/infrastructure/reviewReportDecisionNotificationApi.ts
+// frontend/mall/src/features/notification/infrastructure/reportDecisionNotificationApi.ts
 
 import { HttpError, requestJson } from "../../../lib/http";
 import { getOptionalAuthHeaders } from "../../../lib/authHeaders";
 
 import type {
-  ReviewReportCaseStatus,
-  ReviewReportReason,
-  ReviewReportTargetType,
-} from "../../shared/types/reviewReport";
+  ReportCaseStatus,
+  ReportReason,
+  ReportTargetType,
+} from "../../shared/types/report";
 
-const REVIEW_REPORT_DECISION_NOTIFICATIONS_ENDPOINT =
-  "/mall/me/review-report-decision-notifications";
+const REPORT_DECISION_NOTIFICATIONS_ENDPOINT =
+  "/mall/me/report-decision-notifications";
 
-export type ReviewReportDecisionNotificationRecipientType =
+export type ReportDecisionNotificationRecipientType =
   | "AVATAR"
   | "BRAND";
 
-export type ReviewReportDecisionNotificationKind =
+export type ReportDecisionNotificationKind =
   | "REPORTER_DECISION"
   | "TARGET_ENFORCEMENT";
 
-export type ReviewReportDecisionStatus = Exclude<
-  ReviewReportCaseStatus,
+export type ReportDecisionStatus = Exclude<
+  ReportCaseStatus,
   "PENDING"
 >;
 
-type ReviewReportDecisionNotificationBase = {
+type ReportDecisionNotificationBase = {
   id: string;
   caseId: string;
-  recipientType: ReviewReportDecisionNotificationRecipientType;
+  recipientType: ReportDecisionNotificationRecipientType;
   recipientId: string;
   companyId: string;
-  targetType: ReviewReportTargetType;
+  targetType: ReportTargetType;
   targetId: string;
   targetParentId: string;
-  decisionStatus: ReviewReportDecisionStatus;
+  decisionStatus: ReportDecisionStatus;
   decisionReason: string;
   decidedAt: string;
   createdAt: string;
@@ -43,35 +43,35 @@ type ReviewReportDecisionNotificationBase = {
   isRead: boolean;
 };
 
-export type ReviewReportReporterDecisionNotification =
-  ReviewReportDecisionNotificationBase & {
+export type ReportReporterDecisionNotification =
+  ReportDecisionNotificationBase & {
     notificationKind: "REPORTER_DECISION";
     reportId: string;
-    reportReason: ReviewReportReason;
+    reportReason: ReportReason;
     reportDetail: string;
   };
 
-export type ReviewReportTargetEnforcementNotification =
-  ReviewReportDecisionNotificationBase & {
+export type ReportTargetEnforcementNotification =
+  ReportDecisionNotificationBase & {
     notificationKind: "TARGET_ENFORCEMENT";
     reportId: "";
     reportReason: "";
     reportDetail: "";
   };
 
-export type ReviewReportDecisionNotification =
-  | ReviewReportReporterDecisionNotification
-  | ReviewReportTargetEnforcementNotification;
+export type ReportDecisionNotification =
+  | ReportReporterDecisionNotification
+  | ReportTargetEnforcementNotification;
 
-export type ReviewReportDecisionNotificationPage = {
-  items: ReviewReportDecisionNotification[];
+export type ReportDecisionNotificationPage = {
+  items: ReportDecisionNotification[];
   totalCount: number;
   totalPages: number;
   page: number;
   perPage: number;
 };
 
-export type FetchMeReviewReportDecisionNotificationsParams = {
+export type FetchMeReportDecisionNotificationsParams = {
   page?: number;
   perPage?: number;
   isRead?: boolean;
@@ -81,7 +81,7 @@ export type FetchMeReviewReportDecisionNotificationsParams = {
 function createEmptyPage(
   page: number,
   perPage: number,
-): ReviewReportDecisionNotificationPage {
+): ReportDecisionNotificationPage {
   return {
     items: [],
     totalCount: 0,
@@ -100,9 +100,9 @@ function normalizeFiniteNumber(
     : fallback;
 }
 
-export async function fetchMeReviewReportDecisionNotifications(
-  params: FetchMeReviewReportDecisionNotificationsParams = {},
-): Promise<ReviewReportDecisionNotificationPage> {
+export async function fetchMeReportDecisionNotifications(
+  params: FetchMeReportDecisionNotificationsParams = {},
+): Promise<ReportDecisionNotificationPage> {
   const page = params.page ?? 1;
   const perPage = params.perPage ?? 20;
 
@@ -113,9 +113,9 @@ export async function fetchMeReviewReportDecisionNotifications(
 
   try {
     const json = await requestJson<
-      Partial<ReviewReportDecisionNotificationPage>
+      Partial<ReportDecisionNotificationPage>
     >(
-      REVIEW_REPORT_DECISION_NOTIFICATIONS_ENDPOINT,
+      REPORT_DECISION_NOTIFICATIONS_ENDPOINT,
       {
         method: "GET",
         headers,
@@ -130,11 +130,11 @@ export async function fetchMeReviewReportDecisionNotifications(
         cache: "no-store",
         messages: {
           requestErrorMessage:
-            "failed to fetch review report decision notifications",
+            "failed to fetch report decision notifications",
           nonJsonErrorMessage:
-            "failed to fetch review report decision notifications: response is not json",
+            "failed to fetch report decision notifications: response is not json",
           invalidJsonErrorMessage:
-            "failed to fetch review report decision notifications: invalid json",
+            "failed to fetch report decision notifications: invalid json",
         },
       },
     );
@@ -170,9 +170,9 @@ export async function fetchMeReviewReportDecisionNotifications(
   }
 }
 
-export async function markMeReviewReportDecisionNotificationRead(
+export async function markMeReportDecisionNotificationRead(
   notificationId: string,
-): Promise<ReviewReportDecisionNotification> {
+): Promise<ReportDecisionNotification> {
   if (!notificationId) {
     throw new Error("notificationId is required");
   }
@@ -183,8 +183,8 @@ export async function markMeReviewReportDecisionNotificationRead(
     throw new Error("authentication is required");
   }
 
-  return requestJson<ReviewReportDecisionNotification>(
-    `${REVIEW_REPORT_DECISION_NOTIFICATIONS_ENDPOINT}/${encodeURIComponent(
+  return requestJson<ReportDecisionNotification>(
+    `${REPORT_DECISION_NOTIFICATIONS_ENDPOINT}/${encodeURIComponent(
       notificationId,
     )}/read`,
     {
@@ -193,17 +193,17 @@ export async function markMeReviewReportDecisionNotificationRead(
       cache: "no-store",
       messages: {
         requestErrorMessage:
-          "failed to mark review report decision notification as read",
+          "failed to mark report decision notification as read",
         nonJsonErrorMessage:
-          "failed to mark review report decision notification as read: response is not json",
+          "failed to mark report decision notification as read: response is not json",
         invalidJsonErrorMessage:
-          "failed to mark review report decision notification as read: invalid json",
+          "failed to mark report decision notification as read: invalid json",
       },
     },
   );
 }
 
-export const reviewReportDecisionNotificationApi = {
-  list: fetchMeReviewReportDecisionNotifications,
-  markRead: markMeReviewReportDecisionNotificationRead,
+export const reportDecisionNotificationApi = {
+  list: fetchMeReportDecisionNotifications,
+  markRead: markMeReportDecisionNotificationRead,
 };

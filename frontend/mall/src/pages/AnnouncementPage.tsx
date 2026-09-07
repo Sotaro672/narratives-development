@@ -19,7 +19,7 @@ import type { AnnouncementListItem } from "../features/shared/types/announcement
 import {
   getReviewReportReasonLabel,
   type ReviewReportTargetType,
-} from "../features/shared/types/reviewReport";
+} from "../features/shared/types/report";
 
 import "../styles/page-layout.css";
 import "../styles/announcement-page.css";

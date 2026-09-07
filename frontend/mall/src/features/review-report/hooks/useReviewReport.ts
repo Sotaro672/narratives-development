@@ -5,12 +5,12 @@ import { useCallback, useRef, useState } from "react";
 import type {
   ReviewReportReason,
   ReviewReportResponse,
-} from "../../shared/types/reviewReport";
+} from "../../shared/types/report";
 import {
   reportAvatar,
   reportProductBlueprintReview,
   reportTokenBlueprintComment,
-} from "../api/reviewReportApi";
+} from "../api/reportApi";
 
 export type ReviewReportTarget =
   | {

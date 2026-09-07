@@ -1,41 +1,45 @@
-// frontend/mall/src/features/review-report/api/reviewReportApi.ts
+// frontend/mall/src/features/report/api/reportApi.ts
 
 import { getFirebaseIdToken } from "../../../lib/authToken";
-
 import type {
   ReportAvatarInput,
   ReportProductBlueprintReviewInput,
+  ReportRequest,
+  ReportResponse,
   ReportTokenBlueprintCommentInput,
-  ReviewReportRequest,
-  ReviewReportResponse,
-} from "../../shared/types/reviewReport";
+} from "../../shared/types/report";
 
-type ReviewReportErrorResponse = {
+type ReportErrorResponse = {
   error?: unknown;
   message?: unknown;
 };
 
 function getApiBaseUrl(): string {
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
+
   if (!apiBaseUrl) {
     throw new Error("VITE_API_BASE_URLが設定されていません。");
   }
+
   return apiBaseUrl.replace(/\/+$/, "");
 }
 
 function requireId(value: string, fieldName: string): string {
   const normalized = value.trim();
+
   if (!normalized) {
     throw new Error(`${fieldName}が指定されていません。`);
   }
+
   return normalized;
 }
 
 function createRequest(
-  reason: ReviewReportRequest["reason"],
+  reason: ReportRequest["reason"],
   detail?: string,
-): ReviewReportRequest {
+): ReportRequest {
   const normalizedDetail = detail?.trim() ?? "";
+
   if (reason === "OTHER" && !normalizedDetail) {
     throw new Error("「その他」を選択した場合は詳細を入力してください。");
   }
@@ -48,11 +52,13 @@ function createRequest(
 
 async function readResponseBody(response: Response): Promise<unknown> {
   const text = await response.text();
+
   if (!text.trim()) {
     return null;
   }
 
   const contentType = response.headers.get("content-type") ?? "";
+
   if (!contentType.includes("application/json")) {
     return text;
   }
@@ -73,10 +79,12 @@ function getErrorMessage(body: unknown): string {
     return "";
   }
 
-  const errorBody = body as ReviewReportErrorResponse;
+  const errorBody = body as ReportErrorResponse;
+
   if (typeof errorBody.error === "string" && errorBody.error.trim()) {
     return errorBody.error.trim();
   }
+
   if (typeof errorBody.message === "string" && errorBody.message.trim()) {
     return errorBody.message.trim();
   }
@@ -84,32 +92,29 @@ function getErrorMessage(body: unknown): string {
   return "";
 }
 
-function isReviewReportResponse(
-  value: unknown,
-): value is ReviewReportResponse {
+function isReportResponse(value: unknown): value is ReportResponse {
   if (!value || typeof value !== "object") {
     return false;
   }
 
-  const response = value as Partial<ReviewReportResponse>;
+  const response = value as Partial<ReportResponse>;
+
   return (
     typeof response.caseId === "string" &&
     typeof response.reportId === "string" &&
     typeof response.reportCount === "number" &&
-    (
-      response.status === "PENDING" ||
+    (response.status === "PENDING" ||
       response.status === "KEPT" ||
-      response.status === "REMOVED"
-    ) &&
+      response.status === "REMOVED") &&
     typeof response.caseCreated === "boolean" &&
     typeof response.reportCreated === "boolean"
   );
 }
 
-async function postReviewReport(
+async function postReport(
   path: string,
-  request: ReviewReportRequest,
-): Promise<ReviewReportResponse> {
+  request: ReportRequest,
+): Promise<ReportResponse> {
   const apiBaseUrl = getApiBaseUrl();
   const idToken = await getFirebaseIdToken();
 
@@ -125,14 +130,16 @@ async function postReviewReport(
   });
 
   const body = await readResponseBody(response);
+
   if (!response.ok) {
     const message = getErrorMessage(body);
+
     throw new Error(
       message || `通報の送信に失敗しました。status=${response.status}`,
     );
   }
 
-  if (!isReviewReportResponse(body)) {
+  if (!isReportResponse(body)) {
     throw new Error("通報APIから不正なレスポンスが返されました。");
   }
 
@@ -141,7 +148,7 @@ async function postReviewReport(
 
 export async function reportProductBlueprintReview(
   input: ReportProductBlueprintReviewInput,
-): Promise<ReviewReportResponse> {
+): Promise<ReportResponse> {
   const productBlueprintId = requireId(
     input.productBlueprintId,
     "productBlueprintId",
@@ -149,7 +156,7 @@ export async function reportProductBlueprintReview(
   const reviewId = requireId(input.reviewId, "reviewId");
   const request = createRequest(input.reason, input.detail);
 
-  return postReviewReport(
+  return postReport(
     `/mall/me/catalog/product-blueprints/${encodeURIComponent(productBlueprintId)}/reviews/${encodeURIComponent(reviewId)}/reports`,
     request,
   );
@@ -157,7 +164,7 @@ export async function reportProductBlueprintReview(
 
 export async function reportTokenBlueprintComment(
   input: ReportTokenBlueprintCommentInput,
-): Promise<ReviewReportResponse> {
+): Promise<ReportResponse> {
   const tokenBlueprintId = requireId(
     input.tokenBlueprintId,
     "tokenBlueprintId",
@@ -165,7 +172,7 @@ export async function reportTokenBlueprintComment(
   const commentId = requireId(input.commentId, "commentId");
   const request = createRequest(input.reason, input.detail);
 
-  return postReviewReport(
+  return postReport(
     `/mall/me/token-blueprints/${encodeURIComponent(tokenBlueprintId)}/comments/${encodeURIComponent(commentId)}/reports`,
     request,
   );
@@ -173,11 +180,11 @@ export async function reportTokenBlueprintComment(
 
 export async function reportAvatar(
   input: ReportAvatarInput,
-): Promise<ReviewReportResponse> {
+): Promise<ReportResponse> {
   const avatarId = requireId(input.avatarId, "avatarId");
   const request = createRequest(input.reason, input.detail);
 
-  return postReviewReport(
+  return postReport(
     `/mall/me/avatars/${encodeURIComponent(avatarId)}/reports`,
     request,
   );

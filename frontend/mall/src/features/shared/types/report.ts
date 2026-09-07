@@ -1,32 +1,32 @@
-// frontend/mall/src/features/shared/types/reviewReport.ts
+// frontend/mall/src/features/shared/types/report.ts
 
-export type ReviewReportReason =
+export type ReportReason =
   | "SPAM"
   | "HARASSMENT"
   | "INAPPROPRIATE"
   | "FALSE_INFORMATION"
   | "OTHER";
 
-export type ReviewReportCaseStatus =
+export type ReportCaseStatus =
   | "PENDING"
   | "KEPT"
   | "REMOVED";
 
-export type ReviewReportTargetType =
+export type ReportTargetType =
   | "PRODUCT_BLUEPRINT_REVIEW"
   | "TOKEN_BLUEPRINT_COMMENT"
   | "AVATAR";
 
-export type ReviewReportRequest = {
-  reason: ReviewReportReason;
+export type ReportRequest = {
+  reason: ReportReason;
   detail?: string;
 };
 
-export type ReviewReportResponse = {
+export type ReportResponse = {
   caseId: string;
   reportId: string;
   reportCount: number;
-  status: ReviewReportCaseStatus;
+  status: ReportCaseStatus;
   caseCreated: boolean;
   reportCreated: boolean;
 };
@@ -34,24 +34,24 @@ export type ReviewReportResponse = {
 export type ReportProductBlueprintReviewInput = {
   productBlueprintId: string;
   reviewId: string;
-  reason: ReviewReportReason;
+  reason: ReportReason;
   detail?: string;
 };
 
 export type ReportTokenBlueprintCommentInput = {
   tokenBlueprintId: string;
   commentId: string;
-  reason: ReviewReportReason;
+  reason: ReportReason;
   detail?: string;
 };
 
 export type ReportAvatarInput = {
   avatarId: string;
-  reason: ReviewReportReason;
+  reason: ReportReason;
   detail?: string;
 };
 
-export const REVIEW_REPORT_REASONS: readonly ReviewReportReason[] = [
+export const REPORT_REASONS: readonly ReportReason[] = [
   "SPAM",
   "HARASSMENT",
   "INAPPROPRIATE",
@@ -59,8 +59,8 @@ export const REVIEW_REPORT_REASONS: readonly ReviewReportReason[] = [
   "OTHER",
 ];
 
-export function getReviewReportReasonLabel(
-  reason: ReviewReportReason,
+export function getReportReasonLabel(
+  reason: ReportReason,
 ): string {
   switch (reason) {
     case "SPAM":
@@ -78,8 +78,8 @@ export function getReviewReportReasonLabel(
   }
 }
 
-export function requiresReviewReportDetail(
-  reason: ReviewReportReason,
+export function requiresReportDetail(
+  reason: ReportReason,
 ): boolean {
   return reason === "OTHER";
 }

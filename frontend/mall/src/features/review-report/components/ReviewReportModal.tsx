@@ -7,11 +7,11 @@ import type {
   ReviewReportReason,
   ReviewReportResponse,
   ReviewReportTargetType,
-} from "../../shared/types/reviewReport";
+} from "../../shared/types/report";
 import {
   getReviewReportReasonLabel,
   REVIEW_REPORT_REASONS,
-} from "../../shared/types/reviewReport";
+} from "../../shared/types/report";
 
 import "../styles/review-report.css";
 

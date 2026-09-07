@@ -2,11 +2,11 @@
 
 import { useMemo, type KeyboardEvent } from "react";
 
-import { useReviewReportDecisionNotifications } from "../features/notification/presentation/hooks/useReviewReportDecisionNotifications";
+import { useReportDecisionNotifications } from "../features/notification/presentation/hooks/useReportDecisionNotifications";
 import {
-  toReviewReportDecisionNotificationViewModels,
-  type ReviewReportDecisionNotificationViewModel,
-} from "../features/notification/presentation/model/reviewReportDecisionNotification";
+  toReportDecisionNotificationViewModels,
+  type ReportDecisionNotificationViewModel,
+} from "../features/notification/presentation/model/reportDecisionNotification";
 import List from "../layout/List/List";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
@@ -20,18 +20,18 @@ export default function NotificationPage() {
     markingReadId,
     reload,
     markRead,
-  } = useReviewReportDecisionNotifications({
+  } = useReportDecisionNotifications({
     page: 1,
     perPage: 100,
   });
 
   const items = useMemo(
-    () => toReviewReportDecisionNotificationViewModels(notifications),
+    () => toReportDecisionNotificationViewModels(notifications),
     [notifications],
   );
 
   const handleNotificationClick = async (
-    item: ReviewReportDecisionNotificationViewModel,
+    item: ReportDecisionNotificationViewModel,
   ) => {
     if (item.isRead || markingReadId !== null) {
       return;
@@ -42,7 +42,7 @@ export default function NotificationPage() {
 
   const handleNotificationKeyDown = (
     event: KeyboardEvent<HTMLTableRowElement>,
-    item: ReviewReportDecisionNotificationViewModel,
+    item: ReportDecisionNotificationViewModel,
   ) => {
     if (item.isRead || markingReadId !== null) {
       return;
@@ -68,10 +68,7 @@ export default function NotificationPage() {
   return (
     <div className="notification-page">
       {error ? (
-        <div
-          className="notification-page__error"
-          role="alert"
-        >
+        <div className="notification-page__error" role="alert">
           {error}
         </div>
       ) : null}
@@ -165,9 +162,7 @@ export default function NotificationPage() {
 
               <td className="notification-page__reason-cell">
                 <div className="notification-page__reason">
-                  <span>
-                    {item.reportReasonLabel}
-                  </span>
+                  <span>{item.reportReasonLabel}</span>
 
                   {item.reportDetail ? (
                     <span className="notification-page__detail">

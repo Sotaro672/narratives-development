@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/notification/infrastructure/reportDecisionNotificationApi.ts
+// frontend\console\shell\src\features\notification\infrastructure\ReportDecisionNotificationApi.ts
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
