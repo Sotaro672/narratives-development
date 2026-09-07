@@ -198,7 +198,7 @@ func (q *ReportNameQuery) ResolveReporterName(
 }
 
 // ResolveTargetAuthorName は通報対象の投稿者または対象アバターの表示名を解決する。
-// AVATAR は avatarName、BRAND は memberName として解決を試みる。
+// AVATAR は avatarName、BRAND は brandName として解決する。
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetAuthorName(
 	ctx context.Context,
@@ -209,7 +209,7 @@ func (q *ReportNameQuery) ResolveTargetAuthorName(
 	case reportdom.ActorTypeAvatar:
 		return q.ResolveAvatarName(ctx, authorID)
 	case reportdom.ActorTypeBrand:
-		return q.ResolveMemberName(ctx, authorID)
+		return q.ResolveBrandName(ctx, authorID)
 	default:
 		return ""
 	}
