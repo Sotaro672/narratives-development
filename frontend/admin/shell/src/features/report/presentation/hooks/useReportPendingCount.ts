@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { listReviewReports } from "../../infrastructure/reportApi";
+import { listReports } from "../../infrastructure/reportApi";
 
 export function useReportPendingCount() {
   const requestIdRef = useRef(0);
@@ -17,7 +17,7 @@ export function useReportPendingCount() {
     setError(null);
 
     try {
-      const result = await listReviewReports({
+      const result = await listReports({
         page: 1,
         perPage: 1,
         status: "PENDING",

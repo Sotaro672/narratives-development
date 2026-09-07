@@ -3,30 +3,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
-  ReviewReportCase,
-  ReviewReportCaseStatus,
-  ReviewReportCaseSort,
-  ReviewReportSortOrder,
-  ReviewReportTargetType,
-} from "../../../../shared/type/reviewReport";
-import { listReviewReports } from "../../infrastructure/reportApi";
+  ReportCase,
+  ReportCaseSort,
+  ReportCaseStatus,
+  ReportSortOrder,
+  ReportTargetType,
+} from "../../../../shared/type/report";
+import { listReports } from "../../infrastructure/reportApi";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 50;
-const DEFAULT_SORT: ReviewReportCaseSort = "updatedAt";
-const DEFAULT_ORDER: ReviewReportSortOrder = "desc";
+const DEFAULT_SORT: ReportCaseSort = "updatedAt";
+const DEFAULT_ORDER: ReportSortOrder = "desc";
 
 export function useReports() {
   const requestIdRef = useRef(0);
-  const [items, setItems] = useState<ReviewReportCase[]>([]);
+  const [items, setItems] = useState<ReportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [status, setStatusState] = useState<ReviewReportCaseStatus | undefined>(undefined);
-  const [targetType, setTargetTypeState] = useState<ReviewReportTargetType | undefined>(undefined);
+  const [status, setStatusState] = useState<ReportCaseStatus | undefined>(undefined);
+  const [targetType, setTargetTypeState] = useState<ReportTargetType | undefined>(undefined);
   const [page, setPageState] = useState(DEFAULT_PAGE);
   const [perPage, setPerPageState] = useState(DEFAULT_PER_PAGE);
-  const [sort, setSortState] = useState<ReviewReportCaseSort>(DEFAULT_SORT);
-  const [order, setOrderState] = useState<ReviewReportSortOrder>(DEFAULT_ORDER);
+  const [sort, setSortState] = useState<ReportCaseSort>(DEFAULT_SORT);
+  const [order, setOrderState] = useState<ReportSortOrder>(DEFAULT_ORDER);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -37,7 +37,7 @@ export function useReports() {
     setError(null);
 
     try {
-      const result = await listReviewReports({
+      const result = await listReports({
         status,
         targetType,
         page,
@@ -97,7 +97,7 @@ export function useReports() {
   }, [loadReports]);
 
   const setStatus = useCallback(
-    (value: ReviewReportCaseStatus | undefined) => {
+    (value: ReportCaseStatus | undefined) => {
       setStatusState(value);
       setPageState(DEFAULT_PAGE);
     },
@@ -105,7 +105,7 @@ export function useReports() {
   );
 
   const setTargetType = useCallback(
-    (value: ReviewReportTargetType | undefined) => {
+    (value: ReportTargetType | undefined) => {
       setTargetTypeState(value);
       setPageState(DEFAULT_PAGE);
     },
@@ -135,7 +135,7 @@ export function useReports() {
   }, []);
 
   const setSort = useCallback(
-    (value: ReviewReportCaseSort) => {
+    (value: ReportCaseSort) => {
       setSortState(value);
       setPageState(DEFAULT_PAGE);
     },
@@ -143,7 +143,7 @@ export function useReports() {
   );
 
   const setOrder = useCallback(
-    (value: ReviewReportSortOrder) => {
+    (value: ReportSortOrder) => {
       setOrderState(value);
       setPageState(DEFAULT_PAGE);
     },

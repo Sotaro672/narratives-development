@@ -32,7 +32,7 @@ var (
 // 判定するためのread-side port。
 //
 // 永続化方式はUsecaseから隠蔽する。
-// 現在の想定実装では reviewReportCases の
+// 現在の想定実装では ReportCases の
 // AVATAR + REMOVED を再販利用停止状態として扱う。
 type AvatarResaleAccessChecker interface {
 	IsAvatarResaleSuspended(

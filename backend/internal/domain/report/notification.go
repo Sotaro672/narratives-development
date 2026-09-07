@@ -63,15 +63,6 @@ func (k NotificationKind) Validate() error {
 	}
 }
 
-func normalizeDecisionNotificationKind(kind NotificationKind) NotificationKind {
-	// notificationKind 導入前に保存された既存通知は、
-	// すべて通報者向け裁定通知として扱う。
-	if kind == "" {
-		return NotificationKindReporterDecision
-	}
-	return kind
-}
-
 // ============================================================
 // ID
 // ============================================================
@@ -81,8 +72,6 @@ type DecisionNotificationID string
 // BuildDecisionNotificationID は、1回の裁定結果と1件の通報者を一意に結び付ける。
 // caseId + reportId + decidedAt を利用することで、同一裁定の再実行では重複せず、
 // KEPT 後にケースが再度 PENDING となり再裁定された場合は別通知として扱える。
-//
-// 既存通知とのID互換性を維持するため、この生成規則は変更しない。
 //
 // Firestore Timestamp はマイクロ秒精度で永続化されるため、
 // ID生成に使用する decidedAt もマイクロ秒精度へ正規化する。
@@ -111,11 +100,8 @@ func BuildDecisionNotificationID(
 
 	sum := sha256.Sum256([]byte(source))
 
-	// NOTE:
-	// 既存 Firestore データとのID互換性を維持するため、
-	// review_report_decision_ プレフィックスは変更しない。
 	return DecisionNotificationID(
-		"review_report_decision_" + hex.EncodeToString(sum[:]),
+		"report_decision_" + hex.EncodeToString(sum[:]),
 	), nil
 }
 
@@ -155,11 +141,8 @@ func BuildTargetDecisionNotificationID(
 
 	sum := sha256.Sum256([]byte(source))
 
-	// NOTE:
-	// 既存 Firestore データとのID互換性を維持するため、
-	// review_report_target_enforcement_ プレフィックスは変更しない。
 	return DecisionNotificationID(
-		"review_report_target_enforcement_" + hex.EncodeToString(sum[:]),
+		"report_target_enforcement_" + hex.EncodeToString(sum[:]),
 	), nil
 }
 
@@ -209,9 +192,8 @@ type DecisionNotification struct {
 }
 
 // Kind は通知種別を返す。
-// notificationKind 導入前の既存通知は REPORTER_DECISION として扱う。
 func (n DecisionNotification) Kind() NotificationKind {
-	return normalizeDecisionNotificationKind(n.NotificationKind)
+	return n.NotificationKind
 }
 
 // ============================================================

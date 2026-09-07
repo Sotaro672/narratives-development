@@ -1,4 +1,4 @@
-// backend\internal\platform\di\console\container_usecase.go
+// backend/internal/platform/di/console/container_usecase.go
 package console
 
 import (
@@ -58,7 +58,7 @@ type usecases struct {
 	tokenBlueprintCreateOperationUC *uc.TokenBlueprintCreateOperationUsecase
 	tokenBlueprintReviewUC          *uc.TokenBlueprintReviewUsecase
 	productBlueprintReviewUC        *uc.ProductBlueprintReviewUsecase
-	reviewReportUC                  *uc.ReportUsecase
+	reportUC                        *uc.ReportUsecase
 	userUC                          *uc.UserUsecase
 	walletUC                        *uc.WalletUsecase
 	cartUC                          *uc.CartUsecase
@@ -589,15 +589,15 @@ func buildUsecases(
 		return nil, resources.CloseWithError(errors.New("di.console: product blueprint review usecase is nil"))
 	}
 
-	reviewReportRepo := fsrepo.NewReportRepositoryFS(c.fsClient)
-	if reviewReportRepo == nil {
-		return nil, resources.CloseWithError(errors.New("di.console: review report repository is nil"))
+	reportRepo := fsrepo.NewReportRepositoryFS(c.fsClient)
+	if reportRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: report repository is nil"))
 	}
 
-	reviewReportUC := uc.NewReportUsecase(
+	reportUC := uc.NewReportUsecase(
 		uc.ReportUsecaseDeps{
-			ReportRepo:               reviewReportRepo,
-			DecisionNotificationRepo: r.reviewReportDecisionNotificationRepo,
+			ReportRepo:               reportRepo,
+			DecisionNotificationRepo: r.reportDecisionNotificationRepo,
 			ProductReviewRepo:        r.productBlueprintReviewRepo,
 			ProductBlueprintRepo:     r.productBlueprintRepo,
 			ProductPurchaseResolver:  walletUC,
@@ -608,8 +608,8 @@ func buildUsecases(
 			TokenCommentModerator:    tokenBlueprintReviewUC,
 		},
 	)
-	if reviewReportUC == nil {
-		return nil, resources.CloseWithError(errors.New("di.console: review report usecase is nil"))
+	if reportUC == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: report usecase is nil"))
 	}
 
 	cartUC := uc.NewCartUsecase(r.cartRepo)
@@ -760,7 +760,7 @@ func buildUsecases(
 		tokenBlueprintCreateOperationUC: tokenBlueprintCreateOperationUC,
 		tokenBlueprintReviewUC:          tokenBlueprintReviewUC,
 		productBlueprintReviewUC:        productBlueprintReviewUC,
-		reviewReportUC:                  reviewReportUC,
+		reportUC:                        reportUC,
 		userUC:                          userUC,
 		walletUC:                        walletUC,
 		cartUC:                          cartUC,

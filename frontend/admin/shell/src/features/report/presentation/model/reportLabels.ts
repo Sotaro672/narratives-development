@@ -1,16 +1,16 @@
 // frontend/admin/shell/src/features/report/presentation/model/reportLabels.ts
 
 import type {
-  ReviewReportActorType,
-  ReviewReportCaseStatus,
-  ReviewReportReason,
-  ReviewReportTargetType,
-} from "../../../../shared/type/reviewReport";
+  ReportActorType,
+  ReportCaseStatus,
+  ReportReason,
+  ReportTargetType,
+} from "../../../../shared/type/report";
 import type { TabTone } from "../../../../shared/ui/Tab/Tab";
 
 export function getStatusLabel(
-  status: ReviewReportCaseStatus,
-  targetType: ReviewReportTargetType,
+  status: ReportCaseStatus,
+  targetType: ReportTargetType,
 ): string {
   switch (status) {
     case "PENDING":
@@ -25,7 +25,7 @@ export function getStatusLabel(
 }
 
 export function getStatusTone(
-  status: ReviewReportCaseStatus,
+  status: ReportCaseStatus,
 ): TabTone {
   switch (status) {
     case "PENDING":
@@ -40,7 +40,7 @@ export function getStatusTone(
 }
 
 export function getTargetTypeLabel(
-  targetType: ReviewReportTargetType,
+  targetType: ReportTargetType,
 ): string {
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
@@ -55,7 +55,7 @@ export function getTargetTypeLabel(
 }
 
 export function getActorTypeLabel(
-  actorType: ReviewReportActorType,
+  actorType: ReportActorType,
 ): string {
   switch (actorType) {
     case "AVATAR":
@@ -68,7 +68,7 @@ export function getActorTypeLabel(
 }
 
 export function getReasonLabel(
-  reason: ReviewReportReason,
+  reason: ReportReason,
 ): string {
   switch (reason) {
     case "SPAM":
@@ -87,7 +87,7 @@ export function getReasonLabel(
 }
 
 export function getSnapshotTitleLabel(
-  targetType: ReviewReportTargetType,
+  targetType: ReportTargetType,
 ): string {
   return targetType === "AVATAR"
     ? "アバター名"
@@ -95,7 +95,7 @@ export function getSnapshotTitleLabel(
 }
 
 export function getSnapshotBodyLabel(
-  targetType: ReviewReportTargetType,
+  targetType: ReportTargetType,
 ): string {
   return targetType === "AVATAR"
     ? "プロフィール"
@@ -103,7 +103,7 @@ export function getSnapshotBodyLabel(
 }
 
 export function getTargetParentLabel(
-  targetType: ReviewReportTargetType,
+  targetType: ReportTargetType,
 ): string {
   return targetType === "AVATAR"
     ? "対象アバター"
@@ -111,7 +111,7 @@ export function getTargetParentLabel(
 }
 
 export function getTargetAuthorTypeLabel(
-  targetType: ReviewReportTargetType,
+  targetType: ReportTargetType,
 ): string {
   return targetType === "AVATAR"
     ? "対象種別"
@@ -119,7 +119,7 @@ export function getTargetAuthorTypeLabel(
 }
 
 export function getTargetAuthorLabel(
-  targetType: ReviewReportTargetType,
+  targetType: ReportTargetType,
 ): string {
   return targetType === "AVATAR"
     ? "対象アバター"

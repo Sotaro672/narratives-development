@@ -17,33 +17,33 @@ type RouterDeps struct {
 	BootstrapMw *middleware.BootstrapAuthMiddleware
 
 	// Handlers（生成はDI側）
-	AuthBootstrap                     http.Handler
-	Accounts                          http.Handler
-	Announcements                     http.Handler
-	ReviewReportDecisionNotifications http.Handler
-	Permissions                       http.Handler
-	Brands                            http.Handler
-	Companies                         http.Handler
-	CompanyShippingAddresses          http.Handler
-	Inquiries                         http.Handler
-	Inventories                       http.Handler
-	Lists                             http.Handler
-	ListSaveOperations                http.Handler
-	Transportation                    http.Handler
-	ProductsPrint                     http.Handler
-	ProductBP                         http.Handler
-	ProductBPCategories               http.Handler
-	TokenBP                           http.Handler
-	TokenBPCreateOperations           http.Handler
-	Messages                          http.Handler
-	Orders                            http.Handler
-	Transactions                      http.Handler
-	Wallets                           http.Handler
-	Members                           http.Handler
-	Productions                       http.Handler
-	Models                            http.Handler
-	Inspector                         http.Handler
-	Mint                              http.Handler
+	AuthBootstrap               http.Handler
+	Accounts                    http.Handler
+	Announcements               http.Handler
+	ReportDecisionNotifications http.Handler
+	Permissions                 http.Handler
+	Brands                      http.Handler
+	Companies                   http.Handler
+	CompanyShippingAddresses    http.Handler
+	Inquiries                   http.Handler
+	Inventories                 http.Handler
+	Lists                       http.Handler
+	ListSaveOperations          http.Handler
+	Transportation              http.Handler
+	ProductsPrint               http.Handler
+	ProductBP                   http.Handler
+	ProductBPCategories         http.Handler
+	TokenBP                     http.Handler
+	TokenBPCreateOperations     http.Handler
+	Messages                    http.Handler
+	Orders                      http.Handler
+	Transactions                http.Handler
+	Wallets                     http.Handler
+	Members                     http.Handler
+	Productions                 http.Handler
+	Models                      http.Handler
+	Inspector                   http.Handler
+	Mint                        http.Handler
 
 	// Internal handlers
 	//
@@ -162,10 +162,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 		mux.Handle("/announcements/", h)
 	}
 
-	if deps.ReviewReportDecisionNotifications != nil {
-		h := withAuth(deps.ReviewReportDecisionNotifications)
-		mux.Handle("/review-report-decision-notifications", h)
-		mux.Handle("/review-report-decision-notifications/", h)
+	if deps.ReportDecisionNotifications != nil {
+		h := withAuth(deps.ReportDecisionNotifications)
+		mux.Handle("/report-decision-notifications", h)
+		mux.Handle("/report-decision-notifications/", h)
 	}
 
 	if deps.Permissions != nil {

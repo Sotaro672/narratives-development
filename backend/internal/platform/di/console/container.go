@@ -63,7 +63,7 @@ type Container struct {
 	ProductBlueprintUC              *uc.ProductBlueprintUsecase
 	ProductBlueprintCategoryUC      *uc.ProductBlueprintCategoryUsecase
 	ProductBlueprintReviewUC        *uc.ProductBlueprintReviewUsecase
-	ReviewReportUC                  *uc.ReportUsecase
+	ReportUC                        *uc.ReportUsecase
 	ShippingAddressUC               *uc.ShippingAddressUsecase
 	TransportationUC                *uc.TransportationUsecase
 	TokenUC                         *uc.TokenUsecase
@@ -242,7 +242,7 @@ func NewContainer(
 		ProductBlueprintUC:              u.productBlueprintUC,
 		ProductBlueprintCategoryUC:      u.productBlueprintCategoryUC,
 		ProductBlueprintReviewUC:        u.productBlueprintReviewUC,
-		ReviewReportUC:                  u.reviewReportUC,
+		ReportUC:                        u.reportUC,
 		ShippingAddressUC:               u.shippingAddressUC,
 		TransportationUC:                u.transportationUC,
 		TokenUC:                         u.tokenUC,

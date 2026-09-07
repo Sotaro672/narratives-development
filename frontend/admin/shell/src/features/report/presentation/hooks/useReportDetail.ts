@@ -3,24 +3,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type {
-  ReviewReportActorType,
-  ReviewReportCase,
-  ReviewReportDecision,
-  ReviewReportItem,
-  ReviewReportItemSort,
-  ReviewReportReason,
-  ReviewReportSortOrder,
-} from "../../../../shared/type/reviewReport";
+  ReportActorType,
+  ReportCase,
+  ReportDecision,
+  ReportItem,
+  ReportItemSort,
+  ReportReason,
+  ReportSortOrder,
+} from "../../../../shared/type/report";
 import { useReportPending } from "../../context/ReportPendingContext";
 import {
-  decideReviewReport,
-  getReviewReport,
+  decideReport,
+  getReport,
 } from "../../infrastructure/reportApi";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 50;
-const DEFAULT_SORT: ReviewReportItemSort = "createdAt";
-const DEFAULT_ORDER: ReviewReportSortOrder = "desc";
+const DEFAULT_SORT: ReportItemSort = "createdAt";
+const DEFAULT_ORDER: ReportSortOrder = "desc";
 
 export function useReportDetail(caseId: string | undefined) {
   const { refreshPendingCount } = useReportPending();
@@ -28,19 +28,19 @@ export function useReportDetail(caseId: string | undefined) {
   const requestIdRef = useRef(0);
   const decisionRequestIdRef = useRef(0);
 
-  const [reportCase, setReportCase] = useState<ReviewReportCase | null>(null);
-  const [reports, setReports] = useState<ReviewReportItem[]>([]);
+  const [reportCase, setReportCase] = useState<ReportCase | null>(null);
+  const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [reporterType, setReporterTypeState] = useState<ReviewReportActorType | undefined>(undefined);
+  const [reporterType, setReporterTypeState] = useState<ReportActorType | undefined>(undefined);
   const [reporterId, setReporterIdState] = useState("");
   const [companyId, setCompanyIdState] = useState("");
-  const [reason, setReasonState] = useState<ReviewReportReason | undefined>(undefined);
+  const [reason, setReasonState] = useState<ReportReason | undefined>(undefined);
   const [page, setPageState] = useState(DEFAULT_PAGE);
   const [perPage, setPerPageState] = useState(DEFAULT_PER_PAGE);
-  const [sort, setSortState] = useState<ReviewReportItemSort>(DEFAULT_SORT);
-  const [order, setOrderState] = useState<ReviewReportSortOrder>(DEFAULT_ORDER);
+  const [sort, setSortState] = useState<ReportItemSort>(DEFAULT_SORT);
+  const [order, setOrderState] = useState<ReportSortOrder>(DEFAULT_ORDER);
   const [totalCount, setTotalCount] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -65,7 +65,7 @@ export function useReportDetail(caseId: string | undefined) {
     setError(null);
 
     try {
-      const result = await getReviewReport(normalizedCaseId, {
+      const result = await getReport(normalizedCaseId, {
         reporterType,
         reporterId: reporterId.trim() || undefined,
         companyId: companyId.trim() || undefined,
@@ -138,7 +138,7 @@ export function useReportDetail(caseId: string | undefined) {
   }, [caseId]);
 
   const setReporterType = useCallback(
-    (value: ReviewReportActorType | undefined) => {
+    (value: ReportActorType | undefined) => {
       setReporterTypeState(value);
       setPageState(DEFAULT_PAGE);
     },
@@ -156,7 +156,7 @@ export function useReportDetail(caseId: string | undefined) {
   }, []);
 
   const setReason = useCallback(
-    (value: ReviewReportReason | undefined) => {
+    (value: ReportReason | undefined) => {
       setReasonState(value);
       setPageState(DEFAULT_PAGE);
     },
@@ -180,12 +180,12 @@ export function useReportDetail(caseId: string | undefined) {
     setPageState(DEFAULT_PAGE);
   }, []);
 
-  const setSort = useCallback((value: ReviewReportItemSort) => {
+  const setSort = useCallback((value: ReportItemSort) => {
     setSortState(value);
     setPageState(DEFAULT_PAGE);
   }, []);
 
-  const setOrder = useCallback((value: ReviewReportSortOrder) => {
+  const setOrder = useCallback((value: ReportSortOrder) => {
     setOrderState(value);
     setPageState(DEFAULT_PAGE);
   }, []);
@@ -207,9 +207,9 @@ export function useReportDetail(caseId: string | undefined) {
 
   const decide = useCallback(
     async (
-      decision: ReviewReportDecision,
+      decision: ReportDecision,
       decisionReason: string,
-    ): Promise<ReviewReportCase | null> => {
+    ): Promise<ReportCase | null> => {
       const normalizedCaseId = caseId?.trim() ?? "";
       const normalizedReason = decisionReason.trim();
 
@@ -233,7 +233,7 @@ export function useReportDetail(caseId: string | undefined) {
       setDecisionError(null);
 
       try {
-        const updatedCase = await decideReviewReport(normalizedCaseId, {
+        const updatedCase = await decideReport(normalizedCaseId, {
           decision,
           reason: normalizedReason,
         });

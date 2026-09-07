@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import type { ReviewReportItem } from "../../../../shared/type/reviewReport";
+import type { ReportItem } from "../../../../shared/type/report";
 import Table, {
   type TableColumn,
 } from "../../../../shared/ui/Table/Table";
@@ -10,7 +10,7 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 import { getReasonLabel } from "../model/reportLabels";
 
 type ReportItemsSectionProps = {
-  reports: ReviewReportItem[];
+  reports: ReportItem[];
   loading: boolean;
   page: number;
   totalPages: number;
@@ -28,7 +28,7 @@ export default function ReportItemsSection({
   hasNextPage,
   onPageChange,
 }: ReportItemsSectionProps) {
-  const columns = useMemo<TableColumn<ReviewReportItem>[]>(
+  const columns = useMemo<TableColumn<ReportItem>[]>(
     () => [
       {
         key: "createdAt",

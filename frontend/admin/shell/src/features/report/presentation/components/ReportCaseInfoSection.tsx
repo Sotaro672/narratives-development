@@ -1,6 +1,6 @@
 // frontend/admin/shell/src/features/report/presentation/components/ReportCaseInfoSection.tsx
 
-import type { ReviewReportCase } from "../../../../shared/type/reviewReport";
+import type { ReportCase } from "../../../../shared/type/report";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 import {
   getActorTypeLabel,
@@ -11,7 +11,7 @@ import {
 import ReportDetailField from "./ReportDetailField";
 
 type ReportCaseInfoSectionProps = {
-  reportCase: ReviewReportCase;
+  reportCase: ReportCase;
 };
 
 export default function ReportCaseInfoSection({

@@ -1,6 +1,6 @@
 // frontend/admin/shell/src/features/report/presentation/components/ReportTargetSnapshotSection.tsx
 
-import type { ReviewReportCase } from "../../../../shared/type/reviewReport";
+import type { ReportCase } from "../../../../shared/type/report";
 import {
   getSnapshotBodyLabel,
   getSnapshotTitleLabel,
@@ -8,7 +8,7 @@ import {
 import ReportDetailField from "./ReportDetailField";
 
 type ReportTargetSnapshotSectionProps = {
-  reportCase: ReviewReportCase;
+  reportCase: ReportCase;
 };
 
 export default function ReportTargetSnapshotSection({

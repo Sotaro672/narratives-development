@@ -2,15 +2,15 @@
 
 import { useEffect } from "react";
 
-import type { ReviewReportCaseStatus, ReviewReportTargetType } from "../../../../shared/type/reviewReport";
+import type { ReportCaseStatus, ReportTargetType } from "../../../../shared/type/report";
 import Button from "../../../../shared/ui/Button/Button";
 
 import "./ReportDecisionModal.css";
 
 type ReportDecisionModalProps = {
   open: boolean;
-  status: ReviewReportCaseStatus;
-  targetType?: ReviewReportTargetType;
+  status: ReportCaseStatus;
+  targetType?: ReportTargetType;
   decisionReason: string;
   deciding: boolean;
   decisionError: string | null;
@@ -22,7 +22,7 @@ type ReportDecisionModalProps = {
   onRemove: () => void | Promise<void>;
 };
 
-function getDescription(status: ReviewReportCaseStatus, targetType?: ReviewReportTargetType): string {
+function getDescription(status: ReportCaseStatus, targetType?: ReportTargetType): string {
   const isAvatar = targetType === "AVATAR";
 
   if (isAvatar) {
@@ -36,7 +36,7 @@ function getDescription(status: ReviewReportCaseStatus, targetType?: ReviewRepor
     : "投稿を維持するか、削除するかを決定します。";
 }
 
-function getPlaceholder(status: ReviewReportCaseStatus, targetType?: ReviewReportTargetType): string {
+function getPlaceholder(status: ReportCaseStatus, targetType?: ReportTargetType): string {
   if (targetType === "AVATAR") {
     return status === "KEPT"
       ? "再販サービス利用停止へ変更する根拠を入力してください。"
@@ -48,17 +48,17 @@ function getPlaceholder(status: ReviewReportCaseStatus, targetType?: ReviewRepor
     : "裁定の根拠を入力してください。";
 }
 
-function getNote(targetType?: ReviewReportTargetType): string {
+function getNote(targetType?: ReportTargetType): string {
   return targetType === "AVATAR"
     ? "「再販利用停止」を選択すると、アバター自体は削除・停止せず、対象アバターの再販サービスのみ利用停止にします。"
     : "「削除する」を選択すると、対象コンテンツの削除に成功した後でケースが削除済みとして確定します。";
 }
 
-function getKeepLabel(targetType?: ReviewReportTargetType): string {
+function getKeepLabel(targetType?: ReportTargetType): string {
   return targetType === "AVATAR" ? "変化なし" : "維持する";
 }
 
-function getRemoveLabel(targetType?: ReviewReportTargetType): string {
+function getRemoveLabel(targetType?: ReportTargetType): string {
   return targetType === "AVATAR" ? "再販利用停止" : "削除する";
 }
 

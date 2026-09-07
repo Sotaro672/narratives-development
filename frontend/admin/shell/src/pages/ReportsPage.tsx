@@ -10,10 +10,10 @@ import {
   getTargetTypeLabel,
 } from "../features/report/presentation/model/reportLabels";
 import type {
-  ReviewReportCase,
-  ReviewReportCaseStatus,
-  ReviewReportTargetType,
-} from "../shared/type/reviewReport";
+  ReportCase,
+  ReportCaseStatus,
+  ReportTargetType,
+} from "../shared/type/report";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 import Table, { type TableColumn } from "../shared/ui/Table/Table";
@@ -21,7 +21,7 @@ import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./ReportsPage.css";
 
-function getSnapshotSummary(reportCase: ReviewReportCase): string {
+function getSnapshotSummary(reportCase: ReportCase): string {
   const title = reportCase.snapshotTitle.trim();
   const body = reportCase.snapshotBody.trim();
   const value = title || body;
@@ -51,7 +51,7 @@ export default function ReportsPage() {
     reload,
   } = useReports();
 
-  const columns = useMemo<TableColumn<ReviewReportCase>[]>(
+  const columns = useMemo<TableColumn<ReportCase>[]>(
     () => [
       {
         key: "updatedAt",
@@ -119,7 +119,7 @@ export default function ReportsPage() {
     [],
   );
 
-  const handleRowClick = (reportCase: ReviewReportCase) => {
+  const handleRowClick = (reportCase: ReportCase) => {
     navigate(`/reports/${encodeURIComponent(reportCase.id)}`, {
       state: { reportCase },
     });
@@ -128,10 +128,10 @@ export default function ReportsPage() {
   const handleFilterChange = (key: string, value: string) => {
     switch (key) {
       case "status":
-        setStatus(value ? (value as ReviewReportCaseStatus) : undefined);
+        setStatus(value ? (value as ReportCaseStatus) : undefined);
         break;
       case "targetType":
-        setTargetType(value ? (value as ReviewReportTargetType) : undefined);
+        setTargetType(value ? (value as ReportTargetType) : undefined);
         break;
     }
   };

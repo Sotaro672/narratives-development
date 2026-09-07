@@ -1,4 +1,4 @@
-// backend/internal/application/port/review_report_token_access_resolver.go
+// backend/internal/application/port/report_token_access_resolver.go
 package port
 
 import "context"

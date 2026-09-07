@@ -2,13 +2,13 @@
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
 import type {
-  ReviewReportCase,
-  ReviewReportCaseListResponse,
-  ReviewReportDecisionInput,
-  ReviewReportDetailParams,
-  ReviewReportDetailResponse,
-  ReviewReportListParams,
-} from "../../../shared/type/reviewReport";
+  ReportCase,
+  ReportCaseListResponse,
+  ReportDecisionInput,
+  ReportDetailParams,
+  ReportDetailResponse,
+  ReportListParams,
+} from "../../../shared/type/report";
 import { appendPaginationParams } from "../../../shared/util/pagination";
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -17,17 +17,14 @@ function requireBackendBaseUrl(): string {
   if (!BACKEND_BASE_URL) {
     throw new Error("VITE_BACKEND_BASE_URL is not configured.");
   }
-
   return BACKEND_BASE_URL;
 }
 
 function requireCaseId(caseId: string): string {
   const normalizedCaseId = caseId.trim();
-
   if (!normalizedCaseId) {
     throw new Error("caseId is required.");
   }
-
   return normalizedCaseId;
 }
 
@@ -37,7 +34,6 @@ async function requireOk(response: Response, message: string): Promise<void> {
   }
 
   let detail = "";
-
   try {
     const body = await response.json() as { error?: string };
     detail = body.error ? ` error=${body.error}` : "";
@@ -54,15 +50,14 @@ function appendStringParam(
   value: string | undefined,
 ): void {
   const normalizedValue = value?.trim();
-
   if (normalizedValue) {
     query.set(key, normalizedValue);
   }
 }
 
-export async function listReviewReports(
-  params: ReviewReportListParams = {},
-): Promise<ReviewReportCaseListResponse> {
+export async function listReports(
+  params: ReportListParams = {},
+): Promise<ReportCaseListResponse> {
   const backendBaseUrl = requireBackendBaseUrl();
   const query = new URLSearchParams();
 
@@ -88,15 +83,14 @@ export async function listReviewReports(
     },
   });
 
-  await requireOk(response, "Failed to load review reports.");
-
-  return response.json() as Promise<ReviewReportCaseListResponse>;
+  await requireOk(response, "Failed to load reports.");
+  return response.json() as Promise<ReportCaseListResponse>;
 }
 
-export async function getReviewReport(
+export async function getReport(
   caseId: string,
-  params: ReviewReportDetailParams = {},
-): Promise<ReviewReportDetailResponse> {
+  params: ReportDetailParams = {},
+): Promise<ReportDetailResponse> {
   const normalizedCaseId = requireCaseId(caseId);
   const backendBaseUrl = requireBackendBaseUrl();
   const query = new URLSearchParams();
@@ -121,15 +115,14 @@ export async function getReviewReport(
     },
   });
 
-  await requireOk(response, "Failed to load review report.");
-
-  return response.json() as Promise<ReviewReportDetailResponse>;
+  await requireOk(response, "Failed to load report.");
+  return response.json() as Promise<ReportDetailResponse>;
 }
 
-export async function decideReviewReport(
+export async function decideReport(
   caseId: string,
-  input: ReviewReportDecisionInput,
-): Promise<ReviewReportCase> {
+  input: ReportDecisionInput,
+): Promise<ReportCase> {
   const normalizedCaseId = requireCaseId(caseId);
   const backendBaseUrl = requireBackendBaseUrl();
   const reason = input.reason.trim();
@@ -139,7 +132,6 @@ export async function decideReviewReport(
   }
 
   const authHeaders = await getAuthHeaders();
-
   const response = await fetch(
     `${backendBaseUrl}/admin/reports/${encodeURIComponent(normalizedCaseId)}/decision`,
     {
@@ -156,7 +148,6 @@ export async function decideReviewReport(
     },
   );
 
-  await requireOk(response, "Failed to decide review report.");
-
-  return response.json() as Promise<ReviewReportCase>;
+  await requireOk(response, "Failed to decide report.");
+  return response.json() as Promise<ReportCase>;
 }

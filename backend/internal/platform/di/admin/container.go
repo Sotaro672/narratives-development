@@ -22,19 +22,19 @@ const (
 type Container struct {
 	Infra *shared.Infra
 
-	adminFirebaseUID                     string
-	adminEmail                           string
-	contactUsecase                       *usecase.ContactUsecase
-	reviewReportUsecase                  *usecase.ReportUsecase
-	companyRepo                          *fsrepo.CompanyRepositoryFS
-	memberRepo                           *fsrepo.MemberRepositoryFS
-	avatarRepo                           *fsrepo.AvatarRepositoryFS
-	brandRepo                            *fsrepo.BrandRepositoryFS
-	productBlueprintRepo                 *fsrepo.ProductBlueprintRepositoryFS
-	tokenBlueprintRepo                   *fsrepo.TokenBlueprintRepositoryFS
-	reviewReportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
-	reportNameQuery                      *adminquery.ReportNameQuery
-	gasBalanceQuery                      *adminquery.GasBalanceQuery
+	adminFirebaseUID               string
+	adminEmail                     string
+	contactUsecase                 *usecase.ContactUsecase
+	reportUsecase                  *usecase.ReportUsecase
+	companyRepo                    *fsrepo.CompanyRepositoryFS
+	memberRepo                     *fsrepo.MemberRepositoryFS
+	avatarRepo                     *fsrepo.AvatarRepositoryFS
+	brandRepo                      *fsrepo.BrandRepositoryFS
+	productBlueprintRepo           *fsrepo.ProductBlueprintRepositoryFS
+	tokenBlueprintRepo             *fsrepo.TokenBlueprintRepositoryFS
+	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
+	reportNameQuery                *adminquery.ReportNameQuery
+	gasBalanceQuery                *adminquery.GasBalanceQuery
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -85,14 +85,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		tokenBlueprintRepo,
 	)
 
-	reviewReportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
-	if reviewReportRepo == nil {
-		return nil, errors.New("di.admin: review report repository is nil")
+	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
+	if reportRepo == nil {
+		return nil, errors.New("di.admin: report repository is nil")
 	}
 
-	reviewReportDecisionNotificationRepo := fsrepo.NewReportDecisionNotificationRepositoryFS(infra.Firestore)
-	if reviewReportDecisionNotificationRepo == nil {
-		return nil, errors.New("di.admin: review report decision notification repository is nil")
+	reportDecisionNotificationRepo := fsrepo.NewReportDecisionNotificationRepositoryFS(infra.Firestore)
+	if reportDecisionNotificationRepo == nil {
+		return nil, errors.New("di.admin: report decision notification repository is nil")
 	}
 
 	productBlueprintReviewRepo := fsrepo.NewProductBlueprintReviewRepositoryFS(infra.Firestore)
@@ -152,18 +152,18 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.admin: resale usecase is nil")
 	}
 
-	reviewReportUsecase := usecase.NewReportUsecase(
+	reportUsecase := usecase.NewReportUsecase(
 		usecase.ReportUsecaseDeps{
-			ReportRepo:               reviewReportRepo,
-			DecisionNotificationRepo: reviewReportDecisionNotificationRepo,
+			ReportRepo:               reportRepo,
+			DecisionNotificationRepo: reportDecisionNotificationRepo,
 			ProductReviewModerator:   productBlueprintReviewUsecase,
 			TokenCommentModerator:    tokenBlueprintReviewUsecase,
 			AvatarRepo:               avatarRepo,
 			AvatarResaleModerator:    resaleUsecase,
 		},
 	)
-	if reviewReportUsecase == nil {
-		return nil, errors.New("di.admin: review report usecase is nil")
+	if reportUsecase == nil {
+		return nil, errors.New("di.admin: report usecase is nil")
 	}
 
 	solanaClient, err := solanainfra.NewMintClient(ctx)
@@ -191,19 +191,19 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	)
 
 	return &Container{
-		Infra:                                infra,
-		adminFirebaseUID:                     adminFirebaseUID,
-		adminEmail:                           adminEmail,
-		contactUsecase:                       contactUsecase,
-		reviewReportUsecase:                  reviewReportUsecase,
-		companyRepo:                          companyRepo,
-		memberRepo:                           memberRepo,
-		avatarRepo:                           avatarRepo,
-		brandRepo:                            brandRepo,
-		productBlueprintRepo:                 productBlueprintRepo,
-		tokenBlueprintRepo:                   tokenBlueprintRepo,
-		reviewReportDecisionNotificationRepo: reviewReportDecisionNotificationRepo,
-		reportNameQuery:                      reportNameQuery,
-		gasBalanceQuery:                      gasBalanceQuery,
+		Infra:                          infra,
+		adminFirebaseUID:               adminFirebaseUID,
+		adminEmail:                     adminEmail,
+		contactUsecase:                 contactUsecase,
+		reportUsecase:                  reportUsecase,
+		companyRepo:                    companyRepo,
+		memberRepo:                     memberRepo,
+		avatarRepo:                     avatarRepo,
+		brandRepo:                      brandRepo,
+		productBlueprintRepo:           productBlueprintRepo,
+		tokenBlueprintRepo:             tokenBlueprintRepo,
+		reportDecisionNotificationRepo: reportDecisionNotificationRepo,
+		reportNameQuery:                reportNameQuery,
+		gasBalanceQuery:                gasBalanceQuery,
 	}, nil
 }
