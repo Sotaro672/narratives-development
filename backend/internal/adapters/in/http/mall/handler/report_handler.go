@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\handler\report_handler.go
+// backend/internal/adapters/in/http/mall/handler/report_handler.go
 package mallHandler
 
 import (
@@ -22,10 +22,9 @@ const (
 	defaultReportDecisionNotificationPage    = 1
 	defaultReportDecisionNotificationPerPage = 20
 	maxReportDecisionNotificationPerPage     = 100
-)
 
-// HTTPパスは既存クライアントとの互換性を維持するため変更しない。
-const meReportDecisionNotificationsPath = "/mall/me/review-report-decision-notifications"
+	meReportDecisionNotificationsPath = "/mall/me/report-decision-notifications"
+)
 
 type ReportDecisionNotificationHandler struct {
 	ReportUC *uc.ReportUsecase
@@ -40,9 +39,9 @@ func NewReportDecisionNotificationHandler(
 }
 
 // Supported:
-// - GET  /mall/me/review-report-decision-notifications
-// - GET  /mall/me/review-report-decision-notifications?isRead=false&page=1&perPage=20
-// - POST /mall/me/review-report-decision-notifications/{notificationId}/read
+// - GET  /mall/me/report-decision-notifications
+// - GET  /mall/me/report-decision-notifications?isRead=false&page=1&perPage=20
+// - POST /mall/me/report-decision-notifications/{notificationId}/read
 //
 // Security:
 // - avatarId はクライアント入力から受け取らない。
@@ -63,7 +62,7 @@ func (h *ReportDecisionNotificationHandler) ServeHTTP(
 			w,
 			http.StatusServiceUnavailable,
 			map[string]string{
-				"error": "review_report_decision_notification_handler_not_initialized",
+				"error": "report_decision_notification_handler_not_initialized",
 			},
 		)
 		return
@@ -283,30 +282,25 @@ func parseMallReportDecisionNotificationPath(
 	isReadPath bool,
 	matched bool,
 ) {
-	trimmed := strings.Trim(path, "/")
-	if trimmed == "" {
-		return "", false, false
-	}
+	trimmedPath := strings.TrimSuffix(meReportDecisionNotificationsPath, "/")
+	normalizedPath := strings.TrimSuffix(path, "/")
 
-	parts := strings.Split(trimmed, "/")
-
-	// 既存HTTPパスとの互換性を維持する。
-	// mall / me / review-report-decision-notifications
-	if len(parts) == 3 &&
-		parts[0] == "mall" &&
-		parts[1] == "me" &&
-		parts[2] == "review-report-decision-notifications" {
+	if normalizedPath == trimmedPath {
 		return "", false, true
 	}
 
-	// mall / me / review-report-decision-notifications / {notificationId} / read
-	if len(parts) == 5 &&
-		parts[0] == "mall" &&
-		parts[1] == "me" &&
-		parts[2] == "review-report-decision-notifications" &&
-		parts[3] != "" &&
-		parts[4] == "read" {
-		return parts[3], true, true
+	prefix := trimmedPath + "/"
+	if !strings.HasPrefix(normalizedPath, prefix) {
+		return "", false, false
+	}
+
+	relativePath := strings.TrimPrefix(normalizedPath, prefix)
+	parts := strings.Split(relativePath, "/")
+
+	if len(parts) == 2 &&
+		parts[0] != "" &&
+		parts[1] == "read" {
+		return parts[0], true, true
 	}
 
 	return "", false, false
@@ -411,7 +405,7 @@ func writeMallReportDecisionNotificationError(
 			w,
 			http.StatusInternalServerError,
 			map[string]string{
-				"error": "review_report_decision_notification_internal_error",
+				"error": "report_decision_notification_internal_error",
 			},
 		)
 
@@ -433,7 +427,7 @@ func writeMallReportDecisionNotificationError(
 			w,
 			http.StatusServiceUnavailable,
 			map[string]string{
-				"error": "review_report_usecase_not_configured",
+				"error": "report_usecase_not_configured",
 			},
 		)
 
@@ -445,7 +439,7 @@ func writeMallReportDecisionNotificationError(
 			w,
 			http.StatusForbidden,
 			map[string]string{
-				"error": "review_report_forbidden",
+				"error": "report_forbidden",
 			},
 		)
 
@@ -454,7 +448,7 @@ func writeMallReportDecisionNotificationError(
 			w,
 			http.StatusNotFound,
 			map[string]string{
-				"error": "review_report_decision_notification_not_found",
+				"error": "report_decision_notification_not_found",
 			},
 		)
 
@@ -495,7 +489,7 @@ func writeMallReportDecisionNotificationError(
 			w,
 			http.StatusBadRequest,
 			map[string]string{
-				"error": "invalid_review_report_decision_notification",
+				"error": "invalid_report_decision_notification",
 			},
 		)
 
@@ -504,7 +498,7 @@ func writeMallReportDecisionNotificationError(
 			w,
 			http.StatusNotFound,
 			map[string]string{
-				"error": "review_report_decision_notification_not_found",
+				"error": "report_decision_notification_not_found",
 			},
 		)
 
@@ -513,7 +507,7 @@ func writeMallReportDecisionNotificationError(
 			w,
 			http.StatusInternalServerError,
 			map[string]string{
-				"error": "review_report_decision_notification_internal_error",
+				"error": "report_decision_notification_internal_error",
 			},
 		)
 	}

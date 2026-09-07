@@ -59,7 +59,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var inquiryH http.Handler
 	var meAvatarsH http.Handler
 	var announcementH http.Handler
-	var reviewReportDecisionNotificationH http.Handler
+	var reportDecisionNotificationH http.Handler
 	var marketH http.Handler
 	var resaleH http.Handler
 	var previewPublicH http.Handler
@@ -100,7 +100,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if cont.ProductBlueprintReviewUC != nil {
 		pbReviewH = mallhandler.NewProductBlueprintReviewHandler(
 			cont.ProductBlueprintReviewUC,
-			cont.ReviewReportUC,
+			cont.ReportUC,
 		)
 	}
 
@@ -121,7 +121,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	if cont.TokenBlueprintReviewUC != nil {
 		tbReviewH := mallhandler.NewTokenBlueprintReviewHandler(
 			cont.TokenBlueprintReviewUC,
-			cont.ReviewReportUC,
+			cont.ReportUC,
 		)
 		tbH = mallhandler.NewTokenBlueprintCompositeHandler(tbH, tbReviewH)
 	}
@@ -163,12 +163,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// /mall/me/avatars
 	if cont.MeAvatarResolver != nil &&
 		cont.AvatarUC != nil &&
-		cont.ReviewReportUC != nil {
+		cont.ReportUC != nil {
 
 		meAvatarsH = mallhandler.NewMeAvatarHandler(
 			cont.MeAvatarResolver,
 			cont.AvatarUC,
-			cont.ReviewReportUC,
+			cont.ReportUC,
 		)
 	}
 
@@ -184,11 +184,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
-	// /mall/me/review-report-decision-notifications
-	if cont.ReviewReportUC != nil {
-		reviewReportDecisionNotificationH =
+	// /mall/me/report-decision-notifications
+	if cont.ReportUC != nil {
+		reportDecisionNotificationH =
 			mallhandler.NewReportDecisionNotificationHandler(
-				cont.ReviewReportUC,
+				cont.ReportUC,
 			)
 	}
 
@@ -344,13 +344,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 		OrderScanTransfer: orderScanTransferH,
 
-		Payment:                          payH,
-		Order:                            orderH,
-		Trade:                            tradeH,
-		AvatarReview:                     avatarReviewH,
-		Inquiry:                          inquiryH,
-		Announcement:                     announcementH,
-		ReviewReportDecisionNotification: reviewReportDecisionNotificationH,
+		Payment:                    payH,
+		Order:                      orderH,
+		Trade:                      tradeH,
+		AvatarReview:               avatarReviewH,
+		Inquiry:                    inquiryH,
+		Announcement:               announcementH,
+		ReportDecisionNotification: reportDecisionNotificationH,
 
 		SetupStatus: setupStatusH,
 	}

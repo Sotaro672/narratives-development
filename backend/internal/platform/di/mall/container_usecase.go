@@ -61,7 +61,7 @@ type mallUsecases struct {
 	likeUC                         *usecase.LikeUsecase
 	productBlueprintReviewUC       *usecase.ProductBlueprintReviewUsecase
 	tokenBlueprintReviewUC         *usecase.TokenBlueprintReviewUsecase
-	reviewReportUC                 *usecase.ReportUsecase
+	reportUC                       *usecase.ReportUsecase
 	paymentFlowUC                  *usecase.PaymentFlowUsecase
 
 	// TransferUsecaseの構築時にも利用するためContainerには公開しない。
@@ -98,8 +98,8 @@ func buildMallUsecases(
 	if r.tradeMessageRepo == nil {
 		return nil, errors.New("di.mall: trade message repository is nil")
 	}
-	if r.reviewReportRepo == nil {
-		return nil, errors.New("di.mall: review report repository is nil")
+	if r.reportRepo == nil {
+		return nil, errors.New("di.mall: report repository is nil")
 	}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
@@ -173,7 +173,7 @@ func buildMallUsecases(
 			r.cartRepo,
 		).
 		WithAvatarResaleAccessChecker(
-			r.reviewReportRepo,
+			r.reportRepo,
 		)
 
 	resaleReviewUC := usecase.NewResaleReviewUsecase(
@@ -248,10 +248,10 @@ func buildMallUsecases(
 		r.brandRepo,
 	)
 
-	reviewReportUC := usecase.NewReportUsecase(
+	reportUC := usecase.NewReportUsecase(
 		usecase.ReportUsecaseDeps{
-			ReportRepo:               r.reviewReportRepo,
-			DecisionNotificationRepo: r.reviewReportDecisionNotificationRepo,
+			ReportRepo:               r.reportRepo,
+			DecisionNotificationRepo: r.reportDecisionNotificationRepo,
 			ProductReviewRepo:        r.productBlueprintReviewRepo,
 			ProductBlueprintRepo:     r.productBlueprintRepoFS,
 			ProductPurchaseResolver:  walletUC,
@@ -263,14 +263,14 @@ func buildMallUsecases(
 			AvatarRepo:               r.avatarRepo,
 		},
 	)
-	if reviewReportUC == nil {
-		return nil, errors.New("di.mall: review report usecase is nil")
+	if reportUC == nil {
+		return nil, errors.New("di.mall: report usecase is nil")
 	}
 
 	cartUC := usecase.NewCartUsecase(
 		r.cartRepo,
 	).WithAvatarResaleAccessChecker(
-		r.reviewReportRepo,
+		r.reportRepo,
 	)
 
 	tradeUC := usecase.NewTradeUsecase(r.tradeRepo)
@@ -554,7 +554,7 @@ func buildMallUsecases(
 			tradeUC,
 		).
 		WithAvatarResaleAccessChecker(
-			r.reviewReportRepo,
+			r.reportRepo,
 		).
 		WithOrderConfirmationNotification(
 			authUserReader,
@@ -718,7 +718,7 @@ func buildMallUsecases(
 		likeUC:                         likeUC,
 		productBlueprintReviewUC:       productBlueprintReviewUC,
 		tokenBlueprintReviewUC:         tokenBlueprintReviewUC,
-		reviewReportUC:                 reviewReportUC,
+		reportUC:                       reportUC,
 		paymentFlowUC:                  paymentFlowUC,
 		inventoryUC:                    inventoryUC,
 	}, nil
@@ -763,7 +763,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.LikeUC = u.likeUC
 	c.ProductBlueprintReviewUC = u.productBlueprintReviewUC
 	c.TokenBlueprintReviewUC = u.tokenBlueprintReviewUC
-	c.ReviewReportUC = u.reviewReportUC
+	c.ReportUC = u.reportUC
 	c.PaymentFlowUC = u.paymentFlowUC
 }
 

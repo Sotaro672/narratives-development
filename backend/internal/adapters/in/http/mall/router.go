@@ -1,4 +1,4 @@
-// backend\internal\adapters\in\http\mall\router.go
+// backend/internal/adapters/in/http/mall/router.go
 package mall
 
 import (
@@ -101,10 +101,10 @@ type Deps struct {
 	// - POST /mall/me/announcement/{announcementId}/read
 	Announcement http.Handler
 
-	// review report decision notifications (me)
-	// - GET  /mall/me/review-report-decision-notifications
-	// - POST /mall/me/review-report-decision-notifications/{notificationId}/read
-	ReviewReportDecisionNotification http.Handler
+	// report decision notifications (me)
+	// - GET  /mall/me/report-decision-notifications
+	// - POST /mall/me/report-decision-notifications/{notificationId}/read
+	ReportDecisionNotification http.Handler
 
 	// /mall/me/setup-status (existence checks for redirect)
 	SetupStatus http.Handler
@@ -390,20 +390,20 @@ func Register(
 	handleSafeAuthAvatar(mux, "/mall/me/announcement", deps.Announcement, "Announcement(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/announcement/", deps.Announcement, "Announcement(me)", auth, avatar)
 
-	// review report decision notifications (me)
+	// report decision notifications (me)
 	handleSafeAuthAvatar(
 		mux,
-		"/mall/me/review-report-decision-notifications",
-		deps.ReviewReportDecisionNotification,
-		"ReviewReportDecisionNotification(me)",
+		"/mall/me/report-decision-notifications",
+		deps.ReportDecisionNotification,
+		"ReportDecisionNotification(me)",
 		auth,
 		avatar,
 	)
 	handleSafeAuthAvatar(
 		mux,
-		"/mall/me/review-report-decision-notifications/",
-		deps.ReviewReportDecisionNotification,
-		"ReviewReportDecisionNotification(me)",
+		"/mall/me/report-decision-notifications/",
+		deps.ReportDecisionNotification,
+		"ReportDecisionNotification(me)",
 		auth,
 		avatar,
 	)
