@@ -170,6 +170,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			ReportRepo:               reportRepo,
 			DecisionNotificationRepo: reportDecisionNotificationRepo,
 			ProductReviewModerator:   productBlueprintReviewUsecase,
+			TokenBlueprintRepo:       tokenBlueprintRepo,
 			TokenBlueprintModerator:  tokenBlueprintUsecase,
 			TokenCommentModerator:    tokenBlueprintReviewUsecase,
 			AvatarRepo:               avatarRepo,

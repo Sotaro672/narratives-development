@@ -412,7 +412,7 @@ func (u *ReportUsecase) addTokenBlueprintReport(
 		TargetType:       reportdom.TargetTypeTokenBlueprint,
 		TargetID:         target.ID,
 		TargetParentID:   target.ID,
-		TargetAuthorID:   target.CreatedBy,
+		TargetAuthorID:   target.BrandID,
 		TargetAuthorType: reportdom.ActorTypeBrand,
 		SnapshotTitle:    target.Name,
 		SnapshotBody:     target.Description,
@@ -1183,18 +1183,48 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 		return nil
 	}
 
-	// 裁定対象者への通知は、現在の通知ドメインが直接扱えるケースだけ生成する。
-	// PRODUCT_BLUEPRINT_REVIEW はレビュー削除、AVATAR は再販サービス利用停止。
-	// TOKEN_BLUEPRINT / TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
+	companyID := ""
+	notificationCase := reportCase
+
+	// PRODUCT_BLUEPRINT_REVIEW はレビュー投稿Avatar、AVATAR は対象Avatar自身、
+	// TOKEN_BLUEPRINT はそのTokenBlueprintを所有するBrandへ措置通知を送る。
+	// TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview,
 		reportdom.TargetTypeAvatar:
+
+	case reportdom.TargetTypeTokenBlueprint:
+		if u.tokenBlueprintRepo == nil {
+			return ErrReportUsecaseNotConfigured
+		}
+
+		target, err := u.tokenBlueprintRepo.GetByID(ctx, reportCase.TargetID)
+		if err != nil {
+			return err
+		}
+		if target == nil || target.ID != reportCase.TargetID {
+			return reportdom.ErrInvalidTargetID
+		}
+		if target.BrandID == "" {
+			return reportdom.ErrInvalidTargetAuthorID
+		}
+		if target.CompanyID == "" {
+			return reportdom.ErrInvalidCompanyID
+		}
+
+		// 旧ReportCaseがCreatedBy(member ID)をTargetAuthorIDに保持している場合でも、
+		// 通知時にはTokenBlueprintの現在のBrandIDを正しい宛先として利用する。
+		notificationCase.TargetAuthorID = target.BrandID
+		notificationCase.TargetAuthorType = reportdom.ActorTypeBrand
+		companyID = target.CompanyID
+
 	default:
 		return nil
 	}
 
 	notification, err := reportdom.NewTargetEnforcementNotification(
-		reportCase,
+		notificationCase,
+		companyID,
 		createdAt,
 	)
 	if err != nil {

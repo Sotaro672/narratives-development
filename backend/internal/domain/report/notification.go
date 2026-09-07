@@ -158,9 +158,10 @@ func BuildTargetDecisionNotificationID(
 //   - ReportID / ReportReason / ReportDetail を保持する。
 //
 // TARGET_ENFORCEMENT:
-//   - REMOVE裁定によって実際に措置を受けた対象者向け。
+//   - REMOVE裁定によって実際に措置を受けた AVATAR / BRAND 向け。
 //   - 同一裁定につき対象者へ1件だけ生成する。
 //   - 通報者の情報・通報理由・通報詳細は保持しない。
+//   - BRAND向け通知では CompanyID を保持する。
 //
 // Admin の内部識別子 DecidedBy は通知先へ公開しない。
 // 対象の商品名・トークン名などの表示名は保存せず、Query/BFF 層で解決する。
@@ -270,14 +271,19 @@ func NewDecisionNotification(
 // NewTargetEnforcementNotification は、REMOVE裁定によって実際に措置を受けた
 // 対象者向け通知を生成する。
 //
-// 現在の対象者通知は AVATAR への配信を対象とする。
-// PRODUCT_BLUEPRINT_REVIEW の削除ではレビュー投稿者、AVATAR のREMOVEでは
-// 対象Avatar自身が Recipient となる。
+// 対象者通知:
+//   - PRODUCT_BLUEPRINT_REVIEW の削除ではレビュー投稿Avatar。
+//   - AVATAR のREMOVEでは対象Avatar自身。
+//   - TOKEN_BLUEPRINT の非表示では対象TokenBlueprintを所有するBrand。
+//
+// BRAND向け通知では、そのBrandが所属するCompanyIDを companyID に渡す。
+// AVATAR向け通知では companyID は空文字でなければならない。
 //
 // 通報者の特定や通報内容の漏えいを避けるため、ReportID / ReportReason /
 // ReportDetail は対象者通知へ保存しない。
 func NewTargetEnforcementNotification(
 	reportCase ReportCase,
+	companyID string,
 	createdAt time.Time,
 ) (DecisionNotification, error) {
 	if err := reportCase.Validate(); err != nil {
@@ -289,11 +295,19 @@ func NewTargetEnforcementNotification(
 	if reportCase.DecidedAt == nil || reportCase.DecidedAt.IsZero() {
 		return DecisionNotification{}, ErrDecisionNotificationCaseNotDecided
 	}
-	if reportCase.TargetAuthorType != ActorTypeAvatar {
-		return DecisionNotification{}, ErrInvalidActorType
-	}
 	if !isValidDocumentIDPart(reportCase.TargetAuthorID) {
 		return DecisionNotification{}, ErrInvalidTargetAuthorID
+	}
+
+	switch reportCase.TargetAuthorType {
+	case ActorTypeAvatar:
+		companyID = ""
+	case ActorTypeBrand:
+		if !isValidDocumentIDPart(companyID) {
+			return DecisionNotification{}, ErrInvalidCompanyID
+		}
+	default:
+		return DecisionNotification{}, ErrInvalidActorType
 	}
 
 	decidedAt := reportCase.DecidedAt.UTC().Truncate(time.Microsecond)
@@ -319,7 +333,7 @@ func NewTargetEnforcementNotification(
 		ReportID:         "",
 		RecipientType:    reportCase.TargetAuthorType,
 		RecipientID:      reportCase.TargetAuthorID,
-		CompanyID:        "",
+		CompanyID:        companyID,
 		TargetType:       reportCase.TargetType,
 		TargetID:         reportCase.TargetID,
 		TargetParentID:   reportCase.TargetParentID,
@@ -363,7 +377,10 @@ func (n DecisionNotification) Validate() error {
 	if !isValidDocumentIDPart(n.RecipientID) {
 		return ErrInvalidReporterID
 	}
-	if n.RecipientType == ActorTypeBrand && n.CompanyID == "" {
+	if n.RecipientType == ActorTypeBrand && !isValidDocumentIDPart(n.CompanyID) {
+		return ErrInvalidCompanyID
+	}
+	if n.RecipientType == ActorTypeAvatar && n.CompanyID != "" {
 		return ErrInvalidCompanyID
 	}
 	if err := n.TargetType.Validate(); err != nil {
