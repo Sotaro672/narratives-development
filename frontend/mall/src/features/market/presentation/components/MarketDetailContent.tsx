@@ -7,6 +7,7 @@ import type { UseMarketDetailPageResult } from "../hooks/useMarketDetailPage";
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
 import { useAuthState } from "../../../shared/hooks/useAuthState";
 import AvatarSummaryCard from "../../../shared/presentation/components/AvatarSummaryCard";
+import FavoriteHeartButton from "../../../shared/presentation/components/FavoriteHeartButton";
 import ProductDescription from "../../../shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../../../shared/presentation/components/ProductDetailLayout";
 import ProductIdentity from "../../../shared/presentation/components/ProductIdentity";
@@ -24,10 +25,14 @@ type MarketDetailContentState = Pick<
   | "item"
   | "reviews"
   | "commentCount"
+  | "isLiked"
   | "loading"
+  | "loadingLike"
   | "loadingReviews"
+  | "updatingLike"
   | "error"
   | "reviewsError"
+  | "likeErrorMessage"
   | "cartMessage"
   | "cartErrorMessage"
   | "priceLabel"
@@ -43,6 +48,7 @@ type MarketDetailContentState = Pick<
   | "handlePrevMedia"
   | "handleNextMedia"
   | "handleSelectMedia"
+  | "handleToggleLike"
 >;
 
 type MarketDetailContentProps = {
@@ -63,10 +69,14 @@ export default function MarketDetailContent({
     item,
     reviews,
     commentCount,
+    isLiked,
     loading,
+    loadingLike,
     loadingReviews,
+    updatingLike,
     error,
     reviewsError,
+    likeErrorMessage,
     cartMessage,
     cartErrorMessage,
     priceLabel,
@@ -82,6 +92,7 @@ export default function MarketDetailContent({
     handlePrevMedia,
     handleNextMedia,
     handleSelectMedia,
+    handleToggleLike,
   } = detail;
 
   useEffect(() => {
@@ -95,16 +106,10 @@ export default function MarketDetailContent({
 
       try {
         const avatar = await getMyAvatar();
-
-        if (cancelled) {
-          return;
-        }
-
+        if (cancelled) return;
         setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
       } catch {
-        if (!cancelled) {
-          setCurrentAvatarId("");
-        }
+        if (!cancelled) setCurrentAvatarId("");
       }
     }
 
@@ -144,10 +149,25 @@ export default function MarketDetailContent({
             />
           }
           mediaAfter={
-            <ResaleCommentButton
-              commentCount={commentCount}
-              onClick={onOpenResaleChat}
-            />
+            <div className="market-detail-page__media-actions-area">
+              <div className="market-detail-page__media-actions">
+                <FavoriteHeartButton
+                  isLiked={isLiked}
+                  disabled={loadingLike || updatingLike}
+                  onClick={handleToggleLike}
+                />
+                <ResaleCommentButton
+                  commentCount={commentCount}
+                  onClick={onOpenResaleChat}
+                />
+              </div>
+
+              {likeErrorMessage ? (
+                <p className="market-detail-page__like-error" role="alert">
+                  {likeErrorMessage}
+                </p>
+              ) : null}
+            </div>
           }
           mediaFooter={
             <>
@@ -194,16 +214,11 @@ export default function MarketDetailContent({
           />
 
           {cartMessage ? (
-            <p className="market-detail-page__cart-message">
-              {cartMessage}
-            </p>
+            <p className="market-detail-page__cart-message">{cartMessage}</p>
           ) : null}
 
           {cartErrorMessage ? (
-            <p
-              className="market-detail-page__cart-error"
-              role="alert"
-            >
+            <p className="market-detail-page__cart-error" role="alert">
               {cartErrorMessage}
             </p>
           ) : null}

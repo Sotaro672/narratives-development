@@ -7,7 +7,6 @@ import Layout from "../components/layout/Layout";
 import { addResaleCartItem } from "../features/cart/api/cartApi";
 import MarketDetailContent from "../features/market/presentation/components/MarketDetailContent";
 import { useMarketDetailPage } from "../features/market/presentation/hooks/useMarketDetailPage";
-import FavoriteHeartButton from "../features/shared/presentation/components/FavoriteHeartButton";
 
 import "../styles/page-layout.css";
 import "../styles/market-detail-page.css";
@@ -22,18 +21,10 @@ export default function MarketDetailPage() {
   });
 
   const {
-    item,
     title,
-    isLiked,
-    loading,
-    loadingLike,
     addingToCart,
-    updatingLike,
     canAddToCart,
-    error,
-    likeErrorMessage,
     sellerAvatarId,
-    handleToggleLike,
     handleAddToCart,
   } = detail;
 
@@ -43,28 +34,18 @@ export default function MarketDetailPage() {
 
   async function handleAddToCartAndOpenCart(): Promise<void> {
     const added = await handleAddToCart();
-
-    if (!added) {
-      return;
-    }
-
+    if (!added) return;
     navigate("/cart");
   }
 
   function handleOpenSellerAvatar() {
-    if (!sellerAvatarId) {
-      return;
-    }
-
+    if (!sellerAvatarId) return;
     navigate(`/avatars/${encodeURIComponent(sellerAvatarId)}`);
   }
 
   function handleOpenResaleChat() {
     const normalizedResaleId = resaleId?.trim() ?? "";
-
-    if (!normalizedResaleId) {
-      return;
-    }
+    if (!normalizedResaleId) return;
 
     navigate(`/chats/resales/${encodeURIComponent(normalizedResaleId)}`, {
       state: {
@@ -96,22 +77,6 @@ export default function MarketDetailPage() {
         onButtonClick: handleAddToCartAndOpenCart,
       }}
     >
-      {!loading && !error && item ? (
-        <div className="market-detail-page">
-          <FavoriteHeartButton
-            isLiked={isLiked}
-            disabled={loadingLike || updatingLike}
-            onClick={handleToggleLike}
-          />
-
-          {likeErrorMessage ? (
-            <p className="market-detail-page__cart-error" role="alert">
-              {likeErrorMessage}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
-
       <MarketDetailContent
         detail={detail}
         onOpenSeller={handleOpenSellerAvatar}
