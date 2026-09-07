@@ -8,6 +8,7 @@ import type {
 } from "../../shared/types/report";
 import {
   reportAvatar,
+  reportList,
   reportProductBlueprintReview,
   reportTokenBlueprint,
   reportTokenBlueprintComment,
@@ -18,6 +19,10 @@ export type ReportTarget =
       type: "PRODUCT_BLUEPRINT_REVIEW";
       productBlueprintId: string;
       reviewId: string;
+    }
+  | {
+      type: "LIST";
+      listId: string;
     }
   | {
       type: "TOKEN_BLUEPRINT";
@@ -36,6 +41,10 @@ export type ReportTarget =
 type OpenProductBlueprintReviewReportInput = {
   productBlueprintId: string;
   reviewId: string;
+};
+
+type OpenListReportInput = {
+  listId: string;
 };
 
 type OpenTokenBlueprintReportInput = {
@@ -96,6 +105,19 @@ export function useReport() {
         type: "PRODUCT_BLUEPRINT_REVIEW",
         productBlueprintId,
         reviewId,
+      });
+    },
+    [resetForm],
+  );
+
+  const openListReport = useCallback(
+    (input: OpenListReportInput) => {
+      const listId = normalizeId(input.listId, "listId");
+
+      resetForm();
+      setTarget({
+        type: "LIST",
+        listId,
       });
     },
     [resetForm],
@@ -206,6 +228,14 @@ export function useReport() {
           });
           break;
 
+        case "LIST":
+          response = await reportList({
+            listId: target.listId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
+
         case "TOKEN_BLUEPRINT":
           response = await reportTokenBlueprint({
             tokenBlueprintId: target.tokenBlueprintId,
@@ -269,6 +299,7 @@ export function useReport() {
     requiresDetail,
     canSubmit,
     openProductBlueprintReviewReport,
+    openListReport,
     openTokenBlueprintReport,
     openTokenBlueprintCommentReport,
     openAvatarReport,

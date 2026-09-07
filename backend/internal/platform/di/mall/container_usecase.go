@@ -256,6 +256,8 @@ func buildMallUsecases(
 			ProductBlueprintRepo:     r.productBlueprintRepoFS,
 			ProductPurchaseResolver:  walletUC,
 			ProductReviewModerator:   productBlueprintReviewUC,
+			ListRepo:                 r.listRepoFS,
+			InventoryRepo:            r.inventoryRepo,
 			TokenCommentRepo:         r.tokenBlueprintReviewRepo.Comments(),
 			TokenBlueprintRepo:       r.tokenBlueprintRepo,
 			TokenAccessResolver:      walletUC,

@@ -12,7 +12,8 @@ import MeasurementTable from "../features/catalog/presentation/components/Measur
 import ModelSelector from "../features/catalog/presentation/components/ModelSelector";
 import ProductInfoCard from "../features/catalog/presentation/components/ProductInfoCard";
 import { useCatalogPage } from "../features/catalog/presentation/hooks/useCatalogPage";
-
+import ReportModal from "../features/report/components/ReportModal";
+import { useReport } from "../features/report/hooks/useReport";
 import { useAuthState } from "../features/shared/hooks/useAuthState";
 import FavoriteHeartButton from "../features/shared/presentation/components/FavoriteHeartButton";
 import ProductDescription from "../features/shared/presentation/components/ProductDescription";
@@ -21,6 +22,7 @@ import ProductIdentity from "../features/shared/presentation/components/ProductI
 import ProductMediaGallery from "../features/shared/presentation/components/ProductMediaGallery";
 import ProductPrice from "../features/shared/presentation/components/ProductPrice";
 import ProductReviewSection from "../features/shared/presentation/components/ProductReviewSection";
+import ReportFlagButton from "../features/shared/presentation/components/ReportFlagButton";
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 
 import "../features/shared/styles/product-detail.css";
@@ -75,6 +77,22 @@ export default function CatalogPage() {
     handleAddToCart,
   } = useCatalogPage();
 
+  const {
+    target: reportTarget,
+    isOpen: reportOpen,
+    reason: reportReason,
+    detail: reportDetail,
+    submitting: reportSubmitting,
+    error: reportError,
+    result: reportResult,
+    canSubmit: canSubmitReport,
+    openListReport,
+    close: closeReport,
+    setReason: setReportReason,
+    setDetail: setReportDetail,
+    submit: submitReport,
+  } = useReport();
+
   useEffect(() => {
     let cancelled = false;
 
@@ -106,6 +124,14 @@ export default function CatalogPage() {
     };
   }, [authResolved, isLoggedIn]);
 
+  const normalizedListId = catalog?.list.id?.trim() ?? "";
+  const canReportList =
+    authResolved &&
+    isLoggedIn &&
+    Boolean(currentAvatarId) &&
+    Boolean(normalizedListId) &&
+    !reportSubmitting;
+
   const handleBackButtonClick = () => {
     if (isLoggedIn) {
       navigate("/lists");
@@ -113,6 +139,16 @@ export default function CatalogPage() {
     }
 
     navigate(-1);
+  };
+
+  const handleOpenListReport = () => {
+    if (!canReportList) {
+      return;
+    }
+
+    openListReport({
+      listId: normalizedListId,
+    });
   };
 
   return (
@@ -198,11 +234,17 @@ export default function CatalogPage() {
 
             {isLoggedIn ? (
               <>
-                <FavoriteHeartButton
-                  isLiked={isLiked}
-                  disabled={isLoadingLike || isUpdatingLike}
-                  onClick={handleToggleLike}
-                />
+                <div className="catalog-page-actions">
+                  <FavoriteHeartButton
+                    isLiked={isLiked}
+                    disabled={isLoadingLike || isUpdatingLike}
+                    onClick={handleToggleLike}
+                  />
+                  <ReportFlagButton
+                    disabled={!canReportList}
+                    onClick={handleOpenListReport}
+                  />
+                </div>
 
                 {likeErrorMessage ? (
                   <p className="catalog-page-error" role="alert">
@@ -255,6 +297,21 @@ export default function CatalogPage() {
           </ProductDetailLayout>
         ) : null}
       </section>
+
+      <ReportModal
+        open={reportOpen}
+        targetType={reportTarget?.type}
+        reason={reportReason}
+        detail={reportDetail}
+        submitting={reportSubmitting}
+        error={reportError}
+        result={reportResult}
+        canSubmit={canSubmitReport}
+        onReasonChange={setReportReason}
+        onDetailChange={setReportDetail}
+        onSubmit={submitReport}
+        onClose={closeReport}
+      />
 
       {isLoggedIn && isMobilePortrait ? (
         <FooterNav

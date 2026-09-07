@@ -24,6 +24,9 @@ export function getStatusLabel(
       if (targetType === "AVATAR") {
         return "再販利用停止";
       }
+      if (targetType === "LIST") {
+        return "出品停止";
+      }
       if (targetType === "TOKEN_BLUEPRINT") {
         return "非表示";
       }
@@ -58,6 +61,9 @@ export function getTargetTypeLabel(
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "商品レビュー";
+
+    case "LIST":
+      return "出品";
 
     case "TOKEN_BLUEPRINT":
       return "トークン";
@@ -119,6 +125,9 @@ export function getSnapshotTitleLabel(
     case "AVATAR":
       return "アバター名";
 
+    case "LIST":
+      return "出品名";
+
     case "TOKEN_BLUEPRINT":
       return "トークン名";
 
@@ -134,6 +143,7 @@ export function getSnapshotBodyLabel(
     case "AVATAR":
       return "プロフィール";
 
+    case "LIST":
     case "TOKEN_BLUEPRINT":
       return "説明";
 
@@ -148,6 +158,9 @@ export function getTargetParentLabel(
   switch (targetType) {
     case "AVATAR":
       return "対象アバター";
+
+    case "LIST":
+      return "対象出品";
 
     case "TOKEN_BLUEPRINT":
       return "対象トークン";
@@ -164,6 +177,9 @@ export function getTargetAuthorTypeLabel(
     case "AVATAR":
       return "対象種別";
 
+    case "LIST":
+      return "出品者種別";
+
     case "TOKEN_BLUEPRINT":
       return "作成者種別";
 
@@ -178,6 +194,9 @@ export function getTargetAuthorLabel(
   switch (targetType) {
     case "AVATAR":
       return "対象アバター";
+
+    case "LIST":
+      return "出品ブランド";
 
     case "TOKEN_BLUEPRINT":
       return "作成者";

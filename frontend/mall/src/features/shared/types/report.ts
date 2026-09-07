@@ -16,6 +16,7 @@ export type ReportTargetType =
   | "PRODUCT_BLUEPRINT_REVIEW"
   | "TOKEN_BLUEPRINT"
   | "TOKEN_BLUEPRINT_COMMENT"
+  | "LIST"
   | "AVATAR";
 
 export type ReportRequest = {
@@ -35,6 +36,12 @@ export type ReportResponse = {
 export type ReportProductBlueprintReviewInput = {
   productBlueprintId: string;
   reviewId: string;
+  reason: ReportReason;
+  detail?: string;
+};
+
+export type ReportListInput = {
+  listId: string;
   reason: ReportReason;
   detail?: string;
 };

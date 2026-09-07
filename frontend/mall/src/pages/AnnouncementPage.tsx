@@ -57,6 +57,8 @@ function getReportTargetLabel(
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "商品レビュー";
+    case "LIST":
+      return "出品";
     case "TOKEN_BLUEPRINT":
       return "トークン";
     case "TOKEN_BLUEPRINT_COMMENT":
@@ -75,6 +77,8 @@ function getDecisionBody(
     switch (notification.targetType) {
       case "PRODUCT_BLUEPRINT_REVIEW":
         return "運営の裁定により、あなたの商品レビューを削除しました。";
+      case "LIST":
+        return "運営の裁定により、対象出品を停止しました。Listおよび登録済み画像は削除されていません。";
       case "TOKEN_BLUEPRINT":
         return "運営の裁定により、対象トークンをAMOL上で非表示にしました。オンチェーン上のトークンやメタデータは削除されていません。";
       case "AVATAR":
@@ -92,6 +96,17 @@ function getDecisionBody(
         return "通報いただいた内容を確認し、対象アバターの再販サービス利用を停止しました。";
       case "KEPT":
         return "通報いただいた内容を確認しました。審査の結果、対象アバターへの変更は行いませんでした。";
+      default:
+        return "通報いただいた内容の確認が完了しました。";
+    }
+  }
+
+  if (notification.targetType === "LIST") {
+    switch (notification.decisionStatus) {
+      case "REMOVED":
+        return "通報いただいた内容を確認し、対象出品を停止しました。";
+      case "KEPT":
+        return "通報いただいた内容を確認しました。審査の結果、対象出品の掲載を継続します。";
       default:
         return "通報いただいた内容の確認が完了しました。";
     }
@@ -127,6 +142,17 @@ function getDecisionStatusLabel(
         return "再販利用停止";
       case "KEPT":
         return "変化なし";
+      default:
+        return notification.decisionStatus;
+    }
+  }
+
+  if (notification.targetType === "LIST") {
+    switch (notification.decisionStatus) {
+      case "REMOVED":
+        return "出品停止";
+      case "KEPT":
+        return "維持";
       default:
         return notification.decisionStatus;
     }

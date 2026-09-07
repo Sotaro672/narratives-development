@@ -34,6 +34,8 @@ function getTargetLabel(targetType?: ReportTargetType): string {
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "レビュー";
+    case "LIST":
+      return "出品";
     case "TOKEN_BLUEPRINT":
       return "トークン";
     case "TOKEN_BLUEPRINT_COMMENT":
@@ -47,6 +49,9 @@ function getTargetLabel(targetType?: ReportTargetType): string {
 
 function getDescription(targetType?: ReportTargetType): string {
   switch (targetType) {
+    case "LIST":
+      return "この出品内容が不適切だと思う理由を選択してください。通報しただけでは出品は自動的に停止されません。";
+
     case "TOKEN_BLUEPRINT":
       return "このトークンのコンテンツが不適切だと思う理由を選択してください。通報しただけではコンテンツは自動的に非表示になりません。";
 

@@ -4,6 +4,7 @@ import type {
   ReportDecisionNotification,
   ReportDecisionStatus,
 } from "../../infrastructure/reportDecisionNotificationApi";
+
 import {
   getReportReasonLabel,
   type ReportTargetType,
@@ -28,12 +29,23 @@ export type ReportDecisionNotificationViewModel = {
 
 export function getReportDecisionStatusLabel(
   status: ReportDecisionStatus,
+  targetType?: ReportTargetType,
 ): string {
   switch (status) {
     case "REMOVED":
+      if (targetType === "LIST") {
+        return "出品停止";
+      }
+
+      if (targetType === "AVATAR") {
+        return "再販利用停止";
+      }
+
       return "非表示";
+
     case "KEPT":
       return "掲載継続";
+
     default:
       return status;
   }
@@ -45,12 +57,19 @@ export function getReportDecisionNotificationTargetLabel(
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "商品レビュー";
+
+    case "LIST":
+      return "出品";
+
     case "TOKEN_BLUEPRINT":
       return "トークン";
+
     case "TOKEN_BLUEPRINT_COMMENT":
       return "トークンコメント";
+
     case "AVATAR":
       return "アバター";
+
     default:
       return targetType;
   }
@@ -61,12 +80,18 @@ export function getReportDecisionNotificationTitle(
 ): string {
   if (notification.notificationKind === "TARGET_ENFORCEMENT") {
     switch (notification.targetType) {
+      case "LIST":
+        return "出品が停止されました";
+
       case "TOKEN_BLUEPRINT":
         return "トークンがAMOL上で非表示になりました";
+
       case "PRODUCT_BLUEPRINT_REVIEW":
         return "投稿したレビューに措置が行われました";
+
       case "AVATAR":
         return "アカウントに措置が行われました";
+
       default:
         return "対象コンテンツに措置が行われました";
     }
@@ -80,22 +105,56 @@ export function getReportDecisionNotificationBody(
 ): string {
   if (notification.notificationKind === "TARGET_ENFORCEMENT") {
     switch (notification.targetType) {
+      case "LIST":
+        return "審査の結果、対象出品を停止しました。Listおよび登録済み画像は削除されていません。";
+
       case "TOKEN_BLUEPRINT":
         return "審査の結果、対象トークンをAMOL上で非表示にしました。TokenBlueprintおよびオンチェーン上のトークン・メタデータは削除されていません。";
+
       case "PRODUCT_BLUEPRINT_REVIEW":
         return "審査の結果、対象レビューを非表示にしました。";
+
       case "AVATAR":
         return "審査の結果、対象アバターの再販サービス利用を停止しました。";
+
       default:
         return "審査の結果、対象コンテンツに措置を行いました。";
+    }
+  }
+
+  if (notification.targetType === "LIST") {
+    switch (notification.decisionStatus) {
+      case "REMOVED":
+        return "通報いただいた内容を確認し、対象出品を停止しました。";
+
+      case "KEPT":
+        return "通報いただいた内容を確認しました。審査の結果、対象出品の掲載を継続します。";
+
+      default:
+        return "通報いただいた内容の確認が完了しました。";
+    }
+  }
+
+  if (notification.targetType === "AVATAR") {
+    switch (notification.decisionStatus) {
+      case "REMOVED":
+        return "通報いただいた内容を確認し、対象アバターの再販サービス利用を停止しました。";
+
+      case "KEPT":
+        return "通報いただいた内容を確認しました。審査の結果、対象アバターへの変更は行いませんでした。";
+
+      default:
+        return "通報いただいた内容の確認が完了しました。";
     }
   }
 
   switch (notification.decisionStatus) {
     case "REMOVED":
       return "通報いただいた内容を確認し、対象コンテンツを非表示にしました。";
+
     case "KEPT":
       return "通報いただいた内容を確認しました。審査の結果、掲載を継続します。";
+
     default:
       return "通報いただいた内容の確認が完了しました。";
   }
@@ -139,6 +198,7 @@ export function toReportDecisionNotificationViewModel(
     decisionStatus: notification.decisionStatus,
     decisionStatusLabel: getReportDecisionStatusLabel(
       notification.decisionStatus,
+      notification.targetType,
     ),
     decisionReason: notification.decisionReason,
     occurredAt: notification.decidedAt || notification.createdAt,

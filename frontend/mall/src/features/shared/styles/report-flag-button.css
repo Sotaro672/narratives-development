@@ -1,0 +1,38 @@
+/* frontend/mall/src/features/shared/styles/report-flag-button.css */
+
+.report-flag-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.report-flag-button:hover:not(:disabled) {
+  background: #f7f7f7;
+  color: #d32f2f;
+}
+
+.report-flag-button:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.report-flag-button:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.report-flag-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -63,13 +63,17 @@ export default function ReportsPage() {
       {
         key: "status",
         header: "対応状況",
-        render: (reportCase) => getStatusLabel(reportCase.status, reportCase.targetType),
+        render: (reportCase) =>
+          getStatusLabel(reportCase.status, reportCase.targetType),
         filter: {
           getValue: (reportCase) => reportCase.status,
           options: [
             { value: "PENDING", label: "未対応" },
             { value: "KEPT", label: "維持・変化なし" },
-            { value: "REMOVED", label: "削除・非表示・再販利用停止" },
+            {
+              value: "REMOVED",
+              label: "削除・非表示・出品停止・再販利用停止",
+            },
           ],
         },
         nowrap: true,
@@ -81,9 +85,16 @@ export default function ReportsPage() {
         filter: {
           getValue: (reportCase) => reportCase.targetType,
           options: [
-            { value: "PRODUCT_BLUEPRINT_REVIEW", label: "商品レビュー" },
+            {
+              value: "PRODUCT_BLUEPRINT_REVIEW",
+              label: "商品レビュー",
+            },
+            { value: "LIST", label: "出品" },
             { value: "TOKEN_BLUEPRINT", label: "トークン" },
-            { value: "TOKEN_BLUEPRINT_COMMENT", label: "トークンコメント" },
+            {
+              value: "TOKEN_BLUEPRINT_COMMENT",
+              label: "トークンコメント",
+            },
             { value: "AVATAR", label: "アバター" },
           ],
         },
@@ -98,7 +109,8 @@ export default function ReportsPage() {
       {
         key: "targetAuthorType",
         header: "対象者種別",
-        render: (reportCase) => getActorTypeLabel(reportCase.targetAuthorType),
+        render: (reportCase) =>
+          getActorTypeLabel(reportCase.targetAuthorType),
         nowrap: true,
       },
       {
@@ -131,13 +143,15 @@ export default function ReportsPage() {
       case "status":
         setStatus(value ? (value as ReportCaseStatus) : undefined);
         break;
+
       case "targetType":
         setTargetType(value ? (value as ReportTargetType) : undefined);
         break;
     }
   };
 
-  const hasActiveFilter = status !== undefined || targetType !== undefined;
+  const hasActiveFilter =
+    status !== undefined || targetType !== undefined;
 
   return (
     <Page>
@@ -153,7 +167,9 @@ export default function ReportsPage() {
         }
       />
 
-      {loading && items.length === 0 ? <p>通報を読み込んでいます。</p> : null}
+      {loading && items.length === 0 ? (
+        <p>通報を読み込んでいます。</p>
+      ) : null}
 
       {!loading && error ? (
         <p role="alert">
@@ -167,7 +183,10 @@ export default function ReportsPage() {
             <p className="reports-page__count">{totalCount}件</p>
 
             {loading ? (
-              <span className="reports-page__updating" aria-live="polite">
+              <span
+                className="reports-page__updating"
+                aria-live="polite"
+              >
                 更新中...
               </span>
             ) : null}
@@ -192,7 +211,10 @@ export default function ReportsPage() {
           />
 
           {totalPages > 1 ? (
-            <nav className="reports-page__pagination" aria-label="通報一覧のページ送り">
+            <nav
+              className="reports-page__pagination"
+              aria-label="通報一覧のページ送り"
+            >
               <button
                 type="button"
                 className="reports-page__pagination-button"

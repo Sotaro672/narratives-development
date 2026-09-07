@@ -44,3 +44,9 @@
   font-weight: 900;
   line-height: 1.2;
 }
+
+.catalog-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
