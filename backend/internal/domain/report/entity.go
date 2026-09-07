@@ -79,6 +79,8 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 		prefix = "tokenBlueprint"
 	case TargetTypeTokenBlueprintComment:
 		prefix = "tokenBlueprintComment"
+	case TargetTypeList:
+		prefix = "list"
 	case TargetTypeAvatar:
 		prefix = "avatar"
 	default:
@@ -119,6 +121,7 @@ const (
 	TargetTypeProductBlueprintReview TargetType = "PRODUCT_BLUEPRINT_REVIEW"
 	TargetTypeTokenBlueprint         TargetType = "TOKEN_BLUEPRINT"
 	TargetTypeTokenBlueprintComment  TargetType = "TOKEN_BLUEPRINT_COMMENT"
+	TargetTypeList                   TargetType = "LIST"
 	TargetTypeAvatar                 TargetType = "AVATAR"
 )
 
@@ -127,6 +130,7 @@ func (t TargetType) Validate() error {
 	case TargetTypeProductBlueprintReview,
 		TargetTypeTokenBlueprint,
 		TargetTypeTokenBlueprintComment,
+		TargetTypeList,
 		TargetTypeAvatar:
 		return nil
 	default:
@@ -581,7 +585,8 @@ func validateSnapshotContent(
 	body string,
 ) error {
 	switch targetType {
-	case TargetTypeProductBlueprintReview, TargetTypeTokenBlueprintComment:
+	case TargetTypeProductBlueprintReview,
+		TargetTypeTokenBlueprintComment:
 		if body == "" {
 			return fmt.Errorf("%w: snapshot body is empty", ErrInvalidTargetID)
 		}
@@ -590,6 +595,12 @@ func validateSnapshotContent(
 	case TargetTypeTokenBlueprint:
 		if title == "" && body == "" {
 			return fmt.Errorf("%w: token blueprint snapshot is empty", ErrInvalidTargetID)
+		}
+		return nil
+
+	case TargetTypeList:
+		if title == "" && body == "" {
+			return fmt.Errorf("%w: list snapshot is empty", ErrInvalidTargetID)
 		}
 		return nil
 
@@ -614,7 +625,10 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		value := *rating
 		return &value, nil
 
-	case TargetTypeTokenBlueprint, TargetTypeTokenBlueprintComment, TargetTypeAvatar:
+	case TargetTypeTokenBlueprint,
+		TargetTypeTokenBlueprintComment,
+		TargetTypeList,
+		TargetTypeAvatar:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}

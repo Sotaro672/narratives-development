@@ -7,6 +7,7 @@ import (
 	avatardom "narratives/internal/domain/avatar"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
+	listdom "narratives/internal/domain/list"
 	memberdom "narratives/internal/domain/member"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 	reportdom "narratives/internal/domain/report"
@@ -27,6 +28,10 @@ type reportBrandReader interface {
 
 type reportCompanyReader interface {
 	GetByID(ctx context.Context, id string) (companydom.Company, error)
+}
+
+type reportListReader interface {
+	GetByID(ctx context.Context, id string) (listdom.List, error)
 }
 
 type reportMemberReader interface {
@@ -50,6 +55,7 @@ type ReportNameQuery struct {
 	avatarRepo           reportAvatarReader
 	brandRepo            reportBrandReader
 	companyRepo          reportCompanyReader
+	listRepo             reportListReader
 	memberRepo           reportMemberReader
 	productBlueprintRepo reportProductBlueprintReader
 	tokenBlueprintRepo   reportTokenBlueprintReader
@@ -59,6 +65,7 @@ func NewReportNameQuery(
 	avatarRepo reportAvatarReader,
 	brandRepo reportBrandReader,
 	companyRepo reportCompanyReader,
+	listRepo reportListReader,
 	memberRepo reportMemberReader,
 	productBlueprintRepo reportProductBlueprintReader,
 	tokenBlueprintRepo reportTokenBlueprintReader,
@@ -67,6 +74,7 @@ func NewReportNameQuery(
 		avatarRepo:           avatarRepo,
 		brandRepo:            brandRepo,
 		companyRepo:          companyRepo,
+		listRepo:             listRepo,
 		memberRepo:           memberRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
@@ -120,6 +128,21 @@ func (q *ReportNameQuery) ResolveCompanyName(ctx context.Context, companyID stri
 	}
 
 	return entity.Name
+}
+
+// ResolveListName は listId から List の title を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveListName(ctx context.Context, listID string) string {
+	if q == nil || q.listRepo == nil || listID == "" {
+		return ""
+	}
+
+	entity, err := q.listRepo.GetByID(ctx, listID)
+	if err != nil {
+		return ""
+	}
+
+	return entity.Title
 }
 
 // ResolveMemberName は member の Firestore document ID または Firebase Auth UID から
@@ -216,8 +239,8 @@ func (q *ReportNameQuery) ResolveTargetAuthorName(
 }
 
 // ResolveTargetParentName は通報対象の親リソース名を解決する。
-// 商品レビューでは productName、TokenBlueprint / トークンコメントでは tokenName、
-// アバター通報では avatarName を返す。
+// 商品レビューでは productName、LIST では List.title、
+// TokenBlueprint / トークンコメントでは tokenName、アバター通報では avatarName を返す。
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetParentName(
 	ctx context.Context,
@@ -227,6 +250,8 @@ func (q *ReportNameQuery) ResolveTargetParentName(
 	switch targetType {
 	case reportdom.TargetTypeProductBlueprintReview:
 		return q.ResolveProductName(ctx, targetParentID)
+	case reportdom.TargetTypeList:
+		return q.ResolveListName(ctx, targetParentID)
 	case reportdom.TargetTypeTokenBlueprint,
 		reportdom.TargetTypeTokenBlueprintComment:
 		return q.ResolveTokenName(ctx, targetParentID)

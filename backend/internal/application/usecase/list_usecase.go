@@ -17,10 +17,17 @@ type ListAssetStorage interface {
 	DeleteAll(ctx context.Context, listID string) error
 }
 
+type SuspendListByAdminInput struct {
+	ListID  string
+	Reason  string
+	AdminID string
+}
+
 type ListUsecase struct {
-	listRepo  listdom.Repository
-	imageRepo listdom.ImageRepository
-	storage   ListAssetStorage
+	listRepo        listdom.Repository
+	imageRepo       listdom.ImageRepository
+	storage         ListAssetStorage
+	cartItemCleanup CartItemCleanup
 }
 
 func NewListUsecase(
@@ -33,6 +40,17 @@ func NewListUsecase(
 		imageRepo: imageRepo,
 		storage:   storage,
 	}
+}
+
+func (uc *ListUsecase) WithCartItemCleanup(
+	cartItemCleanup CartItemCleanup,
+) *ListUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.cartItemCleanup = cartItemCleanup
+	return uc
 }
 
 func generateReadableID(listID string, createdAt time.Time) string {
@@ -102,6 +120,67 @@ func (uc *ListUsecase) Update(
 
 	item.ID = id
 	return uc.listRepo.Update(ctx, id, item)
+}
+
+// SuspendListByAdmin は通報裁定によってListをMall上から非表示にする。
+// List本体・ListImage・Firebase Storage上の画像は削除せず、statusのみsuspendedへ変更する。
+// suspended後はListを参照している既存カート項目も削除する。
+// すでにsuspendedの場合も、失敗したカート削除を再試行できるようcleanupは実行する。
+func (uc *ListUsecase) SuspendListByAdmin(
+	ctx context.Context,
+	input SuspendListByAdminInput,
+) error {
+	if uc == nil || uc.listRepo == nil {
+		return ErrNotSupported("List.SuspendByAdmin")
+	}
+
+	listID := strings.TrimSpace(input.ListID)
+	if listID == "" {
+		return listdom.ErrInvalidID
+	}
+
+	adminID := strings.TrimSpace(input.AdminID)
+	if adminID == "" {
+		return ErrInvalidArgument("adminId is required")
+	}
+
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		return ErrInvalidArgument("reason is required")
+	}
+
+	if uc.cartItemCleanup == nil {
+		return ErrNotSupported("List.SuspendByAdmin.CartItemCleanup")
+	}
+
+	item, err := uc.listRepo.GetByID(ctx, listID)
+	if err != nil {
+		return err
+	}
+
+	if item.ID == "" {
+		return listdom.ErrInvalidID
+	}
+
+	if item.Status != listdom.StatusSuspended {
+		now := time.Now().UTC()
+
+		if err := item.Suspend(now); err != nil {
+			return err
+		}
+
+		item.UpdatedBy = &adminID
+
+		if _, err := uc.listRepo.Update(ctx, listID, item); err != nil {
+			return err
+		}
+	}
+
+	if err := uc.cartItemCleanup.RemoveItemsByListID(ctx, listID); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (uc *ListUsecase) Delete(

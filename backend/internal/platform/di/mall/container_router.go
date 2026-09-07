@@ -39,6 +39,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Handlers (construct only)
 	// ----------------------------
 	var listH http.Handler
+	var listReportH http.Handler
 	var catalogH http.Handler
 	var pbReviewH http.Handler
 	var brandH http.Handler
@@ -89,6 +90,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// Lists (public)
 	if cont.ListQ != nil {
 		listH = mallhandler.NewMallListHandler(cont.ListQ)
+	}
+
+	// List report
+	// POST /mall/me/lists/{listId}/reports
+	if cont.ReportUC != nil {
+		listReportH = mallhandler.NewListReportHandler(cont.ReportUC)
 	}
 
 	// Catalog (public)
@@ -327,6 +334,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	// ----------------------------
 	deps := mallhttp.Deps{
 		List:                   listH,
+		ListReport:             listReportH,
 		Catalog:                catalogH,
 		TokenBlueprint:         tbH,
 		ProductBlueprintReview: pbReviewH,

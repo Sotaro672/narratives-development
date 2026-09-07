@@ -11,6 +11,10 @@ type Deps struct {
 	List    http.Handler
 	Catalog http.Handler
 
+	// List report routes
+	// - report: POST /mall/me/lists/{listId}/reports
+	ListReport http.Handler
+
 	// TokenBlueprint routes
 	// - public: /mall/token-blueprints/**
 	// - me:     /mall/me/token-blueprints/**
@@ -351,6 +355,11 @@ func Register(
 	// Auth+Avatar-required routes (/mall/me/**)
 	// ------------------------------------------------------------
 
+	// list reports (me)
+	// POST /mall/me/lists/{listId}/reports
+	handleSafeAuthAvatar(mux, "/mall/me/lists", deps.ListReport, "ListReport(me)", auth, avatar)
+	handleSafeAuthAvatar(mux, "/mall/me/lists/", deps.ListReport, "ListReport(me)", auth, avatar)
+
 	// catalog (me)
 	handleSafeAuthAvatar(mux, "/mall/me/catalog", deps.Catalog, "Catalog(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/catalog/", deps.Catalog, "Catalog(me)", auth, avatar)
@@ -383,8 +392,8 @@ func Register(
 	handleSafeAuthAvatar(mux, "/mall/me/avatars/", deps.MeAvatar, "MeAvatar", auth, avatar)
 
 	// wallet (me)
-	handleSafeAuthAvatar(mux, "/mall/me/wallets", deps.MeWallet, "MeWallet", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/wallets/", deps.MeWallet, "MeWallet", auth, avatar)
+	handleSafeAuthAvatar(mux, "/mall/me/wallets", deps.MeWallet, "MeWallet(me)", auth, avatar)
+	handleSafeAuthAvatar(mux, "/mall/me/wallets/", deps.MeWallet, "MeWallet(me)", auth, avatar)
 
 	// likes (me)
 	handleSafeAuthAvatar(mux, "/mall/me/likes", deps.Like, "Like(me)", auth, avatar)

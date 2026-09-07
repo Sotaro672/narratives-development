@@ -75,11 +75,14 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	brandRepo := fsrepo.NewBrandRepositoryFS(infra.Firestore)
 	productBlueprintRepo := fsrepo.NewProductBlueprintRepositoryFS(infra.Firestore)
 	tokenBlueprintRepo := fsrepo.NewTokenBlueprintRepositoryFS(infra.Firestore)
+	listRepo := fsrepo.NewListRepositoryFS(infra.Firestore)
+	inventoryRepo := fsrepo.NewInventoryRepositoryFS(infra.Firestore)
 
 	reportNameQuery := adminquery.NewReportNameQuery(
 		avatarRepo,
 		brandRepo,
 		companyRepo,
+		listRepo,
 		memberRepo,
 		productBlueprintRepo,
 		tokenBlueprintRepo,
@@ -151,6 +154,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.admin: cart repository is nil")
 	}
 
+	// Admin側のListUsecaseは通報裁定によるMall上の出品停止専用。
+	// List本体、ListImage、Firebase Storage上の画像は削除せず、
+	// statusをsuspendedへ変更し、既存カートから対象Listを除去する。
+	listUsecase := usecase.NewListUsecase(
+		listRepo,
+		nil,
+		nil,
+	).WithCartItemCleanup(
+		cartRepo,
+	)
+	if listUsecase == nil {
+		return nil, errors.New("di.admin: list usecase is nil")
+	}
+
 	// Admin側のResaleUsecaseはアバター通報裁定による再販停止専用。
 	// 出品作成・画像操作は行わないため、imageRepo / imageStorage /
 	// product identity repositories は不要。
@@ -169,7 +186,11 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		usecase.ReportUsecaseDeps{
 			ReportRepo:               reportRepo,
 			DecisionNotificationRepo: reportDecisionNotificationRepo,
+			ProductBlueprintRepo:     productBlueprintRepo,
 			ProductReviewModerator:   productBlueprintReviewUsecase,
+			ListRepo:                 listRepo,
+			InventoryRepo:            inventoryRepo,
+			ListModerator:            listUsecase,
 			TokenBlueprintRepo:       tokenBlueprintRepo,
 			TokenBlueprintModerator:  tokenBlueprintUsecase,
 			TokenCommentModerator:    tokenBlueprintReviewUsecase,

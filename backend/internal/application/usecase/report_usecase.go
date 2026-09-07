@@ -9,6 +9,8 @@ import (
 	applicationport "narratives/internal/application/port"
 	avatar "narratives/internal/domain/avatar"
 	common "narratives/internal/domain/common"
+	inventory "narratives/internal/domain/inventory"
+	listdom "narratives/internal/domain/list"
 	pbr "narratives/internal/domain/productBlueprintReview"
 	reportdom "narratives/internal/domain/report"
 	tokenblueprint "narratives/internal/domain/tokenBlueprint"
@@ -36,6 +38,22 @@ type ReportProductReviewModerator interface {
 		ctx context.Context,
 		in RemoveProductBlueprintReviewByAdminInput,
 	) (pbr.Review, error)
+}
+
+// ReportListInventoryReader owns the minimum inventory read required to resolve
+// the ProductBlueprint, Brand, and Company behind a List.
+type ReportListInventoryReader interface {
+	GetByID(ctx context.Context, id string) (inventory.Mint, error)
+}
+
+// ReportListModerator owns Admin moderation of Lists.
+// LIST + REMOVE in Report means suspending the List from Mall publication.
+// It must not physically delete the List or its images.
+type ReportListModerator interface {
+	SuspendListByAdmin(
+		ctx context.Context,
+		input SuspendListByAdminInput,
+	) error
 }
 
 // ReportTokenBlueprintModerator owns Admin moderation of token blueprints.
@@ -91,6 +109,10 @@ type ReportUsecase struct {
 	productPurchaseResolver applicationport.OwnedProductResolver
 	productReviewModerator  ReportProductReviewModerator
 
+	listRepo      listdom.Repository
+	inventoryRepo ReportListInventoryReader
+	listModerator ReportListModerator
+
 	tokenCommentRepo        tokenreview.CommentRepository
 	tokenBlueprintRepo      tokenblueprint.RepositoryPort
 	tokenAccessResolver     applicationport.ReportTokenAccessResolver
@@ -111,6 +133,10 @@ type ReportUsecaseDeps struct {
 	ProductBlueprintRepo    applicationport.ProductBlueprintGetter
 	ProductPurchaseResolver applicationport.OwnedProductResolver
 	ProductReviewModerator  ReportProductReviewModerator
+
+	ListRepo      listdom.Repository
+	InventoryRepo ReportListInventoryReader
+	ListModerator ReportListModerator
 
 	TokenCommentRepo        tokenreview.CommentRepository
 	TokenBlueprintRepo      tokenblueprint.RepositoryPort
@@ -137,6 +163,9 @@ func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 		productBlueprintRepo:     deps.ProductBlueprintRepo,
 		productPurchaseResolver:  deps.ProductPurchaseResolver,
 		productReviewModerator:   deps.ProductReviewModerator,
+		listRepo:                 deps.ListRepo,
+		inventoryRepo:            deps.InventoryRepo,
+		listModerator:            deps.ListModerator,
 		tokenCommentRepo:         deps.TokenCommentRepo,
 		tokenBlueprintRepo:       deps.TokenBlueprintRepo,
 		tokenAccessResolver:      deps.TokenAccessResolver,
@@ -337,6 +366,152 @@ func reportNewProductReviewCaseParams(
 		SnapshotRating:   &rating,
 		CreatedAt:        now,
 	}
+}
+
+// ============================================================
+// List report
+// ============================================================
+
+type ReportListByAvatarInput struct {
+	ListID   string
+	AvatarID string
+	Reason   reportdom.ReportReason
+	Detail   string
+}
+
+type reportListTargetContext struct {
+	List      listdom.List
+	BrandID   string
+	CompanyID string
+}
+
+func (u *ReportUsecase) ReportListByAvatar(
+	ctx context.Context,
+	input ReportListByAvatarInput,
+) (reportdom.AddReportResult, error) {
+	if err := u.ensureReportRepository(); err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+	if u.listRepo == nil || u.inventoryRepo == nil || u.productBlueprintRepo == nil {
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
+	}
+	if input.ListID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
+	}
+	if input.AvatarID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidReporterID
+	}
+
+	targetContext, err := u.resolveListTargetContext(ctx, input.ListID)
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+	if targetContext.List.Status != listdom.StatusListing {
+		return reportdom.AddReportResult{}, reportdom.ErrCannotReportRemovedTarget
+	}
+
+	return u.addListReport(
+		ctx,
+		targetContext,
+		input.AvatarID,
+		input.Reason,
+		input.Detail,
+	)
+}
+
+func (u *ReportUsecase) addListReport(
+	ctx context.Context,
+	targetContext reportListTargetContext,
+	reporterAvatarID string,
+	reason reportdom.ReportReason,
+	detail string,
+) (reportdom.AddReportResult, error) {
+	now := u.now().UTC()
+	target := targetContext.List
+
+	reportCase, err := reportdom.NewReportCase(reportdom.NewReportCaseParams{
+		TargetType:       reportdom.TargetTypeList,
+		TargetID:         target.ID,
+		TargetParentID:   target.ID,
+		TargetAuthorID:   targetContext.BrandID,
+		TargetAuthorType: reportdom.ActorTypeBrand,
+		SnapshotTitle:    target.Title,
+		SnapshotBody:     target.Description,
+		SnapshotRating:   nil,
+		CreatedAt:        now,
+	})
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	report, err := reportdom.NewReport(reportdom.NewReportParams{
+		CaseID:       reportCase.ID,
+		ReporterType: reportdom.ActorTypeAvatar,
+		ReporterID:   reporterAvatarID,
+		CompanyID:    "",
+		Reason:       reason,
+		Detail:       detail,
+		CreatedAt:    now,
+	})
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	return u.reportRepo.AddReport(ctx, reportCase, report)
+}
+
+func (u *ReportUsecase) resolveListTargetContext(
+	ctx context.Context,
+	listID string,
+) (reportListTargetContext, error) {
+	if u == nil || u.listRepo == nil || u.inventoryRepo == nil || u.productBlueprintRepo == nil {
+		return reportListTargetContext{}, ErrReportUsecaseNotConfigured
+	}
+	if listID == "" {
+		return reportListTargetContext{}, reportdom.ErrInvalidTargetID
+	}
+
+	target, err := u.listRepo.GetByID(ctx, listID)
+	if err != nil {
+		return reportListTargetContext{}, err
+	}
+	if target.ID != listID {
+		return reportListTargetContext{}, reportdom.ErrInvalidTargetID
+	}
+	if target.InventoryID == "" {
+		return reportListTargetContext{}, reportdom.ErrInvalidTargetParentID
+	}
+
+	inventoryEntity, err := u.inventoryRepo.GetByID(ctx, target.InventoryID)
+	if err != nil {
+		return reportListTargetContext{}, err
+	}
+	if inventoryEntity.ProductBlueprintID == "" {
+		return reportListTargetContext{}, reportdom.ErrInvalidTargetParentID
+	}
+
+	productBlueprint, err := u.productBlueprintRepo.GetByID(
+		ctx,
+		inventoryEntity.ProductBlueprintID,
+	)
+	if err != nil {
+		return reportListTargetContext{}, err
+	}
+	if productBlueprint.ID != inventoryEntity.ProductBlueprintID {
+		return reportListTargetContext{}, reportdom.ErrInvalidTargetParentID
+	}
+	if productBlueprint.BrandID == "" {
+		return reportListTargetContext{}, reportdom.ErrInvalidTargetAuthorID
+	}
+	if productBlueprint.CompanyID == "" {
+		return reportListTargetContext{}, reportdom.ErrInvalidCompanyID
+	}
+
+	return reportListTargetContext{
+		List:      target,
+		BrandID:   productBlueprint.BrandID,
+		CompanyID: productBlueprint.CompanyID,
+	}, nil
 }
 
 // ============================================================
@@ -992,10 +1167,20 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
-	// REMOVED 済みの TOKEN_BLUEPRINT / AVATAR 裁定は、対象側の措置だけを
+	// REMOVED 済みの LIST / TOKEN_BLUEPRINT / AVATAR 裁定は、対象側の措置だけを
 	// 再実行できるようにする。各 moderator は冪等に実装する。
 	if reportCase.IsRemoved() {
 		switch reportCase.TargetType {
+		case reportdom.TargetTypeList:
+			if err := u.suspendListTarget(
+				ctx,
+				reportCase,
+				input.Reason,
+				input.DecidedBy,
+			); err != nil {
+				return reportdom.ReportCase{}, err
+			}
+
 		case reportdom.TargetTypeTokenBlueprint:
 			if err := u.hideTokenBlueprintTarget(
 				ctx,
@@ -1005,6 +1190,7 @@ func (u *ReportUsecase) removeReportCase(
 			); err != nil {
 				return reportdom.ReportCase{}, err
 			}
+
 		case reportdom.TargetTypeAvatar:
 			if err := u.suspendAvatarResaleTarget(
 				ctx,
@@ -1020,12 +1206,22 @@ func (u *ReportUsecase) removeReportCase(
 
 	// IMPORTANT:
 	// REMOVE の対象側処理を先に完了する。
-	// 商品レビュー/コメントは削除、TOKEN_BLUEPRINT は AMOL UI 上で非表示、
-	// AVATAR は再販サービスのみ利用停止とする。
+	// 商品レビュー/コメントは削除、LIST は Mall 上で出品停止、
+	// TOKEN_BLUEPRINT は AMOL UI 上で非表示、AVATAR は再販サービスのみ利用停止とする。
 	// 対象側処理に失敗した場合、ReportCase を REMOVED にしてはいけない。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview:
 		if err := u.removeProductBlueprintReviewTarget(
+			ctx,
+			reportCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
+	case reportdom.TargetTypeList:
+		if err := u.suspendListTarget(
 			ctx,
 			reportCase,
 			input.Reason,
@@ -1083,11 +1279,21 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
-	// AVATAR は REMOVED を永続化した後でもう一度スイープする。
-	// 1 回目のスイープと REMOVED 永続化の間に新規 listing が作成される
-	// 競合を閉じるための後処理。失敗した場合はエラーを返し、次回の同じ
-	// REMOVE 裁定で上の REMOVED 済み分岐から再試行できる。
-	if updatedCase.TargetType == reportdom.TargetTypeAvatar {
+	// LIST / AVATAR は REMOVED を永続化した後でもう一度対象側の措置を実行する。
+	// 1 回目の措置と REMOVED 永続化の間に対象が再公開される競合を閉じるための後処理。
+	// 失敗した場合は次回の同じ REMOVE 裁定で REMOVED 済み分岐から再試行できる。
+	switch updatedCase.TargetType {
+	case reportdom.TargetTypeList:
+		if err := u.suspendListTarget(
+			ctx,
+			updatedCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
+	case reportdom.TargetTypeAvatar:
 		if err := u.suspendAvatarResaleTarget(
 			ctx,
 			updatedCase,
@@ -1187,11 +1393,21 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 	notificationCase := reportCase
 
 	// PRODUCT_BLUEPRINT_REVIEW はレビュー投稿Avatar、AVATAR は対象Avatar自身、
-	// TOKEN_BLUEPRINT はそのTokenBlueprintを所有するBrandへ措置通知を送る。
-	// TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
+	// LIST は出品元Brand、TOKEN_BLUEPRINT はそのTokenBlueprintを所有するBrandへ
+	// 措置通知を送る。TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview,
 		reportdom.TargetTypeAvatar:
+
+	case reportdom.TargetTypeList:
+		targetContext, err := u.resolveListTargetContext(ctx, reportCase.TargetID)
+		if err != nil {
+			return err
+		}
+
+		notificationCase.TargetAuthorID = targetContext.BrandID
+		notificationCase.TargetAuthorType = reportdom.ActorTypeBrand
+		companyID = targetContext.CompanyID
 
 	case reportdom.TargetTypeTokenBlueprint:
 		if u.tokenBlueprintRepo == nil {
@@ -1258,6 +1474,26 @@ func (u *ReportUsecase) removeProductBlueprintReviewTarget(
 		},
 	)
 	return err
+}
+
+func (u *ReportUsecase) suspendListTarget(
+	ctx context.Context,
+	reportCase reportdom.ReportCase,
+	reason string,
+	adminID string,
+) error {
+	if u.listModerator == nil {
+		return ErrReportUsecaseNotConfigured
+	}
+
+	return u.listModerator.SuspendListByAdmin(
+		ctx,
+		SuspendListByAdminInput{
+			ListID:  reportCase.TargetID,
+			Reason:  reason,
+			AdminID: adminID,
+		},
+	)
 }
 
 func (u *ReportUsecase) hideTokenBlueprintTarget(
