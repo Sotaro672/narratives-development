@@ -1,10 +1,10 @@
-// frontend/mall/src/features/review-report/hooks/useReviewReport.ts
+// frontend/mall/src/features/report/hooks/useReport.ts
 
 import { useCallback, useRef, useState } from "react";
 
 import type {
-  ReviewReportReason,
-  ReviewReportResponse,
+  ReportReason,
+  ReportResponse,
 } from "../../shared/types/report";
 import {
   reportAvatar,
@@ -12,7 +12,7 @@ import {
   reportTokenBlueprintComment,
 } from "../api/reportApi";
 
-export type ReviewReportTarget =
+export type ReportTarget =
   | {
       type: "PRODUCT_BLUEPRINT_REVIEW";
       productBlueprintId: string;
@@ -42,7 +42,7 @@ type OpenAvatarReportInput = {
   avatarId: string;
 };
 
-const DEFAULT_REASON: ReviewReportReason = "SPAM";
+const DEFAULT_REASON: ReportReason = "SPAM";
 
 function normalizeId(
   value: string,
@@ -57,15 +57,15 @@ function normalizeId(
   return normalized;
 }
 
-export function useReviewReport() {
+export function useReport() {
   const submittingRef = useRef(false);
 
-  const [target, setTarget] = useState<ReviewReportTarget | null>(null);
-  const [reason, setReasonState] = useState<ReviewReportReason>(DEFAULT_REASON);
+  const [target, setTarget] = useState<ReportTarget | null>(null);
+  const [reason, setReasonState] = useState<ReportReason>(DEFAULT_REASON);
   const [detail, setDetailState] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ReviewReportResponse | null>(null);
+  const [result, setResult] = useState<ReportResponse | null>(null);
 
   const resetForm = useCallback(() => {
     setReasonState(DEFAULT_REASON);
@@ -132,7 +132,7 @@ export function useReviewReport() {
     resetForm();
   }, [resetForm]);
 
-  const setReason = useCallback((value: ReviewReportReason) => {
+  const setReason = useCallback((value: ReportReason) => {
     setReasonState(value);
     setError(null);
 
@@ -146,7 +146,7 @@ export function useReviewReport() {
     setError(null);
   }, []);
 
-  const submit = useCallback(async (): Promise<ReviewReportResponse | null> => {
+  const submit = useCallback(async (): Promise<ReportResponse | null> => {
     if (submittingRef.current) {
       return null;
     }
@@ -169,7 +169,7 @@ export function useReviewReport() {
     setResult(null);
 
     try {
-      let response: ReviewReportResponse;
+      let response: ReportResponse;
 
       switch (target.type) {
         case "PRODUCT_BLUEPRINT_REVIEW":
@@ -212,11 +212,7 @@ export function useReviewReport() {
       submittingRef.current = false;
       setSubmitting(false);
     }
-  }, [
-    target,
-    reason,
-    detail,
-  ]);
+  }, [target, reason, detail]);
 
   const isOpen = target !== null;
   const requiresDetail = reason === "OTHER";
@@ -248,3 +244,5 @@ export function useReviewReport() {
     submit,
   };
 }
+
+export default useReport;

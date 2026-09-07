@@ -223,7 +223,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "reviewReportCases",
+      "collectionGroup": "reportCases",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
@@ -233,7 +233,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "reviewReportCases",
+      "collectionGroup": "reportCases",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "targetType", "order": "ASCENDING" },
@@ -243,7 +243,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "reviewReportCases",
+      "collectionGroup": "reportCases",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
@@ -254,7 +254,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "reviewReportDecisionNotifications",
+      "collectionGroup": "reportDecisionNotifications",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "recipientType", "order": "ASCENDING" },
@@ -265,7 +265,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "reviewReportDecisionNotifications",
+      "collectionGroup": "reportDecisionNotifications",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "recipientType", "order": "ASCENDING" },
@@ -277,7 +277,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "reviewReportDecisionNotifications",
+      "collectionGroup": "reportDecisionNotifications",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "recipientType", "order": "ASCENDING" },
@@ -288,7 +288,7 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "reviewReportDecisionNotifications",
+      "collectionGroup": "reportDecisionNotifications",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "recipientType", "order": "ASCENDING" },

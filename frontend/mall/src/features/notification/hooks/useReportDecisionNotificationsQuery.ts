@@ -1,4 +1,4 @@
-// frontend/mall/src/features/notification/hooks/useReviewReportDecisionNotificationsQuery.ts
+// frontend/mall/src/features/notification/hooks/useReportDecisionNotificationsQuery.ts
 
 import {
   useMutation,
@@ -7,57 +7,54 @@ import {
 } from "@tanstack/react-query";
 
 import {
-  fetchMeReviewReportDecisionNotifications,
-  markMeReviewReportDecisionNotificationRead,
-  type FetchMeReviewReportDecisionNotificationsParams,
-  type ReviewReportDecisionNotification,
-  type ReviewReportDecisionNotificationPage,
-} from "../infrastructure/reviewReportDecisionNotificationApi";
+  fetchMeReportDecisionNotifications,
+  markMeReportDecisionNotificationRead,
+  type FetchMeReportDecisionNotificationsParams,
+  type ReportDecisionNotification,
+  type ReportDecisionNotificationPage,
+} from "../infrastructure/reportDecisionNotificationApi";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;
 const UNREAD_COUNT_PAGE = 1;
 const UNREAD_COUNT_PER_PAGE = 1;
 
-export type UseReviewReportDecisionNotificationsQueryParams = {
+export type UseReportDecisionNotificationsQueryParams = {
   page?: number;
   perPage?: number;
   isRead?: boolean;
   enabled?: boolean;
 };
 
-export type UseReviewReportDecisionNotificationUnreadCountQueryParams = {
+export type UseReportDecisionNotificationUnreadCountQueryParams = {
   enabled?: boolean;
 };
 
-type ReviewReportDecisionNotificationListKeyParams = {
+type ReportDecisionNotificationListKeyParams = {
   page: number;
   perPage: number;
   isRead?: boolean;
 };
 
-export const reviewReportDecisionNotificationQueryKeys = {
-  all: ["reviewReportDecisionNotifications"] as const,
+export const reportDecisionNotificationQueryKeys = {
+  all: ["reportDecisionNotifications"] as const,
 
-  me: () =>
-    [
-      ...reviewReportDecisionNotificationQueryKeys.all,
-      "me",
-    ] as const,
+  me: () => [
+    ...reportDecisionNotificationQueryKeys.all,
+    "me",
+  ] as const,
 
-  lists: () =>
-    [
-      ...reviewReportDecisionNotificationQueryKeys.me(),
-      "list",
-    ] as const,
+  lists: () => [
+    ...reportDecisionNotificationQueryKeys.me(),
+    "list",
+  ] as const,
 
   list: (
-    params: ReviewReportDecisionNotificationListKeyParams,
-  ) =>
-    [
-      ...reviewReportDecisionNotificationQueryKeys.lists(),
-      params,
-    ] as const,
+    params: ReportDecisionNotificationListKeyParams,
+  ) => [
+    ...reportDecisionNotificationQueryKeys.lists(),
+    params,
+  ] as const,
 };
 
 function normalizePositiveInteger(
@@ -82,23 +79,21 @@ function createFetchParams(
     isRead?: boolean;
   },
   signal?: AbortSignal,
-): FetchMeReviewReportDecisionNotificationsParams {
+): FetchMeReportDecisionNotificationsParams {
   return {
     page: params.page,
     perPage: params.perPage,
     ...(params.isRead !== undefined
       ? { isRead: params.isRead }
       : {}),
-    ...(signal
-      ? { signal }
-      : {}),
+    ...(signal ? { signal } : {}),
   };
 }
 
 function replaceNotificationInPage(
-  current: ReviewReportDecisionNotificationPage | undefined,
-  updated: ReviewReportDecisionNotification,
-): ReviewReportDecisionNotificationPage | undefined {
+  current: ReportDecisionNotificationPage | undefined,
+  updated: ReportDecisionNotification,
+): ReportDecisionNotificationPage | undefined {
   if (!current) {
     return current;
   }
@@ -124,23 +119,21 @@ function replaceNotificationInPage(
   };
 }
 
-export function useReviewReportDecisionNotificationsQuery(
-  params: UseReviewReportDecisionNotificationsQueryParams = {},
+export function useReportDecisionNotificationsQuery(
+  params: UseReportDecisionNotificationsQueryParams = {},
 ) {
   const page = normalizePositiveInteger(
     params.page,
     DEFAULT_PAGE,
   );
-
   const perPage = normalizePositiveInteger(
     params.perPage,
     DEFAULT_PER_PAGE,
   );
-
   const enabled = params.enabled ?? true;
   const isRead = params.isRead;
 
-  const keyParams: ReviewReportDecisionNotificationListKeyParams = {
+  const keyParams: ReportDecisionNotificationListKeyParams = {
     page,
     perPage,
     ...(isRead !== undefined
@@ -150,12 +143,12 @@ export function useReviewReportDecisionNotificationsQuery(
 
   return useQuery({
     queryKey:
-      reviewReportDecisionNotificationQueryKeys.list(
+      reportDecisionNotificationQueryKeys.list(
         keyParams,
       ),
 
     queryFn: ({ signal }) =>
-      fetchMeReviewReportDecisionNotifications(
+      fetchMeReportDecisionNotifications(
         createFetchParams(
           keyParams,
           signal,
@@ -166,13 +159,13 @@ export function useReviewReportDecisionNotificationsQuery(
   });
 }
 
-export function useReviewReportDecisionNotificationUnreadCountQuery(
-  params: UseReviewReportDecisionNotificationUnreadCountQueryParams = {},
+export function useReportDecisionNotificationUnreadCountQuery(
+  params: UseReportDecisionNotificationUnreadCountQueryParams = {},
 ) {
   const enabled = params.enabled ?? true;
 
   const query =
-    useReviewReportDecisionNotificationsQuery({
+    useReportDecisionNotificationsQuery({
       page: UNREAD_COUNT_PAGE,
       perPage: UNREAD_COUNT_PER_PAGE,
       isRead: false,
@@ -194,35 +187,35 @@ export function useReviewReportDecisionNotificationUnreadCountQuery(
   };
 }
 
-export function useMarkReviewReportDecisionNotificationReadMutation() {
+export function useMarkReportDecisionNotificationReadMutation() {
   const queryClient = useQueryClient();
 
   return useMutation<
-    ReviewReportDecisionNotification,
+    ReportDecisionNotification,
     Error,
     string
   >({
     mutationFn: async (
       notificationId: string,
-    ): Promise<ReviewReportDecisionNotification> => {
+    ): Promise<ReportDecisionNotification> => {
       if (!notificationId) {
         throw new Error(
           "notificationId が空のため既読化できません。",
         );
       }
 
-      return markMeReviewReportDecisionNotificationRead(
+      return markMeReportDecisionNotificationRead(
         notificationId,
       );
     },
 
     onSuccess: (updated) => {
       queryClient.setQueriesData<
-        ReviewReportDecisionNotificationPage
+        ReportDecisionNotificationPage
       >(
         {
           queryKey:
-            reviewReportDecisionNotificationQueryKeys.lists(),
+            reportDecisionNotificationQueryKeys.lists(),
         },
         (current) =>
           replaceNotificationInPage(
@@ -235,10 +228,10 @@ export function useMarkReviewReportDecisionNotificationReadMutation() {
     onSettled: async () => {
       await queryClient.invalidateQueries({
         queryKey:
-          reviewReportDecisionNotificationQueryKeys.lists(),
+          reportDecisionNotificationQueryKeys.lists(),
       });
     },
   });
 }
 
-export default useReviewReportDecisionNotificationsQuery;
+export default useReportDecisionNotificationsQuery;

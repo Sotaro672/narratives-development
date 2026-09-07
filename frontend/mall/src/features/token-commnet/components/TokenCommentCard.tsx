@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { getMyAvatar } from "../../avatar/api/avatarApi";
-import ReviewReportModal from "../../review-report/components/ReviewReportModal";
-import { useReviewReport } from "../../review-report/hooks/useReviewReport";
+import ReviewReportModal from "../../report/components/ReportModal";
+import { useReviewReport } from "../../report/hooks/useReport";
 import { useAuthState } from "../../shared/hooks/useAuthState";
 import type { TokenCommentTreeNode } from "../../shared/types/tokenCommentTypes";
 

@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 
 import { useAnnouncementsQuery } from "../../announcement/hooks/useAnnouncementsQuery";
-import { useReviewReportDecisionNotificationUnreadCountQuery } from "./useReviewReportDecisionNotificationsQuery";
+import { useReportDecisionNotificationUnreadCountQuery } from "./useReportDecisionNotificationsQuery";
 
 const ANNOUNCEMENT_UNREAD_COUNT_PAGE = 1;
 const ANNOUNCEMENT_UNREAD_COUNT_PER_PAGE = 100;
@@ -15,7 +15,7 @@ export type UseNotificationUnreadCountParams = {
 export type UseNotificationUnreadCountResult = {
   unreadCount: number;
   announcementUnreadCount: number;
-  reviewReportDecisionUnreadCount: number;
+  reportDecisionUnreadCount: number;
   loading: boolean;
   fetching: boolean;
   error: Error | null;
@@ -39,8 +39,8 @@ export function useNotificationUnreadCount(
     enabled,
   });
 
-  const reviewReportDecisionQuery =
-    useReviewReportDecisionNotificationUnreadCountQuery({
+  const reportDecisionQuery =
+    useReportDecisionNotificationUnreadCountQuery({
       enabled,
     });
 
@@ -52,29 +52,27 @@ export function useNotificationUnreadCount(
       )
     : 0;
 
-  const reviewReportDecisionUnreadCount = enabled
-    ? normalizeCount(
-        reviewReportDecisionQuery.unreadCount,
-      )
+  const reportDecisionUnreadCount = enabled
+    ? normalizeCount(reportDecisionQuery.unreadCount)
     : 0;
 
   const unreadCount =
     announcementUnreadCount +
-    reviewReportDecisionUnreadCount;
+    reportDecisionUnreadCount;
 
   const loading =
     enabled &&
     (announcementsQuery.isPending ||
-      reviewReportDecisionQuery.isPending);
+      reportDecisionQuery.isPending);
 
   const fetching =
     enabled &&
     (announcementsQuery.isFetching ||
-      reviewReportDecisionQuery.isFetching);
+      reportDecisionQuery.isFetching);
 
   const error = enabled
     ? announcementsQuery.error ??
-      reviewReportDecisionQuery.error ??
+      reportDecisionQuery.error ??
       null
     : null;
 
@@ -85,18 +83,18 @@ export function useNotificationUnreadCount(
 
     await Promise.all([
       announcementsQuery.refetch(),
-      reviewReportDecisionQuery.refetch(),
+      reportDecisionQuery.refetch(),
     ]);
   }, [
     announcementsQuery.refetch,
     enabled,
-    reviewReportDecisionQuery.refetch,
+    reportDecisionQuery.refetch,
   ]);
 
   return {
     unreadCount,
     announcementUnreadCount,
-    reviewReportDecisionUnreadCount,
+    reportDecisionUnreadCount,
     loading,
     fetching,
     error,

@@ -1,36 +1,36 @@
-// frontend/mall/src/features/review-report/components/ReviewReportModal.tsx
+// frontend/mall/src/features/report/components/ReportModal.tsx
 
 import { type MouseEvent, useEffect } from "react";
 import { createPortal } from "react-dom";
 
 import type {
-  ReviewReportReason,
-  ReviewReportResponse,
-  ReviewReportTargetType,
+  ReportReason,
+  ReportResponse,
+  ReportTargetType,
 } from "../../shared/types/report";
 import {
-  getReviewReportReasonLabel,
-  REVIEW_REPORT_REASONS,
+  getReportReasonLabel,
+  REPORT_REASONS,
 } from "../../shared/types/report";
 
-import "../styles/review-report.css";
+import "../styles/report.css";
 
-type ReviewReportModalProps = {
+type ReportModalProps = {
   open: boolean;
-  targetType?: ReviewReportTargetType;
-  reason: ReviewReportReason;
+  targetType?: ReportTargetType;
+  reason: ReportReason;
   detail: string;
   submitting: boolean;
   error: string | null;
-  result: ReviewReportResponse | null;
+  result: ReportResponse | null;
   canSubmit: boolean;
-  onReasonChange: (reason: ReviewReportReason) => void;
+  onReasonChange: (reason: ReportReason) => void;
   onDetailChange: (detail: string) => void;
-  onSubmit: () => void | Promise<ReviewReportResponse | null>;
+  onSubmit: () => void | Promise<ReportResponse | null>;
   onClose: () => void;
 };
 
-function getTargetLabel(targetType?: ReviewReportTargetType): string {
+function getTargetLabel(targetType?: ReportTargetType): string {
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "レビュー";
@@ -43,7 +43,7 @@ function getTargetLabel(targetType?: ReviewReportTargetType): string {
   }
 }
 
-function getDescription(targetType?: ReviewReportTargetType): string {
+function getDescription(targetType?: ReportTargetType): string {
   switch (targetType) {
     case "AVATAR":
       return "このアバターが不適切だと思う理由を選択してください。通報しただけでは再販サービスの利用が自動的に停止されることはありません。";
@@ -55,7 +55,7 @@ function getDescription(targetType?: ReviewReportTargetType): string {
   }
 }
 
-export default function ReviewReportModal({
+export default function ReportModal({
   open,
   targetType,
   reason,
@@ -68,7 +68,7 @@ export default function ReviewReportModal({
   onDetailChange,
   onSubmit,
   onClose,
-}: ReviewReportModalProps) {
+}: ReportModalProps) {
   useEffect(() => {
     if (!open) {
       return;
@@ -116,24 +116,24 @@ export default function ReviewReportModal({
 
   const modal = (
     <div
-      className="review-report-modal"
+      className="report-modal"
       role="presentation"
       onMouseDown={handleBackdropClick}
     >
       <div
-        className="review-report-modal__panel"
+        className="report-modal__panel"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="review-report-modal-title"
-        aria-describedby="review-report-modal-description"
+        aria-labelledby="report-modal-title"
+        aria-describedby="report-modal-description"
         aria-busy={submitting}
       >
-        <div className="review-report-modal__header">
+        <div className="report-modal__header">
           <div>
-            <span className="review-report-modal__eyebrow">通報</span>
+            <span className="report-modal__eyebrow">通報</span>
             <h2
-              id="review-report-modal-title"
-              className="review-report-modal__title"
+              id="report-modal-title"
+              className="report-modal__title"
             >
               {targetLabel}を通報
             </h2>
@@ -141,7 +141,7 @@ export default function ReviewReportModal({
 
           <button
             type="button"
-            className="review-report-modal__close"
+            className="report-modal__close"
             aria-label="通報画面を閉じる"
             disabled={submitting}
             onClick={onClose}
@@ -151,24 +151,24 @@ export default function ReviewReportModal({
         </div>
 
         {submitted ? (
-          <div className="review-report-modal__result">
+          <div className="report-modal__result">
             <div
-              className="review-report-modal__result-icon"
+              className="report-modal__result-icon"
               aria-hidden="true"
             >
               ✓
             </div>
 
-            <div className="review-report-modal__result-body">
-              <h3 className="review-report-modal__result-title">
+            <div className="report-modal__result-body">
+              <h3 className="report-modal__result-title">
                 {alreadyReported
                   ? "この内容はすでに通報済みです"
                   : "通報を受け付けました"}
               </h3>
 
               <p
-                id="review-report-modal-description"
-                className="review-report-modal__description"
+                id="report-modal-description"
+                className="report-modal__description"
               >
                 {alreadyReported
                   ? "同じアカウントからの通報は重複して登録されません。"
@@ -176,10 +176,10 @@ export default function ReviewReportModal({
               </p>
             </div>
 
-            <div className="review-report-modal__actions">
+            <div className="report-modal__actions">
               <button
                 type="button"
-                className="review-report-modal__button review-report-modal__button--primary"
+                className="report-modal__button report-modal__button--primary"
                 onClick={onClose}
               >
                 閉じる
@@ -189,29 +189,29 @@ export default function ReviewReportModal({
         ) : (
           <>
             <p
-              id="review-report-modal-description"
-              className="review-report-modal__description"
+              id="report-modal-description"
+              className="report-modal__description"
             >
               {description}
             </p>
 
-            <div className="review-report-modal__body">
+            <div className="report-modal__body">
               <fieldset
-                className="review-report-modal__reasons"
+                className="report-modal__reasons"
                 disabled={submitting}
               >
-                <legend className="review-report-modal__label">
+                <legend className="report-modal__label">
                   通報理由
                 </legend>
 
-                <div className="review-report-modal__reason-list">
-                  {REVIEW_REPORT_REASONS.map((value) => (
+                <div className="report-modal__reason-list">
+                  {REPORT_REASONS.map((value) => (
                     <label
                       key={value}
                       className={[
-                        "review-report-modal__reason",
+                        "report-modal__reason",
                         reason === value
-                          ? "review-report-modal__reason--selected"
+                          ? "report-modal__reason--selected"
                           : "",
                       ]
                         .filter(Boolean)
@@ -219,14 +219,14 @@ export default function ReviewReportModal({
                     >
                       <input
                         type="radio"
-                        className="review-report-modal__reason-input"
-                        name="review-report-reason"
+                        className="report-modal__reason-input"
+                        name="report-reason"
                         value={value}
                         checked={reason === value}
                         onChange={() => onReasonChange(value)}
                       />
-                      <span className="review-report-modal__reason-label">
-                        {getReviewReportReasonLabel(value)}
+                      <span className="report-modal__reason-label">
+                        {getReportReasonLabel(value)}
                       </span>
                     </label>
                   ))}
@@ -234,14 +234,14 @@ export default function ReviewReportModal({
               </fieldset>
 
               {reason === "OTHER" ? (
-                <label className="review-report-modal__detail-field">
-                  <span className="review-report-modal__label">
+                <label className="report-modal__detail-field">
+                  <span className="report-modal__label">
                     詳細
-                    <span className="review-report-modal__required">必須</span>
+                    <span className="report-modal__required">必須</span>
                   </span>
 
                   <textarea
-                    className="review-report-modal__textarea"
+                    className="report-modal__textarea"
                     value={detail}
                     rows={5}
                     disabled={submitting}
@@ -252,19 +252,16 @@ export default function ReviewReportModal({
               ) : null}
 
               {error ? (
-                <p
-                  className="review-report-modal__error"
-                  role="alert"
-                >
+                <p className="report-modal__error" role="alert">
                   {error}
                 </p>
               ) : null}
             </div>
 
-            <div className="review-report-modal__actions">
+            <div className="report-modal__actions">
               <button
                 type="button"
-                className="review-report-modal__button"
+                className="report-modal__button"
                 disabled={submitting}
                 onClick={onClose}
               >
@@ -273,7 +270,7 @@ export default function ReviewReportModal({
 
               <button
                 type="button"
-                className="review-report-modal__button review-report-modal__button--danger"
+                className="report-modal__button report-modal__button--danger"
                 disabled={!canSubmit || submitting}
                 onClick={handleSubmit}
               >

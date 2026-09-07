@@ -11,8 +11,8 @@ import "../styles/avatar-review-page.css";
 import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
 import { fetchAvatarReviews, type AvatarReviewPageResponse } from "../features/avatar-review/api/avatarReviewApi";
-import ReviewReportModal from "../features/review-report/components/ReviewReportModal";
-import { useReviewReport } from "../features/review-report/hooks/useReviewReport";
+import ReportModal from "../features/report/components/ReportModal";
+import { useReport } from "../features/report/hooks/useReport";
 import WalletProfile from "../features/wallet/components/WalletProfile";
 import WalletResalePanel from "../features/wallet/components/WalletResalePanel";
 import { useWalletPage } from "../features/wallet/hooks/useWalletPage";
@@ -46,13 +46,14 @@ export default function PublicWalletPage() {
     setReason: setReportReason,
     setDetail: setReportDetail,
     submit: submitReport,
-  } = useReviewReport();
+  } = useReport();
 
   const targetAvatarId = viewedAvatarId || avatarId;
   const normalizedTargetAvatarId = targetAvatarId.trim();
   const canReportAvatar = Boolean(normalizedTargetAvatarId) && !isOwnAvatar;
 
-  const [reviewSummary, setReviewSummary] = useState<AvatarReviewPageResponse | null>(null);
+  const [reviewSummary, setReviewSummary] =
+    useState<AvatarReviewPageResponse | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
 
   useEffect(() => {
@@ -180,7 +181,9 @@ export default function PublicWalletPage() {
                         残念だった
                       </span>
                       <strong className="avatar-review-summary__count">
-                        {reviewLoading ? "-" : reviewSummary?.disappointedCount ?? 0}
+                        {reviewLoading
+                          ? "-"
+                          : reviewSummary?.disappointedCount ?? 0}
                       </strong>
                     </span>
 
@@ -225,7 +228,7 @@ export default function PublicWalletPage() {
         </section>
       </Layout>
 
-      <ReviewReportModal
+      <ReportModal
         open={reportOpen}
         targetType={reportTarget?.type}
         reason={reportReason}

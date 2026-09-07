@@ -3,8 +3,8 @@
 import { useState } from "react";
 
 import { formatDateTime } from "../../../../components/utils/date";
-import ReviewReportModal from "../../../review-report/components/ReviewReportModal";
-import { useReviewReport } from "../../../review-report/hooks/useReviewReport";
+import ReviewReportModal from "../../../report/components/ReportModal";
+import { useReviewReport } from "../../../report/hooks/useReport";
 
 import "../../styles/product-review.css";
 
