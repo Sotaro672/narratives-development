@@ -68,6 +68,7 @@
 
 .notification-page__content-cell {
   min-width: 320px;
+  max-width: 560px;
 }
 
 .notification-page__content,
@@ -87,11 +88,14 @@
   color: #1f2937;
   font-weight: 600;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .notification-page__body {
   color: #374151;
   line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .notification-page__detail {
@@ -109,6 +113,7 @@
 .notification-page__reason-cell {
   min-width: 180px;
   max-width: 320px;
+  color: #64748b;
 }
 
 .notification-page__date {
@@ -119,6 +124,7 @@
 @media (max-width: 960px) {
   .notification-page__content-cell {
     min-width: 240px;
+    max-width: 420px;
   }
 
   .notification-page__reason-cell {

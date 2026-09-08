@@ -10,7 +10,7 @@ import { useNavigate } from "react-router-dom";
 
 import "../../../styles/auth.css";
 
-import { useReportDecisionNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useReportDecisionNotificationUnreadCount";
+import { useNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useNotificationUnreadCount";
 import AdminPanel from "./AdminPanel";
 import { useHeader } from "../hook/useHeader";
 
@@ -39,7 +39,7 @@ export default function Header(props: HeaderProps) {
 
   const {
     unreadCount,
-  } = useReportDecisionNotificationUnreadCount();
+  } = useNotificationUnreadCount();
 
   const handleOpenNotifications = () => {
     if (openAdmin) {

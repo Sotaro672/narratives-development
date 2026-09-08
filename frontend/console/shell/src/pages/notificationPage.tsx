@@ -2,49 +2,134 @@
 
 import { useMemo, type KeyboardEvent } from "react";
 
+import { useNewsNotifications } from "../features/notification/presentation/hooks/useNewsNotifications";
 import { useReportDecisionNotifications } from "../features/notification/presentation/hooks/useReportDecisionNotifications";
 import {
   toReportDecisionNotificationViewModels,
   type ReportDecisionNotificationViewModel,
 } from "../features/notification/presentation/model/reportDecisionNotification";
 import List from "../layout/List/List";
+import type { News } from "../shared/types/news";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 import "../styles/notification.css";
 
+type ReportDecisionFeedItem = {
+  kind: "reportDecision";
+  key: string;
+  occurredAt: string;
+  item: ReportDecisionNotificationViewModel;
+};
+
+type NewsFeedItem = {
+  kind: "news";
+  key: string;
+  occurredAt: string;
+  item: News;
+};
+
+type NotificationFeedItem = ReportDecisionFeedItem | NewsFeedItem;
+
+function toTimestamp(value: string | null | undefined): number {
+  if (!value) {
+    return 0;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
 export default function NotificationPage() {
   const {
-    notifications,
-    loading,
-    error,
-    markingReadId,
-    reload,
-    markRead,
+    notifications: reportDecisionNotifications,
+    loading: reportDecisionLoading,
+    error: reportDecisionError,
+    markingReadId: reportDecisionMarkingReadId,
+    reload: reloadReportDecisionNotifications,
+    markRead: markReportDecisionRead,
   } = useReportDecisionNotifications({
     page: 1,
     perPage: 100,
   });
 
-  const items = useMemo(
-    () => toReportDecisionNotificationViewModels(notifications),
-    [notifications],
+  const {
+    notifications: newsNotifications,
+    loading: newsLoading,
+    error: newsError,
+    markingReadId: newsMarkingReadId,
+    reload: reloadNewsNotifications,
+    markRead: markNewsRead,
+  } = useNewsNotifications({
+    page: 1,
+    perPage: 100,
+  });
+
+  const reportDecisionItems = useMemo(
+    () => toReportDecisionNotificationViewModels(reportDecisionNotifications),
+    [reportDecisionNotifications],
   );
 
-  const handleNotificationClick = async (
-    item: ReportDecisionNotificationViewModel,
-  ) => {
-    if (item.isRead || markingReadId !== null) {
+  const items = useMemo<NotificationFeedItem[]>(() => {
+    const decisionItems: ReportDecisionFeedItem[] = reportDecisionItems.map(
+      (item) => ({
+        kind: "reportDecision",
+        key: `reportDecision:${item.id}`,
+        occurredAt: item.occurredAt,
+        item,
+      }),
+    );
+
+    const newsItems: NewsFeedItem[] = newsNotifications.map((item) => ({
+      kind: "news",
+      key: `news:${item.id}`,
+      occurredAt: item.publishedAt || item.createdAt,
+      item,
+    }));
+
+    return [...decisionItems, ...newsItems].sort(
+      (left, right) =>
+        toTimestamp(right.occurredAt) - toTimestamp(left.occurredAt),
+    );
+  }, [newsNotifications, reportDecisionItems]);
+
+  const loading = reportDecisionLoading || newsLoading;
+  const error = reportDecisionError ?? newsError ?? null;
+
+  const handleNotificationClick = async (feedItem: NotificationFeedItem) => {
+    if (feedItem.kind === "news") {
+      if (feedItem.item.isRead || newsMarkingReadId !== null) {
+        return;
+      }
+
+      await markNewsRead(feedItem.item.id);
       return;
     }
 
-    await markRead(item.id);
+    if (
+      feedItem.item.isRead ||
+      reportDecisionMarkingReadId !== null
+    ) {
+      return;
+    }
+
+    await markReportDecisionRead(feedItem.item.id);
   };
 
   const handleNotificationKeyDown = (
     event: KeyboardEvent<HTMLTableRowElement>,
-    item: ReportDecisionNotificationViewModel,
+    feedItem: NotificationFeedItem,
   ) => {
-    if (item.isRead || markingReadId !== null) {
+    const isRead = feedItem.item.isRead;
+
+    if (isRead) {
+      return;
+    }
+
+    if (
+      feedItem.kind === "news"
+        ? newsMarkingReadId !== null
+        : reportDecisionMarkingReadId !== null
+    ) {
       return;
     }
 
@@ -53,7 +138,14 @@ export default function NotificationPage() {
     }
 
     event.preventDefault();
-    void handleNotificationClick(item);
+    void handleNotificationClick(feedItem);
+  };
+
+  const reload = async () => {
+    await Promise.all([
+      reloadReportDecisionNotifications(),
+      reloadNewsNotifications(),
+    ]);
   };
 
   const headers = [
@@ -82,9 +174,13 @@ export default function NotificationPage() {
           void reload();
         }}
       >
-        {items.map((item) => {
+        {items.map((feedItem) => {
+          const isNews = feedItem.kind === "news";
+          const item = feedItem.item;
           const isUnread = !item.isRead;
-          const isMarkingRead = markingReadId === item.id;
+          const isMarkingRead = isNews
+            ? newsMarkingReadId === item.id
+            : reportDecisionMarkingReadId === item.id;
 
           const rowClassName = [
             "notification-page__row",
@@ -103,25 +199,27 @@ export default function NotificationPage() {
             .filter(Boolean)
             .join(" ");
 
+          const title = isNews
+            ? feedItem.item.title
+            : feedItem.item.title;
+
           return (
             <tr
-              key={item.id}
+              key={feedItem.key}
               role={isUnread ? "button" : undefined}
               tabIndex={isUnread ? 0 : undefined}
               aria-label={
-                isUnread
-                  ? `${item.title}を既読にする`
-                  : undefined
+                isUnread ? `${title}を既読にする` : undefined
               }
               aria-busy={isMarkingRead ? true : undefined}
               className={rowClassName}
               onClick={() => {
                 if (isUnread) {
-                  void handleNotificationClick(item);
+                  void handleNotificationClick(feedItem);
                 }
               }}
               onKeyDown={(event) =>
-                handleNotificationKeyDown(event, item)
+                handleNotificationKeyDown(event, feedItem)
               }
             >
               <td className="notification-page__status-cell">
@@ -134,51 +232,89 @@ export default function NotificationPage() {
                 </span>
               </td>
 
-              <td className="notification-page__content-cell">
-                <div className="notification-page__content">
-                  <span className="notification-page__category">
-                    {item.category}
-                  </span>
+              {feedItem.kind === "news" ? (
+                <>
+                  <td className="notification-page__content-cell">
+                    <div className="notification-page__content">
+                      <span className="notification-page__category">
+                        システム通知
+                      </span>
 
-                  <strong className="notification-page__title">
-                    {item.title}
-                  </strong>
+                      <strong className="notification-page__title">
+                        {feedItem.item.title}
+                      </strong>
 
-                  <span className="notification-page__body">
-                    {item.body}
-                  </span>
+                      <span className="notification-page__body">
+                        {feedItem.item.body}
+                      </span>
+                    </div>
+                  </td>
 
-                  {item.decisionReason ? (
-                    <span className="notification-page__detail">
-                      審査理由: {item.decisionReason}
-                    </span>
-                  ) : null}
-                </div>
-              </td>
+                  <td className="notification-page__target">
+                    システム
+                  </td>
 
-              <td className="notification-page__target">
-                {item.targetLabel}
-              </td>
+                  <td className="notification-page__reason-cell">
+                    -
+                  </td>
 
-              <td className="notification-page__reason-cell">
-                <div className="notification-page__reason">
-                  <span>{item.reportReasonLabel}</span>
+                  <td className="notification-page__decision">
+                    -
+                  </td>
 
-                  {item.reportDetail ? (
-                    <span className="notification-page__detail">
-                      {item.reportDetail}
-                    </span>
-                  ) : null}
-                </div>
-              </td>
+                  <td className="notification-page__date">
+                    {safeDateTimeLabelJa(feedItem.occurredAt, "")}
+                  </td>
+                </>
+              ) : (
+                <>
+                  <td className="notification-page__content-cell">
+                    <div className="notification-page__content">
+                      <span className="notification-page__category">
+                        {feedItem.item.category}
+                      </span>
 
-              <td className="notification-page__decision">
-                {item.decisionStatusLabel}
-              </td>
+                      <strong className="notification-page__title">
+                        {feedItem.item.title}
+                      </strong>
 
-              <td className="notification-page__date">
-                {safeDateTimeLabelJa(item.occurredAt, "")}
-              </td>
+                      <span className="notification-page__body">
+                        {feedItem.item.body}
+                      </span>
+
+                      {feedItem.item.decisionReason ? (
+                        <span className="notification-page__detail">
+                          審査理由: {feedItem.item.decisionReason}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+
+                  <td className="notification-page__target">
+                    {feedItem.item.targetLabel}
+                  </td>
+
+                  <td className="notification-page__reason-cell">
+                    <div className="notification-page__reason">
+                      <span>{feedItem.item.reportReasonLabel}</span>
+
+                      {feedItem.item.reportDetail ? (
+                        <span className="notification-page__detail">
+                          {feedItem.item.reportDetail}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+
+                  <td className="notification-page__decision">
+                    {feedItem.item.decisionStatusLabel}
+                  </td>
+
+                  <td className="notification-page__date">
+                    {safeDateTimeLabelJa(feedItem.occurredAt, "")}
+                  </td>
+                </>
+              )}
             </tr>
           );
         })}
