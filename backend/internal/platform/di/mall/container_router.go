@@ -226,6 +226,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 				UC:             cont.ResaleUC,
 				Query:          cont.ResaleQ,
 				ResaleReviewUC: cont.ResaleReviewUC,
+				ReportUC:       cont.ReportUC,
 			},
 		)
 	}

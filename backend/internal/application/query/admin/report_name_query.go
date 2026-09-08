@@ -239,7 +239,7 @@ func (q *ReportNameQuery) ResolveTargetAuthorName(
 }
 
 // ResolveTargetParentName は通報対象の親リソース名を解決する。
-// 商品レビューでは productName、LIST では List.title、
+// 商品レビュー / 再販出品では productName、LIST では List.title、
 // TokenBlueprint / トークンコメントでは tokenName、アバター通報では avatarName を返す。
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetParentName(
@@ -248,15 +248,20 @@ func (q *ReportNameQuery) ResolveTargetParentName(
 	targetParentID string,
 ) string {
 	switch targetType {
-	case reportdom.TargetTypeProductBlueprintReview:
+	case reportdom.TargetTypeProductBlueprintReview,
+		reportdom.TargetTypeResale:
 		return q.ResolveProductName(ctx, targetParentID)
+
 	case reportdom.TargetTypeList:
 		return q.ResolveListName(ctx, targetParentID)
+
 	case reportdom.TargetTypeTokenBlueprint,
 		reportdom.TargetTypeTokenBlueprintComment:
 		return q.ResolveTokenName(ctx, targetParentID)
+
 	case reportdom.TargetTypeAvatar:
 		return q.ResolveAvatarName(ctx, targetParentID)
+
 	default:
 		return ""
 	}

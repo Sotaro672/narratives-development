@@ -168,9 +168,10 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.admin: list usecase is nil")
 	}
 
-	// Admin側のResaleUsecaseはアバター通報裁定による再販停止専用。
+	// Admin側のResaleUsecaseはアバター通報および個別Resale通報の裁定専用。
 	// 出品作成・画像操作は行わないため、imageRepo / imageStorage /
 	// product identity repositories は不要。
+	// 個別ResaleのREMOVEでは対象Resaleをsuspendedへ変更し、既存カートから除去する。
 	resaleUsecase := usecase.NewResaleUsecase(
 		resaleRepo,
 		nil,
@@ -196,6 +197,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 			TokenCommentModerator:    tokenBlueprintReviewUsecase,
 			AvatarRepo:               avatarRepo,
 			AvatarResaleModerator:    resaleUsecase,
+			ResaleRepo:               resaleRepo,
+			ResaleModerator:          resaleUsecase,
 		},
 	)
 	if reportUsecase == nil {

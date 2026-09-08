@@ -90,6 +90,7 @@ export default function ReportsPage() {
               label: "商品レビュー",
             },
             { value: "LIST", label: "出品" },
+            { value: "RESALE", label: "再販出品" },
             { value: "TOKEN_BLUEPRINT", label: "トークン" },
             {
               value: "TOKEN_BLUEPRINT_COMMENT",

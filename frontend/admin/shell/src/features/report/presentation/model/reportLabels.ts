@@ -24,7 +24,7 @@ export function getStatusLabel(
       if (targetType === "AVATAR") {
         return "再販利用停止";
       }
-      if (targetType === "LIST") {
+      if (targetType === "LIST" || targetType === "RESALE") {
         return "出品停止";
       }
       if (targetType === "TOKEN_BLUEPRINT") {
@@ -73,6 +73,9 @@ export function getTargetTypeLabel(
 
     case "AVATAR":
       return "アバター";
+
+    case "RESALE":
+      return "再販出品";
 
     default:
       return targetType;
@@ -131,6 +134,9 @@ export function getSnapshotTitleLabel(
     case "TOKEN_BLUEPRINT":
       return "トークン名";
 
+    case "RESALE":
+      return "商品";
+
     default:
       return "タイトル";
   }
@@ -146,6 +152,9 @@ export function getSnapshotBodyLabel(
     case "LIST":
     case "TOKEN_BLUEPRINT":
       return "説明";
+
+    case "RESALE":
+      return "出品説明";
 
     default:
       return "本文";
@@ -165,6 +174,9 @@ export function getTargetParentLabel(
     case "TOKEN_BLUEPRINT":
       return "対象トークン";
 
+    case "RESALE":
+      return "対象商品";
+
     default:
       return "親";
   }
@@ -178,6 +190,7 @@ export function getTargetAuthorTypeLabel(
       return "対象種別";
 
     case "LIST":
+    case "RESALE":
       return "出品者種別";
 
     case "TOKEN_BLUEPRINT":
@@ -200,6 +213,9 @@ export function getTargetAuthorLabel(
 
     case "TOKEN_BLUEPRINT":
       return "作成者";
+
+    case "RESALE":
+      return "出品者";
 
     default:
       return "投稿者";

@@ -35,6 +35,12 @@ function getDescription(status: ReportCaseStatus, targetType?: ReportTargetType)
       : "出品を維持するか、Mall上で出品停止にするかを決定します。";
   }
 
+  if (targetType === "RESALE") {
+    return status === "KEPT"
+      ? "この再販出品は維持済みです。必要な場合は出品停止へ変更できます。"
+      : "再販出品を維持するか、Mall上で出品停止にするかを決定します。";
+  }
+
   if (targetType === "TOKEN_BLUEPRINT") {
     return status === "KEPT"
       ? "このトークンは維持済みです。必要な場合はAMOL上で非表示へ変更できます。"
@@ -53,7 +59,7 @@ function getPlaceholder(status: ReportCaseStatus, targetType?: ReportTargetType)
       : "裁定の根拠を入力してください。";
   }
 
-  if (targetType === "LIST") {
+  if (targetType === "LIST" || targetType === "RESALE") {
     return status === "KEPT"
       ? "出品停止へ変更する根拠を入力してください。"
       : "裁定の根拠を入力してください。";
@@ -78,6 +84,9 @@ function getNote(targetType?: ReportTargetType): string {
     case "LIST":
       return "「出品停止」を選択すると、対象ListをMall上で出品停止にします。Listドキュメント、ListImage、登録済み画像自体は削除されません。";
 
+    case "RESALE":
+      return "「出品停止」を選択すると、対象ResaleをMall上で出品停止にします。Resaleドキュメント、登録済み画像自体は削除されません。";
+
     case "TOKEN_BLUEPRINT":
       return "「非表示にする」を選択すると、対象トークンをAMOL上で非表示にします。TokenBlueprint自体やオンチェーン上のトークン・メタデータは削除されません。";
 
@@ -96,6 +105,7 @@ function getRemoveLabel(targetType?: ReportTargetType): string {
       return "再販利用停止";
 
     case "LIST":
+    case "RESALE":
       return "出品停止";
 
     case "TOKEN_BLUEPRINT":

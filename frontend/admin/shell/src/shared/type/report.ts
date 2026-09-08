@@ -5,7 +5,8 @@ export type ReportTargetType =
   | "TOKEN_BLUEPRINT"
   | "TOKEN_BLUEPRINT_COMMENT"
   | "LIST"
-  | "AVATAR";
+  | "AVATAR"
+  | "RESALE";
 
 export type ReportActorType =
   | "AVATAR"

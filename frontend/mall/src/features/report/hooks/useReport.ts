@@ -10,6 +10,7 @@ import {
   reportAvatar,
   reportList,
   reportProductBlueprintReview,
+  reportResale,
   reportTokenBlueprint,
   reportTokenBlueprintComment,
 } from "../api/reportApi";
@@ -36,6 +37,10 @@ export type ReportTarget =
   | {
       type: "AVATAR";
       avatarId: string;
+    }
+  | {
+      type: "RESALE";
+      resaleId: string;
     };
 
 type OpenProductBlueprintReviewReportInput = {
@@ -58,6 +63,10 @@ type OpenTokenBlueprintCommentReportInput = {
 
 type OpenAvatarReportInput = {
   avatarId: string;
+};
+
+type OpenResaleReportInput = {
+  resaleId: string;
 };
 
 const DEFAULT_REASON: ReportReason = "SPAM";
@@ -170,6 +179,19 @@ export function useReport() {
     [resetForm],
   );
 
+  const openResaleReport = useCallback(
+    (input: OpenResaleReportInput) => {
+      const resaleId = normalizeId(input.resaleId, "resaleId");
+
+      resetForm();
+      setTarget({
+        type: "RESALE",
+        resaleId,
+      });
+    },
+    [resetForm],
+  );
+
   const close = useCallback(() => {
     if (submittingRef.current) {
       return;
@@ -260,6 +282,14 @@ export function useReport() {
             detail: normalizedDetail || undefined,
           });
           break;
+
+        case "RESALE":
+          response = await reportResale({
+            resaleId: target.resaleId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
       }
 
       setResult(response);
@@ -303,6 +333,7 @@ export function useReport() {
     openTokenBlueprintReport,
     openTokenBlueprintCommentReport,
     openAvatarReport,
+    openResaleReport,
     close,
     setReason,
     setDetail,

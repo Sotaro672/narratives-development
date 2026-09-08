@@ -65,6 +65,8 @@ function getReportTargetLabel(
       return "トークンコメント";
     case "AVATAR":
       return "アバター";
+    case "RESALE":
+      return "再販出品";
     default:
       return "投稿内容";
   }
@@ -83,6 +85,8 @@ function getDecisionBody(
         return "運営の裁定により、対象トークンをAMOL上で非表示にしました。オンチェーン上のトークンやメタデータは削除されていません。";
       case "AVATAR":
         return "運営の裁定により、再販サービスの利用を停止しました。";
+      case "RESALE":
+        return "運営の裁定により、対象の再販出品を停止しました。Resaleおよび登録済み画像は削除されていません。";
       case "TOKEN_BLUEPRINT_COMMENT":
         return "運営の裁定により、あなたのトークンコメントを削除しました。";
       default:
@@ -107,6 +111,17 @@ function getDecisionBody(
         return "通報いただいた内容を確認し、対象出品を停止しました。";
       case "KEPT":
         return "通報いただいた内容を確認しました。審査の結果、対象出品の掲載を継続します。";
+      default:
+        return "通報いただいた内容の確認が完了しました。";
+    }
+  }
+
+  if (notification.targetType === "RESALE") {
+    switch (notification.decisionStatus) {
+      case "REMOVED":
+        return "通報いただいた内容を確認し、対象の再販出品を停止しました。";
+      case "KEPT":
+        return "通報いただいた内容を確認しました。審査の結果、対象の再販出品の掲載を継続します。";
       default:
         return "通報いただいた内容の確認が完了しました。";
     }
@@ -147,7 +162,10 @@ function getDecisionStatusLabel(
     }
   }
 
-  if (notification.targetType === "LIST") {
+  if (
+    notification.targetType === "LIST" ||
+    notification.targetType === "RESALE"
+  ) {
     switch (notification.decisionStatus) {
       case "REMOVED":
         return "出品停止";
@@ -218,7 +236,8 @@ export default function AnnouncementPage() {
   });
 
   const markAnnouncementReadMutation = useMarkAnnouncementReadMutation();
-  const markDecisionReadMutation = useMarkReportDecisionNotificationReadMutation();
+  const markDecisionReadMutation =
+    useMarkReportDecisionNotificationReadMutation();
 
   const announcements = useMemo(
     () => announcementsQuery.data?.items ?? [],
@@ -472,8 +491,10 @@ export default function AnnouncementPage() {
               const notification = item.notification;
               const isUnread = notification.isRead === false;
               const isMarkingRead = markingDecisionId === notification.id;
-              const targetLabel = getReportTargetLabel(notification.targetType);
-              const decisionStatusLabel = getDecisionStatusLabel(notification);
+              const targetLabel =
+                getReportTargetLabel(notification.targetType);
+              const decisionStatusLabel =
+                getDecisionStatusLabel(notification);
               const occurredAtLabel = formatDateTime(item.occurredAt);
               const body = getDecisionBody(notification);
               const cardLabel = getDecisionCardLabel(

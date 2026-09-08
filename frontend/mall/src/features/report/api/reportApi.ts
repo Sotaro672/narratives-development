@@ -7,6 +7,7 @@ import type {
   ReportListInput,
   ReportProductBlueprintReviewInput,
   ReportRequest,
+  ReportResaleInput,
   ReportResponse,
   ReportTokenBlueprintCommentInput,
   ReportTokenBlueprintInput,
@@ -216,6 +217,18 @@ export async function reportAvatar(
 
   return postReport(
     `/mall/me/avatars/${encodeURIComponent(avatarId)}/reports`,
+    request,
+  );
+}
+
+export async function reportResale(
+  input: ReportResaleInput,
+): Promise<ReportResponse> {
+  const resaleId = requireId(input.resaleId, "resaleId");
+  const request = createRequest(input.reason, input.detail);
+
+  return postReport(
+    `/mall/me/resales/${encodeURIComponent(resaleId)}/reports`,
     request,
   );
 }

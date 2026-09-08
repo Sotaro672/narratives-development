@@ -15,6 +15,7 @@ import ProductMediaGallery from "../../../shared/presentation/components/Product
 import ProductModelMeta from "../../../shared/presentation/components/ProductModelMeta";
 import ProductPrice from "../../../shared/presentation/components/ProductPrice";
 import ProductReviewSection from "../../../shared/presentation/components/ProductReviewSection";
+import ReportFlagButton from "../../../shared/presentation/components/ReportFlagButton";
 import ResaleCommentButton from "../../../shared/presentation/components/ResaleCommentButton";
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
 
@@ -55,12 +56,16 @@ type MarketDetailContentProps = {
   detail: MarketDetailContentState;
   onOpenSeller: () => void;
   onOpenResaleChat: () => void;
+  onOpenResaleReport: () => void;
+  reportSubmitting: boolean;
 };
 
 export default function MarketDetailContent({
   detail,
   onOpenSeller,
   onOpenResaleChat,
+  onOpenResaleReport,
+  reportSubmitting,
 }: MarketDetailContentProps) {
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
@@ -120,6 +125,17 @@ export default function MarketDetailContent({
     };
   }, [authResolved, isLoggedIn]);
 
+  const normalizedResaleId = item?.id?.trim() ?? "";
+  const normalizedSellerAvatarId = sellerAvatarId.trim();
+  const canReportResale =
+    authResolved &&
+    isLoggedIn &&
+    Boolean(currentAvatarId) &&
+    Boolean(normalizedResaleId) &&
+    Boolean(normalizedSellerAvatarId) &&
+    normalizedSellerAvatarId !== currentAvatarId &&
+    !reportSubmitting;
+
   return (
     <div className="page-layout market-detail-page">
       {loading ? (
@@ -159,6 +175,10 @@ export default function MarketDetailContent({
                 <ResaleCommentButton
                   commentCount={commentCount}
                   onClick={onOpenResaleChat}
+                />
+                <ReportFlagButton
+                  disabled={!canReportResale}
+                  onClick={onOpenResaleReport}
                 />
               </div>
 

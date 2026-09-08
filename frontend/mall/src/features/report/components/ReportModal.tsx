@@ -42,6 +42,8 @@ function getTargetLabel(targetType?: ReportTargetType): string {
       return "コメント";
     case "AVATAR":
       return "アバター";
+    case "RESALE":
+      return "再販出品";
     default:
       return "投稿";
   }
@@ -51,6 +53,9 @@ function getDescription(targetType?: ReportTargetType): string {
   switch (targetType) {
     case "LIST":
       return "この出品内容が不適切だと思う理由を選択してください。通報しただけでは出品は自動的に停止されません。";
+
+    case "RESALE":
+      return "この再販出品が不適切だと思う理由を選択してください。通報しただけでは出品は自動的に停止されません。";
 
     case "TOKEN_BLUEPRINT":
       return "このトークンのコンテンツが不適切だと思う理由を選択してください。通報しただけではコンテンツは自動的に非表示になりません。";
