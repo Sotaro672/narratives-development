@@ -7,9 +7,14 @@ import Layout from "../components/layout/Layout";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
+import {
+  useMarkNewsReadMutation,
+  useNewsQuery,
+} from "../features/news/hooks/useNewsQuery";
 import { useReportDecisionNotificationsQuery } from "../features/notification/hooks/useReportDecisionNotificationsQuery";
 import type { ReportDecisionNotification } from "../features/notification/infrastructure/reportDecisionNotificationApi";
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
+import type { News } from "../features/shared/types/news";
 import type { ReportTargetType } from "../features/shared/types/report";
 
 import "../styles/page-layout.css";
@@ -29,9 +34,17 @@ type ReportDecisionFeedItem = {
   notification: ReportDecisionNotification;
 };
 
+type NewsFeedItem = {
+  kind: "news";
+  key: string;
+  occurredAt: string;
+  news: News;
+};
+
 type NotificationFeedItem =
   | AnnouncementFeedItem
-  | ReportDecisionFeedItem;
+  | ReportDecisionFeedItem
+  | NewsFeedItem;
 
 function toTimestamp(value: string | null | undefined): number {
   if (!value) {
@@ -98,6 +111,18 @@ export default function AnnouncementPage() {
       perPage: 100,
     });
 
+  const newsQuery = useNewsQuery({
+    page: 1,
+    perPage: 100,
+  });
+
+  const {
+    mutate: markNewsRead,
+    isPending: isMarkingNewsRead,
+    variables: markingNewsId,
+    error: markNewsReadError,
+  } = useMarkNewsReadMutation();
+
   const announcements = useMemo(
     () => announcementsQuery.data?.items ?? [],
     [announcementsQuery.data?.items],
@@ -106,6 +131,11 @@ export default function AnnouncementPage() {
   const decisionNotifications = useMemo(
     () => decisionNotificationsQuery.data?.items ?? [],
     [decisionNotificationsQuery.data?.items],
+  );
+
+  const news = useMemo(
+    () => newsQuery.data?.items ?? [],
+    [newsQuery.data?.items],
   );
 
   const items = useMemo<NotificationFeedItem[]>(() => {
@@ -130,16 +160,35 @@ export default function AnnouncementPage() {
         notification,
       }));
 
-    return [...announcementItems, ...decisionItems].sort(
+    const newsItems: NewsFeedItem[] = news.map((newsItem) => ({
+      kind: "news",
+      key: `news:${newsItem.id}`,
+      occurredAt:
+        newsItem.publishedAt ||
+        newsItem.createdAt ||
+        "",
+      news: newsItem,
+    }));
+
+    return [
+      ...announcementItems,
+      ...decisionItems,
+      ...newsItems,
+    ].sort(
       (left, right) =>
         toTimestamp(right.occurredAt) -
         toTimestamp(left.occurredAt),
     );
-  }, [announcements, decisionNotifications]);
+  }, [
+    announcements,
+    decisionNotifications,
+    news,
+  ]);
 
   const loading =
     announcementsQuery.isPending ||
-    decisionNotificationsQuery.isPending;
+    decisionNotificationsQuery.isPending ||
+    newsQuery.isPending;
 
   const announcementQueryError =
     announcementsQuery.error instanceof Error
@@ -155,9 +204,25 @@ export default function AnnouncementPage() {
         ? "通報結果通知の取得に失敗しました"
         : "";
 
+  const newsQueryError =
+    newsQuery.error instanceof Error
+      ? newsQuery.error.message
+      : newsQuery.error
+        ? "システム通知の取得に失敗しました"
+        : "";
+
+  const newsReadError =
+    markNewsReadError instanceof Error
+      ? markNewsReadError.message
+      : markNewsReadError
+        ? "システム通知を既読にできませんでした"
+        : "";
+
   const error =
     announcementQueryError ||
-    decisionQueryError;
+    decisionQueryError ||
+    newsQueryError ||
+    newsReadError;
 
   const handleOpenAnnouncement = useCallback(
     (item: AnnouncementListItem) => {
@@ -195,6 +260,26 @@ export default function AnnouncementPage() {
       );
     },
     [navigate],
+  );
+
+  const handleMarkNewsRead = useCallback(
+    (newsItem: News) => {
+      const newsId = newsItem.id?.trim();
+
+      if (
+        !newsId ||
+        newsItem.isRead ||
+        isMarkingNewsRead
+      ) {
+        return;
+      }
+
+      markNewsRead(newsId);
+    },
+    [
+      isMarkingNewsRead,
+      markNewsRead,
+    ],
   );
 
   return (
@@ -328,6 +413,102 @@ export default function AnnouncementPage() {
                         件
                       </div>
                     ) : null}
+                  </article>
+                );
+              }
+
+              if (item.kind === "news") {
+                const newsItem = item.news;
+                const isUnread =
+                  newsItem.isRead === false;
+                const isBusy =
+                  isMarkingNewsRead &&
+                  markingNewsId?.trim() ===
+                    newsItem.id;
+                const occurredAtLabel =
+                  formatDateTime(item.occurredAt);
+
+                return (
+                  <article
+                    key={item.key}
+                    className={[
+                      "announcement-page__card",
+                      isUnread
+                        ? "announcement-page__card--unread"
+                        : "",
+                      isBusy
+                        ? "announcement-page__card--busy"
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    role={isUnread ? "button" : undefined}
+                    tabIndex={isUnread ? 0 : undefined}
+                    aria-label={
+                      isUnread
+                        ? `${newsItem.title} を既読にする`
+                        : undefined
+                    }
+                    aria-busy={
+                      isBusy ? true : undefined
+                    }
+                    onClick={() => {
+                      if (isUnread) {
+                        handleMarkNewsRead(newsItem);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        !isUnread ||
+                        (event.key !== "Enter" &&
+                          event.key !== " ")
+                      ) {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      handleMarkNewsRead(newsItem);
+                    }}
+                  >
+                    <div className="announcement-page__card-head">
+                      <div className="announcement-page__card-meta">
+                        <span className="announcement-page__token">
+                          システム通知
+                        </span>
+
+                        <time
+                          className="announcement-page__date"
+                          dateTime={
+                            item.occurredAt ||
+                            undefined
+                          }
+                        >
+                          {occurredAtLabel}
+                        </time>
+                      </div>
+
+                      {isBusy ? (
+                        <span className="announcement-page__unread-badge">
+                          既読処理中
+                        </span>
+                      ) : isUnread ? (
+                        <span className="announcement-page__unread-badge">
+                          未読
+                        </span>
+                      ) : (
+                        <span className="announcement-page__read-badge">
+                          既読
+                        </span>
+                      )}
+                    </div>
+
+                    <h2 className="announcement-page__card-title">
+                      {newsItem.title}
+                    </h2>
+
+                    <div className="announcement-page__news-body">
+                      {newsItem.body}
+                    </div>
                   </article>
                 );
               }

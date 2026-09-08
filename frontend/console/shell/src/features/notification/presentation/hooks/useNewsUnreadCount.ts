@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { getNewsUnreadCountApi } from "../../infrastructure/newsApi";
+import { subscribeNewsNotificationChanged } from "../notificationEvent";
 
 export type UseNewsUnreadCountParams = {
   enabled?: boolean;
@@ -52,10 +53,7 @@ export function useNewsUnreadCount(
 
     try {
       const response = await getNewsUnreadCountApi();
-
-      setUnreadCount(
-        normalizeUnreadCount(response.unreadCount),
-      );
+      setUnreadCount(normalizeUnreadCount(response.unreadCount));
     } catch (loadError) {
       setUnreadCount(0);
       setError(resolveErrorMessage(loadError));
@@ -66,7 +64,15 @@ export function useNewsUnreadCount(
 
   useEffect(() => {
     void load();
-  }, [load]);
+
+    if (!enabled) {
+      return;
+    }
+
+    return subscribeNewsNotificationChanged(() => {
+      void load();
+    });
+  }, [enabled, load]);
 
   return {
     unreadCount,

@@ -11,6 +11,7 @@ import type {
   NewsPage,
   NewsReadResponse,
 } from "../../../../shared/types/news";
+import { emitNewsNotificationChanged } from "../notificationEvent";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;
@@ -128,6 +129,7 @@ export function useNewsNotifications(
         }));
 
         await load();
+        emitNewsNotificationChanged();
 
         return read;
       } catch (markReadError) {

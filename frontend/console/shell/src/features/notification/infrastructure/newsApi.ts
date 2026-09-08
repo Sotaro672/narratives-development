@@ -88,9 +88,7 @@ async function requestJson<T>(
   return readJsonResponse<T>(response, url);
 }
 
-function buildListQuery(
-  params?: ListNewsParams,
-): string {
+function buildListQuery(params?: ListNewsParams): string {
   const searchParams = new URLSearchParams();
 
   if (params?.page !== undefined) {
