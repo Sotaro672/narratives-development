@@ -1,4 +1,4 @@
-// frontend/admin/shell/src/features/news/components/NewsUploadProgressModal.tsx
+// frontend\admin\shell\src\features\news\presentation\components\NewsUploadProgressModal.tsx
 
 import { useEffect } from "react";
 import { createPortal } from "react-dom";

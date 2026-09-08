@@ -1,4 +1,4 @@
-// frontend/admin/shell/src/features/news/hooks/useNews.ts
+// frontend/admin/shell/src/features/news/presentation/hooks/useNews.ts
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -21,6 +21,9 @@ export function useNews() {
   const [error, setError] = useState<string | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
   const [page, setPageState] = useState(DEFAULT_PAGE);
   const [perPage, setPerPageState] = useState(DEFAULT_PER_PAGE);
   const [totalCount, setTotalCount] = useState(0);
@@ -92,16 +95,40 @@ export function useNews() {
         return null;
       }
 
+      const hasImage = input.image !== undefined;
+
       setPublishing(true);
       setPublishError(null);
+      setUploadProgress(0);
+      setUploadFileName(input.image?.name ?? null);
+      setUploadingImage(hasImage);
 
       try {
-        const created = await createNews({
-          title: input.title,
-          body: input.body,
-          image: input.image,
-          imageAlt: input.image ? input.imageAlt : undefined,
-        });
+        const created = await createNews(
+          {
+            title: input.title,
+            body: input.body,
+            image: input.image,
+            imageAlt: input.image
+              ? input.imageAlt
+              : undefined,
+          },
+          hasImage
+            ? (progress) => {
+                setUploadProgress(
+                  Math.min(
+                    100,
+                    Math.max(0, progress.percentage),
+                  ),
+                );
+              }
+            : undefined,
+        );
+
+        if (hasImage) {
+          setUploadProgress(100);
+          setUploadingImage(false);
+        }
 
         if (page === DEFAULT_PAGE) {
           await loadNews();
@@ -116,9 +143,11 @@ export function useNews() {
             ? cause.message
             : "通知に失敗しました。",
         );
+
         return null;
       } finally {
         setPublishing(false);
+        setUploadingImage(false);
       }
     },
     [loadNews, page, publishing],
@@ -151,7 +180,9 @@ export function useNews() {
   }, [loadNews]);
 
   const hasPreviousPage = page > 1;
-  const hasNextPage = totalPages > 0 && page < totalPages;
+  const hasNextPage =
+    totalPages > 0 &&
+    page < totalPages;
 
   return {
     items,
@@ -159,6 +190,9 @@ export function useNews() {
     error,
     publishing,
     publishError,
+    uploadingImage,
+    uploadProgress,
+    uploadFileName,
     page,
     perPage,
     totalCount,
