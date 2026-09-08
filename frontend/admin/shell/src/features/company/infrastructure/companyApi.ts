@@ -1,10 +1,12 @@
 // frontend/admin/shell/src/features/company/infrastructure/companyApi.ts
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
+
 import type {
   Company,
   CompanyListResponse,
 } from "../../../shared/type/company";
+import type { ContractDetailResponse } from "../../../shared/type/contractDetail";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -13,7 +15,6 @@ function requireBackendBaseUrl(): string {
   if (!BACKEND_BASE_URL) {
     throw new Error("VITE_BACKEND_BASE_URL is not configured.");
   }
-
   return BACKEND_BASE_URL;
 }
 
@@ -26,7 +27,6 @@ async function requireOk(
   }
 
   let detail = "";
-
   try {
     const body = (await response.json()) as { error?: string };
     detail = body.error ? ` error=${body.error}` : "";
@@ -34,9 +34,7 @@ async function requireOk(
     // Response body may not be JSON.
   }
 
-  throw new Error(
-    `${message} status=${response.status}${detail}`,
-  );
+  throw new Error(`${message} status=${response.status}${detail}`);
 }
 
 export async function listCompanies(): Promise<Company[]> {
@@ -54,15 +52,35 @@ export async function listCompanies(): Promise<Company[]> {
     },
   );
 
-  await requireOk(
-    response,
-    "Failed to load companies.",
+  await requireOk(response, "Failed to load companies.");
+
+  const body = (await response.json()) as CompanyListResponse;
+  return Array.isArray(body.items) ? body.items : [];
+}
+
+export async function getContractDetail(
+  companyId: string,
+): Promise<ContractDetailResponse> {
+  const normalizedCompanyId = companyId.trim();
+  if (!normalizedCompanyId) {
+    throw new Error("companyId is required.");
+  }
+
+  const backendBaseUrl = requireBackendBaseUrl();
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${backendBaseUrl}/admin/companies/${encodeURIComponent(normalizedCompanyId)}/contract-detail`,
+    {
+      method: "GET",
+      headers: {
+        ...authHeaders,
+        Accept: "application/json",
+      },
+    },
   );
 
-  const body =
-    (await response.json()) as CompanyListResponse;
+  await requireOk(response, "Failed to load contract detail.");
 
-  return Array.isArray(body.items)
-    ? body.items
-    : [];
+  return (await response.json()) as ContractDetailResponse;
 }

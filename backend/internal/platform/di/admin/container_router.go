@@ -27,7 +27,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	meHandler := adminhandler.NewMeHandler()
 	contactHandler := adminhandler.NewContactHandler(cont.contactUsecase)
-	companyHandler := adminhandler.NewCompanyHandler(cont.companyRepo, cont.memberRepo)
+	companyHandler := adminhandler.NewCompanyHandler(
+		cont.companyRepo,
+		cont.memberRepo,
+		cont.contractDetailQuery,
+	)
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	newsHandler := adminhandler.NewNewsHandler(cont.newsUsecase, cont.newsQuery)
 	reportHandler := adminhandler.NewReportHandler(cont.reportUsecase, cont.reportNameQuery)

@@ -1,5 +1,4 @@
 // backend/internal/platform/di/admin/container.go
-
 package admin
 
 import (
@@ -41,6 +40,7 @@ type Container struct {
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 	newsQuery                      *adminquery.NewsQuery
 	reportNameQuery                *adminquery.ReportNameQuery
+	contractDetailQuery            *adminquery.ContractDetailQuery
 	gasBalanceQuery                *adminquery.GasBalanceQuery
 }
 
@@ -135,6 +135,16 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		memberRepo,
 		productBlueprintRepo,
 		tokenBlueprintRepo,
+	)
+
+	contractDetailQuery := adminquery.NewContractDetailQuery(
+		companyRepo,
+		brandRepo,
+		memberRepo,
+		productBlueprintRepo,
+		tokenBlueprintRepo,
+		inventoryRepo,
+		listRepo,
 	)
 
 	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
@@ -306,6 +316,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		reportDecisionNotificationRepo: reportDecisionNotificationRepo,
 		newsQuery:                      newsQuery,
 		reportNameQuery:                reportNameQuery,
+		contractDetailQuery:            contractDetailQuery,
 		gasBalanceQuery:                gasBalanceQuery,
 	}, nil
 }

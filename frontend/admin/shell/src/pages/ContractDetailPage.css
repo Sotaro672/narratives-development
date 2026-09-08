@@ -1,0 +1,87 @@
+/* frontend/admin/shell/src/pages/ContractDetailPage.css */
+
+.contract-detail {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+}
+
+.contract-detail__tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 24px;
+  width: 100%;
+  min-width: 0;
+  border-bottom: 1px solid #e5e5e5;
+}
+
+.contract-detail__tab {
+  position: relative;
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0 2px 10px;
+  border: 0;
+  background: transparent;
+  color: #737373;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.contract-detail__tab::after {
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: transparent;
+  content: "";
+  transition: background-color 0.15s ease;
+}
+
+.contract-detail__tab:hover {
+  color: #111111;
+}
+
+.contract-detail__tab--active {
+  color: #111111;
+  font-weight: 600;
+}
+
+.contract-detail__tab--active::after {
+  background: #111111;
+}
+
+.contract-detail__tab:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid #111111;
+  outline-offset: 3px;
+}
+
+.contract-detail__panel {
+  width: 100%;
+  min-width: 0;
+  padding-top: 16px;
+}
+
+@media (max-width: 640px) {
+  .contract-detail__tabs {
+    gap: 20px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+
+  .contract-detail__tab {
+    padding-bottom: 9px;
+  }
+
+  .contract-detail__panel {
+    padding-top: 12px;
+  }
+}
