@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/announcement-page.css */
+/* frontend/mall/src/styles/announcement-page.css */
 
 .announcement-page {
   width: 100%;
@@ -45,11 +45,7 @@
   background: #ffffff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease,
-    opacity 160ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease, opacity 160ms ease;
 }
 
 .announcement-page__card:hover {
@@ -147,14 +143,6 @@
   overflow-wrap: anywhere;
 }
 
-.announcement-page__news-body {
-  color: #374151;
-  font-size: 14px;
-  line-height: 1.75;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
-
 .announcement-page__attachments {
   margin-top: 12px;
   color: #6b7280;
@@ -177,6 +165,23 @@
   font-weight: 700;
   line-height: 1.45;
   overflow-wrap: anywhere;
+}
+
+.announcement-page__detail-news-image-wrap {
+  width: 100%;
+  margin-top: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 14px;
+  background: #f9fafb;
+}
+
+.announcement-page__detail-news-image {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  background: #ffffff;
 }
 
 .announcement-page__detail-content {
@@ -215,9 +220,7 @@
 .announcement-page__attachment-link {
   color: inherit;
   text-decoration: none;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease;
+  transition: border-color 160ms ease, background-color 160ms ease;
 }
 
 .announcement-page__attachment-link:hover {
@@ -278,11 +281,6 @@
     font-size: 16px;
   }
 
-  .announcement-page__news-body {
-    font-size: 13px;
-    line-height: 1.7;
-  }
-
   .announcement-page__detail {
     padding: 18px 14px;
     border-radius: 16px;
@@ -290,6 +288,15 @@
 
   .announcement-page__detail-title {
     font-size: 20px;
+  }
+
+  .announcement-page__detail-news-image-wrap {
+    margin-top: 16px;
+    border-radius: 12px;
+  }
+
+  .announcement-page__detail-news-image {
+    max-height: 360px;
   }
 
   .announcement-page__attachment-item {

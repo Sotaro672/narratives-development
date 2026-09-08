@@ -3,7 +3,7 @@
 import { Link, useLocation } from "react-router-dom";
 
 import { useInquiryBadgeCounter } from "../../../features/inquiry/presentation/hooks/useInquiryBadgeCounter";
-import { useNotificationUnreadCount } from "../../../features/notification/hooks/useNotificationUnreadCount";
+import { useNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useNotificationUnreadCount";
 import { useResaleChatBadgeCounter } from "../../../features/resale/presentation/hooks/useResaleChatBadgeCounter";
 
 import type { HeaderActionState } from "./types";
@@ -76,15 +76,11 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
   const safeChatBadgeCount = safeInquiryBadgeCount + safeResaleChatBadgeCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
-  const notificationUnreadBadgeLabel = formatBadgeLabel(
-    safeNotificationUnreadCount,
-  );
+  const notificationUnreadBadgeLabel = formatBadgeLabel(safeNotificationUnreadCount);
   const chatBadgeLabel = formatBadgeLabel(safeChatBadgeCount);
 
   const shouldShowResaleButton = isResalePagePath(location.pathname);
-  const shouldShowResaleDetailActions = isResaleDetailPagePath(
-    location.pathname,
-  );
+  const shouldShowResaleDetailActions = isResaleDetailPagePath(location.pathname);
 
   const resaleButtonLabel = actionButtonLabel || "出品";
   const resaleButtonDisabled = !onActionButtonClick || actionButtonDisabled;
@@ -93,35 +89,23 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     "header__settings-link",
     "header__action-button",
     "header__add-to-cart-button",
-    shouldShowResaleDetailActions
-      ? "header__resale-detail-action-button"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
+  ].filter(Boolean).join(" ");
 
   const secondaryActionClassName = [
     "header__settings-link",
     "header__action-button",
     "header__secondary-action-button",
     "header__buy-button",
-    shouldShowResaleDetailActions
-      ? "header__resale-detail-action-button"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
+  ].filter(Boolean).join(" ");
 
   const tertiaryActionClassName = [
     "header__settings-link",
     "header__action-button",
     "header__tertiary-action-button",
-    shouldShowResaleDetailActions
-      ? "header__resale-detail-action-button"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
+  ].filter(Boolean).join(" ");
 
   return (
     <div className="header__right">

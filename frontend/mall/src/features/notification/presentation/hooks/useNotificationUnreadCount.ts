@@ -1,9 +1,9 @@
-// frontend/mall/src/features/notification/hooks/useNotificationUnreadCount.ts
+// frontend/mall/src/features/notification/presentation/hooks/useNotificationUnreadCount.ts
 
 import { useCallback } from "react";
 
-import { useAnnouncementsQuery } from "../../announcement/hooks/useAnnouncementsQuery";
-import { useNewsUnreadCountQuery } from "../../news/hooks/useNewsQuery";
+import { useAnnouncementsQuery } from "../../../announcement/hooks/useAnnouncementsQuery";
+import { useNewsUnreadCountQuery } from "../../../news/hooks/useNewsQuery";
 import { useReportDecisionNotificationUnreadCountQuery } from "./useReportDecisionNotificationsQuery";
 
 const ANNOUNCEMENT_UNREAD_COUNT_PAGE = 1;
@@ -41,10 +41,9 @@ export function useNotificationUnreadCount(
     enabled,
   });
 
-  const reportDecisionQuery =
-    useReportDecisionNotificationUnreadCountQuery({
-      enabled,
-    });
+  const reportDecisionQuery = useReportDecisionNotificationUnreadCountQuery({
+    enabled,
+  });
 
   const newsQuery = useNewsUnreadCountQuery({
     enabled,
