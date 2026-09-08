@@ -19,19 +19,20 @@ func (h *ResaleHandler) listOwnedResaleComments(
 ) {
 	ctx := r.Context()
 
-	if h == nil || h.resaleReviewUC == nil {
+	if h == nil || h.uc == nil || h.resaleReviewUC == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{
 			"error": "not_implemented",
 		})
 		return
 	}
 
-	if _, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	); !ok {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
@@ -61,20 +62,21 @@ func (h *ResaleHandler) createOwnedResaleComment(
 ) {
 	ctx := r.Context()
 
-	if h == nil || h.resaleReviewUC == nil {
+	if h == nil || h.uc == nil || h.resaleReviewUC == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{
 			"error": "not_implemented",
 		})
 		return
 	}
 
-	item, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
+		return
+	}
+
+	item, err := h.uc.GetOwned(ctx, resaleID, avatarID)
+	if err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
@@ -148,24 +150,25 @@ func (h *ResaleHandler) deleteOwnedResaleComment(
 ) {
 	ctx := r.Context()
 
-	if h == nil || h.resaleReviewUC == nil {
+	if h == nil || h.uc == nil || h.resaleReviewUC == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{
 			"error": "not_implemented",
 		})
 		return
 	}
 
-	item, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	)
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	err := h.resaleReviewUC.DeleteComment(
+	item, err := h.uc.GetOwned(ctx, resaleID, avatarID)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	err = h.resaleReviewUC.DeleteComment(
 		ctx,
 		resaleID,
 		commentID,

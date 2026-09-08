@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 
 	cloudtasksadp "narratives/internal/adapters/out/cloudtasks"
 	outfirebase "narratives/internal/adapters/out/firebase"
@@ -161,6 +162,7 @@ func buildMallUsecases(
 		r.resaleRepo,
 		r.resaleImageRepo,
 		resaleImageStorage,
+		time.Now,
 	).
 		WithProductIdentityRepositories(
 			r.productRepo,

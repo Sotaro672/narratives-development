@@ -154,13 +154,22 @@ func (h *ResaleHandler) get(
 ) {
 	ctx := r.Context()
 
-	item, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	)
+	if h == nil || h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
+		return
+	}
+
+	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
+		return
+	}
+
+	item, err := h.uc.GetOwned(ctx, resaleID, avatarID)
+	if err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
@@ -189,19 +198,13 @@ func (h *ResaleHandler) update(
 		return
 	}
 
-	existing, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	)
-	if !ok {
+	existing, err := h.uc.GetOwned(ctx, resaleID, avatarID)
+	if err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
-	body, err := io.ReadAll(
-		io.LimitReader(r.Body, 1<<20),
-	)
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -230,7 +233,6 @@ func (h *ResaleHandler) update(
 	item.BrandID = existing.BrandID
 	item.ProductBlueprintID = existing.ProductBlueprintID
 	item.ImageID = existing.ImageID
-
 	item.CreatedAt = existing.CreatedAt
 	item.CreatedBy = existing.CreatedBy
 	item.UpdatedAt = &now
@@ -274,12 +276,13 @@ func (h *ResaleHandler) delete(
 		return
 	}
 
-	if _, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	); !ok {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 

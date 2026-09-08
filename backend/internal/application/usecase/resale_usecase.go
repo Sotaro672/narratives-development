@@ -23,17 +23,24 @@ type ResaleUsecase struct {
 	productRepo               productdom.Repository
 	productBlueprintRepo      productblueprintdom.Repository
 	avatarResaleAccessChecker AvatarResaleAccessChecker
+	now                       func() time.Time
 }
 
 func NewResaleUsecase(
 	resaleRepo resaledom.Repository,
 	imageRepo resaledom.ImageRepository,
 	imageStorage applicationport.ResaleImageStorage,
+	now func() time.Time,
 ) *ResaleUsecase {
+	if now == nil {
+		now = time.Now
+	}
+
 	return &ResaleUsecase{
 		resaleRepo:   resaleRepo,
 		imageRepo:    imageRepo,
 		imageStorage: imageStorage,
+		now:          now,
 	}
 }
 
@@ -77,6 +84,14 @@ func (uc *ResaleUsecase) WithAvatarResaleAccessChecker(
 
 	uc.avatarResaleAccessChecker = checker
 	return uc
+}
+
+func (uc *ResaleUsecase) nowUTC() time.Time {
+	if uc == nil || uc.now == nil {
+		return time.Now().UTC()
+	}
+
+	return uc.now().UTC()
 }
 
 func (uc *ResaleUsecase) Create(
@@ -236,7 +251,7 @@ func (uc *ResaleUsecase) SuspendAvatarResaleByAdmin(
 		return err
 	}
 
-	now := time.Now().UTC()
+	now := uc.nowUTC()
 
 	for _, item := range items {
 		if item.AvatarID != input.AvatarID {
@@ -313,7 +328,7 @@ func (uc *ResaleUsecase) SuspendResaleByAdmin(
 	}
 
 	if item.Status != resaledom.StatusSuspended {
-		now := time.Now().UTC()
+		now := uc.nowUTC()
 
 		if err := item.Suspend(now); err != nil {
 			return err
@@ -395,7 +410,7 @@ func (uc *ResaleUsecase) CreateImage(
 		img.DisplayOrder = 0
 	}
 	if img.CreatedAt.IsZero() {
-		img.CreatedAt = time.Now().UTC()
+		img.CreatedAt = uc.nowUTC()
 	} else {
 		img.CreatedAt = img.CreatedAt.UTC()
 	}
@@ -443,7 +458,7 @@ func (uc *ResaleUsecase) DeleteImage(
 	if uc.resaleRepo != nil {
 		r, err := uc.resaleRepo.GetByID(ctx, resaleID)
 		if err == nil && r.ImageID == imageID {
-			now := time.Now().UTC()
+			now := uc.nowUTC()
 			r.ImageID = ""
 			r.UpdatedAt = &now
 			_, _ = uc.resaleRepo.Update(ctx, resaleID, r)
@@ -511,7 +526,7 @@ func (uc *ResaleUsecase) SetPrimaryImage(
 	}
 
 	if now.IsZero() {
-		now = time.Now().UTC()
+		now = uc.nowUTC()
 	}
 
 	r, err := uc.resaleRepo.GetByID(ctx, resaleID)

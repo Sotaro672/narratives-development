@@ -29,7 +29,8 @@ func resaleHTTPStatus(err error) int {
 		errors.Is(err, context.DeadlineExceeded):
 		return http.StatusRequestTimeout
 
-	case usecase.IsResaleServiceSuspended(err):
+	case usecase.IsResaleServiceSuspended(err),
+		usecase.IsResaleAccessDenied(err):
 		return http.StatusForbidden
 
 	case errors.Is(err, resaledom.ErrNotFound),
@@ -91,6 +92,9 @@ func resaleErrorMessage(err error) string {
 
 	case usecase.IsResaleServiceSuspended(err):
 		return "resale_service_suspended"
+
+	case usecase.IsResaleAccessDenied(err):
+		return "resale_access_denied"
 
 	case strings.Contains(message, "not supported"):
 		return "not_implemented"

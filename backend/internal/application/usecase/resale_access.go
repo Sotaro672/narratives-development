@@ -26,6 +26,12 @@ var (
 	ErrResaleServiceSuspended = errors.New(
 		"resale: service suspended",
 	)
+
+	// ErrResaleAccessDenied は、指定されたAvatarが対象Resaleの所有者ではなく、
+	// 所有者専用操作を実行できないことを表す。
+	ErrResaleAccessDenied = errors.New(
+		"resale: access denied",
+	)
 )
 
 // AvatarResaleAccessChecker は、アバターが再販サービスを利用可能かを
@@ -39,6 +45,42 @@ type AvatarResaleAccessChecker interface {
 		ctx context.Context,
 		avatarID string,
 	) (bool, error)
+}
+
+// GetOwned は、対象Resaleを取得し、指定Avatarが所有者であることを検証する。
+//
+// HTTP adapterから所有権判定を分離するための共通Usecase。
+// 認証済みAvatarID自体の解決はHTTP middleware / handler側で行い、
+// Usecaseには解決済みのAvatarIDのみを渡す。
+func (uc *ResaleUsecase) GetOwned(
+	ctx context.Context,
+	resaleID string,
+	avatarID string,
+) (resaledom.Resale, error) {
+	if uc == nil || uc.resaleRepo == nil {
+		return resaledom.Resale{}, ErrNotSupported(
+			"Resale.GetOwned",
+		)
+	}
+	if resaleID == "" {
+		return resaledom.Resale{}, resaledom.ErrInvalidID
+	}
+	if avatarID == "" {
+		return resaledom.Resale{}, resaledom.ErrInvalidAvatarID
+	}
+
+	item, err := uc.resaleRepo.GetByID(ctx, resaleID)
+	if err != nil {
+		return resaledom.Resale{}, err
+	}
+	if item.ID != resaleID {
+		return resaledom.Resale{}, resaledom.ErrInvalidID
+	}
+	if item.AvatarID != avatarID {
+		return resaledom.Resale{}, ErrResaleAccessDenied
+	}
+
+	return item, nil
 }
 
 // checkAvatarResaleAccess は、再販サービスを開始する操作の直前に
@@ -80,5 +122,14 @@ func IsResaleServiceSuspended(err error) bool {
 	return errors.Is(
 		err,
 		ErrResaleServiceSuspended,
+	)
+}
+
+// IsResaleAccessDenied は、HTTP adapter等で
+// ErrResaleAccessDeniedを判定するためのヘルパー。
+func IsResaleAccessDenied(err error) bool {
+	return errors.Is(
+		err,
+		ErrResaleAccessDenied,
 	)
 }

@@ -24,13 +24,21 @@ func (h *ResaleHandler) listImages(
 		})
 		return
 	}
+	if h.uc == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "resale usecase is nil",
+		})
+		return
+	}
 
-	if _, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	); !ok {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
@@ -71,12 +79,8 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 		return
 	}
 
-	if _, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	); !ok {
+	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
@@ -167,12 +171,13 @@ func (h *ResaleHandler) deleteImage(
 		return
 	}
 
-	if _, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	); !ok {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
@@ -220,12 +225,8 @@ func (h *ResaleHandler) setPrimaryImage(
 		return
 	}
 
-	if _, ok := h.getOwnedResale(
-		w,
-		r,
-		ctx,
-		resaleID,
-	); !ok {
+	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
+		writeResaleErr(w, err)
 		return
 	}
 
@@ -253,8 +254,7 @@ func (h *ResaleHandler) setPrimaryImage(
 
 	now := time.Now().UTC()
 
-	if req.Now != nil &&
-		*req.Now != "" {
+	if req.Now != nil && *req.Now != "" {
 		if parsed, err := time.Parse(
 			time.RFC3339,
 			*req.Now,

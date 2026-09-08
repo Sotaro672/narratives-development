@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"strings"
+	"time"
 
 	fsrepo "narratives/internal/adapters/out/firestore"
 	adminquery "narratives/internal/application/query/admin"
@@ -176,6 +177,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		resaleRepo,
 		nil,
 		nil,
+		time.Now,
 	).WithCartItemCleanup(
 		cartRepo,
 	)
