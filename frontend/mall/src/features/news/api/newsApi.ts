@@ -2,37 +2,13 @@
 
 import { HttpError, requestJson } from "../../../lib/http";
 import { getOptionalAuthHeaders } from "../../../lib/authHeaders";
+import type {
+  NewsPage,
+  NewsReadResponse,
+  NewsUnreadCountResponse,
+} from "../../shared/types/news";
 
 const NEWS_ENDPOINT = "/mall/me/news";
-
-export type News = {
-  id: string;
-  title: string;
-  body: string;
-  publishedAt: string;
-  createdAt: string;
-  isRead: boolean;
-  readAt: string | null;
-};
-
-export type NewsPage = {
-  items: News[];
-  totalCount: number;
-  totalPages: number;
-  page: number;
-  perPage: number;
-};
-
-export type NewsUnreadCountResponse = {
-  unreadCount: number;
-};
-
-export type NewsReadResponse = {
-  id: string;
-  newsId: string;
-  isRead: boolean;
-  readAt: string;
-};
 
 export type FetchMeNewsParams = {
   page?: number;
@@ -67,7 +43,6 @@ export async function fetchMeNews(
 ): Promise<NewsPage> {
   const page = params.page ?? 1;
   const perPage = params.perPage ?? 20;
-
   const headers = await getOptionalAuthHeaders();
 
   if (!headers) {
@@ -183,9 +158,7 @@ export async function fetchMeNewsUnreadCount(
 export async function markMeNewsRead(
   newsId: string,
 ): Promise<NewsReadResponse> {
-  const normalizedNewsId = newsId.trim();
-
-  if (!normalizedNewsId) {
+  if (!newsId) {
     throw new Error("newsId is required");
   }
 
@@ -196,9 +169,7 @@ export async function markMeNewsRead(
   }
 
   return requestJson<NewsReadResponse>(
-    `${NEWS_ENDPOINT}/${encodeURIComponent(
-      normalizedNewsId,
-    )}/read`,
+    `${NEWS_ENDPOINT}/${encodeURIComponent(newsId)}/read`,
     {
       method: "POST",
       headers,

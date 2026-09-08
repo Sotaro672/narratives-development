@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 
+import NewsUploadProgressModal from "../features/news/presentation/components/NewsUploadProgressModal";
 import { useNews } from "../features/news/presentation/hooks/useNews";
 import Button from "../shared/ui/Button/Button";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
@@ -32,6 +33,9 @@ export default function NewsCreatePage() {
   const {
     publishing,
     publishError,
+    uploadingImage,
+    uploadProgress,
+    uploadFileName,
     publish,
   } = useNews();
 
@@ -78,7 +82,9 @@ export default function NewsCreatePage() {
     if (!ALLOWED_NEWS_IMAGE_TYPES.has(file.type)) {
       setImage(null);
       setImageAlt("");
-      setImageError("JPEG、PNG、WebP形式の画像を選択してください。");
+      setImageError(
+        "JPEG、PNG、WebP形式の画像を選択してください。",
+      );
       event.target.value = "";
       return;
     }
@@ -86,7 +92,9 @@ export default function NewsCreatePage() {
     if (file.size <= 0) {
       setImage(null);
       setImageAlt("");
-      setImageError("空の画像ファイルは選択できません。");
+      setImageError(
+        "空の画像ファイルは選択できません。",
+      );
       event.target.value = "";
       return;
     }
@@ -94,7 +102,9 @@ export default function NewsCreatePage() {
     if (file.size > MAX_NEWS_IMAGE_SIZE) {
       setImage(null);
       setImageAlt("");
-      setImageError("画像サイズは5MB以下にしてください。");
+      setImageError(
+        "画像サイズは5MB以下にしてください。",
+      );
       event.target.value = "";
       return;
     }
@@ -292,7 +302,9 @@ export default function NewsCreatePage() {
                     value={imageAlt}
                     disabled={publishing}
                     autoComplete="off"
-                    onChange={(event) => setImageAlt(event.target.value)}
+                    onChange={(event) =>
+                      setImageAlt(event.target.value)
+                    }
                   />
                 </div>
 
@@ -318,6 +330,12 @@ export default function NewsCreatePage() {
           ) : null}
         </form>
       </section>
+
+      <NewsUploadProgressModal
+        open={uploadingImage}
+        progress={uploadProgress}
+        fileName={uploadFileName}
+      />
     </Page>
   );
 }

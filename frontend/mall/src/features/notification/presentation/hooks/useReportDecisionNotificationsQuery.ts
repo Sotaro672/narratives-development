@@ -13,7 +13,7 @@ import {
   type FetchMeReportDecisionNotificationsParams,
   type ReportDecisionNotification,
   type ReportDecisionNotificationPage,
-} from "../infrastructure/reportDecisionNotificationApi";
+} from "../../infrastructure/reportDecisionNotificationApi";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;

@@ -257,6 +257,22 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/announcements/news/:newsId",
+    element: (
+      <ProtectedRoute>
+        <AnnouncementDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/announcements/report-decisions/:notificationId",
+    element: (
+      <ProtectedRoute>
+        <AnnouncementDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: "/announcements/:announcementId",
     element: (
       <ProtectedRoute>

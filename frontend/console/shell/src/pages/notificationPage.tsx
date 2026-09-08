@@ -119,9 +119,7 @@ export default function NotificationPage() {
     event: KeyboardEvent<HTMLTableRowElement>,
     feedItem: NotificationFeedItem,
   ) => {
-    const isRead = feedItem.item.isRead;
-
-    if (isRead) {
+    if (feedItem.item.isRead) {
       return;
     }
 
@@ -199,9 +197,7 @@ export default function NotificationPage() {
             .filter(Boolean)
             .join(" ");
 
-          const title = isNews
-            ? feedItem.item.title
-            : feedItem.item.title;
+          const title = feedItem.item.title;
 
           return (
             <tr
@@ -239,6 +235,20 @@ export default function NotificationPage() {
                       <span className="notification-page__category">
                         システム通知
                       </span>
+
+                      {feedItem.item.image ? (
+                        <div className="notification-page__news-image-wrap">
+                          <img
+                            className="notification-page__news-image"
+                            src={feedItem.item.image.fileUrl}
+                            alt={
+                              feedItem.item.image.alt ||
+                              feedItem.item.title
+                            }
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : null}
 
                       <strong className="notification-page__title">
                         {feedItem.item.title}

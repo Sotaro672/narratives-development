@@ -127,7 +127,6 @@ export function useNews() {
 
         if (hasImage) {
           setUploadProgress(100);
-          setUploadingImage(false);
         }
 
         if (page === DEFAULT_PAGE) {
@@ -158,7 +157,9 @@ export function useNews() {
       return;
     }
 
-    setPageState(Math.max(1, Math.trunc(value)));
+    setPageState(
+      Math.max(1, Math.trunc(value)),
+    );
   }, []);
 
   const setPerPage = useCallback((value: number) => {

@@ -7,11 +7,8 @@ import Layout from "../components/layout/Layout";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
-import {
-  useMarkNewsReadMutation,
-  useNewsQuery,
-} from "../features/news/hooks/useNewsQuery";
-import { useReportDecisionNotificationsQuery } from "../features/notification/hooks/useReportDecisionNotificationsQuery";
+import { useNewsQuery } from "../features/news/hooks/useNewsQuery";
+import { useReportDecisionNotificationsQuery } from "../features/notification/presentation/hooks/useReportDecisionNotificationsQuery";
 import type { ReportDecisionNotification } from "../features/notification/infrastructure/reportDecisionNotificationApi";
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 import type { News } from "../features/shared/types/news";
@@ -55,9 +52,7 @@ function toTimestamp(value: string | null | undefined): number {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function getReportTargetLabel(
-  targetType: ReportTargetType,
-): string {
+function getReportTargetLabel(targetType: ReportTargetType): string {
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "商品レビュー";
@@ -116,13 +111,6 @@ export default function AnnouncementPage() {
     perPage: 100,
   });
 
-  const {
-    mutate: markNewsRead,
-    isPending: isMarkingNewsRead,
-    variables: markingNewsId,
-    error: markNewsReadError,
-  } = useMarkNewsReadMutation();
-
   const announcements = useMemo(
     () => announcementsQuery.data?.items ?? [],
     [announcementsQuery.data?.items],
@@ -179,11 +167,7 @@ export default function AnnouncementPage() {
         toTimestamp(right.occurredAt) -
         toTimestamp(left.occurredAt),
     );
-  }, [
-    announcements,
-    decisionNotifications,
-    news,
-  ]);
+  }, [announcements, decisionNotifications, news]);
 
   const loading =
     announcementsQuery.isPending ||
@@ -211,18 +195,10 @@ export default function AnnouncementPage() {
         ? "システム通知の取得に失敗しました"
         : "";
 
-  const newsReadError =
-    markNewsReadError instanceof Error
-      ? markNewsReadError.message
-      : markNewsReadError
-        ? "システム通知を既読にできませんでした"
-        : "";
-
   const error =
     announcementQueryError ||
     decisionQueryError ||
-    newsQueryError ||
-    newsReadError;
+    newsQueryError;
 
   const handleOpenAnnouncement = useCallback(
     (item: AnnouncementListItem) => {
@@ -262,24 +238,22 @@ export default function AnnouncementPage() {
     [navigate],
   );
 
-  const handleMarkNewsRead = useCallback(
+  const handleOpenNews = useCallback(
     (newsItem: News) => {
-      const newsId = newsItem.id?.trim();
-
-      if (
-        !newsId ||
-        newsItem.isRead ||
-        isMarkingNewsRead
-      ) {
+      if (!newsItem.id) {
         return;
       }
 
-      markNewsRead(newsId);
+      navigate(
+        `/announcements/news/${encodeURIComponent(newsItem.id)}`,
+        {
+          state: {
+            news: newsItem,
+          },
+        },
+      );
     },
-    [
-      isMarkingNewsRead,
-      markNewsRead,
-    ],
+    [navigate],
   );
 
   return (
@@ -338,9 +312,7 @@ export default function AnnouncementPage() {
                     tabIndex={0}
                     aria-label={`${announcement.title} の詳細を開く`}
                     onClick={() =>
-                      handleOpenAnnouncement(
-                        announcement,
-                      )
+                      handleOpenAnnouncement(announcement)
                     }
                     onKeyDown={(event) => {
                       if (
@@ -348,9 +320,7 @@ export default function AnnouncementPage() {
                         event.key === " "
                       ) {
                         event.preventDefault();
-                        handleOpenAnnouncement(
-                          announcement,
-                        );
+                        handleOpenAnnouncement(announcement);
                       }
                     }}
                   >
@@ -389,27 +359,19 @@ export default function AnnouncementPage() {
                     {Array.isArray(
                       announcement.attachmentFiles,
                     ) &&
-                    announcement.attachmentFiles.length >
-                      0 ? (
+                    announcement.attachmentFiles.length > 0 ? (
                       <div className="announcement-page__attachments">
                         添付{" "}
-                        {
-                          announcement
-                            .attachmentFiles.length
-                        }{" "}
+                        {announcement.attachmentFiles.length}{" "}
                         件
                       </div>
                     ) : Array.isArray(
                         announcement.attachments,
                       ) &&
-                      announcement.attachments.length >
-                        0 ? (
+                      announcement.attachments.length > 0 ? (
                       <div className="announcement-page__attachments">
                         添付{" "}
-                        {
-                          announcement.attachments
-                            .length
-                        }{" "}
+                        {announcement.attachments.length}{" "}
                         件
                       </div>
                     ) : null}
@@ -421,53 +383,31 @@ export default function AnnouncementPage() {
                 const newsItem = item.news;
                 const isUnread =
                   newsItem.isRead === false;
-                const isBusy =
-                  isMarkingNewsRead &&
-                  markingNewsId?.trim() ===
-                    newsItem.id;
                 const occurredAtLabel =
                   formatDateTime(item.occurredAt);
 
                 return (
                   <article
                     key={item.key}
-                    className={[
-                      "announcement-page__card",
+                    className={
                       isUnread
-                        ? "announcement-page__card--unread"
-                        : "",
-                      isBusy
-                        ? "announcement-page__card--busy"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    role={isUnread ? "button" : undefined}
-                    tabIndex={isUnread ? 0 : undefined}
-                    aria-label={
-                      isUnread
-                        ? `${newsItem.title} を既読にする`
-                        : undefined
+                        ? "announcement-page__card announcement-page__card--unread"
+                        : "announcement-page__card"
                     }
-                    aria-busy={
-                      isBusy ? true : undefined
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`${newsItem.title} の詳細を開く`}
+                    onClick={() =>
+                      handleOpenNews(newsItem)
                     }
-                    onClick={() => {
-                      if (isUnread) {
-                        handleMarkNewsRead(newsItem);
-                      }
-                    }}
                     onKeyDown={(event) => {
                       if (
-                        !isUnread ||
-                        (event.key !== "Enter" &&
-                          event.key !== " ")
+                        event.key === "Enter" ||
+                        event.key === " "
                       ) {
-                        return;
+                        event.preventDefault();
+                        handleOpenNews(newsItem);
                       }
-
-                      event.preventDefault();
-                      handleMarkNewsRead(newsItem);
                     }}
                   >
                     <div className="announcement-page__card-head">
@@ -487,11 +427,7 @@ export default function AnnouncementPage() {
                         </time>
                       </div>
 
-                      {isBusy ? (
-                        <span className="announcement-page__unread-badge">
-                          既読処理中
-                        </span>
-                      ) : isUnread ? (
+                      {isUnread ? (
                         <span className="announcement-page__unread-badge">
                           未読
                         </span>
@@ -505,10 +441,6 @@ export default function AnnouncementPage() {
                     <h2 className="announcement-page__card-title">
                       {newsItem.title}
                     </h2>
-
-                    <div className="announcement-page__news-body">
-                      {newsItem.body}
-                    </div>
                   </article>
                 );
               }
