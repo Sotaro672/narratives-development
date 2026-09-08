@@ -13,6 +13,7 @@ import (
 	listdom "narratives/internal/domain/list"
 	pbr "narratives/internal/domain/productBlueprintReview"
 	reportdom "narratives/internal/domain/report"
+	resaledom "narratives/internal/domain/resale"
 	tokenblueprint "narratives/internal/domain/tokenBlueprint"
 	tokenreview "narratives/internal/domain/tokenBlueprint_review"
 )
@@ -96,6 +97,22 @@ type SuspendAvatarResaleByAdminInput struct {
 	AdminID  string
 }
 
+// ReportResaleModerator owns Admin moderation of individual resale listings.
+// RESALE + REMOVE in Report means suspending only the target resale listing.
+// It must not physically delete the Resale document or its images.
+type ReportResaleModerator interface {
+	SuspendResaleByAdmin(
+		ctx context.Context,
+		input SuspendResaleByAdminInput,
+	) error
+}
+
+type SuspendResaleByAdminInput struct {
+	ResaleID string
+	Reason   string
+	AdminID  string
+}
+
 // ============================================================
 // Usecase
 // ============================================================
@@ -122,6 +139,9 @@ type ReportUsecase struct {
 	avatarRepo            avatar.Repository
 	avatarResaleModerator ReportAvatarResaleModerator
 
+	resaleRepo      resaledom.Repository
+	resaleModerator ReportResaleModerator
+
 	now func() time.Time
 }
 
@@ -146,6 +166,9 @@ type ReportUsecaseDeps struct {
 
 	AvatarRepo            avatar.Repository
 	AvatarResaleModerator ReportAvatarResaleModerator
+
+	ResaleRepo      resaledom.Repository
+	ResaleModerator ReportResaleModerator
 
 	Now func() time.Time
 }
@@ -173,6 +196,8 @@ func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 		tokenCommentModerator:    deps.TokenCommentModerator,
 		avatarRepo:               deps.AvatarRepo,
 		avatarResaleModerator:    deps.AvatarResaleModerator,
+		resaleRepo:               deps.ResaleRepo,
+		resaleModerator:          deps.ResaleModerator,
 		now:                      now,
 	}
 }
@@ -512,6 +537,125 @@ func (u *ReportUsecase) resolveListTargetContext(
 		BrandID:   productBlueprint.BrandID,
 		CompanyID: productBlueprint.CompanyID,
 	}, nil
+}
+
+// ============================================================
+// Resale report
+// ============================================================
+
+type ReportResaleByAvatarInput struct {
+	ResaleID string
+	AvatarID string
+	Reason   reportdom.ReportReason
+	Detail   string
+}
+
+func (u *ReportUsecase) ReportResaleByAvatar(
+	ctx context.Context,
+	input ReportResaleByAvatarInput,
+) (reportdom.AddReportResult, error) {
+	if err := u.ensureReportRepository(); err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	if u.resaleRepo == nil || u.productBlueprintRepo == nil {
+		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
+	}
+
+	if input.ResaleID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
+	}
+
+	if input.AvatarID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidReporterID
+	}
+
+	target, err := u.resaleRepo.GetByID(ctx, input.ResaleID)
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	if target.ID != input.ResaleID {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetID
+	}
+
+	if target.Status != resaledom.StatusListing {
+		return reportdom.AddReportResult{}, reportdom.ErrCannotReportRemovedTarget
+	}
+
+	if target.AvatarID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetAuthorID
+	}
+
+	if target.AvatarID == input.AvatarID {
+		return reportdom.AddReportResult{}, ErrReportSelfReport
+	}
+
+	if target.ProductBlueprintID == "" {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetParentID
+	}
+
+	productBlueprint, err := u.productBlueprintRepo.GetByID(
+		ctx,
+		target.ProductBlueprintID,
+	)
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	if productBlueprint.ID != target.ProductBlueprintID {
+		return reportdom.AddReportResult{}, reportdom.ErrInvalidTargetParentID
+	}
+
+	return u.addResaleReport(
+		ctx,
+		target,
+		productBlueprint.ProductName,
+		input.AvatarID,
+		input.Reason,
+		input.Detail,
+	)
+}
+
+func (u *ReportUsecase) addResaleReport(
+	ctx context.Context,
+	target resaledom.Resale,
+	productName string,
+	reporterAvatarID string,
+	reason reportdom.ReportReason,
+	detail string,
+) (reportdom.AddReportResult, error) {
+	now := u.now().UTC()
+
+	reportCase, err := reportdom.NewReportCase(reportdom.NewReportCaseParams{
+		TargetType:       reportdom.TargetTypeResale,
+		TargetID:         target.ID,
+		TargetParentID:   target.ProductBlueprintID,
+		TargetAuthorID:   target.AvatarID,
+		TargetAuthorType: reportdom.ActorTypeAvatar,
+		SnapshotTitle:    productName,
+		SnapshotBody:     target.Description,
+		SnapshotRating:   nil,
+		CreatedAt:        now,
+	})
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	report, err := reportdom.NewReport(reportdom.NewReportParams{
+		CaseID:       reportCase.ID,
+		ReporterType: reportdom.ActorTypeAvatar,
+		ReporterID:   reporterAvatarID,
+		CompanyID:    "",
+		Reason:       reason,
+		Detail:       detail,
+		CreatedAt:    now,
+	})
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	return u.reportRepo.AddReport(ctx, reportCase, report)
 }
 
 // ============================================================
@@ -1167,8 +1311,8 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
-	// REMOVED 済みの LIST / TOKEN_BLUEPRINT / AVATAR 裁定は、対象側の措置だけを
-	// 再実行できるようにする。各 moderator は冪等に実装する。
+	// REMOVED 済みの LIST / TOKEN_BLUEPRINT / AVATAR / RESALE 裁定は、
+	// 対象側の措置だけを再実行できるようにする。各 moderator は冪等に実装する。
 	if reportCase.IsRemoved() {
 		switch reportCase.TargetType {
 		case reportdom.TargetTypeList:
@@ -1200,13 +1344,23 @@ func (u *ReportUsecase) removeReportCase(
 			); err != nil {
 				return reportdom.ReportCase{}, err
 			}
+
+		case reportdom.TargetTypeResale:
+			if err := u.suspendResaleTarget(
+				ctx,
+				reportCase,
+				input.Reason,
+				input.DecidedBy,
+			); err != nil {
+				return reportdom.ReportCase{}, err
+			}
 		}
 		return reportCase, nil
 	}
 
 	// IMPORTANT:
 	// REMOVE の対象側処理を先に完了する。
-	// 商品レビュー/コメントは削除、LIST は Mall 上で出品停止、
+	// 商品レビュー/コメントは削除、LIST / RESALE は Mall 上で出品停止、
 	// TOKEN_BLUEPRINT は AMOL UI 上で非表示、AVATAR は再販サービスのみ利用停止とする。
 	// 対象側処理に失敗した場合、ReportCase を REMOVED にしてはいけない。
 	switch reportCase.TargetType {
@@ -1258,6 +1412,16 @@ func (u *ReportUsecase) removeReportCase(
 			return reportdom.ReportCase{}, err
 		}
 
+	case reportdom.TargetTypeResale:
+		if err := u.suspendResaleTarget(
+			ctx,
+			reportCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
 	default:
 		return reportdom.ReportCase{}, reportdom.ErrInvalidTargetType
 	}
@@ -1279,7 +1443,7 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
-	// LIST / AVATAR は REMOVED を永続化した後でもう一度対象側の措置を実行する。
+	// LIST / AVATAR / RESALE は REMOVED を永続化した後でもう一度対象側の措置を実行する。
 	// 1 回目の措置と REMOVED 永続化の間に対象が再公開される競合を閉じるための後処理。
 	// 失敗した場合は次回の同じ REMOVE 裁定で REMOVED 済み分岐から再試行できる。
 	switch updatedCase.TargetType {
@@ -1295,6 +1459,16 @@ func (u *ReportUsecase) removeReportCase(
 
 	case reportdom.TargetTypeAvatar:
 		if err := u.suspendAvatarResaleTarget(
+			ctx,
+			updatedCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
+	case reportdom.TargetTypeResale:
+		if err := u.suspendResaleTarget(
 			ctx,
 			updatedCase,
 			input.Reason,
@@ -1393,11 +1567,12 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 	notificationCase := reportCase
 
 	// PRODUCT_BLUEPRINT_REVIEW はレビュー投稿Avatar、AVATAR は対象Avatar自身、
-	// LIST は出品元Brand、TOKEN_BLUEPRINT はそのTokenBlueprintを所有するBrandへ
-	// 措置通知を送る。TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
+	// RESALE は出品Avatar、LIST は出品元Brand、TOKEN_BLUEPRINT はそのTokenBlueprintを
+	// 所有するBrandへ措置通知を送る。TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview,
-		reportdom.TargetTypeAvatar:
+		reportdom.TargetTypeAvatar,
+		reportdom.TargetTypeResale:
 
 	case reportdom.TargetTypeList:
 		targetContext, err := u.resolveListTargetContext(ctx, reportCase.TargetID)
@@ -1547,6 +1722,26 @@ func (u *ReportUsecase) suspendAvatarResaleTarget(
 		ctx,
 		SuspendAvatarResaleByAdminInput{
 			AvatarID: reportCase.TargetID,
+			Reason:   reason,
+			AdminID:  adminID,
+		},
+	)
+}
+
+func (u *ReportUsecase) suspendResaleTarget(
+	ctx context.Context,
+	reportCase reportdom.ReportCase,
+	reason string,
+	adminID string,
+) error {
+	if u.resaleModerator == nil {
+		return ErrReportUsecaseNotConfigured
+	}
+
+	return u.resaleModerator.SuspendResaleByAdmin(
+		ctx,
+		SuspendResaleByAdminInput{
+			ResaleID: reportCase.TargetID,
 			Reason:   reason,
 			AdminID:  adminID,
 		},

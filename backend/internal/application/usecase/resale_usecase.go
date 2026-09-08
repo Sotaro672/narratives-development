@@ -263,6 +263,72 @@ func (uc *ResaleUsecase) SuspendAvatarResaleByAdmin(
 	return nil
 }
 
+// SuspendResaleByAdmin suspends one resale listing by Admin moderation.
+//
+// Policy:
+// - Resale document and images are not physically deleted.
+// - Listing resales are changed to suspended.
+// - Already suspended resales remain suspended.
+// - Sold resales remain sold and are not modified.
+// - Suspended resale items are removed from carts.
+// - The operation is idempotent; cleanup is retried even when already suspended.
+func (uc *ResaleUsecase) SuspendResaleByAdmin(
+	ctx context.Context,
+	input SuspendResaleByAdminInput,
+) error {
+	if uc == nil || uc.resaleRepo == nil {
+		return ErrNotSupported("Resale.SuspendResaleByAdmin")
+	}
+
+	resaleID := strings.TrimSpace(input.ResaleID)
+	if resaleID == "" {
+		return resaledom.ErrInvalidID
+	}
+
+	adminID := strings.TrimSpace(input.AdminID)
+	if adminID == "" {
+		return ErrInvalidArgument("adminId is required")
+	}
+
+	reason := strings.TrimSpace(input.Reason)
+	if reason == "" {
+		return ErrInvalidArgument("reason is required")
+	}
+
+	if uc.cartItemCleanup == nil {
+		return ErrNotSupported("Resale.SuspendResaleByAdmin.CartItemCleanup")
+	}
+
+	item, err := uc.resaleRepo.GetByID(ctx, resaleID)
+	if err != nil {
+		return err
+	}
+
+	if item.ID != resaleID {
+		return resaledom.ErrInvalidID
+	}
+
+	if item.Status == resaledom.StatusSold {
+		return nil
+	}
+
+	if item.Status != resaledom.StatusSuspended {
+		now := time.Now().UTC()
+
+		if err := item.Suspend(now); err != nil {
+			return err
+		}
+
+		item.UpdatedBy = &adminID
+
+		if _, err := uc.resaleRepo.Update(ctx, resaleID, item); err != nil {
+			return err
+		}
+	}
+
+	return uc.cartItemCleanup.RemoveItemsByResaleID(ctx, resaleID)
+}
+
 func (uc *ResaleUsecase) Delete(
 	ctx context.Context,
 	id string,

@@ -13,6 +13,8 @@ import (
 	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
+	productblueprintdom "narratives/internal/domain/productBlueprint"
+	reportdom "narratives/internal/domain/report"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -20,7 +22,7 @@ import (
 // mall.ResaleQuery satisfies this interface.
 //
 // NOTE:
-// /mall/me/resales は「自分の出品管理」専用。
+// /mall/me/resales は「自分の出品管理」を基本とし、/{resaleId}/reports は他者出品の通報にも利用する。
 // /mall/resales/avatar/{avatarId} は公開アバターの出品一覧表示専用。
 // 公開マーケット一覧の List / ListByCursor は market_handler.go に移譲する。
 type ResaleQuery interface {
@@ -54,12 +56,14 @@ type ResaleHandler struct {
 	uc             *usecase.ResaleUsecase
 	query          ResaleQuery
 	resaleReviewUC *usecase.ResaleReviewUsecase
+	reportUC       *usecase.ReportUsecase
 }
 
 type NewResaleHandlerParams struct {
 	UC             *usecase.ResaleUsecase
 	Query          ResaleQuery
 	ResaleReviewUC *usecase.ResaleReviewUsecase
+	ReportUC       *usecase.ReportUsecase
 }
 
 func NewResaleHandler(p NewResaleHandlerParams) http.Handler {
@@ -67,6 +71,7 @@ func NewResaleHandler(p NewResaleHandlerParams) http.Handler {
 		uc:             p.UC,
 		query:          p.Query,
 		resaleReviewUC: p.ResaleReviewUC,
+		reportUC:       p.ReportUC,
 	}
 }
 
@@ -152,6 +157,23 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) > 1 {
 		switch parts[1] {
+		case "reports":
+			if len(parts) != 2 {
+				w.WriteHeader(http.StatusNotFound)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"error": "not_found",
+				})
+				return
+			}
+
+			if r.Method != http.MethodPost {
+				methodNotAllowed(w)
+				return
+			}
+
+			h.reportResale(w, r, resaleID)
+			return
+
 		case "images", "condition-images":
 			imageID := ""
 
@@ -1032,6 +1054,121 @@ func (h *ResaleHandler) setPrimaryImage(
 	})
 }
 
+type resaleReportRequest struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
+}
+
+type resaleReportResponse struct {
+	CaseID        string               `json:"caseId"`
+	ReportID      string               `json:"reportId"`
+	ReportCount   int                  `json:"reportCount"`
+	Status        reportdom.CaseStatus `json:"status"`
+	CaseCreated   bool                 `json:"caseCreated"`
+	ReportCreated bool                 `json:"reportCreated"`
+}
+
+func (h *ResaleHandler) reportResale(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
+	if h == nil || h.reportUC == nil {
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"report service not configured",
+		)
+		return
+	}
+
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	resaleID = strings.TrimSpace(resaleID)
+	if resaleID == "" {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"resaleId is required",
+		)
+		return
+	}
+
+	var request resaleReportRequest
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&request); err != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid json body",
+		)
+		return
+	}
+
+	reason := reportdom.ReportReason(
+		strings.ToUpper(
+			strings.TrimSpace(request.Reason),
+		),
+	)
+	if err := reason.Validate(); err != nil {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"invalid report reason",
+		)
+		return
+	}
+
+	request.Detail = strings.TrimSpace(request.Detail)
+	if reason == reportdom.ReportReasonOther &&
+		request.Detail == "" {
+		writeJSONError(
+			w,
+			http.StatusBadRequest,
+			"report detail required",
+		)
+		return
+	}
+
+	result, err := h.reportUC.ReportResaleByAvatar(
+		r.Context(),
+		usecase.ReportResaleByAvatarInput{
+			ResaleID: resaleID,
+			AvatarID: avatarID,
+			Reason:   reason,
+			Detail:   request.Detail,
+		},
+	)
+	if err != nil {
+		writeResaleReportError(w, err)
+		return
+	}
+
+	statusCode := http.StatusCreated
+	if !result.ReportCreated {
+		statusCode = http.StatusOK
+	}
+
+	writeJSON(
+		w,
+		statusCode,
+		resaleReportResponse{
+			CaseID:        string(result.Case.ID),
+			ReportID:      string(result.Report.ID),
+			ReportCount:   result.Case.ReportCount,
+			Status:        result.Case.Status,
+			CaseCreated:   result.CaseCreated,
+			ReportCreated: result.ReportCreated,
+		},
+	)
+}
+
 type resaleCommentRequest struct {
 	Body string `json:"body"`
 }
@@ -1331,6 +1468,39 @@ func buildResaleReviewPageFromQuery(r *http.Request) common.Page {
 	return common.Page{
 		Number:  pageNum,
 		PerPage: perPage,
+	}
+}
+
+func writeResaleReportError(
+	w http.ResponseWriter,
+	err error,
+) {
+	if err == nil {
+		writeJSONError(
+			w,
+			http.StatusInternalServerError,
+			"unknown error",
+		)
+		return
+	}
+
+	switch {
+	case errors.Is(err, resaledom.ErrNotFound):
+		writeJSONError(
+			w,
+			http.StatusNotFound,
+			"resale not found",
+		)
+
+	case productblueprintdom.IsNotFound(err):
+		writeJSONError(
+			w,
+			http.StatusNotFound,
+			"product blueprint not found",
+		)
+
+	default:
+		writeReportError(w, err)
 	}
 }
 
