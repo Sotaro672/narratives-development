@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useNews } from "../features/news/hooks/useNews";
+import { useNews } from "../features/news/presentation/hooks/useNews";
 import type { News } from "../shared/type/news";
 import Button from "../shared/ui/Button/Button";
 import Page, { PageHeader } from "../shared/ui/Page/Page";

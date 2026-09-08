@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	firebaseadp "narratives/internal/adapters/out/firebase"
 	fsrepo "narratives/internal/adapters/out/firestore"
 	adminquery "narratives/internal/application/query/admin"
 	usecase "narratives/internal/application/usecase"
@@ -92,8 +93,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.admin: news read repository is nil")
 	}
 
-	newsUsecase := usecase.NewNewsUsecase(newsRepo, newsReadRepo)
+	newsImageStorage, err := firebaseadp.NewNewsImageStorageFromEnv(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if newsImageStorage == nil {
+		return nil, errors.New("di.admin: news image storage is nil")
+	}
+
+	newsUsecase := usecase.NewNewsUsecase(
+		newsRepo,
+		newsReadRepo,
+	).WithImageStorage(newsImageStorage)
 	if newsUsecase == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: news usecase is nil")
 	}
 
@@ -109,16 +122,19 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
 	if reportRepo == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: report repository is nil")
 	}
 
 	reportDecisionNotificationRepo := fsrepo.NewReportDecisionNotificationRepositoryFS(infra.Firestore)
 	if reportDecisionNotificationRepo == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: report decision notification repository is nil")
 	}
 
 	productBlueprintReviewRepo := fsrepo.NewProductBlueprintReviewRepositoryFS(infra.Firestore)
 	if productBlueprintReviewRepo == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: product blueprint review repository is nil")
 	}
 
@@ -132,11 +148,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		nil,
 	)
 	if productBlueprintReviewUsecase == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: product blueprint review usecase is nil")
 	}
 
 	tokenBlueprintReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(infra.Firestore)
 	if tokenBlueprintReviewRepo == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: token blueprint review repository is nil")
 	}
 
@@ -147,6 +165,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		nil,
 	)
 	if tokenBlueprintReviewUsecase == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: token blueprint review usecase is nil")
 	}
 
@@ -160,16 +179,19 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		nil,
 	)
 	if tokenBlueprintUsecase == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: token blueprint usecase is nil")
 	}
 
 	resaleRepo := fsrepo.NewResaleRepositoryFS(infra.Firestore)
 	if resaleRepo == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: resale repository is nil")
 	}
 
 	cartRepo := fsrepo.NewCartRepositoryFS(infra.Firestore)
 	if cartRepo == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: cart repository is nil")
 	}
 
@@ -180,10 +202,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		listRepo,
 		nil,
 		nil,
-	).WithCartItemCleanup(
-		cartRepo,
-	)
+	).WithCartItemCleanup(cartRepo)
 	if listUsecase == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: list usecase is nil")
 	}
 
@@ -196,10 +217,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		nil,
 		nil,
 		time.Now,
-	).WithCartItemCleanup(
-		cartRepo,
-	)
+	).WithCartItemCleanup(cartRepo)
 	if resaleUsecase == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: resale usecase is nil")
 	}
 
@@ -222,11 +242,13 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		},
 	)
 	if reportUsecase == nil {
+		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: report usecase is nil")
 	}
 
 	solanaClient, err := solanainfra.NewMintClient(ctx)
 	if err != nil {
+		_ = newsImageStorage.Close()
 		return nil, err
 	}
 

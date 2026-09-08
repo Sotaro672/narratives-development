@@ -23,12 +23,8 @@ type NewsHandler struct {
 	NewsUC *uc.NewsUsecase
 }
 
-func NewNewsHandler(
-	newsUC *uc.NewsUsecase,
-) *NewsHandler {
-	return &NewsHandler{
-		NewsUC: newsUC,
-	}
+func NewNewsHandler(newsUC *uc.NewsUsecase) *NewsHandler {
+	return &NewsHandler{NewsUC: newsUC}
 }
 
 // Supported:
@@ -41,16 +37,9 @@ func NewNewsHandler(
 // News read state is scoped to the authenticated Console member.
 // memberId is always resolved from request context and is never accepted from
 // query parameters or request body.
-func (h *NewsHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *NewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.NewsUC == nil {
-		writeError(
-			w,
-			http.StatusServiceUnavailable,
-			"NewsHandlerNotInitialized",
-		)
+		writeError(w, http.StatusServiceUnavailable, "NewsHandlerNotInitialized")
 		return
 	}
 
@@ -94,14 +83,24 @@ func (h *NewsHandler) ServeHTTP(
 // DTO
 // ============================================================
 
+type newsImageResponse struct {
+	FileURL    string `json:"fileUrl"`
+	ObjectPath string `json:"objectPath"`
+	FileName   string `json:"fileName"`
+	MimeType   string `json:"mimeType"`
+	FileSize   int64  `json:"fileSize"`
+	Alt        string `json:"alt,omitempty"`
+}
+
 type newsResponse struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Body        string     `json:"body"`
-	PublishedAt time.Time  `json:"publishedAt"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	IsRead      bool       `json:"isRead"`
-	ReadAt      *time.Time `json:"readAt"`
+	ID          string             `json:"id"`
+	Title       string             `json:"title"`
+	Body        string             `json:"body"`
+	Image       *newsImageResponse `json:"image,omitempty"`
+	PublishedAt time.Time          `json:"publishedAt"`
+	CreatedAt   time.Time          `json:"createdAt"`
+	IsRead      bool               `json:"isRead"`
+	ReadAt      *time.Time         `json:"readAt"`
 }
 
 type newsUnreadCountResponse struct {
@@ -112,53 +111,28 @@ type newsUnreadCountResponse struct {
 // List
 // ============================================================
 
-func (h *NewsHandler) list(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	memberID := strings.TrimSpace(
-		uc.MemberIDFromContext(r.Context()),
-	)
+func (h *NewsHandler) list(w http.ResponseWriter, r *http.Request) {
+	memberID := uc.MemberIDFromContext(r.Context())
 	if memberID == "" {
-		writeError(
-			w,
-			http.StatusForbidden,
-			"MemberIDNotResolved",
-		)
+		writeError(w, http.StatusForbidden, "MemberIDNotResolved")
 		return
 	}
 
 	page, err := parseNewsPage(r)
 	if err != nil {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"InvalidPagination",
-		)
+		writeError(w, http.StatusBadRequest, "InvalidPagination")
 		return
 	}
 
-	result, err := h.NewsUC.ListNewsForMember(
-		r.Context(),
-		memberID,
-		page,
-	)
+	result, err := h.NewsUC.ListNewsForMember(r.Context(), memberID, page)
 	if err != nil {
 		writeNewsError(w, err)
 		return
 	}
 
-	items := make(
-		[]newsResponse,
-		0,
-		len(result.Items),
-	)
-
+	items := make([]newsResponse, 0, len(result.Items))
 	for _, item := range result.Items {
-		items = append(
-			items,
-			toNewsResponse(item),
-		)
+		items = append(items, toNewsResponse(item))
 	}
 
 	writeJSON(
@@ -178,26 +152,14 @@ func (h *NewsHandler) list(
 // Unread count
 // ============================================================
 
-func (h *NewsHandler) unreadCount(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
-	memberID := strings.TrimSpace(
-		uc.MemberIDFromContext(r.Context()),
-	)
+func (h *NewsHandler) unreadCount(w http.ResponseWriter, r *http.Request) {
+	memberID := uc.MemberIDFromContext(r.Context())
 	if memberID == "" {
-		writeError(
-			w,
-			http.StatusForbidden,
-			"MemberIDNotResolved",
-		)
+		writeError(w, http.StatusForbidden, "MemberIDNotResolved")
 		return
 	}
 
-	count, err := h.NewsUC.CountUnreadNewsForMember(
-		r.Context(),
-		memberID,
-	)
+	count, err := h.NewsUC.CountUnreadNewsForMember(r.Context(), memberID)
 	if err != nil {
 		writeNewsError(w, err)
 		return
@@ -206,9 +168,7 @@ func (h *NewsHandler) unreadCount(
 	writeJSON(
 		w,
 		http.StatusOK,
-		newsUnreadCountResponse{
-			UnreadCount: count,
-		},
+		newsUnreadCountResponse{UnreadCount: count},
 	)
 }
 
@@ -216,30 +176,15 @@ func (h *NewsHandler) unreadCount(
 // Mark read
 // ============================================================
 
-func (h *NewsHandler) markRead(
-	w http.ResponseWriter,
-	r *http.Request,
-	newsID string,
-) {
-	newsID = strings.TrimSpace(newsID)
+func (h *NewsHandler) markRead(w http.ResponseWriter, r *http.Request, newsID string) {
 	if newsID == "" {
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"NewsIDRequired",
-		)
+		writeError(w, http.StatusBadRequest, "NewsIDRequired")
 		return
 	}
 
-	memberID := strings.TrimSpace(
-		uc.MemberIDFromContext(r.Context()),
-	)
+	memberID := uc.MemberIDFromContext(r.Context())
 	if memberID == "" {
-		writeError(
-			w,
-			http.StatusForbidden,
-			"MemberIDNotResolved",
-		)
+		writeError(w, http.StatusForbidden, "MemberIDNotResolved")
 		return
 	}
 
@@ -282,13 +227,7 @@ const (
 	newsRouteRead
 )
 
-func parseNewsPath(
-	path string,
-) (
-	newsID string,
-	route newsRouteKind,
-	matched bool,
-) {
+func parseNewsPath(path string) (newsID string, route newsRouteKind, matched bool) {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
 		return "", newsRouteList, false
@@ -296,22 +235,16 @@ func parseNewsPath(
 
 	parts := strings.Split(trimmed, "/")
 
-	if len(parts) == 1 &&
-		parts[0] == "news" {
+	if len(parts) == 1 && parts[0] == "news" {
 		return "", newsRouteList, true
 	}
 
-	if len(parts) == 2 &&
-		parts[0] == "news" &&
-		parts[1] == "unread-count" {
+	if len(parts) == 2 && parts[0] == "news" && parts[1] == "unread-count" {
 		return "", newsRouteUnreadCount, true
 	}
 
-	if len(parts) == 3 &&
-		parts[0] == "news" &&
-		strings.TrimSpace(parts[1]) != "" &&
-		parts[2] == "read" {
-		return strings.TrimSpace(parts[1]), newsRouteRead, true
+	if len(parts) == 3 && parts[0] == "news" && parts[1] != "" && parts[2] == "read" {
+		return parts[1], newsRouteRead, true
 	}
 
 	return "", newsRouteList, false
@@ -321,34 +254,24 @@ func parseNewsPath(
 // Pagination
 // ============================================================
 
-func parseNewsPage(
-	r *http.Request,
-) (domcommon.Page, error) {
+func parseNewsPage(r *http.Request) (domcommon.Page, error) {
 	pageNumber := defaultNewsPage
 	perPage := defaultNewsPerPage
 
-	rawPage := strings.TrimSpace(
-		r.URL.Query().Get("page"),
-	)
+	rawPage := r.URL.Query().Get("page")
 	if rawPage != "" {
 		parsed, err := strconv.Atoi(rawPage)
 		if err != nil || parsed <= 0 {
-			return domcommon.Page{},
-				errors.New("invalid page")
+			return domcommon.Page{}, errors.New("invalid page")
 		}
 		pageNumber = parsed
 	}
 
-	rawPerPage := strings.TrimSpace(
-		r.URL.Query().Get("perPage"),
-	)
+	rawPerPage := r.URL.Query().Get("perPage")
 	if rawPerPage != "" {
 		parsed, err := strconv.Atoi(rawPerPage)
-		if err != nil ||
-			parsed <= 0 ||
-			parsed > maxNewsPerPage {
-			return domcommon.Page{},
-				errors.New("invalid perPage")
+		if err != nil || parsed <= 0 || parsed > maxNewsPerPage {
+			return domcommon.Page{}, errors.New("invalid perPage")
 		}
 		perPage = parsed
 	}
@@ -363,10 +286,8 @@ func parseNewsPage(
 // Mapping
 // ============================================================
 
-func toNewsResponse(
-	item uc.NewsRecipientItem,
-) newsResponse {
-	return newsResponse{
+func toNewsResponse(item uc.NewsRecipientItem) newsResponse {
+	response := newsResponse{
 		ID:          string(item.News.ID),
 		Title:       item.News.Title,
 		Body:        item.News.Body,
@@ -375,114 +296,59 @@ func toNewsResponse(
 		IsRead:      item.IsRead,
 		ReadAt:      item.ReadAt,
 	}
+
+	if item.News.Image != nil {
+		response.Image = &newsImageResponse{
+			FileURL:    item.News.Image.FileURL,
+			ObjectPath: item.News.Image.ObjectPath,
+			FileName:   item.News.Image.FileName,
+			MimeType:   item.News.Image.MimeType,
+			FileSize:   item.News.Image.FileSize,
+			Alt:        item.News.Image.Alt,
+		}
+	}
+
+	return response
 }
 
 // ============================================================
 // Error mapping
 // ============================================================
 
-func writeNewsError(
-	w http.ResponseWriter,
-	err error,
-) {
+func writeNewsError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(
-		err,
-		uc.ErrNewsRepositoryNotConfigured,
-	),
-		errors.Is(
-			err,
-			uc.ErrNewsReadRepositoryNotConfigured,
-		):
-		writeError(
-			w,
-			http.StatusServiceUnavailable,
-			"NewsServiceUnavailable",
-		)
+	case errors.Is(err, uc.ErrNewsRepositoryNotConfigured),
+		errors.Is(err, uc.ErrNewsReadRepositoryNotConfigured),
+		errors.Is(err, uc.ErrNewsImageStorageNotConfigured):
+		writeError(w, http.StatusServiceUnavailable, "NewsServiceUnavailable")
 
-	case errors.Is(
-		err,
-		newsdom.ErrNotFound,
-	),
-		errors.Is(
-			err,
-			newsdom.ErrReadNotFound,
-		):
-		writeError(
-			w,
-			http.StatusNotFound,
-			"NewsNotFound",
-		)
+	case errors.Is(err, newsdom.ErrNotFound),
+		errors.Is(err, newsdom.ErrReadNotFound):
+		writeError(w, http.StatusNotFound, "NewsNotFound")
 
-	case errors.Is(
-		err,
-		newsdom.ErrConflict,
-	):
-		writeError(
-			w,
-			http.StatusConflict,
-			"NewsConflict",
-		)
+	case errors.Is(err, newsdom.ErrConflict):
+		writeError(w, http.StatusConflict, "NewsConflict")
 
-	case errors.Is(
-		err,
-		newsdom.ErrInvalidID,
-	),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidTitle,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidBody,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidCreatedBy,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidCreatedAt,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidPublishedAt,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrPublishedBeforeCreated,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidReadID,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidNewsID,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidRecipientType,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidRecipientID,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidReadAt,
-		):
-		writeError(
-			w,
-			http.StatusBadRequest,
-			"InvalidNews",
-		)
+	case errors.Is(err, newsdom.ErrInvalidID),
+		errors.Is(err, newsdom.ErrInvalidTitle),
+		errors.Is(err, newsdom.ErrInvalidBody),
+		errors.Is(err, newsdom.ErrInvalidCreatedBy),
+		errors.Is(err, newsdom.ErrInvalidCreatedAt),
+		errors.Is(err, newsdom.ErrInvalidPublishedAt),
+		errors.Is(err, newsdom.ErrPublishedBeforeCreated),
+		errors.Is(err, newsdom.ErrInvalidImageFileURL),
+		errors.Is(err, newsdom.ErrInvalidImageObjectPath),
+		errors.Is(err, newsdom.ErrInvalidImageFileName),
+		errors.Is(err, newsdom.ErrInvalidImageMimeType),
+		errors.Is(err, newsdom.ErrInvalidImageFileSize),
+		errors.Is(err, newsdom.ErrInvalidReadID),
+		errors.Is(err, newsdom.ErrInvalidNewsID),
+		errors.Is(err, newsdom.ErrInvalidRecipientType),
+		errors.Is(err, newsdom.ErrInvalidRecipientID),
+		errors.Is(err, newsdom.ErrInvalidReadAt):
+		writeError(w, http.StatusBadRequest, "InvalidNews")
 
 	default:
-		writeError(
-			w,
-			http.StatusInternalServerError,
-			"NewsInternalError",
-		)
+		writeError(w, http.StatusInternalServerError, "NewsInternalError")
 	}
 }

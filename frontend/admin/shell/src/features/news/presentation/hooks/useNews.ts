@@ -5,11 +5,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CreateNewsInput,
   News,
-} from "../../../shared/type/news";
+} from "../../../../shared/type/news";
 import {
   createNews,
   listNews,
-} from "../infrastructure/newsApi";
+} from "../../infrastructure/newsApi";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 20;
@@ -87,10 +87,7 @@ export function useNews() {
         return null;
       }
 
-      const title = input.title.trim();
-      const body = input.body.trim();
-
-      if (!title || !body) {
+      if (!input.title || !input.body) {
         setPublishError("タイトルと本文を入力してください。");
         return null;
       }
@@ -100,8 +97,10 @@ export function useNews() {
 
       try {
         const created = await createNews({
-          title,
-          body,
+          title: input.title,
+          body: input.body,
+          image: input.image,
+          imageAlt: input.image ? input.imageAlt : undefined,
         });
 
         if (page === DEFAULT_PAGE) {

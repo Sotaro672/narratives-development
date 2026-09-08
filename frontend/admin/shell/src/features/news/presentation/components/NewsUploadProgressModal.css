@@ -1,0 +1,174 @@
+/* frontend/admin/shell/src/features/news/components/NewsUploadProgressModal.css */
+
+.news-upload-progress-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(17, 24, 39, 0.48);
+  box-sizing: border-box;
+}
+
+.news-upload-progress-modal__panel {
+  display: flex;
+  width: min(100%, 440px);
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow:
+    0 24px 48px rgba(17, 24, 39, 0.16),
+    0 8px 20px rgba(17, 24, 39, 0.08);
+}
+
+.news-upload-progress-modal__header {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 24px 16px;
+}
+
+.news-upload-progress-modal__status {
+  align-self: flex-start;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.news-upload-progress-modal__title {
+  margin: 0;
+  color: #111827;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.news-upload-progress-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 0 24px 24px;
+}
+
+.news-upload-progress-modal__description {
+  margin: 0;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.news-upload-progress-modal__file {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.news-upload-progress-modal__file-label {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.news-upload-progress-modal__file-name {
+  min-width: 0;
+  color: #374151;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.news-upload-progress-modal__progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.news-upload-progress-modal__progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.news-upload-progress-modal__progress-header strong {
+  color: #111827;
+  font-variant-numeric: tabular-nums;
+}
+
+.news-upload-progress-modal__progress {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.news-upload-progress-modal__progress-bar {
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 120ms linear;
+}
+
+.news-upload-progress-modal__processing {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.news-upload-progress-modal__spinner {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border: 2px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: news-upload-progress-modal-spin 800ms linear infinite;
+}
+
+@keyframes news-upload-progress-modal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .news-upload-progress-modal {
+    align-items: flex-end;
+    padding: 16px;
+  }
+
+  .news-upload-progress-modal__panel {
+    width: 100%;
+  }
+
+  .news-upload-progress-modal__header {
+    padding: 20px 20px 14px;
+  }
+
+  .news-upload-progress-modal__body {
+    padding: 0 20px 20px;
+  }
+}

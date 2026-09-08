@@ -29,7 +29,7 @@ var (
 // ============================================================
 
 // Filter は News 一覧取得用の検索条件。
-// SearchQuery は title / body を対象とする想定。
+// SearchQuery は title / body を対象とする。
 // Created は News.CreatedAt に対する期間条件。
 // PublishedAt は News.PublishedAt に対する期間条件。
 type Filter struct {
@@ -55,16 +55,15 @@ var AllowedSortColumns = map[string]struct{}{
 
 // Repository は AMOL Admin が配信する News 本体を永続化する。
 //
-// News は Console / Mall の各ユーザーごとには複製しない。
-// 1件の News を全受信者で共有し、受信者固有の既読状態は
-// ReadRepository で管理する。
+// News は Console / Mall のユーザーごとに複製しない。
+// 1件の News document を全読者で共有する。
 type Repository interface {
 	// Create creates one globally distributed News.
 	//
 	// Expected implementation policy:
 	// - News.ID must be used as the persistence document ID.
 	// - Existing IDs must return ErrConflict.
-	// - The entity must not be modified into recipient-specific copies.
+	// - The entity must not be modified into reader-specific copies.
 	Create(
 		ctx context.Context,
 		entity News,
@@ -82,8 +81,8 @@ type Repository interface {
 
 	// List returns News ordered and paginated according to sort/page.
 	//
-	// All News are system-wide messages, so recipient filtering must not be
-	// performed here. Recipient-specific read state belongs to ReadRepository.
+	// News は system-wide message であるため、読者による絞り込みは行わない。
+	// 読者自身の既読状態は ReadRepository から取得する。
 	List(
 		ctx context.Context,
 		filter Filter,
@@ -93,45 +92,17 @@ type Repository interface {
 }
 
 // ============================================================
-// NewsRead filter
-// ============================================================
-
-// ReadFilter は NewsRead 一覧取得用の検索条件。
-//
-// RecipientType / RecipientID の組み合わせで、Console Member または
-// Mall Avatar の既読レコードだけを取得できる。
-//
-// NewsIDs が指定された場合、その News 群に対する既読状態だけを取得する。
-// 通知一覧取得時に、取得した News page と既読状態を突き合わせる用途を想定する。
-type ReadFilter struct {
-	RecipientType *RecipientType `json:"recipientType"`
-	RecipientID   string         `json:"recipientId"`
-
-	NewsIDs []NewsID `json:"newsIds,omitempty"`
-
-	ReadAt common.TimeRange `json:"readAt"`
-}
-
-// ============================================================
-// NewsRead sort
-// ============================================================
-
-var AllowedReadSortColumns = map[string]struct{}{
-	"readAt": {},
-}
-
-// ============================================================
 // CreateNewsReadResult
 // ============================================================
 
 // CreateNewsReadResult は冪等な既読作成の結果を表す。
 //
 // Created:
-// - true  = 今回初めて既読レコードを作成した。
-// - false = 同一 News / recipient の既読レコードが既に存在していた。
+// - true  = 今回初めて既読状態を作成した。
+// - false = 同一 News / reader の既読状態が既に存在していた。
 //
 // NewsRead.ID は NewsID + RecipientType + RecipientID から決定論的に
-// 生成されるため、CreateIfAbsent は同一操作の再試行に対して冪等でなければならない。
+// 生成されるため、同一読者による同一 News の既読操作は冪等になる。
 type CreateNewsReadResult struct {
 	Read    NewsRead
 	Created bool
@@ -141,26 +112,37 @@ type CreateNewsReadResult struct {
 // NewsReadRepository
 // ============================================================
 
-// ReadRepository は News の受信者ごとの既読状態を永続化する。
+// ReadRepository は News の既読状態を永続化する。
 //
 // News 配信時に全 MEMBER / AVATAR 分の document を生成してはならない。
-// NewsRead は受信者が実際に News を既読にした時点で初めて作成する。
+// NewsRead は読者が実際に News を既読にした時点で初めて作成する。
 //
-// Console:
+// Firestore document には読者を検索可能な形で保存しない。
+// RecipientType / RecipientID は NewsRead document ID を導出するためだけに利用する。
 //
-//	RecipientType = MEMBER
-//	RecipientID   = memberId
+// document ID:
 //
-// Mall:
+//	NewsID + RecipientType + RecipientID
+//	↓
+//	SHA-256
+//	↓
+//	NewsReadID
 //
-//	RecipientType = AVATAR
-//	RecipientID   = avatarId
+// 永続化する既読情報は基本的に以下だけとする。
+//
+//	ID
+//	NewsID
+//	ReadAt
+//
+// このため「誰が読んだか」を newsReads collection から一覧取得する用途は持たない。
+// あくまで現在の読者について対象 News が未読か既読かを判定するためのRepositoryとする。
 type ReadRepository interface {
 	// CreateIfAbsent creates a NewsRead only when it does not already exist.
 	//
 	// Expected implementation policy:
 	// - NewsRead.ID must be used as the persistence document ID.
-	// - If the same ID already exists, the existing record must be returned
+	// - RecipientType / RecipientID must not be persisted as searchable fields.
+	// - If the same ID already exists, the existing read state must be returned
 	//   with Created=false.
 	// - Existing ReadAt must not be overwritten by retries.
 	// - This operation must be safe to retry.
@@ -169,10 +151,16 @@ type ReadRepository interface {
 		read NewsRead,
 	) (CreateNewsReadResult, error)
 
-	// Get returns the read state for one News and recipient.
+	// Get returns the current reader's read state for one News.
 	//
-	// The repository should derive or validate the deterministic NewsRead ID
-	// from newsID / recipientType / recipientID.
+	// The implementation derives the deterministic NewsReadID from:
+	//
+	//	newsID + recipientType + recipientID
+	//
+	// and directly reads that document.
+	//
+	// RecipientType / RecipientID は検索条件としてFirestoreへ送らず、
+	// document ID の生成にだけ使用する。
 	//
 	// Missing read state must return ErrReadNotFound.
 	Get(
@@ -182,16 +170,22 @@ type ReadRepository interface {
 		recipientID string,
 	) (NewsRead, error)
 
-	// List returns recipient read states matching the filter.
+	// GetMany returns the current reader's read states for the specified News.
 	//
-	// Main use cases:
-	// - obtain all read states for one recipient;
-	// - obtain read states only for News IDs currently displayed;
-	// - obtain TotalCount for unread-counter calculation.
-	List(
+	// 各 NewsID と recipientType / recipientID から決定論的な NewsReadID を
+	// 生成し、その document を直接参照する。
+	//
+	// RecipientType / RecipientID による collection query や
+	// newsReads collection 全件走査を行ってはならない。
+	//
+	// 未読の News に対応する document は存在しないため結果には含めない。
+	// 全件が未読の場合は空 slice を返す。
+	//
+	// NewsIDs の順序と返却結果の順序が一致することは要求しない。
+	GetMany(
 		ctx context.Context,
-		filter ReadFilter,
-		sort common.Sort,
-		page common.Page,
-	) (common.PageResult[NewsRead], error)
+		newsIDs []NewsID,
+		recipientType RecipientType,
+		recipientID string,
+	) ([]NewsRead, error)
 }

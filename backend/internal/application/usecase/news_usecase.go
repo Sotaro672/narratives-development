@@ -6,8 +6,10 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
 	"time"
 
+	applicationport "narratives/internal/application/port"
 	common "narratives/internal/domain/common"
 	newsdom "narratives/internal/domain/news"
 )
@@ -19,27 +21,32 @@ import (
 var (
 	ErrNewsRepositoryNotConfigured     = errors.New("news_usecase: news repository is not configured")
 	ErrNewsReadRepositoryNotConfigured = errors.New("news_usecase: news read repository is not configured")
+	ErrNewsImageStorageNotConfigured   = errors.New("news_usecase: news image storage is not configured")
+	ErrNewsImageRollbackFailed         = errors.New("news_usecase: news image rollback failed")
 )
 
 // ============================================================
 // NewsUsecase
 // ============================================================
 
-// NewsUsecase coordinates AMOL system-wide News and recipient read states.
+// NewsUsecase coordinates AMOL system-wide News and reader read states.
 //
 // News:
 // - Admin creates one News document.
 // - The News is visible to all Console members and Mall avatars.
-// - News creation never fans out recipient-specific documents.
+// - News creation never fans out reader-specific documents.
+// - Optional image data is stored in external Storage before News persistence.
+// - If News persistence fails after image upload, the uploaded image is rolled back.
 //
 // NewsRead:
-// - Recipient identity is used only to derive the deterministic NewsRead ID.
-// - RecipientType / RecipientID do not need to be persisted in Firestore.
-// - A NewsRead document is created only when the recipient actually reads News.
+// - Reader identity is used only to derive the deterministic NewsRead ID.
+// - RecipientType / RecipientID are not persisted as searchable Firestore fields.
+// - A NewsRead document is created only when the reader actually reads News.
 type NewsUsecase struct {
-	newsRepo     newsdom.Repository
-	newsReadRepo newsdom.ReadRepository
-	now          func() time.Time
+	newsRepo         newsdom.Repository
+	newsReadRepo     newsdom.ReadRepository
+	newsImageStorage applicationport.NewsImageStorage
+	now              func() time.Time
 }
 
 func NewNewsUsecase(newsRepo newsdom.Repository, newsReadRepo newsdom.ReadRepository) *NewsUsecase {
@@ -48,6 +55,13 @@ func NewNewsUsecase(newsRepo newsdom.Repository, newsReadRepo newsdom.ReadReposi
 		newsReadRepo: newsReadRepo,
 		now:          time.Now,
 	}
+}
+
+func (u *NewsUsecase) WithImageStorage(storage applicationport.NewsImageStorage) *NewsUsecase {
+	if u != nil {
+		u.newsImageStorage = storage
+	}
+	return u
 }
 
 func (u *NewsUsecase) WithNow(now func() time.Time) *NewsUsecase {
@@ -61,6 +75,18 @@ func (u *NewsUsecase) WithNow(now func() time.Time) *NewsUsecase {
 // Create
 // ============================================================
 
+// CreateNewsImageInput は Admin から受け取った任意の News 画像を表す。
+//
+// HTTP multipart 固有の型はapplication/usecaseへ持ち込まず、Readerと
+// ファイルメタデータだけを受け取る。
+type CreateNewsImageInput struct {
+	FileName    string
+	ContentType string
+	FileSize    int64
+	Reader      io.Reader
+	Alt         string
+}
+
 type CreateNewsInput struct {
 	// ID is optional.
 	// When empty, the usecase generates a random ID.
@@ -68,7 +94,7 @@ type CreateNewsInput struct {
 
 	Title string
 	Body  string
-	Image *newsdom.NewsImage
+	Image *CreateNewsImageInput
 
 	// CreatedBy must identify the authenticated Admin.
 	CreatedBy string
@@ -78,6 +104,15 @@ type CreateNewsInput struct {
 //
 // There is intentionally no draft state.
 // CreatedAt and PublishedAt are set to the same timestamp.
+//
+// Image creation flow:
+//
+//  1. validate News fields
+//  2. upload optional image
+//  3. build NewsImage metadata
+//  4. create News
+//  5. persist News
+//  6. rollback uploaded image if News creation fails
 func (u *NewsUsecase) CreateNews(ctx context.Context, input CreateNewsInput) (newsdom.News, error) {
 	if err := u.ensureNewsRepository(); err != nil {
 		return newsdom.News{}, err
@@ -94,11 +129,12 @@ func (u *NewsUsecase) CreateNews(ctx context.Context, input CreateNewsInput) (ne
 
 	now := u.currentTime()
 
-	entity, err := newsdom.New(
+	// Storageへ画像を作成する前に、画像以外のNewsフィールドを検証する。
+	baseEntity, err := newsdom.New(
 		newsdom.NewsID(id),
 		input.Title,
 		input.Body,
-		input.Image,
+		nil,
 		now,
 		now,
 		input.CreatedBy,
@@ -107,7 +143,70 @@ func (u *NewsUsecase) CreateNews(ctx context.Context, input CreateNewsInput) (ne
 		return newsdom.News{}, err
 	}
 
-	return u.newsRepo.Create(ctx, entity)
+	if input.Image == nil {
+		return u.newsRepo.Create(ctx, baseEntity)
+	}
+
+	if err := u.ensureNewsImageStorage(); err != nil {
+		return newsdom.News{}, err
+	}
+
+	uploadResult, err := u.newsImageStorage.Upload(
+		ctx,
+		applicationport.NewsImageUploadInput{
+			NewsID:      id,
+			FileName:    input.Image.FileName,
+			ContentType: input.Image.ContentType,
+			FileSize:    input.Image.FileSize,
+			Reader:      input.Image.Reader,
+		},
+	)
+	if err != nil {
+		return newsdom.News{}, err
+	}
+
+	rollback := func(cause error) error {
+		if rollbackErr := u.newsImageStorage.Delete(ctx, uploadResult.ObjectPath); rollbackErr != nil {
+			return errors.Join(
+				cause,
+				ErrNewsImageRollbackFailed,
+				rollbackErr,
+			)
+		}
+		return cause
+	}
+
+	image, err := newsdom.NewNewsImage(
+		uploadResult.FileURL,
+		uploadResult.ObjectPath,
+		uploadResult.FileName,
+		uploadResult.MimeType,
+		uploadResult.FileSize,
+		input.Image.Alt,
+	)
+	if err != nil {
+		return newsdom.News{}, rollback(err)
+	}
+
+	entity, err := newsdom.New(
+		baseEntity.ID,
+		baseEntity.Title,
+		baseEntity.Body,
+		&image,
+		baseEntity.PublishedAt,
+		baseEntity.CreatedAt,
+		baseEntity.CreatedBy,
+	)
+	if err != nil {
+		return newsdom.News{}, rollback(err)
+	}
+
+	created, err := u.newsRepo.Create(ctx, entity)
+	if err != nil {
+		return newsdom.News{}, rollback(err)
+	}
+
+	return created, nil
 }
 
 // ============================================================
@@ -138,7 +237,7 @@ func (u *NewsUsecase) ListNews(
 }
 
 // ============================================================
-// Recipient list result
+// Reader list result
 // ============================================================
 
 // NewsRecipientItem combines globally shared News with the current reader's
@@ -219,7 +318,7 @@ func (u *NewsUsecase) MarkNewsReadForAvatar(
 }
 
 // ============================================================
-// Recipient list
+// Reader list
 // ============================================================
 
 func (u *NewsUsecase) listNewsForRecipient(
@@ -262,32 +361,22 @@ func (u *NewsUsecase) listNewsForRecipient(
 	}
 
 	newsIDs := make([]newsdom.NewsID, 0, len(newsResult.Items))
-	for _, item := range newsResult.Items {
-		newsIDs = append(newsIDs, item.ID)
+	for _, entity := range newsResult.Items {
+		newsIDs = append(newsIDs, entity.ID)
 	}
 
-	readResult, err := u.newsReadRepo.List(
+	reads, err := u.newsReadRepo.GetMany(
 		ctx,
-		newsdom.ReadFilter{
-			RecipientType: &recipientType,
-			RecipientID:   recipientID,
-			NewsIDs:       newsIDs,
-		},
-		common.Sort{
-			Column: "readAt",
-			Order:  common.SortDesc,
-		},
-		common.Page{
-			Number:  1,
-			PerPage: len(newsIDs),
-		},
+		newsIDs,
+		recipientType,
+		recipientID,
 	)
 	if err != nil {
 		return common.PageResult[NewsRecipientItem]{}, err
 	}
 
-	readByNewsID := make(map[newsdom.NewsID]newsdom.NewsRead, len(readResult.Items))
-	for _, read := range readResult.Items {
+	readByNewsID := make(map[newsdom.NewsID]newsdom.NewsRead, len(reads))
+	for _, read := range reads {
 		readByNewsID[read.NewsID] = read
 	}
 
@@ -325,8 +414,9 @@ func (u *NewsUsecase) listNewsForRecipient(
 //
 //	total News count - current reader's NewsRead count
 //
-// RecipientType / RecipientID are not persisted as fields.
-// They are used only to derive deterministic NewsRead document IDs.
+// RecipientType / RecipientID are not persisted as searchable fields.
+// NewsRead document IDs are derived deterministically for the current reader,
+// and only the corresponding documents are read.
 func (u *NewsUsecase) countUnreadNewsForRecipient(
 	ctx context.Context,
 	recipientType newsdom.RecipientType,
@@ -342,7 +432,7 @@ func (u *NewsUsecase) countUnreadNewsForRecipient(
 		return 0, err
 	}
 
-	newsResult, err := u.newsRepo.List(
+	countResult, err := u.newsRepo.List(
 		ctx,
 		newsdom.Filter{},
 		common.Sort{
@@ -358,29 +448,46 @@ func (u *NewsUsecase) countUnreadNewsForRecipient(
 		return 0, err
 	}
 
-	readResult, err := u.newsReadRepo.List(
+	if countResult.TotalCount <= 0 {
+		return 0, nil
+	}
+
+	allNewsResult, err := u.newsRepo.List(
 		ctx,
-		newsdom.ReadFilter{
-			RecipientType: &recipientType,
-			RecipientID:   recipientID,
-		},
+		newsdom.Filter{},
 		common.Sort{
-			Column: "readAt",
+			Column: "publishedAt",
 			Order:  common.SortDesc,
 		},
 		common.Page{
 			Number:  1,
-			PerPage: 1,
+			PerPage: countResult.TotalCount,
 		},
 	)
 	if err != nil {
 		return 0, err
 	}
 
-	unreadCount := newsResult.TotalCount - readResult.TotalCount
+	newsIDs := make([]newsdom.NewsID, 0, len(allNewsResult.Items))
+	for _, entity := range allNewsResult.Items {
+		newsIDs = append(newsIDs, entity.ID)
+	}
+
+	reads, err := u.newsReadRepo.GetMany(
+		ctx,
+		newsIDs,
+		recipientType,
+		recipientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	unreadCount := countResult.TotalCount - len(reads)
 	if unreadCount < 0 {
 		return 0, nil
 	}
+
 	return unreadCount, nil
 }
 
@@ -445,7 +552,7 @@ func validateNewsRecipient(recipientType newsdom.RecipientType, recipientID stri
 }
 
 // ============================================================
-// Repository guards
+// Repository / Storage guards
 // ============================================================
 
 func (u *NewsUsecase) ensureNewsRepository() error {
@@ -458,6 +565,13 @@ func (u *NewsUsecase) ensureNewsRepository() error {
 func (u *NewsUsecase) ensureNewsReadRepository() error {
 	if u == nil || u.newsReadRepo == nil {
 		return ErrNewsReadRepositoryNotConfigured
+	}
+	return nil
+}
+
+func (u *NewsUsecase) ensureNewsImageStorage() error {
+	if u == nil || u.newsImageStorage == nil {
+		return ErrNewsImageStorageNotConfigured
 	}
 	return nil
 }

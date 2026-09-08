@@ -27,12 +27,8 @@ type NewsHandler struct {
 	NewsUC *uc.NewsUsecase
 }
 
-func NewNewsHandler(
-	newsUC *uc.NewsUsecase,
-) *NewsHandler {
-	return &NewsHandler{
-		NewsUC: newsUC,
-	}
+func NewNewsHandler(newsUC *uc.NewsUsecase) *NewsHandler {
+	return &NewsHandler{NewsUC: newsUC}
 }
 
 // Supported:
@@ -47,10 +43,7 @@ func NewNewsHandler(
 // - UserAuthMiddleware + AvatarContextMiddleware が解決した current avatarId を利用する。
 // - News の既読状態は AVATAR 単位で管理する。
 // - Admin の内部識別子 CreatedBy はレスポンスへ公開しない。
-func (h *NewsHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *NewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -60,9 +53,7 @@ func (h *NewsHandler) ServeHTTP(
 		writeJSON(
 			w,
 			http.StatusServiceUnavailable,
-			map[string]string{
-				"error": "news_handler_not_initialized",
-			},
+			map[string]string{"error": "news_handler_not_initialized"},
 		)
 		return
 	}
@@ -72,21 +63,17 @@ func (h *NewsHandler) ServeHTTP(
 		writeJSON(
 			w,
 			http.StatusNotFound,
-			map[string]string{
-				"error": "not_found",
-			},
+			map[string]string{"error": "not_found"},
 		)
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
-	if !ok || strings.TrimSpace(avatarID) == "" {
+	if !ok || avatarID == "" {
 		writeJSON(
 			w,
 			http.StatusUnauthorized,
-			map[string]string{
-				"error": "avatar_context_required",
-			},
+			map[string]string{"error": "avatar_context_required"},
 		)
 		return
 	}
@@ -98,18 +85,11 @@ func (h *NewsHandler) ServeHTTP(
 			writeJSON(
 				w,
 				http.StatusMethodNotAllowed,
-				map[string]string{
-					"error": "method_not_allowed",
-				},
+				map[string]string{"error": "method_not_allowed"},
 			)
 			return
 		}
-
-		h.list(
-			w,
-			r,
-			avatarID,
-		)
+		h.list(w, r, avatarID)
 
 	case mallNewsRouteUnreadCount:
 		if r.Method != http.MethodGet {
@@ -117,18 +97,11 @@ func (h *NewsHandler) ServeHTTP(
 			writeJSON(
 				w,
 				http.StatusMethodNotAllowed,
-				map[string]string{
-					"error": "method_not_allowed",
-				},
+				map[string]string{"error": "method_not_allowed"},
 			)
 			return
 		}
-
-		h.unreadCount(
-			w,
-			r,
-			avatarID,
-		)
+		h.unreadCount(w, r, avatarID)
 
 	case mallNewsRouteRead:
 		if r.Method != http.MethodPost {
@@ -136,27 +109,17 @@ func (h *NewsHandler) ServeHTTP(
 			writeJSON(
 				w,
 				http.StatusMethodNotAllowed,
-				map[string]string{
-					"error": "method_not_allowed",
-				},
+				map[string]string{"error": "method_not_allowed"},
 			)
 			return
 		}
-
-		h.markRead(
-			w,
-			r,
-			avatarID,
-			newsID,
-		)
+		h.markRead(w, r, avatarID, newsID)
 
 	default:
 		writeJSON(
 			w,
 			http.StatusNotFound,
-			map[string]string{
-				"error": "not_found",
-			},
+			map[string]string{"error": "not_found"},
 		)
 	}
 }
@@ -165,14 +128,24 @@ func (h *NewsHandler) ServeHTTP(
 // DTO
 // ============================================================
 
+type newsImageResponse struct {
+	FileURL    string `json:"fileUrl"`
+	ObjectPath string `json:"objectPath"`
+	FileName   string `json:"fileName"`
+	MimeType   string `json:"mimeType"`
+	FileSize   int64  `json:"fileSize"`
+	Alt        string `json:"alt,omitempty"`
+}
+
 type newsResponse struct {
-	ID          string     `json:"id"`
-	Title       string     `json:"title"`
-	Body        string     `json:"body"`
-	PublishedAt time.Time  `json:"publishedAt"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	IsRead      bool       `json:"isRead"`
-	ReadAt      *time.Time `json:"readAt"`
+	ID          string             `json:"id"`
+	Title       string             `json:"title"`
+	Body        string             `json:"body"`
+	Image       *newsImageResponse `json:"image,omitempty"`
+	PublishedAt time.Time          `json:"publishedAt"`
+	CreatedAt   time.Time          `json:"createdAt"`
+	IsRead      bool               `json:"isRead"`
+	ReadAt      *time.Time         `json:"readAt"`
 }
 
 type newsUnreadCountResponse struct {
@@ -200,9 +173,7 @@ func (h *NewsHandler) list(
 		writeJSON(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid_pagination",
-			},
+			map[string]string{"error": "invalid_pagination"},
 		)
 		return
 	}
@@ -217,17 +188,9 @@ func (h *NewsHandler) list(
 		return
 	}
 
-	items := make(
-		[]newsResponse,
-		0,
-		len(result.Items),
-	)
-
+	items := make([]newsResponse, 0, len(result.Items))
 	for _, item := range result.Items {
-		items = append(
-			items,
-			toMallNewsResponse(item),
-		)
+		items = append(items, toMallNewsResponse(item))
 	}
 
 	writeJSON(
@@ -264,9 +227,7 @@ func (h *NewsHandler) unreadCount(
 	writeJSON(
 		w,
 		http.StatusOK,
-		newsUnreadCountResponse{
-			UnreadCount: count,
-		},
+		newsUnreadCountResponse{UnreadCount: count},
 	)
 }
 
@@ -280,14 +241,11 @@ func (h *NewsHandler) markRead(
 	avatarID string,
 	newsID string,
 ) {
-	newsID = strings.TrimSpace(newsID)
 	if newsID == "" {
 		writeJSON(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "news_id_required",
-			},
+			map[string]string{"error": "news_id_required"},
 		)
 		return
 	}
@@ -337,6 +295,7 @@ func parseMallNewsPath(
 		meNewsPath,
 		"/",
 	)
+
 	normalizedPath := strings.TrimSuffix(
 		path,
 		"/",
@@ -352,10 +311,7 @@ func parseMallNewsPath(
 	}
 
 	prefix := basePath + "/"
-	if !strings.HasPrefix(
-		normalizedPath,
-		prefix,
-	) {
+	if !strings.HasPrefix(normalizedPath, prefix) {
 		return "", mallNewsRouteList, false
 	}
 
@@ -363,15 +319,16 @@ func parseMallNewsPath(
 		normalizedPath,
 		prefix,
 	)
+
 	parts := strings.Split(
 		relativePath,
 		"/",
 	)
 
 	if len(parts) == 2 &&
-		strings.TrimSpace(parts[0]) != "" &&
+		parts[0] != "" &&
 		parts[1] == "read" {
-		return strings.TrimSpace(parts[0]), mallNewsRouteRead, true
+		return parts[0], mallNewsRouteRead, true
 	}
 
 	return "", mallNewsRouteList, false
@@ -381,37 +338,25 @@ func parseMallNewsPath(
 // Pagination
 // ============================================================
 
-func parseMallNewsPage(
-	r *http.Request,
-) (domcommon.Page, error) {
+func parseMallNewsPage(r *http.Request) (domcommon.Page, error) {
 	pageNumber := defaultMallNewsPage
 	perPage := defaultMallNewsPerPage
 
-	rawPage := strings.TrimSpace(
-		r.URL.Query().Get("page"),
-	)
+	rawPage := r.URL.Query().Get("page")
 	if rawPage != "" {
 		parsed, err := strconv.Atoi(rawPage)
 		if err != nil || parsed <= 0 {
-			return domcommon.Page{},
-				errors.New("invalid page")
+			return domcommon.Page{}, errors.New("invalid page")
 		}
-
 		pageNumber = parsed
 	}
 
-	rawPerPage := strings.TrimSpace(
-		r.URL.Query().Get("perPage"),
-	)
+	rawPerPage := r.URL.Query().Get("perPage")
 	if rawPerPage != "" {
 		parsed, err := strconv.Atoi(rawPerPage)
-		if err != nil ||
-			parsed <= 0 ||
-			parsed > maxMallNewsPerPage {
-			return domcommon.Page{},
-				errors.New("invalid perPage")
+		if err != nil || parsed <= 0 || parsed > maxMallNewsPerPage {
+			return domcommon.Page{}, errors.New("invalid perPage")
 		}
-
 		perPage = parsed
 	}
 
@@ -425,10 +370,8 @@ func parseMallNewsPage(
 // Mapping
 // ============================================================
 
-func toMallNewsResponse(
-	item uc.NewsRecipientItem,
-) newsResponse {
-	return newsResponse{
+func toMallNewsResponse(item uc.NewsRecipientItem) newsResponse {
+	response := newsResponse{
 		ID:          string(item.News.ID),
 		Title:       item.News.Title,
 		Body:        item.News.Body,
@@ -437,6 +380,19 @@ func toMallNewsResponse(
 		IsRead:      item.IsRead,
 		ReadAt:      item.ReadAt,
 	}
+
+	if item.News.Image != nil {
+		response.Image = &newsImageResponse{
+			FileURL:    item.News.Image.FileURL,
+			ObjectPath: item.News.Image.ObjectPath,
+			FileName:   item.News.Image.FileName,
+			MimeType:   item.News.Image.MimeType,
+			FileSize:   item.News.Image.FileSize,
+			Alt:        item.News.Image.Alt,
+		}
+	}
+
+	return response
 }
 
 // ============================================================
@@ -452,143 +408,76 @@ func writeMallNewsError(
 		writeJSON(
 			w,
 			http.StatusInternalServerError,
-			map[string]string{
-				"error": "news_internal_error",
-			},
+			map[string]string{"error": "news_internal_error"},
 		)
 
-	case errors.Is(
-		err,
-		context.Canceled,
-	),
-		errors.Is(
-			err,
-			context.DeadlineExceeded,
-		):
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
 		writeJSON(
 			w,
 			http.StatusRequestTimeout,
-			map[string]string{
-				"error": "request_timeout",
-			},
+			map[string]string{"error": "request_timeout"},
 		)
 
-	case errors.Is(
-		err,
-		uc.ErrNewsRepositoryNotConfigured,
-	),
-		errors.Is(
-			err,
-			uc.ErrNewsReadRepositoryNotConfigured,
-		):
+	case errors.Is(err, uc.ErrNewsRepositoryNotConfigured),
+		errors.Is(err, uc.ErrNewsReadRepositoryNotConfigured),
+		errors.Is(err, uc.ErrNewsImageStorageNotConfigured):
 		writeJSON(
 			w,
 			http.StatusServiceUnavailable,
-			map[string]string{
-				"error": "news_service_unavailable",
-			},
+			map[string]string{"error": "news_service_unavailable"},
 		)
 
-	case errors.Is(
-		err,
-		newsdom.ErrNotFound,
-	),
-		errors.Is(
-			err,
-			newsdom.ErrReadNotFound,
-		):
+	case errors.Is(err, newsdom.ErrNotFound),
+		errors.Is(err, newsdom.ErrReadNotFound):
 		writeJSON(
 			w,
 			http.StatusNotFound,
-			map[string]string{
-				"error": "news_not_found",
-			},
+			map[string]string{"error": "news_not_found"},
 		)
 
-	case errors.Is(
-		err,
-		newsdom.ErrConflict,
-	):
+	case errors.Is(err, newsdom.ErrConflict):
 		writeJSON(
 			w,
 			http.StatusConflict,
-			map[string]string{
-				"error": "news_conflict",
-			},
+			map[string]string{"error": "news_conflict"},
 		)
 
-	case errors.Is(
-		err,
-		newsdom.ErrInvalidID,
-	),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidTitle,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidBody,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidCreatedBy,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidCreatedAt,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidPublishedAt,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrPublishedBeforeCreated,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidReadID,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidNewsID,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidRecipientType,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidRecipientID,
-		),
-		errors.Is(
-			err,
-			newsdom.ErrInvalidReadAt,
-		):
+	case errors.Is(err, newsdom.ErrInvalidID),
+		errors.Is(err, newsdom.ErrInvalidTitle),
+		errors.Is(err, newsdom.ErrInvalidBody),
+		errors.Is(err, newsdom.ErrInvalidCreatedBy),
+		errors.Is(err, newsdom.ErrInvalidCreatedAt),
+		errors.Is(err, newsdom.ErrInvalidPublishedAt),
+		errors.Is(err, newsdom.ErrPublishedBeforeCreated),
+		errors.Is(err, newsdom.ErrInvalidImageFileURL),
+		errors.Is(err, newsdom.ErrInvalidImageObjectPath),
+		errors.Is(err, newsdom.ErrInvalidImageFileName),
+		errors.Is(err, newsdom.ErrInvalidImageMimeType),
+		errors.Is(err, newsdom.ErrInvalidImageFileSize),
+		errors.Is(err, newsdom.ErrInvalidReadID),
+		errors.Is(err, newsdom.ErrInvalidNewsID),
+		errors.Is(err, newsdom.ErrInvalidRecipientType),
+		errors.Is(err, newsdom.ErrInvalidRecipientID),
+		errors.Is(err, newsdom.ErrInvalidReadAt):
 		writeJSON(
 			w,
 			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid_news",
-			},
+			map[string]string{"error": "invalid_news"},
 		)
 
 	case isNotFound(err):
 		writeJSON(
 			w,
 			http.StatusNotFound,
-			map[string]string{
-				"error": "news_not_found",
-			},
+			map[string]string{"error": "news_not_found"},
 		)
 
 	default:
 		writeJSON(
 			w,
 			http.StatusInternalServerError,
-			map[string]string{
-				"error": "news_internal_error",
-			},
+			map[string]string{"error": "news_internal_error"},
 		)
 	}
 }

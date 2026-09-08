@@ -75,7 +75,7 @@ var (
 type NewsID string
 
 func (id NewsID) Validate() error {
-	if strings.TrimSpace(string(id)) == "" {
+	if string(id) == "" {
 		return ErrInvalidID
 	}
 	return nil
@@ -84,7 +84,7 @@ func (id NewsID) Validate() error {
 type NewsReadID string
 
 func (id NewsReadID) Validate() error {
-	if strings.TrimSpace(string(id)) == "" {
+	if string(id) == "" {
 		return ErrInvalidReadID
 	}
 	return nil
@@ -94,8 +94,12 @@ func (id NewsReadID) Validate() error {
 // RecipientType
 // ============================================================
 
-// RecipientType は News の既読主体を表す。
-// Console は MEMBER、Mall は AVATAR 単位で既読状態を管理する。
+// RecipientType は News の既読判定主体を表す。
+// Console は MEMBER、Mall は AVATAR 単位で既読状態を判定する。
+//
+// RecipientType 自体を NewsRead の永続化フィールドとして保存する必要はない。
+// NewsID + RecipientType + RecipientID から決定論的な NewsReadID を生成するために
+// アプリケーション内部でのみ利用する。
 type RecipientType string
 
 const (
@@ -131,7 +135,7 @@ type NewsImage struct {
 	Alt        string `json:"alt,omitempty"`
 }
 
-// NewNewsImage creates normalized News image metadata.
+// NewNewsImage creates News image metadata.
 func NewNewsImage(
 	fileURL string,
 	objectPath string,
@@ -141,12 +145,12 @@ func NewNewsImage(
 	alt string,
 ) (NewsImage, error) {
 	image := NewsImage{
-		FileURL:    strings.TrimSpace(fileURL),
-		ObjectPath: strings.TrimSpace(objectPath),
-		FileName:   strings.TrimSpace(fileName),
-		MimeType:   strings.ToLower(strings.TrimSpace(mimeType)),
+		FileURL:    fileURL,
+		ObjectPath: objectPath,
+		FileName:   fileName,
+		MimeType:   strings.ToLower(mimeType),
 		FileSize:   fileSize,
-		Alt:        strings.TrimSpace(alt),
+		Alt:        alt,
 	}
 
 	if err := image.Validate(); err != nil {
@@ -158,19 +162,19 @@ func NewNewsImage(
 
 // Validate validates NewsImage invariants.
 func (i NewsImage) Validate() error {
-	if strings.TrimSpace(i.FileURL) == "" {
+	if i.FileURL == "" {
 		return ErrInvalidImageFileURL
 	}
 
-	if strings.TrimSpace(i.ObjectPath) == "" {
+	if i.ObjectPath == "" {
 		return ErrInvalidImageObjectPath
 	}
 
-	if strings.TrimSpace(i.FileName) == "" {
+	if i.FileName == "" {
 		return ErrInvalidImageFileName
 	}
 
-	switch strings.ToLower(strings.TrimSpace(i.MimeType)) {
+	switch strings.ToLower(i.MimeType) {
 	case "image/jpeg", "image/png", "image/webp":
 	default:
 		return ErrInvalidImageMimeType
@@ -183,7 +187,7 @@ func (i NewsImage) Validate() error {
 	return nil
 }
 
-// normalizeNewsImage returns a normalized copy of image metadata.
+// normalizeNewsImage returns a validated copy of image metadata.
 func normalizeNewsImage(
 	image *NewsImage,
 ) (*NewsImage, error) {
@@ -214,8 +218,7 @@ func normalizeNewsImage(
 // システム共通のお知らせを表す。
 //
 // News 自体は受信者ごとに複製しない。
-// 1件の News document を全ユーザーが共有し、既読状態のみ NewsRead として
-// recipient ごとに保持する。
+// 1件の News document を全ユーザーが共有する。
 //
 // Image は任意で、画像本体は Firebase Storage、画像メタデータは
 // News document に保持する。
@@ -253,12 +256,12 @@ func New(
 
 	n := News{
 		ID:          id,
-		Title:       strings.TrimSpace(title),
-		Body:        strings.TrimSpace(body),
+		Title:       title,
+		Body:        body,
 		Image:       normalizedImage,
 		PublishedAt: canonicalTime(publishedAt),
 		CreatedAt:   canonicalTime(createdAt),
-		CreatedBy:   strings.TrimSpace(createdBy),
+		CreatedBy:   createdBy,
 	}
 
 	if err := n.Validate(); err != nil {
@@ -274,11 +277,11 @@ func (n News) Validate() error {
 		return err
 	}
 
-	if strings.TrimSpace(n.Title) == "" {
+	if n.Title == "" {
 		return ErrInvalidTitle
 	}
 
-	if strings.TrimSpace(n.Body) == "" {
+	if n.Body == "" {
 		return ErrInvalidBody
 	}
 
@@ -288,7 +291,7 @@ func (n News) Validate() error {
 		}
 	}
 
-	if strings.TrimSpace(n.CreatedBy) == "" {
+	if n.CreatedBy == "" {
 		return ErrInvalidCreatedBy
 	}
 
@@ -311,10 +314,20 @@ func (n News) Validate() error {
 // NewsRead
 // ============================================================
 
-// NewsRead は News に対する受信者ごとの既読状態を表す。
+// NewsRead は現在の読者に対する News の既読状態を表す。
 //
-// News 作成時には NewsRead を全ユーザー分 fan-out しない。
-// ユーザーが実際に News を既読にした時点で初めて作成する。
+// News 配信時に全ユーザー分の NewsRead を作成しない。
+// 読者が実際に News を既読にした時点で初めて既読 document を作成する。
+//
+// RecipientType / RecipientID は永続化するための情報ではない。
+// NewsID + RecipientType + RecipientID から決定論的な NewsReadID を生成し、
+// その document が存在するかどうかによって現在の読者が未読か既読かを判定する。
+//
+// Firestore に永続化する既読情報は基本的に以下だけでよい。
+//
+//	ID
+//	NewsID
+//	ReadAt
 //
 // Console:
 //
@@ -330,16 +343,19 @@ type NewsRead struct {
 
 	NewsID NewsID `json:"newsId"`
 
-	RecipientType RecipientType `json:"recipientType"`
-	RecipientID   string        `json:"recipientId"`
+	// RecipientType / RecipientID は NewsReadID の導出および
+	// アプリケーション内部での既読判定にのみ使用する。
+	// Firestore document のフィールドとして保存する必要はない。
+	RecipientType RecipientType `json:"-"`
+	RecipientID   string        `json:"-"`
 
 	ReadAt time.Time `json:"readAt"`
 }
 
-// NewRead creates a read-state record for one recipient.
+// NewRead creates a read-state value for the current reader.
 //
 // ID は NewsID + RecipientType + RecipientID から決定論的に生成されるため、
-// 同一 recipient に対する既読処理を冪等に扱える。
+// 同一読者・同一 News の既読処理を冪等に扱える。
 func NewRead(
 	newsID NewsID,
 	recipientType RecipientType,
@@ -359,7 +375,7 @@ func NewRead(
 		ID:            id,
 		NewsID:        newsID,
 		RecipientType: recipientType,
-		RecipientID:   strings.TrimSpace(recipientID),
+		RecipientID:   recipientID,
 		ReadAt:        canonicalTime(readAt),
 	}
 
@@ -384,7 +400,7 @@ func (r NewsRead) Validate() error {
 		return err
 	}
 
-	if strings.TrimSpace(r.RecipientID) == "" {
+	if r.RecipientID == "" {
 		return ErrInvalidRecipientID
 	}
 
@@ -412,10 +428,15 @@ func (r NewsRead) Validate() error {
 // NewsRead ID
 // ============================================================
 
-// BuildNewsReadID returns a stable document ID for a recipient's read state.
+// BuildNewsReadID returns a stable document ID for the current reader's read state.
 //
-// recipientID をそのまま Firestore document ID に使用せず hash 化することで、
-// ID に "/" 等が含まれる可能性を排除する。
+// RecipientType / RecipientID 自体を Firestore に保存せず、
+// NewsID + RecipientType + RecipientID を hash 化した値だけを
+// NewsRead document ID として使用する。
+//
+// このため、newsReads collection から「誰が読んだか」を直接取得するための
+// recipientId / recipientType フィールドは保持しない。
+//
 // 同一 News / RecipientType / RecipientID からは常に同じ ID が生成される。
 func BuildNewsReadID(
 	newsID NewsID,
@@ -430,7 +451,6 @@ func BuildNewsReadID(
 		return "", err
 	}
 
-	recipientID = strings.TrimSpace(recipientID)
 	if recipientID == "" {
 		return "", ErrInvalidRecipientID
 	}
