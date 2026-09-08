@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+
+	resaledom "narratives/internal/domain/resale"
 )
 
 func (h *ResaleHandler) servePublic(
@@ -87,18 +89,23 @@ func (h *ResaleHandler) listPublicByAvatarID(
 		return
 	}
 
-	items, err := h.query.ListByAvatarID(ctx, avatarID)
+	result, err := h.query.List(
+		ctx,
+		resaledom.Filter{
+			AvatarIDs: []string{avatarID},
+		},
+		resaledom.Sort{
+			Column: "updatedAt",
+			Order:  resaledom.SortDesc,
+		},
+		buildResalePageFromQuery(r),
+	)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
 	}
 
-	page := buildResalePageResponse(
-		items,
-		buildResalePageFromQuery(r),
-	)
-
-	_ = json.NewEncoder(w).Encode(page)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *ResaleHandler) getPublic(

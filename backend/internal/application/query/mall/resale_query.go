@@ -82,6 +82,35 @@ func (q *ResaleQuery) List(
 	return result, nil
 }
 
+// ListOwned returns one paged resale list scoped to the authenticated owner.
+//
+// avatarID must come from the authenticated Avatar context. The owner scope is
+// applied here so callers cannot accidentally issue an unscoped resale list.
+func (q *ResaleQuery) ListOwned(
+	ctx context.Context,
+	avatarID string,
+	page resaledom.Page,
+) (resaledom.PageResult[resaledom.Resale], error) {
+	if q == nil || q.resaleRepo == nil {
+		return resaledom.PageResult[resaledom.Resale]{}, errors.New("not supported: ResaleQuery.ListOwned")
+	}
+	if avatarID == "" {
+		return resaledom.PageResult[resaledom.Resale]{}, resaledom.ErrInvalidAvatarID
+	}
+
+	return q.List(
+		ctx,
+		resaledom.Filter{
+			AvatarIDs: []string{avatarID},
+		},
+		resaledom.Sort{
+			Column: "updatedAt",
+			Order:  resaledom.SortDesc,
+		},
+		page,
+	)
+}
+
 func (q *ResaleQuery) ListByCursor(
 	ctx context.Context,
 	filter resaledom.Filter,
@@ -122,28 +151,6 @@ func (q *ResaleQuery) GetByID(
 	item = q.enrichResaleForDisplay(ctx, item)
 
 	return item, nil
-}
-
-func (q *ResaleQuery) ListByAvatarID(
-	ctx context.Context,
-	avatarID string,
-) ([]resaledom.Resale, error) {
-	if q == nil || q.resaleRepo == nil {
-		return nil, errors.New("not supported: ResaleQuery.ListByAvatarID")
-	}
-
-	if avatarID == "" {
-		return []resaledom.Resale{}, nil
-	}
-
-	items, err := q.resaleRepo.ListByAvatarID(ctx, avatarID)
-	if err != nil {
-		return nil, err
-	}
-
-	items = q.enrichResalesForDisplay(ctx, items)
-
-	return items, nil
 }
 
 // ListChatItems returns resale comment threads related to avatarID.

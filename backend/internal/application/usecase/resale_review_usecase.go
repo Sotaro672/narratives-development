@@ -88,7 +88,6 @@ func (uc *ResaleReviewUsecase) ListComments(
 	if page.Number <= 0 {
 		page.Number = 1
 	}
-
 	if page.PerPage <= 0 {
 		page.PerPage = 20
 	}
@@ -137,6 +136,35 @@ func (uc *ResaleReviewUsecase) ListComments(
 	}, nil
 }
 
+// ListOwnerComments returns visible comments for a resale after verifying
+// that the authenticated avatar owns the target resale.
+//
+// Historical comments remain readable for the owner after suspended / sold.
+func (uc *ResaleReviewUsecase) ListOwnerComments(
+	ctx context.Context,
+	resaleID string,
+	avatarID string,
+	page common.Page,
+) (common.PageResult[ResaleReviewCommentListItem], error) {
+	if err := uc.requireConfigured("ResaleReview.ListOwnerComments"); err != nil {
+		return common.PageResult[ResaleReviewCommentListItem]{}, err
+	}
+
+	if _, err := uc.requireOwnedResale(
+		ctx,
+		resaleID,
+		avatarID,
+	); err != nil {
+		return common.PageResult[ResaleReviewCommentListItem]{}, err
+	}
+
+	return uc.ListComments(
+		ctx,
+		resaleID,
+		page,
+	)
+}
+
 // ============================================================
 // Create comment
 // ============================================================
@@ -161,7 +189,6 @@ func (uc *ResaleReviewUsecase) CreateComment(
 	if resaleID == "" {
 		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidResaleID
 	}
-
 	if avatarID == "" {
 		return ResaleReviewCommentListItem{}, resalereview.ErrInvalidAvatarID
 	}
@@ -206,6 +233,33 @@ func (uc *ResaleReviewUsecase) CreateComment(
 	}, nil
 }
 
+// CreateOwnerComment creates a seller-side comment after verifying that
+// the authenticated avatar owns the target resale.
+//
+// The resale must still be listing. Comment construction, validation,
+// timestamps and persistence remain delegated to CreateComment.
+func (uc *ResaleReviewUsecase) CreateOwnerComment(
+	ctx context.Context,
+	input CreateResaleReviewCommentInput,
+) (ResaleReviewCommentListItem, error) {
+	if err := uc.requireConfigured("ResaleReview.CreateOwnerComment"); err != nil {
+		return ResaleReviewCommentListItem{}, err
+	}
+
+	if _, err := uc.requireOwnedResale(
+		ctx,
+		input.ResaleID,
+		input.AvatarID,
+	); err != nil {
+		return ResaleReviewCommentListItem{}, err
+	}
+
+	return uc.CreateComment(
+		ctx,
+		input,
+	)
+}
+
 // ============================================================
 // Purchase comment
 // ============================================================
@@ -231,11 +285,9 @@ func (uc *ResaleReviewUsecase) CreatePurchaseComment(
 	if resaleID == "" {
 		return resalereview.ErrInvalidResaleID
 	}
-
 	if buyerAvatarID == "" {
 		return resalereview.ErrInvalidAvatarID
 	}
-
 	if uc.avatarRepo == nil {
 		return ErrNotSupported("ResaleReview.CreatePurchaseComment.AvatarRepo")
 	}
@@ -298,21 +350,12 @@ func (uc *ResaleReviewUsecase) MarkCommentsRead(
 		return 0, err
 	}
 
-	if resaleID == "" {
-		return 0, resalereview.ErrInvalidResaleID
-	}
-
-	if avatarID == "" {
-		return 0, resalereview.ErrInvalidAvatarID
-	}
-
-	resale, err := uc.requireExistingResale(ctx, resaleID)
-	if err != nil {
+	if _, err := uc.requireOwnedResale(
+		ctx,
+		resaleID,
+		avatarID,
+	); err != nil {
 		return 0, err
-	}
-
-	if resale.AvatarID != avatarID {
-		return 0, resalereview.ErrForbidden
 	}
 
 	return uc.reviewRepo.Mutations().MarkCommentsRead(
@@ -348,11 +391,9 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 	if resaleID == "" {
 		return resalereview.ErrInvalidResaleID
 	}
-
 	if commentID == "" {
 		return resalereview.ErrInvalidCommentID
 	}
-
 	if avatarID == "" {
 		return resalereview.ErrInvalidAvatarID
 	}
@@ -373,11 +414,9 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 	if comment.Kind != resalereview.CommentKindUser {
 		return resalereview.ErrForbidden
 	}
-
 	if comment.AvatarID != avatarID {
 		return resalereview.ErrForbidden
 	}
-
 	if comment.IsRead {
 		return resalereview.ErrConflict
 	}
@@ -389,6 +428,40 @@ func (uc *ResaleReviewUsecase) DeleteComment(
 	)
 
 	return err
+}
+
+// DeleteOwnerComment logically deletes a seller-side comment after verifying
+// that the authenticated avatar owns the target resale.
+//
+// DeleteComment continues to enforce:
+// - listing-only mutation
+// - user-comment-only deletion
+// - original author ownership
+// - unread-only deletion
+func (uc *ResaleReviewUsecase) DeleteOwnerComment(
+	ctx context.Context,
+	resaleID string,
+	commentID string,
+	avatarID string,
+) error {
+	if err := uc.requireConfigured("ResaleReview.DeleteOwnerComment"); err != nil {
+		return err
+	}
+
+	if _, err := uc.requireOwnedResale(
+		ctx,
+		resaleID,
+		avatarID,
+	); err != nil {
+		return err
+	}
+
+	return uc.DeleteComment(
+		ctx,
+		resaleID,
+		commentID,
+		avatarID,
+	)
 }
 
 // ============================================================
@@ -428,15 +501,12 @@ func (uc *ResaleReviewUsecase) requireConfigured(
 	if uc == nil {
 		return ErrNotSupported(operation)
 	}
-
 	if uc.resaleRepo == nil {
 		return ErrNotSupported(operation + ".ResaleRepo")
 	}
-
 	if uc.reviewRepo == nil {
 		return ErrNotSupported(operation + ".ReviewRepo")
 	}
-
 	if uc.reviewRepo.Comments() == nil ||
 		uc.reviewRepo.Mutations() == nil ||
 		uc.reviewRepo.Cleanup() == nil {
@@ -465,6 +535,38 @@ func (uc *ResaleReviewUsecase) requireExistingResale(
 		}
 
 		return resaledom.Resale{}, err
+	}
+
+	return item, nil
+}
+
+// requireOwnedResale verifies that the target resale exists and belongs to
+// the authenticated avatar.
+//
+// This helper intentionally does not require listing status so owner-only
+// read operations remain available for suspended / sold resale history.
+func (uc *ResaleReviewUsecase) requireOwnedResale(
+	ctx context.Context,
+	resaleID string,
+	avatarID string,
+) (resaledom.Resale, error) {
+	if resaleID == "" {
+		return resaledom.Resale{}, resalereview.ErrInvalidResaleID
+	}
+	if avatarID == "" {
+		return resaledom.Resale{}, resalereview.ErrInvalidAvatarID
+	}
+
+	item, err := uc.requireExistingResale(
+		ctx,
+		resaleID,
+	)
+	if err != nil {
+		return resaledom.Resale{}, err
+	}
+
+	if item.AvatarID != avatarID {
+		return resaledom.Resale{}, resalereview.ErrForbidden
 	}
 
 	return item, nil

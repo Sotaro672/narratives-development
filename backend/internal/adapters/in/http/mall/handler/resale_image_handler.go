@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
-	"time"
 
-	resaledom "narratives/internal/domain/resale"
+	usecase "narratives/internal/application/usecase"
 )
 
 func (h *ResaleHandler) listImages(
@@ -59,6 +58,7 @@ func (h *ResaleHandler) listImages(
 // - frontend uploads images directly to Firebase Storage.
 // - backend receives and stores only the Firebase Storage download URL.
 // - backend does not validate or persist objectPath, fileName, contentType, or size.
+// - ownership and audit fields are handled by ResaleUsecase.
 func (h *ResaleHandler) createImageFromFirebaseStorage(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -76,11 +76,6 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
-		return
-	}
-
-	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
-		writeResaleErr(w, err)
 		return
 	}
 
@@ -106,8 +101,7 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 		return
 	}
 
-	if strings.Contains(req.ID, "/") ||
-		strings.Contains(req.ID, "://") {
+	if strings.Contains(req.ID, "/") || strings.Contains(req.ID, "://") {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "invalid image id",
@@ -131,17 +125,14 @@ func (h *ResaleHandler) createImageFromFirebaseStorage(
 		return
 	}
 
-	now := time.Now().UTC()
-
-	img, err := h.uc.CreateImage(
+	img, err := h.uc.CreateOwnedImage(
 		ctx,
-		resaledom.ResaleImage{
-			ID:           req.ID,
+		usecase.CreateOwnedResaleImageInput{
 			ResaleID:     resaleID,
+			AvatarID:     avatarID,
+			ImageID:      req.ID,
 			URL:          req.URL,
 			DisplayOrder: req.DisplayOrder,
-			CreatedAt:    now,
-			CreatedBy:    avatarID,
 		},
 	)
 	if err != nil {
@@ -176,11 +167,6 @@ func (h *ResaleHandler) deleteImage(
 		return
 	}
 
-	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
-		writeResaleErr(w, err)
-		return
-	}
-
 	if imageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
@@ -189,10 +175,11 @@ func (h *ResaleHandler) deleteImage(
 		return
 	}
 
-	if err := h.uc.DeleteImage(
+	if err := h.uc.DeleteOwnedImage(
 		ctx,
 		resaleID,
 		imageID,
+		avatarID,
 	); err != nil {
 		writeResaleErr(w, err)
 		return
@@ -225,14 +212,8 @@ func (h *ResaleHandler) setPrimaryImage(
 		return
 	}
 
-	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
-		writeResaleErr(w, err)
-		return
-	}
-
 	var req struct {
-		ImageID string  `json:"imageId"`
-		Now     *string `json:"now"`
+		ImageID string `json:"imageId"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -243,8 +224,7 @@ func (h *ResaleHandler) setPrimaryImage(
 		return
 	}
 
-	imageID := req.ImageID
-	if imageID == "" {
+	if req.ImageID == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "imageId is required",
@@ -252,23 +232,11 @@ func (h *ResaleHandler) setPrimaryImage(
 		return
 	}
 
-	now := time.Now().UTC()
-
-	if req.Now != nil && *req.Now != "" {
-		if parsed, err := time.Parse(
-			time.RFC3339,
-			*req.Now,
-		); err == nil {
-			now = parsed.UTC()
-		}
-	}
-
-	item, err := h.uc.SetPrimaryImage(
+	item, err := h.uc.SetOwnedPrimaryImage(
 		ctx,
 		resaleID,
-		imageID,
-		now,
-		&avatarID,
+		req.ImageID,
+		avatarID,
 	)
 	if err != nil {
 		writeResaleErr(w, err)

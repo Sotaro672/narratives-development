@@ -18,12 +18,20 @@ import (
 // NOTE:
 // /mall/me/resales は「自分の出品管理」を基本とし、/{resaleId}/reports は他者出品の通報にも利用する。
 // /mall/resales/avatar/{avatarId} は公開アバターの出品一覧表示専用。
-// 公開マーケット一覧の List / ListByCursor は market_handler.go に移譲する。
+// 所有者一覧は ListOwned、公開アバター一覧は List を使用する。
 type ResaleQuery interface {
-	ListByAvatarID(
+	List(
+		ctx context.Context,
+		filter resaledom.Filter,
+		sort resaledom.Sort,
+		page resaledom.Page,
+	) (resaledom.PageResult[resaledom.Resale], error)
+
+	ListOwned(
 		ctx context.Context,
 		avatarID string,
-	) ([]resaledom.Resale, error)
+		page resaledom.Page,
+	) (resaledom.PageResult[resaledom.Resale], error)
 
 	ListChatItems(
 		ctx context.Context,
@@ -98,11 +106,9 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPost:
 			h.create(w, r)
 			return
-
 		case http.MethodGet:
 			h.listIndex(w, r)
 			return
-
 		default:
 			methodNotAllowed(w)
 			return
@@ -180,11 +186,9 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				case http.MethodGet:
 					h.listImages(w, r, resaleID)
 					return
-
 				case http.MethodPost:
 					h.createImageFromFirebaseStorage(w, r, resaleID)
 					return
-
 				default:
 					methodNotAllowed(w)
 					return
@@ -222,11 +226,9 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				case http.MethodGet:
 					h.listOwnedResaleComments(w, r, resaleID)
 					return
-
 				case http.MethodPost:
 					h.createOwnedResaleComment(w, r, resaleID)
 					return
-
 				default:
 					methodNotAllowed(w)
 					return
@@ -274,15 +276,12 @@ func (h *ResaleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		h.get(w, r, resaleID)
 		return
-
 	case http.MethodPut:
 		h.update(w, r, resaleID)
 		return
-
 	case http.MethodDelete:
 		h.delete(w, r, resaleID)
 		return
-
 	default:
 		methodNotAllowed(w)
 		return

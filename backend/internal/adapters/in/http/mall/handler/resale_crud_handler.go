@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"time"
 
+	usecase "narratives/internal/application/usecase"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -17,6 +17,13 @@ type createResaleRequest struct {
 	Price            int                       `json:"price"`
 	Condition        resaledom.ResaleCondition `json:"condition"`
 	Description      string                    `json:"description"`
+}
+
+type updateResaleRequest struct {
+	Price       int                       `json:"price"`
+	Status      resaledom.ResaleStatus    `json:"status"`
+	Condition   resaledom.ResaleCondition `json:"condition"`
+	Description string                    `json:"description"`
 }
 
 func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
@@ -85,27 +92,18 @@ func (h *ResaleHandler) create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	condition := req.Condition
-	if condition == "" {
-		condition = resaledom.ConditionLikeNew
-	}
-
-	now := time.Now().UTC()
-	item := resaledom.Resale{
-		Status:           resaledom.StatusListing,
-		AssetID:          req.AssetID,
-		TokenBlueprintID: req.TokenBlueprintID,
-		ProductID:        req.ProductID,
-		AvatarID:         avatarID,
-		Price:            req.Price,
-		Condition:        condition,
-		Description:      req.Description,
-		CreatedBy:        avatarID,
-		CreatedAt:        now,
-		UpdatedAt:        &now,
-	}
-
-	created, err := h.uc.Create(ctx, item)
+	created, err := h.uc.CreateResale(
+		ctx,
+		usecase.CreateResaleInput{
+			AvatarID:         avatarID,
+			AssetID:          req.AssetID,
+			TokenBlueprintID: req.TokenBlueprintID,
+			ProductID:        req.ProductID,
+			Price:            req.Price,
+			Condition:        req.Condition,
+			Description:      req.Description,
+		},
+	)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -133,18 +131,17 @@ func (h *ResaleHandler) listIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items, err := h.query.ListByAvatarID(ctx, avatarID)
+	result, err := h.query.ListOwned(
+		ctx,
+		avatarID,
+		buildResalePageFromQuery(r),
+	)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
 	}
 
-	page := buildResalePageResponse(
-		items,
-		buildResalePageFromQuery(r),
-	)
-
-	_ = json.NewEncoder(w).Encode(page)
+	_ = json.NewEncoder(w).Encode(result)
 }
 
 func (h *ResaleHandler) get(
@@ -161,13 +158,25 @@ func (h *ResaleHandler) get(
 		})
 		return
 	}
+	if h.query == nil {
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
 
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
 	}
 
-	item, err := h.uc.GetOwned(ctx, resaleID, avatarID)
+	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	item, err := h.query.GetByID(ctx, resaleID)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -198,12 +207,6 @@ func (h *ResaleHandler) update(
 		return
 	}
 
-	existing, err := h.uc.GetOwned(ctx, resaleID, avatarID)
-	if err != nil {
-		writeResaleErr(w, err)
-		return
-	}
-
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -213,8 +216,8 @@ func (h *ResaleHandler) update(
 		return
 	}
 
-	var item resaledom.Resale
-	if err := json.Unmarshal(body, &item); err != nil {
+	var req updateResaleRequest
+	if err := json.Unmarshal(body, &req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "invalid json",
@@ -222,35 +225,17 @@ func (h *ResaleHandler) update(
 		return
 	}
 
-	now := time.Now().UTC()
-	updatedBy := avatarID
-
-	item.ID = resaleID
-	item.AvatarID = avatarID
-	item.AssetID = existing.AssetID
-	item.TokenBlueprintID = existing.TokenBlueprintID
-	item.ProductID = existing.ProductID
-	item.BrandID = existing.BrandID
-	item.ProductBlueprintID = existing.ProductBlueprintID
-	item.ImageID = existing.ImageID
-	item.CreatedAt = existing.CreatedAt
-	item.CreatedBy = existing.CreatedBy
-	item.UpdatedAt = &now
-	item.UpdatedBy = &updatedBy
-
-	if item.Price <= 0 {
-		item.Price = existing.Price
-	}
-
-	if item.Status == "" {
-		item.Status = existing.Status
-	}
-
-	if item.Condition == "" {
-		item.Condition = existing.Condition
-	}
-
-	updated, err := h.uc.Update(ctx, item)
+	updated, err := h.uc.UpdateOwnedResale(
+		ctx,
+		usecase.UpdateOwnedResaleInput{
+			ResaleID:    resaleID,
+			AvatarID:    avatarID,
+			Price:       req.Price,
+			Status:      req.Status,
+			Condition:   req.Condition,
+			Description: req.Description,
+		},
+	)
 	if err != nil {
 		writeResaleErr(w, err)
 		return
@@ -281,12 +266,7 @@ func (h *ResaleHandler) delete(
 		return
 	}
 
-	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
-		writeResaleErr(w, err)
-		return
-	}
-
-	if err := h.uc.Delete(ctx, resaleID); err != nil {
+	if err := h.uc.DeleteOwned(ctx, resaleID, avatarID); err != nil {
 		writeResaleErr(w, err)
 		return
 	}

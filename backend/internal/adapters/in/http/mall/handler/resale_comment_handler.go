@@ -19,7 +19,7 @@ func (h *ResaleHandler) listOwnedResaleComments(
 ) {
 	ctx := r.Context()
 
-	if h == nil || h.uc == nil || h.resaleReviewUC == nil {
+	if h == nil || h.resaleReviewUC == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{
 			"error": "not_implemented",
 		})
@@ -31,14 +31,10 @@ func (h *ResaleHandler) listOwnedResaleComments(
 		return
 	}
 
-	if _, err := h.uc.GetOwned(ctx, resaleID, avatarID); err != nil {
-		writeResaleErr(w, err)
-		return
-	}
-
-	result, err := h.resaleReviewUC.ListComments(
+	result, err := h.resaleReviewUC.ListOwnerComments(
 		ctx,
 		resaleID,
+		avatarID,
 		buildResaleReviewPageFromQuery(r),
 	)
 	if err != nil {
@@ -62,7 +58,7 @@ func (h *ResaleHandler) createOwnedResaleComment(
 ) {
 	ctx := r.Context()
 
-	if h == nil || h.uc == nil || h.resaleReviewUC == nil {
+	if h == nil || h.resaleReviewUC == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{
 			"error": "not_implemented",
 		})
@@ -74,12 +70,6 @@ func (h *ResaleHandler) createOwnedResaleComment(
 		return
 	}
 
-	item, err := h.uc.GetOwned(ctx, resaleID, avatarID)
-	if err != nil {
-		writeResaleErr(w, err)
-		return
-	}
-
 	var req resaleCommentRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{
@@ -88,11 +78,11 @@ func (h *ResaleHandler) createOwnedResaleComment(
 		return
 	}
 
-	comment, err := h.resaleReviewUC.CreateComment(
+	comment, err := h.resaleReviewUC.CreateOwnerComment(
 		ctx,
 		usecase.CreateResaleReviewCommentInput{
 			ResaleID: resaleID,
-			AvatarID: item.AvatarID,
+			AvatarID: avatarID,
 			Body:     req.Body,
 		},
 	)
@@ -150,7 +140,7 @@ func (h *ResaleHandler) deleteOwnedResaleComment(
 ) {
 	ctx := r.Context()
 
-	if h == nil || h.uc == nil || h.resaleReviewUC == nil {
+	if h == nil || h.resaleReviewUC == nil {
 		writeJSON(w, http.StatusNotImplemented, map[string]string{
 			"error": "not_implemented",
 		})
@@ -162,19 +152,12 @@ func (h *ResaleHandler) deleteOwnedResaleComment(
 		return
 	}
 
-	item, err := h.uc.GetOwned(ctx, resaleID, avatarID)
-	if err != nil {
-		writeResaleErr(w, err)
-		return
-	}
-
-	err = h.resaleReviewUC.DeleteComment(
+	if err := h.resaleReviewUC.DeleteOwnerComment(
 		ctx,
 		resaleID,
 		commentID,
-		item.AvatarID,
-	)
-	if err != nil {
+		avatarID,
+	); err != nil {
 		writeResaleReviewErr(w, err)
 		return
 	}
