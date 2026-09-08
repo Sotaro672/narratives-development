@@ -3,6 +3,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import BillingPage from "../../pages/BillingPage";
+import ContractDetailPage from "../../pages/ContractDetailPage";
 import ContractsPage from "../../pages/ContractsPage";
 import GasPage from "../../pages/GasPage";
 import InquiryDetailPage from "../../pages/InquiryDetailPage";
@@ -24,6 +25,7 @@ export default function MainRoutes() {
       <Route path="/news/create" element={<NewsCreatePage />} />
       <Route path="/news/:newsId" element={<NewsDetailPage />} />
       <Route path="/contracts" element={<ContractsPage />} />
+      <Route path="/contracts/:companyId" element={<ContractDetailPage />} />
       <Route path="/reports" element={<ReportsPage />} />
       <Route path="/reports/:reportId" element={<ReportDetailPage />} />
       <Route path="/billing" element={<BillingPage />} />

@@ -1,11 +1,14 @@
 // frontend/admin/shell/src/pages/ContractsPage.tsx
 
+import { useNavigate } from "react-router-dom";
+
 import CompanyTable from "../features/company/presentation/components/CompanyTable";
 import { useCompanies } from "../features/company/presentation/hooks/useCompanies";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 
 export default function ContractsPage() {
+  const navigate = useNavigate();
   const { companies, loading, error, reload } = useCompanies();
 
   return (
@@ -28,7 +31,16 @@ export default function ContractsPage() {
         <p role="alert">企業一覧の取得に失敗しました。{error}</p>
       )}
 
-      {!loading && !error && <CompanyTable companies={companies} />}
+      {!loading && !error && (
+        <CompanyTable
+          companies={companies}
+          onCompanyClick={(company) =>
+            navigate(`/contracts/${company.id}`, {
+              state: { company },
+            })
+          }
+        />
+      )}
     </Page>
   );
 }

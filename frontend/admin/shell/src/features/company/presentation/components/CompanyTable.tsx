@@ -10,20 +10,20 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type CompanyTableProps = {
   companies: Company[];
+  onCompanyClick?: (company: Company) => void;
 };
 
 export default function CompanyTable({
   companies,
+  onCompanyClick,
 }: CompanyTableProps) {
   const columns = useMemo<TableColumn<Company>[]>(
     () => [
       {
         key: "createdAt",
         header: "登録日時",
-        render: (company) =>
-          formatDateTime(company.createdAt),
-        sortValue: (company) =>
-          new Date(company.createdAt).getTime(),
+        render: (company) => formatDateTime(company.createdAt),
+        sortValue: (company) => new Date(company.createdAt).getTime(),
         nowrap: true,
       },
       {
@@ -40,13 +40,10 @@ export default function CompanyTable({
       {
         key: "representativeName",
         header: "代表者",
-        render: (company) =>
-          company.representativeName || "-",
-        sortValue: (company) =>
-          company.representativeName,
+        render: (company) => company.representativeName || "-",
+        sortValue: (company) => company.representativeName,
         filter: {
-          getValue: (company) =>
-            company.representativeName,
+          getValue: (company) => company.representativeName,
           placeholder: "代表者名で絞り込み",
         },
         nowrap: true,
@@ -54,21 +51,13 @@ export default function CompanyTable({
       {
         key: "isActive",
         header: "契約状態",
-        render: (company) =>
-          company.isActive ? "契約中" : "停止中",
+        render: (company) => company.isActive ? "契約中" : "停止中",
         sortValue: (company) => company.isActive,
         filter: {
-          getValue: (company) =>
-            company.isActive ? "契約中" : "停止中",
+          getValue: (company) => company.isActive ? "契約中" : "停止中",
           options: [
-            {
-              value: "契約中",
-              label: "契約中",
-            },
-            {
-              value: "停止中",
-              label: "停止中",
-            },
+            { value: "契約中", label: "契約中" },
+            { value: "停止中", label: "停止中" },
           ],
         },
         nowrap: true,
@@ -76,10 +65,8 @@ export default function CompanyTable({
       {
         key: "updatedAt",
         header: "最終更新日時",
-        render: (company) =>
-          formatDateTime(company.updatedAt),
-        sortValue: (company) =>
-          new Date(company.updatedAt).getTime(),
+        render: (company) => formatDateTime(company.updatedAt),
+        sortValue: (company) => new Date(company.updatedAt).getTime(),
         nowrap: true,
       },
     ],
@@ -93,6 +80,7 @@ export default function CompanyTable({
       getRowKey={(company) => company.id}
       emptyMessage="登録企業はありません。"
       filteredEmptyMessage="条件に一致する企業はありません。"
+      onRowClick={onCompanyClick}
     />
   );
 }
