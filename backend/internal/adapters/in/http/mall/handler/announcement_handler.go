@@ -12,7 +12,6 @@ import (
 	announcementuc "narratives/internal/application/usecase"
 	ann "narratives/internal/domain/announcement"
 	avatardom "narratives/internal/domain/avatar"
-	common "narratives/internal/domain/common"
 )
 
 // Policy (me-only):
@@ -116,16 +115,12 @@ func (h *MeAnnouncementHandler) handleList(
 		return
 	}
 
-	pageNumber := parsePositiveIntDefault(r.URL.Query().Get("page"), 1)
-	perPage := parsePositiveIntDefault(r.URL.Query().Get("perPage"), 50)
+	page := parsePageFromQuery(r, 50, 100)
 
 	result, err := h.AnnouncementQuery.ListByTargetAvatar(
 		r.Context(),
 		avatarID,
-		common.Page{
-			Number:  pageNumber,
-			PerPage: perPage,
-		},
+		page,
 	)
 	if err != nil {
 		writeMeAnnouncementErr(w, err)

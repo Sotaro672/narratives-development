@@ -10,15 +10,14 @@ import (
 	"strings"
 
 	"narratives/internal/adapters/in/http/middleware"
+	common "narratives/internal/domain/common"
 )
 
 // ============================================================
 // Shared helpers
 // ============================================================
 
-func isNotFound(
-	err error,
-) bool {
+func isNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -28,26 +27,12 @@ func isNotFound(
 		return false
 	}
 
-	message := strings.ToLower(
-		err.Error(),
-	)
+	message := strings.ToLower(err.Error())
 
-	return strings.Contains(
-		message,
-		"not_found",
-	) ||
-		strings.Contains(
-			message,
-			"not found",
-		) ||
-		strings.Contains(
-			message,
-			"404",
-		) ||
-		strings.Contains(
-			message,
-			"avatar_not_found_for_uid",
-		)
+	return strings.Contains(message, "not_found") ||
+		strings.Contains(message, "not found") ||
+		strings.Contains(message, "404") ||
+		strings.Contains(message, "avatar_not_found_for_uid")
 }
 
 // ============================================================
@@ -68,9 +53,7 @@ func writeJSON(
 	_ = json.NewEncoder(w).Encode(v)
 }
 
-func methodNotAllowed(
-	w http.ResponseWriter,
-) {
+func methodNotAllowed(w http.ResponseWriter) {
 	writeJSON(
 		w,
 		http.StatusMethodNotAllowed,
@@ -80,9 +63,7 @@ func methodNotAllowed(
 	)
 }
 
-func notFound(
-	w http.ResponseWriter,
-) {
+func notFound(w http.ResponseWriter) {
 	writeJSON(
 		w,
 		http.StatusNotFound,
@@ -134,9 +115,7 @@ func parseIntDefault(
 	return n
 }
 
-func ptrStr(
-	p *string,
-) string {
+func ptrStr(p *string) string {
 	if p == nil {
 		return ""
 	}
@@ -168,14 +147,42 @@ func parsePositiveIntDefault(
 	raw string,
 	fallback int,
 ) int {
-	n, err := strconv.Atoi(
-		strings.TrimSpace(raw),
-	)
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
 	if err != nil || n <= 0 {
 		return fallback
 	}
 
 	return n
+}
+
+func parsePageFromQuery(
+	r *http.Request,
+	defaultPerPage int,
+	maxPerPage int,
+) common.Page {
+	if defaultPerPage <= 0 {
+		defaultPerPage = 20
+	}
+
+	if r == nil {
+		return common.Page{
+			Number:  1,
+			PerPage: defaultPerPage,
+		}
+	}
+
+	query := r.URL.Query()
+	page := parsePositiveIntDefault(query.Get("page"), 1)
+	perPage := parsePositiveIntDefault(query.Get("perPage"), defaultPerPage)
+
+	if maxPerPage > 0 && perPage > maxPerPage {
+		perPage = maxPerPage
+	}
+
+	return common.Page{
+		Number:  page,
+		PerPage: perPage,
+	}
 }
 
 func requireAvatarID(

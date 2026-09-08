@@ -550,18 +550,7 @@ func buildInquiryFilterFromQuery(r *http.Request) inquirydom.Filter {
 }
 
 func buildInquiryPageFromQuery(r *http.Request) inquirydom.Page {
-	query := r.URL.Query()
-	pageNumber := parsePositiveIntDefault(query.Get("page"), 1)
-	perPage := parsePositiveIntDefault(query.Get("perPage"), 100)
-
-	if perPage > 100 {
-		perPage = 100
-	}
-
-	return inquirydom.Page{
-		Number:  pageNumber,
-		PerPage: perPage,
-	}
+	return parsePageFromQuery(r, 100, 100)
 }
 
 func buildInquiryImagesForMall(

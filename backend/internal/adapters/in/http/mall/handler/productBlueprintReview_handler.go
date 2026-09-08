@@ -116,6 +116,7 @@ func (h *ProductBlueprintReviewHandler) handleReviewCollection(
 			writeJSONError(w, http.StatusMethodNotAllowed, "POST not allowed on public catalog")
 			return
 		}
+
 		h.handleCreateMe(w, r, productBlueprintID)
 	default:
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -133,10 +134,12 @@ func (h *ProductBlueprintReviewHandler) handleReport(
 		http.NotFound(w, r)
 		return
 	}
+
 	if r.Method != http.MethodPost {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
+
 	if h.reportSvc == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "report service not configured")
 		return
@@ -189,6 +192,7 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(
 		writeDomainError(w, err)
 		return
 	}
+
 	if !verified {
 		writeJSONError(w, http.StatusForbidden, "verified purchase required")
 		return
@@ -516,19 +520,7 @@ func splitPath(p string) []string {
 // ============================================================
 
 func parsePage(r *http.Request) domcommon.Page {
-	q := r.URL.Query()
-
-	page := parsePositiveIntDefault(q.Get("page"), 1)
-	perPage := parsePositiveIntDefault(q.Get("perPage"), 20)
-
-	if perPage > 100 {
-		perPage = 100
-	}
-
-	return domcommon.Page{
-		Number:  page,
-		PerPage: perPage,
-	}
+	return parsePageFromQuery(r, 20, 100)
 }
 
 // ============================================================

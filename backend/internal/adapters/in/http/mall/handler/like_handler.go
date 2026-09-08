@@ -102,11 +102,7 @@ func (h *LikeHandler) listLikes(w http.ResponseWriter, r *http.Request) {
 		filter.TargetType = &targetType
 	}
 
-	pageNumber := parsePositiveIntDefault(r.URL.Query().Get("page"), 1)
-	perPage := parsePositiveIntDefault(r.URL.Query().Get("perPage"), 20)
-	if perPage > 100 {
-		perPage = 100
-	}
+	page := parsePageFromQuery(r, 20, 100)
 
 	result, err := h.uc.ListByAvatarID(
 		r.Context(),
@@ -117,8 +113,8 @@ func (h *LikeHandler) listLikes(w http.ResponseWriter, r *http.Request) {
 			Order:  likedom.SortDesc,
 		},
 		likedom.Page{
-			Number:  pageNumber,
-			PerPage: perPage,
+			Number:  page.Number,
+			PerPage: page.PerPage,
 		},
 	)
 	if err != nil {

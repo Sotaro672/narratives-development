@@ -9,33 +9,14 @@ import (
 )
 
 func buildResalePageFromQuery(r *http.Request) resaledom.Page {
-	query := r.URL.Query()
-
-	pageNum := parsePositiveIntDefault(query.Get("page"), 1)
-	perPage := parsePositiveIntDefault(query.Get("perPage"), 50)
-
-	if perPage > 100 {
-		perPage = 100
-	}
+	page := parsePageFromQuery(r, 50, 100)
 
 	return resaledom.Page{
-		Number:  pageNum,
-		PerPage: perPage,
+		Number:  page.Number,
+		PerPage: page.PerPage,
 	}
 }
 
 func buildResaleReviewPageFromQuery(r *http.Request) common.Page {
-	query := r.URL.Query()
-
-	pageNum := parsePositiveIntDefault(query.Get("page"), 1)
-	perPage := parsePositiveIntDefault(query.Get("perPage"), 20)
-
-	if perPage > 100 {
-		perPage = 100
-	}
-
-	return common.Page{
-		Number:  pageNum,
-		PerPage: perPage,
-	}
+	return parsePageFromQuery(r, 20, 100)
 }

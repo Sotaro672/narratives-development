@@ -357,13 +357,9 @@ func (h *OrderHandler) cancelMe(
 		return
 	}
 
-	orderID := strings.TrimSpace(
-		parts[0],
-	)
+	orderID := strings.TrimSpace(parts[0])
 
-	itemIndex, err := strconv.Atoi(
-		parts[2],
-	)
+	itemIndex, err := strconv.Atoi(parts[2])
 	if err != nil || itemIndex < 0 {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -441,13 +437,9 @@ func (h *OrderHandler) returnMe(
 		return
 	}
 
-	orderID := strings.TrimSpace(
-		parts[0],
-	)
+	orderID := strings.TrimSpace(parts[0])
 
-	itemIndex, err := strconv.Atoi(
-		parts[2],
-	)
+	itemIndex, err := strconv.Atoi(parts[2])
 	if err != nil || itemIndex < 0 {
 		w.WriteHeader(http.StatusNotFound)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "not_found"})
@@ -455,20 +447,14 @@ func (h *OrderHandler) returnMe(
 	}
 
 	var req returnOrderItemRequest
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "invalid_json"})
 		return
 	}
 
-	packageState := strings.TrimSpace(
-		req.PackageState,
-	)
-
-	reason := strings.TrimSpace(
-		req.Reason,
-	)
+	packageState := strings.TrimSpace(req.PackageState)
+	reason := strings.TrimSpace(req.Reason)
 
 	if packageState != "unopened" &&
 		packageState != "opened" {
@@ -587,7 +573,10 @@ func (h *OrderHandler) listMe(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(enriched)
 }
 
-func (h *OrderHandler) enrichOrderHistoryPage(ctx context.Context, out any) (historydto.HistoryOrderPage, error) {
+func (h *OrderHandler) enrichOrderHistoryPage(
+	ctx context.Context,
+	out any,
+) (historydto.HistoryOrderPage, error) {
 	if h == nil || h.historyQuery == nil {
 		return historydto.HistoryOrderPage{}, errors.New("order handler: history query not configured")
 	}
@@ -606,18 +595,7 @@ func (h *OrderHandler) enrichOrderHistoryPage(ctx context.Context, out any) (his
 }
 
 func parseOrderPage(r *http.Request) common.Page {
-	q := r.URL.Query()
-	page := parsePositiveIntDefault(q.Get("page"), 1)
-	perPage := parsePositiveIntDefault(q.Get("perPage"), 20)
-
-	if perPage > 100 {
-		perPage = 100
-	}
-
-	return common.Page{
-		Number:  page,
-		PerPage: perPage,
-	}
+	return parsePageFromQuery(r, 20, 100)
 }
 
 func parseOrderSort(r *http.Request) common.Sort {
