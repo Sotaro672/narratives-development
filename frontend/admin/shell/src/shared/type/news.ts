@@ -17,6 +17,7 @@ export type News = {
   publishedAt: string;
   createdAt: string;
   createdBy: string;
+  createdByName: string;
 };
 
 export type CreateNewsInput = {

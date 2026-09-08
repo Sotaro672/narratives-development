@@ -1,4 +1,5 @@
 // backend/internal/platform/di/admin/container.go
+
 package admin
 
 import (
@@ -38,6 +39,7 @@ type Container struct {
 	newsRepo                       *fsrepo.NewsRepositoryFS
 	newsReadRepo                   *fsrepo.NewsReadRepositoryFS
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
+	newsQuery                      *adminquery.NewsQuery
 	reportNameQuery                *adminquery.ReportNameQuery
 	gasBalanceQuery                *adminquery.GasBalanceQuery
 }
@@ -108,6 +110,21 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	if newsUsecase == nil {
 		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: news usecase is nil")
+	}
+
+	authUserReader := firebaseadp.NewAuthUserReader(infra.FirebaseAuth)
+	if authUserReader == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: auth user reader is nil")
+	}
+
+	newsQuery := adminquery.NewNewsQuery(
+		newsUsecase,
+		authUserReader,
+	)
+	if newsQuery == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: news query is nil")
 	}
 
 	reportNameQuery := adminquery.NewReportNameQuery(
@@ -287,6 +304,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		newsRepo:                       newsRepo,
 		newsReadRepo:                   newsReadRepo,
 		reportDecisionNotificationRepo: reportDecisionNotificationRepo,
+		newsQuery:                      newsQuery,
 		reportNameQuery:                reportNameQuery,
 		gasBalanceQuery:                gasBalanceQuery,
 	}, nil

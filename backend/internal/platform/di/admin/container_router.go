@@ -1,4 +1,5 @@
 // backend/internal/platform/di/admin/container_router.go
+
 package admin
 
 import (
@@ -28,7 +29,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	contactHandler := adminhandler.NewContactHandler(cont.contactUsecase)
 	companyHandler := adminhandler.NewCompanyHandler(cont.companyRepo, cont.memberRepo)
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
-	newsHandler := adminhandler.NewNewsHandler(cont.newsUsecase)
+	newsHandler := adminhandler.NewNewsHandler(cont.newsUsecase, cont.newsQuery)
 	reportHandler := adminhandler.NewReportHandler(cont.reportUsecase, cont.reportNameQuery)
 
 	router := adminhttp.NewRouter(adminhttp.RouterDeps{

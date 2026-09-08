@@ -18,9 +18,7 @@ function getBodySummary(body: string): string {
     return "-";
   }
 
-  return body.length > 120
-    ? `${body.slice(0, 120)}…`
-    : body;
+  return body.length > 120 ? `${body.slice(0, 120)}…` : body;
 }
 
 export default function NewsPage() {
@@ -69,6 +67,16 @@ export default function NewsPage() {
         minWidth: "360px",
       },
       {
+        key: "createdByName",
+        header: "作成者",
+        render: (news) => news.createdByName || "-",
+        filter: {
+          getValue: (news) => news.createdByName || "",
+          placeholder: "作成者で絞り込み",
+        },
+        minWidth: "160px",
+      },
+      {
         key: "createdAt",
         header: "作成日時",
         render: (news) => formatDateTime(news.createdAt),
@@ -85,11 +93,7 @@ export default function NewsPage() {
         title="通知"
         actions={
           <>
-            <Button
-              type="button"
-              variant="primary"
-              onClick={() => navigate("/news/create")}
-            >
+            <Button type="button" variant="primary" onClick={() => navigate("/news/create")}>
               通知を作成
             </Button>
 
@@ -107,15 +111,12 @@ export default function NewsPage() {
         <div className="news-page__section-header news-page__section-header--history">
           <div>
             <h2 className="news-page__section-title">配信済み通知</h2>
-
             <p className="news-page__section-description">
               これまでConsoleとMallへ配信したシステム通知の一覧です。
             </p>
           </div>
 
-          {!error && !loading ? (
-            <span className="news-page__count">{totalCount}件</span>
-          ) : null}
+          {!error && !loading ? <span className="news-page__count">{totalCount}件</span> : null}
         </div>
 
         {loading && items.length === 0 ? (
@@ -124,8 +125,7 @@ export default function NewsPage() {
 
         {!loading && error ? (
           <p className="news-page__error" role="alert">
-            配信済み通知の取得に失敗しました。
-            {error}
+            配信済み通知の取得に失敗しました。{error}
           </p>
         ) : null}
 
@@ -145,10 +145,7 @@ export default function NewsPage() {
             />
 
             {totalPages > 1 ? (
-              <nav
-                className="news-page__pagination"
-                aria-label="配信済み通知のページ送り"
-              >
+              <nav className="news-page__pagination" aria-label="配信済み通知のページ送り">
                 <Button
                   size="sm"
                   variant="secondary"

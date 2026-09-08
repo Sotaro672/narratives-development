@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
+	adminquery "narratives/internal/application/query/admin"
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	newsdom "narratives/internal/domain/news"
@@ -28,12 +29,14 @@ const (
 // ============================================================
 
 type NewsHandler struct {
-	uc *usecase.NewsUsecase
+	uc    *usecase.NewsUsecase
+	query *adminquery.NewsQuery
 }
 
-func NewNewsHandler(uc *usecase.NewsUsecase) http.Handler {
+func NewNewsHandler(uc *usecase.NewsUsecase, query *adminquery.NewsQuery) http.Handler {
 	return http.HandlerFunc((&NewsHandler{
-		uc: uc,
+		uc:    uc,
+		query: query,
 	}).handle)
 }
 
@@ -51,13 +54,14 @@ type newsImageResponse struct {
 }
 
 type newsResponse struct {
-	ID          string             `json:"id"`
-	Title       string             `json:"title"`
-	Body        string             `json:"body"`
-	Image       *newsImageResponse `json:"image,omitempty"`
-	PublishedAt string             `json:"publishedAt"`
-	CreatedAt   string             `json:"createdAt"`
-	CreatedBy   string             `json:"createdBy"`
+	ID            string             `json:"id"`
+	Title         string             `json:"title"`
+	Body          string             `json:"body"`
+	Image         *newsImageResponse `json:"image,omitempty"`
+	PublishedAt   string             `json:"publishedAt"`
+	CreatedAt     string             `json:"createdAt"`
+	CreatedBy     string             `json:"createdBy"`
+	CreatedByName string             `json:"createdByName"`
 }
 
 type newsListResponse struct {
@@ -73,8 +77,8 @@ type newsListResponse struct {
 // ============================================================
 
 func (h *NewsHandler) handle(w http.ResponseWriter, r *http.Request) {
-	if h == nil || h.uc == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "news_usecase_not_initialized")
+	if h == nil || h.uc == nil || h.query == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "news_service_not_initialized")
 		return
 	}
 
@@ -106,52 +110,35 @@ func (h *NewsHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	sortValue, ok := parseNewsSort(
-		query.Get("sort"),
-		query.Get("order"),
-	)
+	sortValue, ok := parseNewsSort(query.Get("sort"), query.Get("order"))
 	if !ok {
 		writeJSONError(w, http.StatusBadRequest, "invalid_sort")
 		return
 	}
 
 	page := common.Page{
-		Number: parsePositiveInt(
-			query.Get("page"),
-			1,
-		),
-		PerPage: adminNewsPerPage(
-			query.Get("perPage"),
-		),
+		Number:  parsePositiveInt(query.Get("page"), 1),
+		PerPage: adminNewsPerPage(query.Get("perPage")),
 	}
 
-	result, err := h.uc.ListNews(
-		r.Context(),
-		filter,
-		sortValue,
-		page,
-	)
+	result, err := h.query.ListNews(r.Context(), filter, sortValue, page)
 	if err != nil {
 		writeNewsError(w, err, "news_list_failed")
 		return
 	}
 
 	items := make([]newsResponse, 0, len(result.Items))
-	for _, entity := range result.Items {
-		items = append(items, toNewsResponse(entity))
+	for _, item := range result.Items {
+		items = append(items, toNewsResponse(item.News, item.CreatedByName))
 	}
 
-	writeJSON(
-		w,
-		http.StatusOK,
-		newsListResponse{
-			Items:      items,
-			TotalCount: result.TotalCount,
-			TotalPages: result.TotalPages,
-			Page:       result.Page,
-			PerPage:    result.PerPage,
-		},
-	)
+	writeJSON(w, http.StatusOK, newsListResponse{
+		Items:      items,
+		TotalCount: result.TotalCount,
+		TotalPages: result.TotalPages,
+		Page:       result.Page,
+		PerPage:    result.PerPage,
+	})
 }
 
 // ============================================================
@@ -165,11 +152,7 @@ func (h *NewsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(
-		w,
-		r.Body,
-		maxAdminNewsRequestSize,
-	)
+	r.Body = http.MaxBytesReader(w, r.Body, maxAdminNewsRequestSize)
 
 	if err := r.ParseMultipartForm(maxAdminNewsImageSize); err != nil {
 		var maxBytesErr *http.MaxBytesError
@@ -229,19 +212,18 @@ func (h *NewsHandler) handleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	created, err := h.uc.CreateNews(
-		r.Context(),
-		input,
-	)
+	created, err := h.uc.CreateNews(r.Context(), input)
 	if err != nil {
 		writeNewsError(w, err, "news_create_failed")
 		return
 	}
 
+	createdByName := h.query.ResolveCreatedByName(r.Context(), created.CreatedBy)
+
 	writeJSON(
 		w,
 		http.StatusCreated,
-		toNewsResponse(created),
+		toNewsResponse(created, createdByName),
 	)
 }
 
@@ -303,9 +285,7 @@ func detectNewsImageContentType(file multipart.File) (string, error) {
 		return "", err
 	}
 
-	contentType := strings.ToLower(
-		http.DetectContentType(header[:readBytes]),
-	)
+	contentType := strings.ToLower(http.DetectContentType(header[:readBytes]))
 
 	switch contentType {
 	case "image/jpeg", "image/png", "image/webp":
@@ -319,13 +299,10 @@ func writeNewsImageError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errNewsImageTooLarge):
 		writeJSONError(w, http.StatusRequestEntityTooLarge, "news_image_too_large")
-
 	case errors.Is(err, errNewsImageEmpty):
 		writeJSONError(w, http.StatusBadRequest, "news_image_empty")
-
 	case errors.Is(err, errNewsImageInvalidMimeType):
 		writeJSONError(w, http.StatusBadRequest, "invalid_news_image_type")
-
 	default:
 		writeJSONError(w, http.StatusBadRequest, "invalid_news_image")
 	}
@@ -335,14 +312,15 @@ func writeNewsImageError(w http.ResponseWriter, err error) {
 // Response mapper
 // ============================================================
 
-func toNewsResponse(entity newsdom.News) newsResponse {
+func toNewsResponse(entity newsdom.News, createdByName string) newsResponse {
 	response := newsResponse{
-		ID:          string(entity.ID),
-		Title:       entity.Title,
-		Body:        entity.Body,
-		PublishedAt: newsTimeString(entity.PublishedAt),
-		CreatedAt:   newsTimeString(entity.CreatedAt),
-		CreatedBy:   entity.CreatedBy,
+		ID:            string(entity.ID),
+		Title:         entity.Title,
+		Body:          entity.Body,
+		PublishedAt:   newsTimeString(entity.PublishedAt),
+		CreatedAt:     newsTimeString(entity.CreatedAt),
+		CreatedBy:     entity.CreatedBy,
+		CreatedByName: createdByName,
 	}
 
 	if entity.Image != nil {
@@ -364,9 +342,7 @@ func newsTimeString(value time.Time) string {
 		return ""
 	}
 
-	return value.
-		UTC().
-		Format(time.RFC3339Nano)
+	return value.UTC().Format(time.RFC3339Nano)
 }
 
 // ============================================================
@@ -407,15 +383,10 @@ func parseNewsSort(
 }
 
 func adminNewsPerPage(value string) int {
-	perPage := parsePositiveInt(
-		value,
-		defaultNewsPerPage,
-	)
-
+	perPage := parsePositiveInt(value, defaultNewsPerPage)
 	if perPage > maxAdminNewsPerPage {
 		return maxAdminNewsPerPage
 	}
-
 	return perPage
 }
 
