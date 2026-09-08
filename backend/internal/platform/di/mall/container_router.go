@@ -60,6 +60,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var inquiryH http.Handler
 	var meAvatarsH http.Handler
 	var announcementH http.Handler
+	var newsH http.Handler
 	var reportDecisionNotificationH http.Handler
 	var marketH http.Handler
 	var resaleH http.Handler
@@ -199,6 +200,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 			cont.AnnouncementUC,
 			cont.AnnouncementQ,
 		)
+	}
+
+	// /mall/me/news
+	if cont.NewsUC != nil {
+		newsH = mallhandler.NewNewsHandler(cont.NewsUC)
 	}
 
 	// /mall/me/report-decision-notifications
@@ -369,6 +375,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		AvatarReview:               avatarReviewH,
 		Inquiry:                    inquiryH,
 		Announcement:               announcementH,
+		News:                       newsH,
 		ReportDecisionNotification: reportDecisionNotificationH,
 
 		SetupStatus: setupStatusH,

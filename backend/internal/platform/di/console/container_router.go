@@ -32,6 +32,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		authBootstrapH                                http.Handler
 		accountsH                                     http.Handler
 		announcementsH                                http.Handler
+		newsH                                         http.Handler
 		reportDecisionNotificationsH                  http.Handler
 		permissionsH                                  http.Handler
 		brandsH                                       http.Handler
@@ -90,6 +91,10 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 			c.AnnouncementManagementQuery,
 			c.AnnouncementDetailQuery,
 		)
+	}
+
+	if c.NewsUC != nil {
+		newsH = consoleHandler.NewNewsHandler(c.NewsUC)
 	}
 
 	if c.ReportUC != nil {
@@ -446,6 +451,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		AuthBootstrap:                  authBootstrapH,
 		Accounts:                       accountsH,
 		Announcements:                  announcementsH,
+		News:                           newsH,
 		ReportDecisionNotifications:    reportDecisionNotificationsH,
 		Permissions:                    permissionsH,
 		Brands:                         brandsH,

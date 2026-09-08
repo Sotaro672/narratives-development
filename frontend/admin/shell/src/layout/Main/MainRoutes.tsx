@@ -7,6 +7,7 @@ import ContractsPage from "../../pages/ContractsPage";
 import GasPage from "../../pages/GasPage";
 import InquiryDetailPage from "../../pages/InquiryDetailPage";
 import InquiriesPage from "../../pages/InquiriesPage";
+import NewsPage from "../../pages/NewsPage";
 import ReportDetailPage from "../../pages/ReportDetailPage";
 import ReportsPage from "../../pages/ReportsPage";
 
@@ -17,6 +18,7 @@ export default function MainRoutes() {
       <Route path="/inquiries" element={<InquiriesPage />} />
       <Route path="/inquiries/:inquiryId" element={<InquiryDetailPage />} />
       <Route path="/gas" element={<GasPage />} />
+      <Route path="/news" element={<NewsPage />} />
       <Route path="/contracts" element={<ContractsPage />} />
       <Route path="/reports" element={<ReportsPage />} />
       <Route path="/reports/:reportId" element={<ReportDetailPage />} />

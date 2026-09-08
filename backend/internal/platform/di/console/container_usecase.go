@@ -24,6 +24,7 @@ type usecases struct {
 	tokenUC                         *uc.TokenUsecase
 	accountUC                       *uc.AccountUsecase
 	announcementUC                  *uc.AnnouncementUsecase
+	newsUC                          *uc.NewsUsecase
 	avatarUC                        *uc.AvatarUsecase
 	paymentMethodUC                 *uc.PaymentMethodUsecase
 	brandUC                         *uc.BrandUsecase
@@ -269,6 +270,21 @@ func buildUsecases(
 		announcementAvatarRepo,
 		announcementAttachmentRepo,
 	).WithAttachmentStorage(announcementAttachmentStorage)
+
+	if r.newsRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: news repository is nil"))
+	}
+	if r.newsReadRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: news read repository is nil"))
+	}
+
+	newsUC := uc.NewNewsUsecase(
+		r.newsRepo,
+		r.newsReadRepo,
+	)
+	if newsUC == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: news usecase is nil"))
+	}
 
 	brandWalletSvc := solanainfra.NewBrandWalletService(c.firestoreProjectID)
 	avatarWalletSvc := solanainfra.NewAvatarWalletService(c.firestoreProjectID)
@@ -726,6 +742,7 @@ func buildUsecases(
 		tokenUC:                         tokenUC,
 		accountUC:                       accountUC,
 		announcementUC:                  announcementUC,
+		newsUC:                          newsUC,
 		avatarUC:                        avatarUC,
 		paymentMethodUC:                 paymentMethodUC,
 		brandUC:                         brandUC,

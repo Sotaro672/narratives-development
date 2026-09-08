@@ -52,6 +52,7 @@ type Container struct {
 	InquiryUC                      *usecase.InquiryUsecase
 	ReturnRequestUC                *usecase.ReturnRequestUsecase
 	AnnouncementUC                 *usecase.AnnouncementUsecase
+	NewsUC                         *usecase.NewsUsecase
 	ResaleUC                       *usecase.ResaleUsecase
 	ResaleReviewUC                 *usecase.ResaleReviewUsecase
 	LikeUC                         *usecase.LikeUsecase

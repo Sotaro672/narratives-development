@@ -111,6 +111,12 @@ type Deps struct {
 	// - POST /mall/me/announcement/{announcementId}/read
 	Announcement http.Handler
 
+	// system news (me)
+	// - GET  /mall/me/news
+	// - GET  /mall/me/news/unread-count
+	// - POST /mall/me/news/{newsId}/read
+	News http.Handler
+
 	// report decision notifications (me)
 	// - GET  /mall/me/report-decision-notifications
 	// - POST /mall/me/report-decision-notifications/{notificationId}/read
@@ -422,6 +428,10 @@ func Register(
 	// announcements (me)
 	handleSafeAuthAvatar(mux, "/mall/me/announcement", deps.Announcement, "Announcement(me)", auth, avatar)
 	handleSafeAuthAvatar(mux, "/mall/me/announcement/", deps.Announcement, "Announcement(me)", auth, avatar)
+
+	// system news (me)
+	handleSafeAuthAvatar(mux, "/mall/me/news", deps.News, "News(me)", auth, avatar)
+	handleSafeAuthAvatar(mux, "/mall/me/news/", deps.News, "News(me)", auth, avatar)
 
 	// report decision notifications (me)
 	handleSafeAuthAvatar(

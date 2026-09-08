@@ -26,6 +26,7 @@ type Container struct {
 	adminFirebaseUID               string
 	adminEmail                     string
 	contactUsecase                 *usecase.ContactUsecase
+	newsUsecase                    *usecase.NewsUsecase
 	reportUsecase                  *usecase.ReportUsecase
 	companyRepo                    *fsrepo.CompanyRepositoryFS
 	memberRepo                     *fsrepo.MemberRepositoryFS
@@ -33,6 +34,8 @@ type Container struct {
 	brandRepo                      *fsrepo.BrandRepositoryFS
 	productBlueprintRepo           *fsrepo.ProductBlueprintRepositoryFS
 	tokenBlueprintRepo             *fsrepo.TokenBlueprintRepositoryFS
+	newsRepo                       *fsrepo.NewsRepositoryFS
+	newsReadRepo                   *fsrepo.NewsReadRepositoryFS
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 	reportNameQuery                *adminquery.ReportNameQuery
 	gasBalanceQuery                *adminquery.GasBalanceQuery
@@ -78,6 +81,21 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	tokenBlueprintRepo := fsrepo.NewTokenBlueprintRepositoryFS(infra.Firestore)
 	listRepo := fsrepo.NewListRepositoryFS(infra.Firestore)
 	inventoryRepo := fsrepo.NewInventoryRepositoryFS(infra.Firestore)
+
+	newsRepo := fsrepo.NewNewsRepositoryFS(infra.Firestore)
+	if newsRepo == nil {
+		return nil, errors.New("di.admin: news repository is nil")
+	}
+
+	newsReadRepo := fsrepo.NewNewsReadRepositoryFS(infra.Firestore)
+	if newsReadRepo == nil {
+		return nil, errors.New("di.admin: news read repository is nil")
+	}
+
+	newsUsecase := usecase.NewNewsUsecase(newsRepo, newsReadRepo)
+	if newsUsecase == nil {
+		return nil, errors.New("di.admin: news usecase is nil")
+	}
 
 	reportNameQuery := adminquery.NewReportNameQuery(
 		avatarRepo,
@@ -236,6 +254,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		adminFirebaseUID:               adminFirebaseUID,
 		adminEmail:                     adminEmail,
 		contactUsecase:                 contactUsecase,
+		newsUsecase:                    newsUsecase,
 		reportUsecase:                  reportUsecase,
 		companyRepo:                    companyRepo,
 		memberRepo:                     memberRepo,
@@ -243,6 +262,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		brandRepo:                      brandRepo,
 		productBlueprintRepo:           productBlueprintRepo,
 		tokenBlueprintRepo:             tokenBlueprintRepo,
+		newsRepo:                       newsRepo,
+		newsReadRepo:                   newsReadRepo,
 		reportDecisionNotificationRepo: reportDecisionNotificationRepo,
 		reportNameQuery:                reportNameQuery,
 		gasBalanceQuery:                gasBalanceQuery,

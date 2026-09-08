@@ -9,6 +9,7 @@ import "./Sidebar.css";
 const menuItems = [
   { label: "問い合わせ", path: "/inquiries", countType: "contact" as const },
   { label: "ガス", path: "/gas" },
+  { label: "通知", path: "/news" },
   { label: "契約", path: "/contracts" },
   { label: "通報", path: "/reports", countType: "report" as const },
   { label: "請求", path: "/billing" },

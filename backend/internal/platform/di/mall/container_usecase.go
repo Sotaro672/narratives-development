@@ -57,6 +57,7 @@ type mallUsecases struct {
 	inquiryUC                      *usecase.InquiryUsecase
 	returnRequestUC                *usecase.ReturnRequestUsecase
 	announcementUC                 *usecase.AnnouncementUsecase
+	newsUC                         *usecase.NewsUsecase
 	resaleUC                       *usecase.ResaleUsecase
 	resaleReviewUC                 *usecase.ResaleReviewUsecase
 	likeUC                         *usecase.LikeUsecase
@@ -157,6 +158,21 @@ func buildMallUsecases(
 		r.announcementAvatarRepo,
 		r.announcementAttachmentRepo,
 	)
+
+	if r.newsRepo == nil {
+		return nil, errors.New("di.mall: news repository is nil")
+	}
+	if r.newsReadRepo == nil {
+		return nil, errors.New("di.mall: news read repository is nil")
+	}
+
+	newsUC := usecase.NewNewsUsecase(
+		r.newsRepo,
+		r.newsReadRepo,
+	)
+	if newsUC == nil {
+		return nil, errors.New("di.mall: news usecase is nil")
+	}
 
 	resaleUC := usecase.NewResaleUsecase(
 		r.resaleRepo,
@@ -718,6 +734,7 @@ func buildMallUsecases(
 		inquiryUC:                      inquiryUC,
 		returnRequestUC:                returnRequestUC,
 		announcementUC:                 announcementUC,
+		newsUC:                         newsUC,
 		resaleUC:                       resaleUC,
 		resaleReviewUC:                 resaleReviewUC,
 		likeUC:                         likeUC,
@@ -763,6 +780,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
 	c.AnnouncementUC = u.announcementUC
+	c.NewsUC = u.newsUC
 	c.ResaleUC = u.resaleUC
 	c.ResaleReviewUC = u.resaleReviewUC
 	c.LikeUC = u.likeUC

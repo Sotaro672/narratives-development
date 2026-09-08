@@ -28,6 +28,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	contactHandler := adminhandler.NewContactHandler(cont.contactUsecase)
 	companyHandler := adminhandler.NewCompanyHandler(cont.companyRepo, cont.memberRepo)
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
+	newsHandler := adminhandler.NewNewsHandler(cont.newsUsecase)
 	reportHandler := adminhandler.NewReportHandler(cont.reportUsecase, cont.reportNameQuery)
 
 	router := adminhttp.NewRouter(adminhttp.RouterDeps{
@@ -36,6 +37,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Contacts:  contactHandler,
 		Companies: companyHandler,
 		Gas:       gasHandler,
+		News:      newsHandler,
 		Reports:   reportHandler,
 	})
 

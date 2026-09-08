@@ -36,6 +36,7 @@ type Container struct {
 	MemberService                   *memdom.Service
 	AccountUC                       *uc.AccountUsecase
 	AnnouncementUC                  *uc.AnnouncementUsecase
+	NewsUC                          *uc.NewsUsecase
 	AvatarUC                        *uc.AvatarUsecase
 	PaymentMethodUC                 *uc.PaymentMethodUsecase
 	BrandUC                         *uc.BrandUsecase
@@ -215,6 +216,7 @@ func NewContainer(
 		MemberService:                   services.memberSvc,
 		AccountUC:                       u.accountUC,
 		AnnouncementUC:                  u.announcementUC,
+		NewsUC:                          u.newsUC,
 		AvatarUC:                        u.avatarUC,
 		PaymentMethodUC:                 u.paymentMethodUC,
 		BrandUC:                         u.brandUC,

@@ -20,6 +20,7 @@ type RouterDeps struct {
 	AuthBootstrap               http.Handler
 	Accounts                    http.Handler
 	Announcements               http.Handler
+	News                        http.Handler
 	ReportDecisionNotifications http.Handler
 	Permissions                 http.Handler
 	Brands                      http.Handler
@@ -160,6 +161,12 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.Announcements)
 		mux.Handle("/announcements", h)
 		mux.Handle("/announcements/", h)
+	}
+
+	if deps.News != nil {
+		h := withAuth(deps.News)
+		mux.Handle("/news", h)
+		mux.Handle("/news/", h)
 	}
 
 	if deps.ReportDecisionNotifications != nil {
