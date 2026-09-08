@@ -109,13 +109,6 @@ export default function NewsPage() {
 
       <section className="news-page__history-section">
         <div className="news-page__section-header news-page__section-header--history">
-          <div>
-            <h2 className="news-page__section-title">配信済み通知</h2>
-            <p className="news-page__section-description">
-              これまでConsoleとMallへ配信したシステム通知の一覧です。
-            </p>
-          </div>
-
           {!error && !loading ? <span className="news-page__count">{totalCount}件</span> : null}
         </div>
 
