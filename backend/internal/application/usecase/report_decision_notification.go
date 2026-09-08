@@ -23,22 +23,17 @@ func (u *ReportUsecase) ListDecisionNotificationsForAvatar(
 	}
 
 	recipientType := reportdom.ActorTypeAvatar
-	return u.decisionNotificationRepo.List(
-		ctx,
-		reportdom.DecisionNotificationFilter{
-			RecipientType: &recipientType,
-			RecipientID:   avatarID,
-			IsRead:        isRead,
-		},
-		common.Sort{
-			Column: "createdAt",
-			Order:  common.SortDesc,
-		},
-		page,
-	)
+	return u.decisionNotificationRepo.List(ctx, reportdom.DecisionNotificationFilter{
+		RecipientType: &recipientType,
+		RecipientID:   avatarID,
+		IsRead:        isRead,
+	}, common.Sort{
+		Column: "createdAt",
+		Order:  common.SortDesc,
+	}, page)
 }
 
-func (u *ReportUsecase) MarkDecisionNotificationReadForAvatar(
+func (u *ReportUsecase) GetDecisionNotificationForAvatar(
 	ctx context.Context,
 	notificationID reportdom.DecisionNotificationID,
 	avatarID string,
@@ -57,16 +52,38 @@ func (u *ReportUsecase) MarkDecisionNotificationReadForAvatar(
 	if err != nil {
 		return reportdom.DecisionNotification{}, err
 	}
-	if notification.RecipientType != reportdom.ActorTypeAvatar ||
-		notification.RecipientID != avatarID {
+	if notification.RecipientType != reportdom.ActorTypeAvatar || notification.RecipientID != avatarID {
 		return reportdom.DecisionNotification{}, ErrReportForbidden
+	}
+
+	return notification, nil
+}
+
+func (u *ReportUsecase) MarkDecisionNotificationReadForAvatar(
+	ctx context.Context,
+	notificationID reportdom.DecisionNotificationID,
+	avatarID string,
+) (reportdom.DecisionNotification, error) {
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return reportdom.DecisionNotification{}, err
+	}
+	if notificationID == "" {
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidDecisionNotificationID
+	}
+	if avatarID == "" {
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidReporterID
+	}
+
+	notification, err := u.GetDecisionNotificationForAvatar(ctx, notificationID, avatarID)
+	if err != nil {
+		return reportdom.DecisionNotification{}, err
 	}
 
 	return u.decisionNotificationRepo.MarkRead(
 		ctx,
 		notificationID,
 		reportdom.ActorTypeAvatar,
-		avatarID,
+		notification.RecipientID,
 		u.now().UTC(),
 	)
 }
@@ -85,22 +102,17 @@ func (u *ReportUsecase) ListDecisionNotificationsForCompany(
 	}
 
 	recipientType := reportdom.ActorTypeBrand
-	return u.decisionNotificationRepo.List(
-		ctx,
-		reportdom.DecisionNotificationFilter{
-			RecipientType: &recipientType,
-			CompanyID:     companyID,
-			IsRead:        isRead,
-		},
-		common.Sort{
-			Column: "createdAt",
-			Order:  common.SortDesc,
-		},
-		page,
-	)
+	return u.decisionNotificationRepo.List(ctx, reportdom.DecisionNotificationFilter{
+		RecipientType: &recipientType,
+		CompanyID:     companyID,
+		IsRead:        isRead,
+	}, common.Sort{
+		Column: "createdAt",
+		Order:  common.SortDesc,
+	}, page)
 }
 
-func (u *ReportUsecase) MarkDecisionNotificationReadForCompany(
+func (u *ReportUsecase) GetDecisionNotificationForCompany(
 	ctx context.Context,
 	notificationID reportdom.DecisionNotificationID,
 	companyID string,
@@ -119,9 +131,31 @@ func (u *ReportUsecase) MarkDecisionNotificationReadForCompany(
 	if err != nil {
 		return reportdom.DecisionNotification{}, err
 	}
-	if notification.RecipientType != reportdom.ActorTypeBrand ||
-		notification.CompanyID != companyID {
+	if notification.RecipientType != reportdom.ActorTypeBrand || notification.CompanyID != companyID {
 		return reportdom.DecisionNotification{}, ErrReportForbidden
+	}
+
+	return notification, nil
+}
+
+func (u *ReportUsecase) MarkDecisionNotificationReadForCompany(
+	ctx context.Context,
+	notificationID reportdom.DecisionNotificationID,
+	companyID string,
+) (reportdom.DecisionNotification, error) {
+	if err := u.ensureDecisionNotificationRepository(); err != nil {
+		return reportdom.DecisionNotification{}, err
+	}
+	if notificationID == "" {
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidDecisionNotificationID
+	}
+	if companyID == "" {
+		return reportdom.DecisionNotification{}, reportdom.ErrInvalidCompanyID
+	}
+
+	notification, err := u.GetDecisionNotificationForCompany(ctx, notificationID, companyID)
+	if err != nil {
+		return reportdom.DecisionNotification{}, err
 	}
 
 	return u.decisionNotificationRepo.MarkRead(
@@ -160,36 +194,21 @@ func (u *ReportUsecase) createDecisionNotifications(
 	}
 
 	const perPage = 100
-
 	for pageNumber := 1; ; pageNumber++ {
-		result, err := u.reportRepo.ListReports(
-			ctx,
-			reportCase.ID,
-			filter,
-			sort,
-			common.Page{
-				Number:  pageNumber,
-				PerPage: perPage,
-			},
-		)
+		result, err := u.reportRepo.ListReports(ctx, reportCase.ID, filter, sort, common.Page{
+			Number:  pageNumber,
+			PerPage: perPage,
+		})
 		if err != nil {
 			return err
 		}
 
 		for _, report := range result.Items {
-			notification, err := reportdom.NewDecisionNotification(
-				reportCase,
-				report,
-				decidedAt,
-			)
+			notification, err := reportdom.NewDecisionNotification(reportCase, report, decidedAt)
 			if err != nil {
 				return err
 			}
-
-			if _, err := u.decisionNotificationRepo.CreateIfAbsent(
-				ctx,
-				notification,
-			); err != nil {
+			if _, err := u.decisionNotificationRepo.CreateIfAbsent(ctx, notification); err != nil {
 				return err
 			}
 		}
@@ -199,11 +218,7 @@ func (u *ReportUsecase) createDecisionNotifications(
 		}
 	}
 
-	return u.createTargetEnforcementDecisionNotification(
-		ctx,
-		reportCase,
-		decidedAt,
-	)
+	return u.createTargetEnforcementDecisionNotification(ctx, reportCase, decidedAt)
 }
 
 func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
@@ -222,16 +237,12 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 	// RESALE は出品Avatar、LIST は出品元Brand、TOKEN_BLUEPRINT はそのTokenBlueprintを
 	// 所有するBrandへ措置通知を送る。TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
-	case reportdom.TargetTypeProductBlueprintReview,
-		reportdom.TargetTypeAvatar,
-		reportdom.TargetTypeResale:
-
+	case reportdom.TargetTypeProductBlueprintReview, reportdom.TargetTypeAvatar, reportdom.TargetTypeResale:
 	case reportdom.TargetTypeList:
 		targetContext, err := u.resolveListTargetContext(ctx, reportCase.TargetID)
 		if err != nil {
 			return err
 		}
-
 		notificationCase.TargetAuthorID = targetContext.BrandID
 		notificationCase.TargetAuthorType = reportdom.ActorTypeBrand
 		companyID = targetContext.CompanyID
@@ -274,9 +285,6 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 		return err
 	}
 
-	_, err = u.decisionNotificationRepo.CreateIfAbsent(
-		ctx,
-		notification,
-	)
+	_, err = u.decisionNotificationRepo.CreateIfAbsent(ctx, notification)
 	return err
 }

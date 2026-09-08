@@ -30,17 +30,14 @@ type ReportDecisionNotificationHandler struct {
 	ReportUC *uc.ReportUsecase
 }
 
-func NewReportDecisionNotificationHandler(
-	reportUC *uc.ReportUsecase,
-) *ReportDecisionNotificationHandler {
-	return &ReportDecisionNotificationHandler{
-		ReportUC: reportUC,
-	}
+func NewReportDecisionNotificationHandler(reportUC *uc.ReportUsecase) *ReportDecisionNotificationHandler {
+	return &ReportDecisionNotificationHandler{ReportUC: reportUC}
 }
 
 // Supported:
 // - GET  /mall/me/report-decision-notifications
 // - GET  /mall/me/report-decision-notifications?isRead=false&page=1&perPage=20
+// - GET  /mall/me/report-decision-notifications/{notificationId}
 // - POST /mall/me/report-decision-notifications/{notificationId}/read
 //
 // Security:
@@ -48,90 +45,56 @@ func NewReportDecisionNotificationHandler(
 // - UserAuthMiddleware + AvatarContextMiddleware が解決した current avatarId を利用する。
 // - Usecase 側でも通知の RecipientType / RecipientID を再検証する。
 // - Admin の内部識別子 DecidedBy はレスポンスへ公開しない。
-func (h *ReportDecisionNotificationHandler) ServeHTTP(
-	w http.ResponseWriter,
-	r *http.Request,
-) {
+func (h *ReportDecisionNotificationHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
 	if h == nil || h.ReportUC == nil {
-		writeJSON(
-			w,
-			http.StatusServiceUnavailable,
-			map[string]string{
-				"error": "report_decision_notification_handler_not_initialized",
-			},
-		)
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "report_decision_notification_handler_not_initialized"})
 		return
 	}
 
-	notificationID, isReadPath, matched :=
-		parseMallReportDecisionNotificationPath(r.URL.Path)
+	notificationID, isDetailPath, isReadPath, matched := parseMallReportDecisionNotificationPath(r.URL.Path)
 	if !matched {
-		writeJSON(
-			w,
-			http.StatusNotFound,
-			map[string]string{
-				"error": "not_found",
-			},
-		)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not_found"})
 		return
 	}
 
 	avatarID, ok := middleware.CurrentAvatarID(r)
 	if !ok || avatarID == "" {
-		writeJSON(
-			w,
-			http.StatusUnauthorized,
-			map[string]string{
-				"error": "avatar_context_required",
-			},
-		)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "avatar_context_required"})
 		return
 	}
 
 	if isReadPath {
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
-			writeJSON(
-				w,
-				http.StatusMethodNotAllowed,
-				map[string]string{
-					"error": "method_not_allowed",
-				},
-			)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 			return
 		}
+		h.markRead(w, r, avatarID, notificationID)
+		return
+	}
 
-		h.markRead(
-			w,
-			r,
-			avatarID,
-			notificationID,
-		)
+	if isDetailPath {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
+			return
+		}
+		h.getDetail(w, r, avatarID, notificationID)
 		return
 	}
 
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
-		writeJSON(
-			w,
-			http.StatusMethodNotAllowed,
-			map[string]string{
-				"error": "method_not_allowed",
-			},
-		)
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method_not_allowed"})
 		return
 	}
 
-	h.list(
-		w,
-		r,
-		avatarID,
-	)
+	h.list(w, r, avatarID)
 }
 
 // ============================================================
@@ -164,72 +127,65 @@ type reportDecisionNotificationResponse struct {
 // List
 // ============================================================
 
-func (h *ReportDecisionNotificationHandler) list(
-	w http.ResponseWriter,
-	r *http.Request,
-	avatarID string,
-) {
-	isRead, err := parseMallReportDecisionNotificationIsRead(
-		r.URL.Query().Get("isRead"),
-	)
+func (h *ReportDecisionNotificationHandler) list(w http.ResponseWriter, r *http.Request, avatarID string) {
+	isRead, err := parseMallReportDecisionNotificationIsRead(r.URL.Query().Get("isRead"))
 	if err != nil {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid_is_read",
-			},
-		)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_is_read"})
 		return
 	}
 
 	page, err := parseMallReportDecisionNotificationPage(r)
 	if err != nil {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid_pagination",
-			},
-		)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_pagination"})
 		return
 	}
 
-	result, err := h.ReportUC.ListDecisionNotificationsForAvatar(
+	result, err := h.ReportUC.ListDecisionNotificationsForAvatar(r.Context(), avatarID, isRead, page)
+	if err != nil {
+		writeMallReportDecisionNotificationError(w, err)
+		return
+	}
+
+	items := make([]reportDecisionNotificationResponse, 0, len(result.Items))
+	for _, notification := range result.Items {
+		items = append(items, toMallReportDecisionNotificationResponse(notification))
+	}
+
+	writeJSON(w, http.StatusOK, domcommon.PageResult[reportDecisionNotificationResponse]{
+		Items:      items,
+		TotalCount: result.TotalCount,
+		TotalPages: result.TotalPages,
+		Page:       result.Page,
+		PerPage:    result.PerPage,
+	})
+}
+
+// ============================================================
+// Detail
+// ============================================================
+
+func (h *ReportDecisionNotificationHandler) getDetail(
+	w http.ResponseWriter,
+	r *http.Request,
+	avatarID string,
+	notificationID string,
+) {
+	if notificationID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "notification_id_required"})
+		return
+	}
+
+	notification, err := h.ReportUC.GetDecisionNotificationForAvatar(
 		r.Context(),
+		reportdom.DecisionNotificationID(notificationID),
 		avatarID,
-		isRead,
-		page,
 	)
 	if err != nil {
 		writeMallReportDecisionNotificationError(w, err)
 		return
 	}
 
-	items := make(
-		[]reportDecisionNotificationResponse,
-		0,
-		len(result.Items),
-	)
-
-	for _, notification := range result.Items {
-		items = append(
-			items,
-			toMallReportDecisionNotificationResponse(notification),
-		)
-	}
-
-	writeJSON(
-		w,
-		http.StatusOK,
-		domcommon.PageResult[reportDecisionNotificationResponse]{
-			Items:      items,
-			TotalCount: result.TotalCount,
-			TotalPages: result.TotalPages,
-			Page:       result.Page,
-			PerPage:    result.PerPage,
-		},
-	)
+	writeJSON(w, http.StatusOK, toMallReportDecisionNotificationResponse(notification))
 }
 
 // ============================================================
@@ -243,32 +199,21 @@ func (h *ReportDecisionNotificationHandler) markRead(
 	notificationID string,
 ) {
 	if notificationID == "" {
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "notification_id_required",
-			},
-		)
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "notification_id_required"})
 		return
 	}
 
-	notification, err :=
-		h.ReportUC.MarkDecisionNotificationReadForAvatar(
-			r.Context(),
-			reportdom.DecisionNotificationID(notificationID),
-			avatarID,
-		)
+	notification, err := h.ReportUC.MarkDecisionNotificationReadForAvatar(
+		r.Context(),
+		reportdom.DecisionNotificationID(notificationID),
+		avatarID,
+	)
 	if err != nil {
 		writeMallReportDecisionNotificationError(w, err)
 		return
 	}
 
-	writeJSON(
-		w,
-		http.StatusOK,
-		toMallReportDecisionNotificationResponse(notification),
-	)
+	writeJSON(w, http.StatusOK, toMallReportDecisionNotificationResponse(notification))
 }
 
 // ============================================================
@@ -279,6 +224,7 @@ func parseMallReportDecisionNotificationPath(
 	path string,
 ) (
 	notificationID string,
+	isDetailPath bool,
 	isReadPath bool,
 	matched bool,
 ) {
@@ -286,33 +232,33 @@ func parseMallReportDecisionNotificationPath(
 	normalizedPath := strings.TrimSuffix(path, "/")
 
 	if normalizedPath == trimmedPath {
-		return "", false, true
+		return "", false, false, true
 	}
 
 	prefix := trimmedPath + "/"
 	if !strings.HasPrefix(normalizedPath, prefix) {
-		return "", false, false
+		return "", false, false, false
 	}
 
 	relativePath := strings.TrimPrefix(normalizedPath, prefix)
 	parts := strings.Split(relativePath, "/")
 
-	if len(parts) == 2 &&
-		parts[0] != "" &&
-		parts[1] == "read" {
-		return parts[0], true, true
+	if len(parts) == 1 && parts[0] != "" {
+		return parts[0], true, false, true
 	}
 
-	return "", false, false
+	if len(parts) == 2 && parts[0] != "" && parts[1] == "read" {
+		return parts[0], false, true, true
+	}
+
+	return "", false, false, false
 }
 
 // ============================================================
 // Query params
 // ============================================================
 
-func parseMallReportDecisionNotificationIsRead(
-	raw string,
-) (*bool, error) {
+func parseMallReportDecisionNotificationIsRead(raw string) (*bool, error) {
 	if raw == "" {
 		return nil, nil
 	}
@@ -329,9 +275,7 @@ func parseMallReportDecisionNotificationIsRead(
 	}
 }
 
-func parseMallReportDecisionNotificationPage(
-	r *http.Request,
-) (domcommon.Page, error) {
+func parseMallReportDecisionNotificationPage(r *http.Request) (domcommon.Page, error) {
 	pageNumber := defaultReportDecisionNotificationPage
 	perPage := defaultReportDecisionNotificationPerPage
 
@@ -347,9 +291,7 @@ func parseMallReportDecisionNotificationPage(
 	rawPerPage := r.URL.Query().Get("perPage")
 	if rawPerPage != "" {
 		parsed, err := strconv.Atoi(rawPerPage)
-		if err != nil ||
-			parsed <= 0 ||
-			parsed > maxReportDecisionNotificationPerPage {
+		if err != nil || parsed <= 0 || parsed > maxReportDecisionNotificationPerPage {
 			return domcommon.Page{}, errors.New("invalid perPage")
 		}
 		perPage = parsed
@@ -395,120 +337,38 @@ func toMallReportDecisionNotificationResponse(
 // Error mapping
 // ============================================================
 
-func writeMallReportDecisionNotificationError(
-	w http.ResponseWriter,
-	err error,
-) {
+func writeMallReportDecisionNotificationError(w http.ResponseWriter, err error) {
 	switch {
 	case err == nil:
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "report_decision_notification_internal_error",
-			},
-		)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "report_decision_notification_internal_error"})
 
-	case errors.Is(err, context.Canceled),
-		errors.Is(err, context.DeadlineExceeded):
-		writeJSON(
-			w,
-			http.StatusRequestTimeout,
-			map[string]string{
-				"error": "request_timeout",
-			},
-		)
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		writeJSON(w, http.StatusRequestTimeout, map[string]string{"error": "request_timeout"})
 
-	case errors.Is(
-		err,
-		uc.ErrReportUsecaseNotConfigured,
-	):
-		writeJSON(
-			w,
-			http.StatusServiceUnavailable,
-			map[string]string{
-				"error": "report_usecase_not_configured",
-			},
-		)
+	case errors.Is(err, uc.ErrReportUsecaseNotConfigured):
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "report_usecase_not_configured"})
 
-	case errors.Is(
-		err,
-		uc.ErrReportForbidden,
-	):
-		writeJSON(
-			w,
-			http.StatusForbidden,
-			map[string]string{
-				"error": "report_forbidden",
-			},
-		)
+	case errors.Is(err, uc.ErrReportForbidden):
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "report_forbidden"})
 
 	case status.Code(err) == codes.NotFound:
-		writeJSON(
-			w,
-			http.StatusNotFound,
-			map[string]string{
-				"error": "report_decision_notification_not_found",
-			},
-		)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "report_decision_notification_not_found"})
 
 	case reportdom.IsInvalid(err),
-		errors.Is(
-			err,
-			reportdom.ErrInvalidDecisionNotificationID,
-		),
-		errors.Is(
-			err,
-			reportdom.ErrInvalidDecisionNotificationKind,
-		),
-		errors.Is(
-			err,
-			reportdom.ErrDecisionNotificationCaseMismatch,
-		),
-		errors.Is(
-			err,
-			reportdom.ErrDecisionNotificationCaseNotDecided,
-		),
-		errors.Is(
-			err,
-			reportdom.ErrInvalidDecisionNotificationCreatedAt,
-		),
-		errors.Is(
-			err,
-			reportdom.ErrInvalidDecisionNotificationUpdatedAt,
-		),
-		errors.Is(
-			err,
-			reportdom.ErrInvalidDecisionNotificationReadAt,
-		),
-		errors.Is(
-			err,
-			reportdom.ErrTargetDecisionNotificationReportData,
-		):
-		writeJSON(
-			w,
-			http.StatusBadRequest,
-			map[string]string{
-				"error": "invalid_report_decision_notification",
-			},
-		)
+		errors.Is(err, reportdom.ErrInvalidDecisionNotificationID),
+		errors.Is(err, reportdom.ErrInvalidDecisionNotificationKind),
+		errors.Is(err, reportdom.ErrDecisionNotificationCaseMismatch),
+		errors.Is(err, reportdom.ErrDecisionNotificationCaseNotDecided),
+		errors.Is(err, reportdom.ErrInvalidDecisionNotificationCreatedAt),
+		errors.Is(err, reportdom.ErrInvalidDecisionNotificationUpdatedAt),
+		errors.Is(err, reportdom.ErrInvalidDecisionNotificationReadAt),
+		errors.Is(err, reportdom.ErrTargetDecisionNotificationReportData):
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_report_decision_notification"})
 
 	case isNotFound(err):
-		writeJSON(
-			w,
-			http.StatusNotFound,
-			map[string]string{
-				"error": "report_decision_notification_not_found",
-			},
-		)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "report_decision_notification_not_found"})
 
 	default:
-		writeJSON(
-			w,
-			http.StatusInternalServerError,
-			map[string]string{
-				"error": "report_decision_notification_internal_error",
-			},
-		)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "report_decision_notification_internal_error"})
 	}
 }

@@ -170,6 +170,40 @@ export async function fetchMeReportDecisionNotifications(
   }
 }
 
+export async function fetchMeReportDecisionNotification(
+  notificationId: string,
+  signal?: AbortSignal,
+): Promise<ReportDecisionNotification> {
+  if (!notificationId) {
+    throw new Error("notificationId is required");
+  }
+
+  const headers = await getOptionalAuthHeaders();
+  if (!headers) {
+    throw new Error("authentication is required");
+  }
+
+  return requestJson<ReportDecisionNotification>(
+    `${REPORT_DECISION_NOTIFICATIONS_ENDPOINT}/${encodeURIComponent(
+      notificationId,
+    )}`,
+    {
+      method: "GET",
+      headers,
+      signal,
+      cache: "no-store",
+      messages: {
+        requestErrorMessage:
+          "failed to fetch report decision notification",
+        nonJsonErrorMessage:
+          "failed to fetch report decision notification: response is not json",
+        invalidJsonErrorMessage:
+          "failed to fetch report decision notification: invalid json",
+      },
+    },
+  );
+}
+
 export async function markMeReportDecisionNotificationRead(
   notificationId: string,
 ): Promise<ReportDecisionNotification> {
@@ -178,7 +212,6 @@ export async function markMeReportDecisionNotificationRead(
   }
 
   const headers = await getOptionalAuthHeaders();
-
   if (!headers) {
     throw new Error("authentication is required");
   }
@@ -205,5 +238,6 @@ export async function markMeReportDecisionNotificationRead(
 
 export const reportDecisionNotificationApi = {
   list: fetchMeReportDecisionNotifications,
+  get: fetchMeReportDecisionNotification,
   markRead: markMeReportDecisionNotificationRead,
 };

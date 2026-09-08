@@ -1,25 +1,16 @@
 // frontend/mall/src/pages/AnnouncementPage.tsx
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import { formatDateTime } from "../components/utils/date";
 
-import {
-  useAnnouncementsQuery,
-  useMarkAnnouncementReadMutation,
-} from "../features/announcement/hooks/useAnnouncementsQuery";
-import {
-  useMarkReportDecisionNotificationReadMutation,
-  useReportDecisionNotificationsQuery,
-} from "../features/notification/hooks/useReportDecisionNotificationsQuery";
+import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
+import { useReportDecisionNotificationsQuery } from "../features/notification/hooks/useReportDecisionNotificationsQuery";
 import type { ReportDecisionNotification } from "../features/notification/infrastructure/reportDecisionNotificationApi";
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
-import {
-  getReportReasonLabel,
-  type ReportTargetType,
-} from "../features/shared/types/report";
+import type { ReportTargetType } from "../features/shared/types/report";
 
 import "../styles/page-layout.css";
 import "../styles/announcement-page.css";
@@ -72,131 +63,6 @@ function getReportTargetLabel(
   }
 }
 
-function getDecisionBody(
-  notification: ReportDecisionNotification,
-): string {
-  if (notification.notificationKind === "TARGET_ENFORCEMENT") {
-    switch (notification.targetType) {
-      case "PRODUCT_BLUEPRINT_REVIEW":
-        return "運営の裁定により、あなたの商品レビューを削除しました。";
-      case "LIST":
-        return "運営の裁定により、対象出品を停止しました。Listおよび登録済み画像は削除されていません。";
-      case "TOKEN_BLUEPRINT":
-        return "運営の裁定により、対象トークンをAMOL上で非表示にしました。オンチェーン上のトークンやメタデータは削除されていません。";
-      case "AVATAR":
-        return "運営の裁定により、再販サービスの利用を停止しました。";
-      case "RESALE":
-        return "運営の裁定により、対象の再販出品を停止しました。Resaleおよび登録済み画像は削除されていません。";
-      case "TOKEN_BLUEPRINT_COMMENT":
-        return "運営の裁定により、あなたのトークンコメントを削除しました。";
-      default:
-        return "運営の裁定により、対象コンテンツに措置を行いました。";
-    }
-  }
-
-  if (notification.targetType === "AVATAR") {
-    switch (notification.decisionStatus) {
-      case "REMOVED":
-        return "通報いただいた内容を確認し、対象アバターの再販サービス利用を停止しました。";
-      case "KEPT":
-        return "通報いただいた内容を確認しました。審査の結果、対象アバターへの変更は行いませんでした。";
-      default:
-        return "通報いただいた内容の確認が完了しました。";
-    }
-  }
-
-  if (notification.targetType === "LIST") {
-    switch (notification.decisionStatus) {
-      case "REMOVED":
-        return "通報いただいた内容を確認し、対象出品を停止しました。";
-      case "KEPT":
-        return "通報いただいた内容を確認しました。審査の結果、対象出品の掲載を継続します。";
-      default:
-        return "通報いただいた内容の確認が完了しました。";
-    }
-  }
-
-  if (notification.targetType === "RESALE") {
-    switch (notification.decisionStatus) {
-      case "REMOVED":
-        return "通報いただいた内容を確認し、対象の再販出品を停止しました。";
-      case "KEPT":
-        return "通報いただいた内容を確認しました。審査の結果、対象の再販出品の掲載を継続します。";
-      default:
-        return "通報いただいた内容の確認が完了しました。";
-    }
-  }
-
-  if (notification.targetType === "TOKEN_BLUEPRINT") {
-    switch (notification.decisionStatus) {
-      case "REMOVED":
-        return "通報いただいた内容を確認し、対象トークンをAMOL上で非表示にしました。オンチェーン上のトークンやメタデータは削除されていません。";
-      case "KEPT":
-        return "通報いただいた内容を確認しました。審査の結果、対象トークンを維持します。";
-      default:
-        return "通報いただいた内容の確認が完了しました。";
-    }
-  }
-
-  switch (notification.decisionStatus) {
-    case "REMOVED":
-      return "通報いただいた内容を確認し、対象コンテンツを削除しました。";
-    case "KEPT":
-      return "通報いただいた内容を確認しました。審査の結果、対象コンテンツを維持します。";
-    default:
-      return "通報いただいた内容の確認が完了しました。";
-  }
-}
-
-function getDecisionStatusLabel(
-  notification: ReportDecisionNotification,
-): string {
-  if (notification.targetType === "AVATAR") {
-    switch (notification.decisionStatus) {
-      case "REMOVED":
-        return "再販利用停止";
-      case "KEPT":
-        return "変化なし";
-      default:
-        return notification.decisionStatus;
-    }
-  }
-
-  if (
-    notification.targetType === "LIST" ||
-    notification.targetType === "RESALE"
-  ) {
-    switch (notification.decisionStatus) {
-      case "REMOVED":
-        return "出品停止";
-      case "KEPT":
-        return "維持";
-      default:
-        return notification.decisionStatus;
-    }
-  }
-
-  if (notification.targetType === "TOKEN_BLUEPRINT") {
-    switch (notification.decisionStatus) {
-      case "REMOVED":
-        return "非表示";
-      case "KEPT":
-        return "維持";
-      default:
-        return notification.decisionStatus;
-    }
-  }
-
-  switch (notification.decisionStatus) {
-    case "REMOVED":
-      return "削除";
-    case "KEPT":
-      return "維持";
-    default:
-      return notification.decisionStatus;
-  }
-}
-
 function getDecisionCardLabel(
   notification: ReportDecisionNotification,
   targetLabel: string,
@@ -221,23 +87,16 @@ function getDecisionCardTitle(
 export default function AnnouncementPage() {
   const navigate = useNavigate();
 
-  const [navigatingId, setNavigatingId] = useState<string | null>(null);
-  const [markingDecisionId, setMarkingDecisionId] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string>("");
-
   const announcementsQuery = useAnnouncementsQuery({
     page: 1,
     perPage: 100,
   });
 
-  const decisionNotificationsQuery = useReportDecisionNotificationsQuery({
-    page: 1,
-    perPage: 100,
-  });
-
-  const markAnnouncementReadMutation = useMarkAnnouncementReadMutation();
-  const markDecisionReadMutation =
-    useMarkReportDecisionNotificationReadMutation();
+  const decisionNotificationsQuery =
+    useReportDecisionNotificationsQuery({
+      page: 1,
+      perPage: 100,
+    });
 
   const announcements = useMemo(
     () => announcementsQuery.data?.items ?? [],
@@ -250,8 +109,8 @@ export default function AnnouncementPage() {
   );
 
   const items = useMemo<NotificationFeedItem[]>(() => {
-    const announcementItems: AnnouncementFeedItem[] = announcements.map(
-      (announcement) => ({
+    const announcementItems: AnnouncementFeedItem[] =
+      announcements.map((announcement) => ({
         kind: "announcement",
         key: `announcement:${announcement.id}`,
         occurredAt:
@@ -259,8 +118,7 @@ export default function AnnouncementPage() {
           announcement.createdAt ??
           "",
         announcement,
-      }),
-    );
+      }));
 
     const decisionItems: ReportDecisionFeedItem[] =
       decisionNotifications.map((notification) => ({
@@ -298,88 +156,45 @@ export default function AnnouncementPage() {
         : "";
 
   const error =
-    actionError ||
     announcementQueryError ||
     decisionQueryError;
 
   const handleOpenAnnouncement = useCallback(
-    async (item: AnnouncementListItem) => {
-      if (!item.id || navigatingId || markingDecisionId) {
+    (item: AnnouncementListItem) => {
+      if (!item.id) {
         return;
       }
 
-      setNavigatingId(item.id);
-      setActionError("");
-
-      let announcementForNavigation = item;
-
-      try {
-        if (item.isRead === false) {
-          const readAt = item.readAt ?? new Date().toISOString();
-
-          await markAnnouncementReadMutation.mutateAsync(item.id);
-
-          announcementForNavigation = {
-            ...item,
-            isRead: true,
-            readAt,
-          };
-        }
-      } catch (caught) {
-        setActionError(
-          caught instanceof Error
-            ? caught.message
-            : "お知らせの既読化に失敗しました",
-        );
-      } finally {
-        setNavigatingId(null);
-
-        navigate(`/announcements/${item.id}`, {
+      navigate(
+        `/announcements/${encodeURIComponent(item.id)}`,
+        {
           state: {
-            announcement: announcementForNavigation,
+            announcement: item,
           },
-        });
-      }
+        },
+      );
     },
-    [
-      markAnnouncementReadMutation,
-      markingDecisionId,
-      navigate,
-      navigatingId,
-    ],
+    [navigate],
   );
 
   const handleOpenDecisionNotification = useCallback(
-    async (notification: ReportDecisionNotification) => {
-      if (
-        !notification.id ||
-        notification.isRead ||
-        markingDecisionId ||
-        navigatingId
-      ) {
+    (notification: ReportDecisionNotification) => {
+      if (!notification.id) {
         return;
       }
 
-      setMarkingDecisionId(notification.id);
-      setActionError("");
-
-      try {
-        await markDecisionReadMutation.mutateAsync(notification.id);
-      } catch (caught) {
-        setActionError(
-          caught instanceof Error
-            ? caught.message
-            : "通報結果通知の既読化に失敗しました",
-        );
-      } finally {
-        setMarkingDecisionId(null);
-      }
+      navigate(
+        `/announcements/report-decisions/${encodeURIComponent(
+          notification.id,
+        )}`,
+        {
+          state: {
+            reportDecisionNotification: notification,
+          },
+        },
+      );
     },
-    [
-      markDecisionReadMutation,
-      markingDecisionId,
-      navigatingId,
-    ],
+    [navigate],
   );
 
   return (
@@ -392,7 +207,10 @@ export default function AnnouncementPage() {
     >
       <section className="page-section content-page-section announcement-page">
         {error ? (
-          <div className="announcement-page__error" role="alert">
+          <div
+            className="announcement-page__error"
+            role="alert"
+          >
             {error}
           </div>
         ) : null}
@@ -414,15 +232,14 @@ export default function AnnouncementPage() {
             {items.map((item) => {
               if (item.kind === "announcement") {
                 const announcement = item.announcement;
-                const isUnread = announcement.isRead === false;
-
+                const isUnread =
+                  announcement.isRead === false;
                 const tokenLabel =
                   announcement.tokenName ||
                   announcement.targetToken ||
                   "お知らせ";
-
-                const occurredAtLabel = formatDateTime(item.occurredAt);
-                const isNavigating = navigatingId === announcement.id;
+                const occurredAtLabel =
+                  formatDateTime(item.occurredAt);
 
                 return (
                   <article
@@ -435,12 +252,20 @@ export default function AnnouncementPage() {
                     role="button"
                     tabIndex={0}
                     aria-label={`${announcement.title} の詳細を開く`}
-                    aria-busy={isNavigating}
-                    onClick={() => void handleOpenAnnouncement(announcement)}
+                    onClick={() =>
+                      handleOpenAnnouncement(
+                        announcement,
+                      )
+                    }
                     onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
+                      if (
+                        event.key === "Enter" ||
+                        event.key === " "
+                      ) {
                         event.preventDefault();
-                        void handleOpenAnnouncement(announcement);
+                        handleOpenAnnouncement(
+                          announcement,
+                        );
                       }
                     }}
                   >
@@ -452,7 +277,10 @@ export default function AnnouncementPage() {
 
                         <time
                           className="announcement-page__date"
-                          dateTime={item.occurredAt || undefined}
+                          dateTime={
+                            item.occurredAt ||
+                            undefined
+                          }
                         >
                           {occurredAtLabel}
                         </time>
@@ -473,15 +301,31 @@ export default function AnnouncementPage() {
                       {announcement.title}
                     </h2>
 
-                    {Array.isArray(announcement.attachmentFiles) &&
-                    announcement.attachmentFiles.length > 0 ? (
+                    {Array.isArray(
+                      announcement.attachmentFiles,
+                    ) &&
+                    announcement.attachmentFiles.length >
+                      0 ? (
                       <div className="announcement-page__attachments">
-                        添付 {announcement.attachmentFiles.length} 件
+                        添付{" "}
+                        {
+                          announcement
+                            .attachmentFiles.length
+                        }{" "}
+                        件
                       </div>
-                    ) : Array.isArray(announcement.attachments) &&
-                      announcement.attachments.length > 0 ? (
+                    ) : Array.isArray(
+                        announcement.attachments,
+                      ) &&
+                      announcement.attachments.length >
+                        0 ? (
                       <div className="announcement-page__attachments">
-                        添付 {announcement.attachments.length} 件
+                        添付{" "}
+                        {
+                          announcement.attachments
+                            .length
+                        }{" "}
+                        件
                       </div>
                     ) : null}
                   </article>
@@ -489,26 +333,21 @@ export default function AnnouncementPage() {
               }
 
               const notification = item.notification;
-              const isUnread = notification.isRead === false;
-              const isMarkingRead = markingDecisionId === notification.id;
+              const isUnread =
+                notification.isRead === false;
               const targetLabel =
-                getReportTargetLabel(notification.targetType);
-              const decisionStatusLabel =
-                getDecisionStatusLabel(notification);
-              const occurredAtLabel = formatDateTime(item.occurredAt);
-              const body = getDecisionBody(notification);
-              const cardLabel = getDecisionCardLabel(
-                notification,
-                targetLabel,
-              );
-              const cardTitle = getDecisionCardTitle(notification);
-
-              const isReporterDecision =
-                notification.notificationKind === "REPORTER_DECISION";
-
-              const reportReasonLabel = isReporterDecision
-                ? getReportReasonLabel(notification.reportReason)
-                : "";
+                getReportTargetLabel(
+                  notification.targetType,
+                );
+              const occurredAtLabel =
+                formatDateTime(item.occurredAt);
+              const cardLabel =
+                getDecisionCardLabel(
+                  notification,
+                  targetLabel,
+                );
+              const cardTitle =
+                getDecisionCardTitle(notification);
 
               return (
                 <article
@@ -518,31 +357,24 @@ export default function AnnouncementPage() {
                       ? "announcement-page__card announcement-page__card--unread"
                       : "announcement-page__card"
                   }
-                  role={isUnread ? "button" : undefined}
-                  tabIndex={isUnread ? 0 : undefined}
-                  aria-label={
-                    isUnread
-                      ? notification.notificationKind === "TARGET_ENFORCEMENT"
-                        ? "運営からの措置通知を既読にする"
-                        : "通報結果通知を既読にする"
-                      : undefined
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`${cardTitle} の詳細を開く`}
+                  onClick={() =>
+                    handleOpenDecisionNotification(
+                      notification,
+                    )
                   }
-                  aria-busy={isMarkingRead}
-                  onClick={() => {
-                    if (isUnread) {
-                      void handleOpenDecisionNotification(notification);
-                    }
-                  }}
                   onKeyDown={(event) => {
                     if (
-                      !isUnread ||
-                      (event.key !== "Enter" && event.key !== " ")
+                      event.key === "Enter" ||
+                      event.key === " "
                     ) {
-                      return;
+                      event.preventDefault();
+                      handleOpenDecisionNotification(
+                        notification,
+                      );
                     }
-
-                    event.preventDefault();
-                    void handleOpenDecisionNotification(notification);
                   }}
                 >
                   <div className="announcement-page__card-head">
@@ -553,7 +385,10 @@ export default function AnnouncementPage() {
 
                       <time
                         className="announcement-page__date"
-                        dateTime={item.occurredAt || undefined}
+                        dateTime={
+                          item.occurredAt ||
+                          undefined
+                        }
                       >
                         {occurredAtLabel}
                       </time>
@@ -561,7 +396,7 @@ export default function AnnouncementPage() {
 
                     {isUnread ? (
                       <span className="announcement-page__unread-badge">
-                        {isMarkingRead ? "既読処理中" : "未読"}
+                        未読
                       </span>
                     ) : (
                       <span className="announcement-page__read-badge">
@@ -573,34 +408,6 @@ export default function AnnouncementPage() {
                   <h2 className="announcement-page__card-title">
                     {cardTitle}
                   </h2>
-
-                  <div className="announcement-page__detail-content">
-                    {body}
-                  </div>
-
-                  {isReporterDecision ? (
-                    <>
-                      <div className="announcement-page__attachments">
-                        通報理由: {reportReasonLabel}
-                      </div>
-
-                      {notification.reportDetail ? (
-                        <div className="announcement-page__attachments">
-                          通報詳細: {notification.reportDetail}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
-
-                  <div className="announcement-page__attachments">
-                    審査結果: {decisionStatusLabel}
-                  </div>
-
-                  {notification.decisionReason ? (
-                    <div className="announcement-page__attachments">
-                      審査理由: {notification.decisionReason}
-                    </div>
-                  ) : null}
                 </article>
               );
             })}

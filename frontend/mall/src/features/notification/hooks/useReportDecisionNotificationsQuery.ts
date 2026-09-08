@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  fetchMeReportDecisionNotification,
   fetchMeReportDecisionNotifications,
   markMeReportDecisionNotificationRead,
   type FetchMeReportDecisionNotificationsParams,
@@ -23,6 +24,10 @@ export type UseReportDecisionNotificationsQueryParams = {
   page?: number;
   perPage?: number;
   isRead?: boolean;
+  enabled?: boolean;
+};
+
+export type UseReportDecisionNotificationQueryParams = {
   enabled?: boolean;
 };
 
@@ -54,6 +59,16 @@ export const reportDecisionNotificationQueryKeys = {
   ) => [
     ...reportDecisionNotificationQueryKeys.lists(),
     params,
+  ] as const,
+
+  details: () => [
+    ...reportDecisionNotificationQueryKeys.me(),
+    "detail",
+  ] as const,
+
+  detail: (notificationId: string) => [
+    ...reportDecisionNotificationQueryKeys.details(),
+    notificationId,
   ] as const,
 };
 
@@ -159,6 +174,31 @@ export function useReportDecisionNotificationsQuery(
   });
 }
 
+export function useReportDecisionNotificationQuery(
+  notificationId: string,
+  params: UseReportDecisionNotificationQueryParams = {},
+) {
+  const normalizedNotificationId = notificationId.trim();
+  const enabled =
+    (params.enabled ?? true) &&
+    normalizedNotificationId.length > 0;
+
+  return useQuery({
+    queryKey:
+      reportDecisionNotificationQueryKeys.detail(
+        normalizedNotificationId,
+      ),
+
+    queryFn: ({ signal }) =>
+      fetchMeReportDecisionNotification(
+        normalizedNotificationId,
+        signal,
+      ),
+
+    enabled,
+  });
+}
+
 export function useReportDecisionNotificationUnreadCountQuery(
   params: UseReportDecisionNotificationUnreadCountQueryParams = {},
 ) {
@@ -198,18 +238,28 @@ export function useMarkReportDecisionNotificationReadMutation() {
     mutationFn: async (
       notificationId: string,
     ): Promise<ReportDecisionNotification> => {
-      if (!notificationId) {
+      const normalizedNotificationId =
+        notificationId.trim();
+
+      if (!normalizedNotificationId) {
         throw new Error(
           "notificationId が空のため既読化できません。",
         );
       }
 
       return markMeReportDecisionNotificationRead(
-        notificationId,
+        normalizedNotificationId,
       );
     },
 
     onSuccess: (updated) => {
+      queryClient.setQueryData<ReportDecisionNotification>(
+        reportDecisionNotificationQueryKeys.detail(
+          updated.id,
+        ),
+        updated,
+      );
+
       queryClient.setQueriesData<
         ReportDecisionNotificationPage
       >(
@@ -225,11 +275,26 @@ export function useMarkReportDecisionNotificationReadMutation() {
       );
     },
 
-    onSettled: async () => {
-      await queryClient.invalidateQueries({
-        queryKey:
-          reportDecisionNotificationQueryKeys.lists(),
-      });
+    onSettled: async (_data, _error, notificationId) => {
+      const normalizedNotificationId =
+        notificationId.trim();
+
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey:
+            reportDecisionNotificationQueryKeys.lists(),
+        }),
+        ...(normalizedNotificationId
+          ? [
+              queryClient.invalidateQueries({
+                queryKey:
+                  reportDecisionNotificationQueryKeys.detail(
+                    normalizedNotificationId,
+                  ),
+              }),
+            ]
+          : []),
+      ]);
     },
   });
 }
