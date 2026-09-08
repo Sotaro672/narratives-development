@@ -176,10 +176,14 @@ func (r *ResaleRepositoryFS) List(
 
 	// NOTE:
 	// Do not add Firestore OrderBy here.
-	// Public market requests filter and sort in Go below.
-	// Firestore compound OrderBy such as updated_at + created_at + documentID can require
-	// composite indexes and cause 500 errors before application-side filtering runs.
+	// Sorting remains in Go below because compound OrderBy can require composite indexes.
+	// When exactly one AvatarID is requested, narrow the Firestore query first so owner/public
+	// avatar lists do not scan the entire resales collection. matchesResaleFilter remains the
+	// final defensive filter for all conditions.
 	q := r.col().Query
+	if len(filter.AvatarIDs) == 1 {
+		q = q.Where("avatar_id", "==", filter.AvatarIDs[0])
+	}
 
 	it := q.Documents(ctx)
 	defer it.Stop()
