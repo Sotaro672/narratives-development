@@ -35,6 +35,21 @@ var (
 	ErrPublishedBeforeCreated = errors.New(
 		"news: published at is before created at",
 	)
+	ErrInvalidImageFileURL = errors.New(
+		"news: invalid image file url",
+	)
+	ErrInvalidImageObjectPath = errors.New(
+		"news: invalid image object path",
+	)
+	ErrInvalidImageFileName = errors.New(
+		"news: invalid image file name",
+	)
+	ErrInvalidImageMimeType = errors.New(
+		"news: invalid image mime type",
+	)
+	ErrInvalidImageFileSize = errors.New(
+		"news: invalid image file size",
+	)
 
 	ErrInvalidReadID = errors.New(
 		"news: invalid read id",
@@ -98,6 +113,100 @@ func (t RecipientType) Validate() error {
 }
 
 // ============================================================
+// NewsImage
+// ============================================================
+
+// NewsImage は News に掲載する任意のメイン画像を表す。
+//
+// 画像本体は Firebase Storage に保存し、News document には表示・管理に
+// 必要なメタデータのみ保持する。
+//
+// 既存 News との後方互換性を維持するため、News.Image は nil を許容する。
+type NewsImage struct {
+	FileURL    string `json:"fileUrl"`
+	ObjectPath string `json:"objectPath"`
+	FileName   string `json:"fileName"`
+	MimeType   string `json:"mimeType"`
+	FileSize   int64  `json:"fileSize"`
+	Alt        string `json:"alt,omitempty"`
+}
+
+// NewNewsImage creates normalized News image metadata.
+func NewNewsImage(
+	fileURL string,
+	objectPath string,
+	fileName string,
+	mimeType string,
+	fileSize int64,
+	alt string,
+) (NewsImage, error) {
+	image := NewsImage{
+		FileURL:    strings.TrimSpace(fileURL),
+		ObjectPath: strings.TrimSpace(objectPath),
+		FileName:   strings.TrimSpace(fileName),
+		MimeType:   strings.ToLower(strings.TrimSpace(mimeType)),
+		FileSize:   fileSize,
+		Alt:        strings.TrimSpace(alt),
+	}
+
+	if err := image.Validate(); err != nil {
+		return NewsImage{}, err
+	}
+
+	return image, nil
+}
+
+// Validate validates NewsImage invariants.
+func (i NewsImage) Validate() error {
+	if strings.TrimSpace(i.FileURL) == "" {
+		return ErrInvalidImageFileURL
+	}
+
+	if strings.TrimSpace(i.ObjectPath) == "" {
+		return ErrInvalidImageObjectPath
+	}
+
+	if strings.TrimSpace(i.FileName) == "" {
+		return ErrInvalidImageFileName
+	}
+
+	switch strings.ToLower(strings.TrimSpace(i.MimeType)) {
+	case "image/jpeg", "image/png", "image/webp":
+	default:
+		return ErrInvalidImageMimeType
+	}
+
+	if i.FileSize <= 0 {
+		return ErrInvalidImageFileSize
+	}
+
+	return nil
+}
+
+// normalizeNewsImage returns a normalized copy of image metadata.
+func normalizeNewsImage(
+	image *NewsImage,
+) (*NewsImage, error) {
+	if image == nil {
+		return nil, nil
+	}
+
+	normalized, err := NewNewsImage(
+		image.FileURL,
+		image.ObjectPath,
+		image.FileName,
+		image.MimeType,
+		image.FileSize,
+		image.Alt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &normalized, nil
+}
+
+// ============================================================
 // News
 // ============================================================
 
@@ -108,6 +217,9 @@ func (t RecipientType) Validate() error {
 // 1件の News document を全ユーザーが共有し、既読状態のみ NewsRead として
 // recipient ごとに保持する。
 //
+// Image は任意で、画像本体は Firebase Storage、画像メタデータは
+// News document に保持する。
+//
 // 現在の配信方針では Admin から作成された News は即時公開されるため、
 // Published フラグは持たず PublishedAt を必須とする。
 type News struct {
@@ -115,6 +227,8 @@ type News struct {
 
 	Title string `json:"title"`
 	Body  string `json:"body"`
+
+	Image *NewsImage `json:"image,omitempty"`
 
 	PublishedAt time.Time `json:"publishedAt"`
 
@@ -127,14 +241,21 @@ func New(
 	id NewsID,
 	title string,
 	body string,
+	image *NewsImage,
 	publishedAt time.Time,
 	createdAt time.Time,
 	createdBy string,
 ) (News, error) {
+	normalizedImage, err := normalizeNewsImage(image)
+	if err != nil {
+		return News{}, err
+	}
+
 	n := News{
 		ID:          id,
 		Title:       strings.TrimSpace(title),
 		Body:        strings.TrimSpace(body),
+		Image:       normalizedImage,
 		PublishedAt: canonicalTime(publishedAt),
 		CreatedAt:   canonicalTime(createdAt),
 		CreatedBy:   strings.TrimSpace(createdBy),
@@ -159,6 +280,12 @@ func (n News) Validate() error {
 
 	if strings.TrimSpace(n.Body) == "" {
 		return ErrInvalidBody
+	}
+
+	if n.Image != nil {
+		if err := n.Image.Validate(); err != nil {
+			return err
+		}
 	}
 
 	if strings.TrimSpace(n.CreatedBy) == "" {

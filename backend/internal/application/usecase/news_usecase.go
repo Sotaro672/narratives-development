@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"strings"
 	"time"
 
 	common "narratives/internal/domain/common"
@@ -18,12 +17,8 @@ import (
 // ============================================================
 
 var (
-	ErrNewsRepositoryNotConfigured = errors.New(
-		"news_usecase: news repository is not configured",
-	)
-	ErrNewsReadRepositoryNotConfigured = errors.New(
-		"news_usecase: news read repository is not configured",
-	)
+	ErrNewsRepositoryNotConfigured     = errors.New("news_usecase: news repository is not configured")
+	ErrNewsReadRepositoryNotConfigured = errors.New("news_usecase: news read repository is not configured")
 )
 
 // ============================================================
@@ -38,8 +33,8 @@ var (
 // - News creation never fans out recipient-specific documents.
 //
 // NewsRead:
-// - Console read state is scoped by MEMBER.
-// - Mall read state is scoped by AVATAR.
+// - Recipient identity is used only to derive the deterministic NewsRead ID.
+// - RecipientType / RecipientID do not need to be persisted in Firestore.
 // - A NewsRead document is created only when the recipient actually reads News.
 type NewsUsecase struct {
 	newsRepo     newsdom.Repository
@@ -47,10 +42,7 @@ type NewsUsecase struct {
 	now          func() time.Time
 }
 
-func NewNewsUsecase(
-	newsRepo newsdom.Repository,
-	newsReadRepo newsdom.ReadRepository,
-) *NewsUsecase {
+func NewNewsUsecase(newsRepo newsdom.Repository, newsReadRepo newsdom.ReadRepository) *NewsUsecase {
 	return &NewsUsecase{
 		newsRepo:     newsRepo,
 		newsReadRepo: newsReadRepo,
@@ -58,13 +50,10 @@ func NewNewsUsecase(
 	}
 }
 
-func (u *NewsUsecase) WithNow(
-	now func() time.Time,
-) *NewsUsecase {
+func (u *NewsUsecase) WithNow(now func() time.Time) *NewsUsecase {
 	if u != nil && now != nil {
 		u.now = now
 	}
-
 	return u
 }
 
@@ -79,6 +68,7 @@ type CreateNewsInput struct {
 
 	Title string
 	Body  string
+	Image *newsdom.NewsImage
 
 	// CreatedBy must identify the authenticated Admin.
 	CreatedBy string
@@ -88,21 +78,17 @@ type CreateNewsInput struct {
 //
 // There is intentionally no draft state.
 // CreatedAt and PublishedAt are set to the same timestamp.
-func (u *NewsUsecase) CreateNews(
-	ctx context.Context,
-	input CreateNewsInput,
-) (newsdom.News, error) {
+func (u *NewsUsecase) CreateNews(ctx context.Context, input CreateNewsInput) (newsdom.News, error) {
 	if err := u.ensureNewsRepository(); err != nil {
 		return newsdom.News{}, err
 	}
 
-	id := strings.TrimSpace(input.ID)
+	id := input.ID
 	if id == "" {
 		generatedID, err := newNewsID()
 		if err != nil {
 			return newsdom.News{}, err
 		}
-
 		id = generatedID
 	}
 
@@ -112,6 +98,7 @@ func (u *NewsUsecase) CreateNews(
 		newsdom.NewsID(id),
 		input.Title,
 		input.Body,
+		input.Image,
 		now,
 		now,
 		input.CreatedBy,
@@ -120,10 +107,7 @@ func (u *NewsUsecase) CreateNews(
 		return newsdom.News{}, err
 	}
 
-	return u.newsRepo.Create(
-		ctx,
-		entity,
-	)
+	return u.newsRepo.Create(ctx, entity)
 }
 
 // ============================================================
@@ -143,28 +127,22 @@ func (u *NewsUsecase) ListNews(
 		return common.PageResult[newsdom.News]{}, err
 	}
 
-	if strings.TrimSpace(sort.Column) == "" {
+	if sort.Column == "" {
 		sort.Column = "publishedAt"
 	}
-
 	if sort.Order == "" {
 		sort.Order = common.SortDesc
 	}
 
-	return u.newsRepo.List(
-		ctx,
-		filter,
-		sort,
-		page,
-	)
+	return u.newsRepo.List(ctx, filter, sort, page)
 }
 
 // ============================================================
 // Recipient list result
 // ============================================================
 
-// NewsRecipientItem combines globally shared News with one recipient's read
-// state.
+// NewsRecipientItem combines globally shared News with the current reader's
+// read state.
 //
 // NewsRead does not exist for unread News, so unread state is represented by:
 // - IsRead = false
@@ -187,25 +165,13 @@ func (u *NewsUsecase) ListNewsForMember(
 	memberID string,
 	page common.Page,
 ) (common.PageResult[NewsRecipientItem], error) {
-	return u.listNewsForRecipient(
-		ctx,
-		newsdom.RecipientTypeMember,
-		memberID,
-		page,
-	)
+	return u.listNewsForRecipient(ctx, newsdom.RecipientTypeMember, memberID, page)
 }
 
 // CountUnreadNewsForMember returns the number of unread News for one Console
 // member.
-func (u *NewsUsecase) CountUnreadNewsForMember(
-	ctx context.Context,
-	memberID string,
-) (int, error) {
-	return u.countUnreadNewsForRecipient(
-		ctx,
-		newsdom.RecipientTypeMember,
-		memberID,
-	)
+func (u *NewsUsecase) CountUnreadNewsForMember(ctx context.Context, memberID string) (int, error) {
+	return u.countUnreadNewsForRecipient(ctx, newsdom.RecipientTypeMember, memberID)
 }
 
 // MarkNewsReadForMember marks one News as read by one Console member.
@@ -217,12 +183,7 @@ func (u *NewsUsecase) MarkNewsReadForMember(
 	newsID newsdom.NewsID,
 	memberID string,
 ) (newsdom.NewsRead, error) {
-	return u.markNewsReadForRecipient(
-		ctx,
-		newsID,
-		newsdom.RecipientTypeMember,
-		memberID,
-	)
+	return u.markNewsReadForRecipient(ctx, newsID, newsdom.RecipientTypeMember, memberID)
 }
 
 // ============================================================
@@ -236,25 +197,13 @@ func (u *NewsUsecase) ListNewsForAvatar(
 	avatarID string,
 	page common.Page,
 ) (common.PageResult[NewsRecipientItem], error) {
-	return u.listNewsForRecipient(
-		ctx,
-		newsdom.RecipientTypeAvatar,
-		avatarID,
-		page,
-	)
+	return u.listNewsForRecipient(ctx, newsdom.RecipientTypeAvatar, avatarID, page)
 }
 
 // CountUnreadNewsForAvatar returns the number of unread News for one Mall
 // avatar.
-func (u *NewsUsecase) CountUnreadNewsForAvatar(
-	ctx context.Context,
-	avatarID string,
-) (int, error) {
-	return u.countUnreadNewsForRecipient(
-		ctx,
-		newsdom.RecipientTypeAvatar,
-		avatarID,
-	)
+func (u *NewsUsecase) CountUnreadNewsForAvatar(ctx context.Context, avatarID string) (int, error) {
+	return u.countUnreadNewsForRecipient(ctx, newsdom.RecipientTypeAvatar, avatarID)
 }
 
 // MarkNewsReadForAvatar marks one News as read by one Mall avatar.
@@ -266,12 +215,7 @@ func (u *NewsUsecase) MarkNewsReadForAvatar(
 	newsID newsdom.NewsID,
 	avatarID string,
 ) (newsdom.NewsRead, error) {
-	return u.markNewsReadForRecipient(
-		ctx,
-		newsID,
-		newsdom.RecipientTypeAvatar,
-		avatarID,
-	)
+	return u.markNewsReadForRecipient(ctx, newsID, newsdom.RecipientTypeAvatar, avatarID)
 }
 
 // ============================================================
@@ -287,15 +231,10 @@ func (u *NewsUsecase) listNewsForRecipient(
 	if err := u.ensureNewsRepository(); err != nil {
 		return common.PageResult[NewsRecipientItem]{}, err
 	}
-
 	if err := u.ensureNewsReadRepository(); err != nil {
 		return common.PageResult[NewsRecipientItem]{}, err
 	}
-
-	if err := validateNewsRecipient(
-		recipientType,
-		recipientID,
-	); err != nil {
+	if err := validateNewsRecipient(recipientType, recipientID); err != nil {
 		return common.PageResult[NewsRecipientItem]{}, err
 	}
 
@@ -322,24 +261,16 @@ func (u *NewsUsecase) listNewsForRecipient(
 		}, nil
 	}
 
-	newsIDs := make(
-		[]newsdom.NewsID,
-		0,
-		len(newsResult.Items),
-	)
-
+	newsIDs := make([]newsdom.NewsID, 0, len(newsResult.Items))
 	for _, item := range newsResult.Items {
-		newsIDs = append(
-			newsIDs,
-			item.ID,
-		)
+		newsIDs = append(newsIDs, item.ID)
 	}
 
 	readResult, err := u.newsReadRepo.List(
 		ctx,
 		newsdom.ReadFilter{
 			RecipientType: &recipientType,
-			RecipientID:   strings.TrimSpace(recipientID),
+			RecipientID:   recipientID,
 			NewsIDs:       newsIDs,
 		},
 		common.Sort{
@@ -355,21 +286,12 @@ func (u *NewsUsecase) listNewsForRecipient(
 		return common.PageResult[NewsRecipientItem]{}, err
 	}
 
-	readByNewsID := make(
-		map[newsdom.NewsID]newsdom.NewsRead,
-		len(readResult.Items),
-	)
-
+	readByNewsID := make(map[newsdom.NewsID]newsdom.NewsRead, len(readResult.Items))
 	for _, read := range readResult.Items {
 		readByNewsID[read.NewsID] = read
 	}
 
-	items := make(
-		[]NewsRecipientItem,
-		0,
-		len(newsResult.Items),
-	)
-
+	items := make([]NewsRecipientItem, 0, len(newsResult.Items))
 	for _, entity := range newsResult.Items {
 		item := NewsRecipientItem{
 			News:   entity,
@@ -383,10 +305,7 @@ func (u *NewsUsecase) listNewsForRecipient(
 			item.ReadAt = &readAt
 		}
 
-		items = append(
-			items,
-			item,
-		)
+		items = append(items, item)
 	}
 
 	return common.PageResult[NewsRecipientItem]{
@@ -404,16 +323,10 @@ func (u *NewsUsecase) listNewsForRecipient(
 
 // countUnreadNewsForRecipient calculates:
 //
-//	total News count - recipient NewsRead count
+//	total News count - current reader's NewsRead count
 //
-// Under the current News policy:
-//   - every News is immediately published;
-//   - News cannot be deleted through the domain repository;
-//   - one recipient can have at most one NewsRead per News because NewsRead.ID is
-//     deterministic.
-//
-// Therefore the difference represents the unread count without creating
-// recipient documents when News is published.
+// RecipientType / RecipientID are not persisted as fields.
+// They are used only to derive deterministic NewsRead document IDs.
 func (u *NewsUsecase) countUnreadNewsForRecipient(
 	ctx context.Context,
 	recipientType newsdom.RecipientType,
@@ -422,15 +335,10 @@ func (u *NewsUsecase) countUnreadNewsForRecipient(
 	if err := u.ensureNewsRepository(); err != nil {
 		return 0, err
 	}
-
 	if err := u.ensureNewsReadRepository(); err != nil {
 		return 0, err
 	}
-
-	if err := validateNewsRecipient(
-		recipientType,
-		recipientID,
-	); err != nil {
+	if err := validateNewsRecipient(recipientType, recipientID); err != nil {
 		return 0, err
 	}
 
@@ -454,7 +362,7 @@ func (u *NewsUsecase) countUnreadNewsForRecipient(
 		ctx,
 		newsdom.ReadFilter{
 			RecipientType: &recipientType,
-			RecipientID:   strings.TrimSpace(recipientID),
+			RecipientID:   recipientID,
 		},
 		common.Sort{
 			Column: "readAt",
@@ -469,14 +377,10 @@ func (u *NewsUsecase) countUnreadNewsForRecipient(
 		return 0, err
 	}
 
-	unreadCount :=
-		newsResult.TotalCount -
-			readResult.TotalCount
-
+	unreadCount := newsResult.TotalCount - readResult.TotalCount
 	if unreadCount < 0 {
 		return 0, nil
 	}
-
 	return unreadCount, nil
 }
 
@@ -493,44 +397,32 @@ func (u *NewsUsecase) markNewsReadForRecipient(
 	if err := u.ensureNewsRepository(); err != nil {
 		return newsdom.NewsRead{}, err
 	}
-
 	if err := u.ensureNewsReadRepository(); err != nil {
 		return newsdom.NewsRead{}, err
 	}
-
 	if err := newsID.Validate(); err != nil {
 		return newsdom.NewsRead{}, err
 	}
-
-	if err := validateNewsRecipient(
-		recipientType,
-		recipientID,
-	); err != nil {
+	if err := validateNewsRecipient(recipientType, recipientID); err != nil {
 		return newsdom.NewsRead{}, err
 	}
 
 	// Do not create an orphan NewsRead for a non-existing News.
-	if _, err := u.newsRepo.GetByID(
-		ctx,
-		newsID,
-	); err != nil {
+	if _, err := u.newsRepo.GetByID(ctx, newsID); err != nil {
 		return newsdom.NewsRead{}, err
 	}
 
 	read, err := newsdom.NewRead(
 		newsID,
 		recipientType,
-		strings.TrimSpace(recipientID),
+		recipientID,
 		u.currentTime(),
 	)
 	if err != nil {
 		return newsdom.NewsRead{}, err
 	}
 
-	result, err := u.newsReadRepo.CreateIfAbsent(
-		ctx,
-		read,
-	)
+	result, err := u.newsReadRepo.CreateIfAbsent(ctx, read)
 	if err != nil {
 		return newsdom.NewsRead{}, err
 	}
@@ -542,18 +434,13 @@ func (u *NewsUsecase) markNewsReadForRecipient(
 // Validation
 // ============================================================
 
-func validateNewsRecipient(
-	recipientType newsdom.RecipientType,
-	recipientID string,
-) error {
+func validateNewsRecipient(recipientType newsdom.RecipientType, recipientID string) error {
 	if err := recipientType.Validate(); err != nil {
 		return err
 	}
-
-	if strings.TrimSpace(recipientID) == "" {
+	if recipientID == "" {
 		return newsdom.ErrInvalidRecipientID
 	}
-
 	return nil
 }
 
@@ -565,7 +452,6 @@ func (u *NewsUsecase) ensureNewsRepository() error {
 	if u == nil || u.newsRepo == nil {
 		return ErrNewsRepositoryNotConfigured
 	}
-
 	return nil
 }
 
@@ -573,7 +459,6 @@ func (u *NewsUsecase) ensureNewsReadRepository() error {
 	if u == nil || u.newsReadRepo == nil {
 		return ErrNewsReadRepositoryNotConfigured
 	}
-
 	return nil
 }
 
@@ -583,14 +468,9 @@ func (u *NewsUsecase) ensureNewsReadRepository() error {
 
 func (u *NewsUsecase) currentTime() time.Time {
 	if u == nil || u.now == nil {
-		return time.Now().
-			UTC().
-			Truncate(time.Microsecond)
+		return time.Now().UTC().Truncate(time.Microsecond)
 	}
-
-	return u.now().
-		UTC().
-		Truncate(time.Microsecond)
+	return u.now().UTC().Truncate(time.Microsecond)
 }
 
 // ============================================================
@@ -599,12 +479,8 @@ func (u *NewsUsecase) currentTime() time.Time {
 
 func newNewsID() (string, error) {
 	var value [16]byte
-
 	if _, err := rand.Read(value[:]); err != nil {
 		return "", err
 	}
-
-	return hex.EncodeToString(
-		value[:],
-	), nil
+	return hex.EncodeToString(value[:]), nil
 }
