@@ -14,15 +14,13 @@ import { formatDateTime } from "../shared/util/dateFormat";
 import "./NewsPage.css";
 
 function getBodySummary(body: string): string {
-  const value = body.trim();
-
-  if (!value) {
+  if (!body) {
     return "-";
   }
 
-  return value.length > 120
-    ? `${value.slice(0, 120)}…`
-    : value;
+  return body.length > 120
+    ? `${body.slice(0, 120)}…`
+    : body;
 }
 
 export default function NewsPage() {
@@ -47,8 +45,7 @@ export default function NewsPage() {
         key: "publishedAt",
         header: "配信日時",
         render: (news) => formatDateTime(news.publishedAt),
-        sortValue: (news) =>
-          new Date(news.publishedAt).getTime(),
+        sortValue: (news) => new Date(news.publishedAt).getTime(),
         nowrap: true,
       },
       {
@@ -75,8 +72,7 @@ export default function NewsPage() {
         key: "createdAt",
         header: "作成日時",
         render: (news) => formatDateTime(news.createdAt),
-        sortValue: (news) =>
-          new Date(news.createdAt).getTime(),
+        sortValue: (news) => new Date(news.createdAt).getTime(),
         nowrap: true,
       },
     ],
@@ -110,9 +106,7 @@ export default function NewsPage() {
       <section className="news-page__history-section">
         <div className="news-page__section-header news-page__section-header--history">
           <div>
-            <h2 className="news-page__section-title">
-              配信済み通知
-            </h2>
+            <h2 className="news-page__section-title">配信済み通知</h2>
 
             <p className="news-page__section-description">
               これまでConsoleとMallへ配信したシステム通知の一覧です。
@@ -120,35 +114,32 @@ export default function NewsPage() {
           </div>
 
           {!error && !loading ? (
-            <span className="news-page__count">
-              {totalCount}件
-            </span>
+            <span className="news-page__count">{totalCount}件</span>
           ) : null}
         </div>
 
         {loading && items.length === 0 ? (
-          <p className="news-page__state">
-            配信済み通知を読み込んでいます。
-          </p>
+          <p className="news-page__state">配信済み通知を読み込んでいます。</p>
         ) : null}
 
         {!loading && error ? (
-          <p
-            className="news-page__error"
-            role="alert"
-          >
+          <p className="news-page__error" role="alert">
             配信済み通知の取得に失敗しました。
             {error}
           </p>
         ) : null}
 
-        {!error &&
-        (items.length > 0 || !loading) ? (
+        {!error && (items.length > 0 || !loading) ? (
           <>
             <Table
               columns={columns}
               rows={items}
               getRowKey={(news) => news.id}
+              onRowClick={(news) =>
+                navigate(`/news/${encodeURIComponent(news.id)}`, {
+                  state: { news },
+                })
+              }
               emptyMessage="配信済み通知はありません。"
               filteredEmptyMessage="条件に一致する通知はありません。"
             />

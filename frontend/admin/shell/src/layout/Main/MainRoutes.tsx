@@ -8,6 +8,7 @@ import GasPage from "../../pages/GasPage";
 import InquiryDetailPage from "../../pages/InquiryDetailPage";
 import InquiriesPage from "../../pages/InquiriesPage";
 import NewsCreatePage from "../../pages/NewsCreatePage";
+import NewsDetailPage from "../../pages/NewsDetailPage";
 import NewsPage from "../../pages/NewsPage";
 import ReportDetailPage from "../../pages/ReportDetailPage";
 import ReportsPage from "../../pages/ReportsPage";
@@ -21,6 +22,7 @@ export default function MainRoutes() {
       <Route path="/gas" element={<GasPage />} />
       <Route path="/news" element={<NewsPage />} />
       <Route path="/news/create" element={<NewsCreatePage />} />
+      <Route path="/news/:newsId" element={<NewsDetailPage />} />
       <Route path="/contracts" element={<ContractsPage />} />
       <Route path="/reports" element={<ReportsPage />} />
       <Route path="/reports/:reportId" element={<ReportDetailPage />} />
