@@ -17,12 +17,13 @@ export default function ContractDetailPage() {
 
   const locationState = location.state as ContractDetailLocationState | null;
   const stateCompany = locationState?.company;
-  const company = stateCompany && stateCompany.id === companyId ? stateCompany : null;
+  const company =
+    stateCompany && stateCompany.id === companyId ? stateCompany : null;
 
   return (
     <Page>
       <PageHeader
-        title="契約詳細"
+        title={company?.name || "契約詳細"}
         leading={
           <button
             type="button"
@@ -58,10 +59,8 @@ export default function ContractDetailPage() {
           aside={
             <section className="ui-detail-section">
               <h2 className="ui-detail-section__title">企業情報</h2>
-              <dl className="ui-detail-definition-list">
-                <dt>企業名</dt>
-                <dd>{company.name || "-"}</dd>
 
+              <dl className="ui-detail-definition-list">
                 <dt>代表者</dt>
                 <dd>{company.representativeName || "-"}</dd>
 
