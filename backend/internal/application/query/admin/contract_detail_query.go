@@ -7,6 +7,9 @@ import (
 	"sort"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	branddom "narratives/internal/domain/brand"
 	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
@@ -14,6 +17,7 @@ import (
 	listdom "narratives/internal/domain/list"
 	memberdom "narratives/internal/domain/member"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
+	reportdom "narratives/internal/domain/report"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -82,6 +86,13 @@ type contractDetailListReader interface {
 	) ([]listdom.List, error)
 }
 
+type contractDetailReportCaseReader interface {
+	GetCase(
+		ctx context.Context,
+		caseID reportdom.CaseID,
+	) (reportdom.ReportCase, error)
+}
+
 // ============================================================
 // Query
 // ============================================================
@@ -94,6 +105,7 @@ type ContractDetailQuery struct {
 	tokenBlueprintRepo   contractDetailTokenBlueprintReader
 	inventoryRepo        contractDetailInventoryReader
 	listRepo             contractDetailListReader
+	reportCaseRepo       contractDetailReportCaseReader
 }
 
 func NewContractDetailQuery(
@@ -104,6 +116,7 @@ func NewContractDetailQuery(
 	tokenBlueprintRepo contractDetailTokenBlueprintReader,
 	inventoryRepo contractDetailInventoryReader,
 	listRepo contractDetailListReader,
+	reportCaseRepo contractDetailReportCaseReader,
 ) *ContractDetailQuery {
 	return &ContractDetailQuery{
 		companyRepo:          companyRepo,
@@ -113,6 +126,7 @@ func NewContractDetailQuery(
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		inventoryRepo:        inventoryRepo,
 		listRepo:             listRepo,
+		reportCaseRepo:       reportCaseRepo,
 	}
 }
 
@@ -157,6 +171,7 @@ type ContractTokenBlueprintRow struct {
 	BrandName    string `json:"brandName"`
 	AssigneeName string `json:"assigneeName"`
 	Minted       bool   `json:"minted"`
+	ReportCount  int    `json:"reportCount"`
 	CreatedAt    string `json:"createdAt"`
 	UpdatedAt    string `json:"updatedAt"`
 }
@@ -186,7 +201,8 @@ func (q *ContractDetailQuery) Get(
 		q.productBlueprintRepo == nil ||
 		q.tokenBlueprintRepo == nil ||
 		q.inventoryRepo == nil ||
-		q.listRepo == nil {
+		q.listRepo == nil ||
+		q.reportCaseRepo == nil {
 		return ContractDetailResult{}, ErrContractDetailQueryNotConfigured
 	}
 
@@ -229,13 +245,16 @@ func (q *ContractDetailQuery) Get(
 		memberNameCache,
 	)
 
-	tokenRows, tokenByID := q.buildTokenBlueprintRows(
+	tokenRows, tokenByID, err := q.buildTokenBlueprintRows(
 		ctx,
 		companyID,
 		tokenBlueprints,
 		brandNameCache,
 		memberNameCache,
 	)
+	if err != nil {
+		return ContractDetailResult{}, err
+	}
 
 	listRows, err := q.buildListRows(
 		ctx,
@@ -393,6 +412,7 @@ func (q *ContractDetailQuery) buildTokenBlueprintRows(
 ) (
 	[]ContractTokenBlueprintRow,
 	map[string]tokenblueprintdom.TokenBlueprint,
+	error,
 ) {
 	rows := make(
 		[]ContractTokenBlueprintRow,
@@ -408,6 +428,14 @@ func (q *ContractDetailQuery) buildTokenBlueprintRows(
 		if tokenBlueprint.ID == "" ||
 			tokenBlueprint.CompanyID != companyID {
 			continue
+		}
+
+		reportCount, err := q.resolveTokenBlueprintReportCount(
+			ctx,
+			tokenBlueprint.ID,
+		)
+		if err != nil {
+			return nil, nil, err
 		}
 
 		tokenByID[tokenBlueprint.ID] = tokenBlueprint
@@ -428,7 +456,8 @@ func (q *ContractDetailQuery) buildTokenBlueprintRows(
 					tokenBlueprint.AssigneeID,
 					memberNameCache,
 				),
-				Minted: tokenBlueprint.Minted,
+				Minted:      tokenBlueprint.Minted,
+				ReportCount: reportCount,
 				CreatedAt: formatContractDetailTime(
 					tokenBlueprint.CreatedAt,
 				),
@@ -439,7 +468,37 @@ func (q *ContractDetailQuery) buildTokenBlueprintRows(
 		)
 	}
 
-	return rows, tokenByID
+	return rows, tokenByID, nil
+}
+
+func (q *ContractDetailQuery) resolveTokenBlueprintReportCount(
+	ctx context.Context,
+	tokenBlueprintID string,
+) (int, error) {
+	caseID, err := reportdom.BuildCaseID(
+		reportdom.TargetTypeTokenBlueprint,
+		tokenBlueprintID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	reportCase, err := q.reportCaseRepo.GetCase(ctx, caseID)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	if reportCase.TargetType != reportdom.TargetTypeTokenBlueprint {
+		return 0, reportdom.ErrInvalidTargetType
+	}
+	if reportCase.TargetID != tokenBlueprintID {
+		return 0, reportdom.ErrInvalidTargetID
+	}
+
+	return reportCase.ReportCount, nil
 }
 
 // ============================================================

@@ -23,6 +23,7 @@ export type ContractTokenBlueprintRow = {
   brandName: string;
   assigneeName: string;
   minted: boolean;
+  reportCount: number;
   createdAt: string;
   updatedAt: string;
 };

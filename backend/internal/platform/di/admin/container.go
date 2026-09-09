@@ -145,6 +145,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		tokenBlueprintRepo,
 	)
 
+	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
+	if reportRepo == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: report repository is nil")
+	}
+
 	contractDetailQuery := adminquery.NewContractDetailQuery(
 		companyRepo,
 		brandRepo,
@@ -153,13 +159,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		tokenBlueprintRepo,
 		inventoryRepo,
 		listRepo,
+		reportRepo,
 	)
-
-	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
-	if reportRepo == nil {
-		_ = newsImageStorage.Close()
-		return nil, errors.New("di.admin: report repository is nil")
-	}
 
 	contractListQuery := adminquery.NewContractListQuery(
 		companyRepo,

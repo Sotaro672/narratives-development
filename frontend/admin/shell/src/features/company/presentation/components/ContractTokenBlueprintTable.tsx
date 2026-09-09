@@ -32,35 +32,12 @@ export default function ContractTokenBlueprintTable({
     [tokenBlueprints],
   );
 
-  const assigneeOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          tokenBlueprints
-            .map((tokenBlueprint) => tokenBlueprint.assigneeName?.trim())
-            .filter((name): name is string => Boolean(name)),
-        ),
-      )
-        .sort((a, b) => a.localeCompare(b, "ja"))
-        .map((name) => ({
-          value: name,
-          label: name,
-        })),
-    [tokenBlueprints],
-  );
-
   const columns = useMemo<TableColumn<ContractTokenBlueprintRow>[]>(
     () => [
       {
         key: "name",
         header: "トークン",
         render: (tokenBlueprint) => tokenBlueprint.name || tokenBlueprint.id,
-        nowrap: true,
-      },
-      {
-        key: "symbol",
-        header: "シンボル",
-        render: (tokenBlueprint) => tokenBlueprint.symbol || "-",
         nowrap: true,
       },
       {
@@ -74,13 +51,10 @@ export default function ContractTokenBlueprintTable({
         nowrap: true,
       },
       {
-        key: "assigneeName",
-        header: "担当者",
-        render: (tokenBlueprint) => tokenBlueprint.assigneeName || "-",
-        filter: {
-          getValue: (tokenBlueprint) => tokenBlueprint.assigneeName,
-          options: assigneeOptions,
-        },
+        key: "reportCount",
+        header: "通報数",
+        render: (tokenBlueprint) => tokenBlueprint.reportCount,
+        sortValue: (tokenBlueprint) => tokenBlueprint.reportCount,
         nowrap: true,
       },
       {
@@ -100,7 +74,7 @@ export default function ContractTokenBlueprintTable({
         nowrap: true,
       },
     ],
-    [assigneeOptions, brandOptions],
+    [brandOptions],
   );
 
   return (
