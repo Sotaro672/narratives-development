@@ -6,6 +6,10 @@ import (
 	"errors"
 	"sort"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	applicationport "narratives/internal/application/port"
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	inventorydom "narratives/internal/domain/inventory"
@@ -13,6 +17,7 @@ import (
 	memberdom "narratives/internal/domain/member"
 	modeldom "narratives/internal/domain/model"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
+	reportdom "narratives/internal/domain/report"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -57,6 +62,13 @@ type contractListModelReader interface {
 	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
+type contractListReportCaseReader interface {
+	GetCase(
+		ctx context.Context,
+		caseID reportdom.CaseID,
+	) (reportdom.ReportCase, error)
+}
+
 type ContractListQuery struct {
 	companyRepo          contractListCompanyReader
 	brandRepo            contractListBrandReader
@@ -67,6 +79,8 @@ type ContractListQuery struct {
 	listRepo             contractListReader
 	listImageRepo        contractListImageReader
 	modelRepo            contractListModelReader
+	salesSummaryReader   applicationport.ListSalesSummaryReader
+	reportCaseRepo       contractListReportCaseReader
 }
 
 func NewContractListQuery(
@@ -79,6 +93,8 @@ func NewContractListQuery(
 	listRepo contractListReader,
 	listImageRepo contractListImageReader,
 	modelRepo contractListModelReader,
+	salesSummaryReader applicationport.ListSalesSummaryReader,
+	reportCaseRepo contractListReportCaseReader,
 ) *ContractListQuery {
 	return &ContractListQuery{
 		companyRepo:          companyRepo,
@@ -90,6 +106,8 @@ func NewContractListQuery(
 		listRepo:             listRepo,
 		listImageRepo:        listImageRepo,
 		modelRepo:            modelRepo,
+		salesSummaryReader:   salesSummaryReader,
+		reportCaseRepo:       reportCaseRepo,
 	}
 }
 
@@ -115,6 +133,8 @@ type ContractListDetailRow struct {
 	ProductBrandName   string                 `json:"productBrandName"`
 	TokenBrandID       string                 `json:"tokenBrandId"`
 	TokenBrandName     string                 `json:"tokenBrandName"`
+	TotalOrderCount    int                    `json:"totalOrderCount"`
+	ReportCount        int                    `json:"reportCount"`
 	AssigneeID         string                 `json:"assigneeId"`
 	AssigneeName       string                 `json:"assigneeName"`
 	Status             string                 `json:"status"`
@@ -145,7 +165,18 @@ func (q *ContractListQuery) Get(
 	companyID string,
 	listID string,
 ) (ContractListDetailResult, error) {
-	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.productBlueprintRepo == nil || q.tokenBlueprintRepo == nil || q.inventoryRepo == nil || q.listRepo == nil || q.listImageRepo == nil || q.modelRepo == nil {
+	if q == nil ||
+		q.companyRepo == nil ||
+		q.brandRepo == nil ||
+		q.memberRepo == nil ||
+		q.productBlueprintRepo == nil ||
+		q.tokenBlueprintRepo == nil ||
+		q.inventoryRepo == nil ||
+		q.listRepo == nil ||
+		q.listImageRepo == nil ||
+		q.modelRepo == nil ||
+		q.salesSummaryReader == nil ||
+		q.reportCaseRepo == nil {
 		return ContractListDetailResult{}, ErrContractListQueryNotConfigured
 	}
 	if companyID == "" {
@@ -215,6 +246,7 @@ func (q *ContractListQuery) Get(
 		if _, exists := seenImageIDs[image.ID]; exists {
 			continue
 		}
+
 		seenImageIDs[image.ID] = struct{}{}
 		images = append(images, ContractListImageRow{
 			ID:           image.ID,
@@ -261,6 +293,27 @@ func (q *ContractListQuery) Get(
 		prices = append(prices, row)
 	}
 
+	summaries, err := q.salesSummaryReader.ListByListIDs(
+		ctx,
+		[]string{item.ID},
+		map[string]struct{}{
+			item.InventoryID: {},
+		},
+	)
+	if err != nil {
+		return ContractListDetailResult{}, err
+	}
+
+	totalOrderCount := 0
+	if summary, ok := summaries[item.ID]; ok {
+		totalOrderCount = summary.TotalOrderCount
+	}
+
+	reportCount, err := q.resolveReportCount(ctx, item.ID)
+	if err != nil {
+		return ContractListDetailResult{}, err
+	}
+
 	updatedAt := ""
 	if item.UpdatedAt != nil {
 		updatedAt = formatContractDetailTime(*item.UpdatedAt)
@@ -297,6 +350,8 @@ func (q *ContractListQuery) Get(
 			ProductBrandName:   q.resolveBrandName(ctx, productBlueprint.BrandID),
 			TokenBrandID:       tokenBlueprint.BrandID,
 			TokenBrandName:     q.resolveBrandName(ctx, tokenBlueprint.BrandID),
+			TotalOrderCount:    totalOrderCount,
+			ReportCount:        reportCount,
 			AssigneeID:         item.AssigneeID,
 			AssigneeName:       q.resolveMemberName(ctx, item.AssigneeID),
 			Status:             string(item.Status),
@@ -304,6 +359,36 @@ func (q *ContractListQuery) Get(
 			UpdatedAt:          updatedAt,
 		},
 	}, nil
+}
+
+func (q *ContractListQuery) resolveReportCount(
+	ctx context.Context,
+	listID string,
+) (int, error) {
+	caseID, err := reportdom.BuildCaseID(
+		reportdom.TargetTypeList,
+		listID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	reportCase, err := q.reportCaseRepo.GetCase(ctx, caseID)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	if reportCase.TargetType != reportdom.TargetTypeList {
+		return 0, reportdom.ErrInvalidTargetType
+	}
+	if reportCase.TargetID != listID {
+		return 0, reportdom.ErrInvalidTargetID
+	}
+
+	return reportCase.ReportCount, nil
 }
 
 func (q *ContractListQuery) resolveBrandName(ctx context.Context, brandID string) string {
@@ -315,6 +400,7 @@ func (q *ContractListQuery) resolveBrandName(ctx context.Context, brandID string
 	if err != nil || brand.Name == "" {
 		return brandID
 	}
+
 	return brand.Name
 }
 

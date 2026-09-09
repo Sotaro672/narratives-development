@@ -91,6 +91,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	listImageRepo := fsrepo.NewListImageRepositoryFS(infra.Firestore)
 	inventoryRepo := fsrepo.NewInventoryRepositoryFS(infra.Firestore)
 	modelRepo := fsrepo.NewModelRepositoryFS(infra.Firestore)
+	orderConsoleLister := fsrepo.NewOrderConsoleListerFS(infra.Firestore)
 
 	newsRepo := fsrepo.NewNewsRepositoryFS(infra.Firestore)
 	if newsRepo == nil {
@@ -154,6 +155,12 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		listRepo,
 	)
 
+	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
+	if reportRepo == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: report repository is nil")
+	}
+
 	contractListQuery := adminquery.NewContractListQuery(
 		companyRepo,
 		brandRepo,
@@ -164,13 +171,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		listRepo,
 		listImageRepo,
 		modelRepo,
+		orderConsoleLister,
+		reportRepo,
 	)
-
-	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
-	if reportRepo == nil {
-		_ = newsImageStorage.Close()
-		return nil, errors.New("di.admin: report repository is nil")
-	}
 
 	reportDecisionNotificationRepo := fsrepo.NewReportDecisionNotificationRepositoryFS(infra.Firestore)
 	if reportDecisionNotificationRepo == nil {

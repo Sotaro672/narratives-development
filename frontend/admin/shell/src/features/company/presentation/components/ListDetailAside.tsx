@@ -9,6 +9,7 @@ type ListDetailAsideProps = {
   list: ContractListDetail;
   onOpenProductBlueprint: () => void;
   onOpenTokenBlueprint: () => void;
+  onOpenReport: () => void;
 };
 
 export default function ListDetailAside({
@@ -16,6 +17,7 @@ export default function ListDetailAside({
   list,
   onOpenProductBlueprint,
   onOpenTokenBlueprint,
+  onOpenReport,
 }: ListDetailAsideProps) {
   return (
     <>
@@ -30,11 +32,7 @@ export default function ListDetailAside({
         <dl className="ui-detail-definition-list ui-list-detail-meta-list">
           <dt>商品名</dt>
           <dd>
-            <button
-              type="button"
-              className="ui-list-detail-meta-link"
-              onClick={onOpenProductBlueprint}
-            >
+            <button type="button" className="ui-list-detail-meta-link" onClick={onOpenProductBlueprint}>
               {list.productName || "-"}
             </button>
           </dd>
@@ -48,11 +46,7 @@ export default function ListDetailAside({
         <dl className="ui-detail-definition-list ui-list-detail-meta-list">
           <dt>トークン名</dt>
           <dd>
-            <button
-              type="button"
-              className="ui-list-detail-meta-link"
-              onClick={onOpenTokenBlueprint}
-            >
+            <button type="button" className="ui-list-detail-meta-link" onClick={onOpenTokenBlueprint}>
               {list.tokenName || "-"}
             </button>
           </dd>
@@ -66,6 +60,20 @@ export default function ListDetailAside({
         <dl className="ui-detail-definition-list ui-list-detail-meta-list">
           <dt>出品ID</dt>
           <dd>{list.readableId || list.id || "-"}</dd>
+
+          <dt>累計注文数</dt>
+          <dd>{list.totalOrderCount.toLocaleString("ja-JP")}</dd>
+
+          <dt>通報数</dt>
+          <dd>
+            {list.reportCount > 0 ? (
+              <button type="button" className="ui-list-detail-meta-link" onClick={onOpenReport}>
+                {list.reportCount.toLocaleString("ja-JP")}
+              </button>
+            ) : (
+              "0"
+            )}
+          </dd>
 
           <dt>担当者</dt>
           <dd>{list.assigneeName || "-"}</dd>

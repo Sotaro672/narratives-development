@@ -123,16 +123,17 @@ export default function ListDetailPage() {
               list={list}
               onOpenProductBlueprint={() =>
                 navigate(
-                  `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(
-                    list.productBlueprintId,
-                  )}`,
+                  `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(list.productBlueprintId)}`,
                 )
               }
               onOpenTokenBlueprint={() =>
                 navigate(
-                  `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(
-                    list.tokenBlueprintId,
-                  )}`,
+                  `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(list.tokenBlueprintId)}`,
+                )
+              }
+              onOpenReport={() =>
+                navigate(
+                  `/reports/${encodeURIComponent(`list_${list.id}`)}`,
                 )
               }
             />

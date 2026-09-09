@@ -37,6 +37,8 @@ export type ContractListDetail = {
   productBrandName: string;
   tokenBrandId: string;
   tokenBrandName: string;
+  totalOrderCount: number;
+  reportCount: number;
   assigneeId: string;
   assigneeName: string;
   status: string;
