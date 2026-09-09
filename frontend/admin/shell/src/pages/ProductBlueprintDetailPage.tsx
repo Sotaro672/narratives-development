@@ -7,6 +7,8 @@ import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 import { formatModelMeta } from "../shared/util/modelMetaFormat";
 
+import "./ProductBlueprintDetailPage.css";
+
 function formatPrinted(printed: boolean): string {
   return printed ? "印刷済み" : "未印刷";
 }
@@ -67,28 +69,6 @@ export default function ProductBlueprintDetailPage() {
 
     return (
       <>
-        <section className="ui-detail-section">
-          <dl className="ui-detail-definition-list">
-            <dt>ブランド</dt>
-            <dd>{productBlueprint.brandName || "-"}</dd>
-
-            <dt>担当者</dt>
-            <dd>{productBlueprint.assigneeName || "-"}</dd>
-
-            <dt>印刷状態</dt>
-            <dd>{formatPrinted(productBlueprint.printed)}</dd>
-
-            <dt>タグ種別</dt>
-            <dd>{productBlueprint.productIdTagType || "-"}</dd>
-
-            <dt>作成日時</dt>
-            <dd>{formatDateTime(productBlueprint.createdAt)}</dd>
-
-            <dt>最終更新日時</dt>
-            <dd>{formatDateTime(productBlueprint.updatedAt)}</dd>
-          </dl>
-        </section>
-
         <section className="ui-detail-section">
           <h2 className="ui-detail-section__title">カテゴリ</h2>
           <dl className="ui-detail-definition-list">
@@ -162,16 +142,36 @@ export default function ProductBlueprintDetailPage() {
         }
       />
 
-      {company ? (
+      {company && productBlueprint ? (
         <DetailPageBody
           main={renderMain()}
           aside={
-            <section className="ui-detail-section">
-              <dl className="ui-detail-definition-list">
-                <dt>企業名</dt>
-                <dd>{company.name || "-"}</dd>
-              </dl>
-            </section>
+            <div className="product-blueprint-detail-page__aside">
+              <section className="ui-detail-section">
+                <dl className="ui-detail-definition-list product-blueprint-detail-page__definition-list">
+                  <dt>企業名</dt>
+                  <dd>{company.name || "-"}</dd>
+
+                  <dt>ブランド</dt>
+                  <dd>{productBlueprint.brandName || "-"}</dd>
+
+                  <dt>担当者</dt>
+                  <dd>{productBlueprint.assigneeName || "-"}</dd>
+
+                  <dt>印刷状態</dt>
+                  <dd>{formatPrinted(productBlueprint.printed)}</dd>
+
+                  <dt>タグ種別</dt>
+                  <dd>{productBlueprint.productIdTagType || "-"}</dd>
+
+                  <dt>作成日時</dt>
+                  <dd>{formatDateTime(productBlueprint.createdAt)}</dd>
+
+                  <dt>最終更新日時</dt>
+                  <dd>{formatDateTime(productBlueprint.updatedAt)}</dd>
+                </dl>
+              </section>
+            </div>
           }
         />
       ) : (
