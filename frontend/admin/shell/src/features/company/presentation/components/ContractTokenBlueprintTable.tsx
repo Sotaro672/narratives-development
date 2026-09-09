@@ -15,39 +15,61 @@ export default function ContractTokenBlueprintTable({
   tokenBlueprints,
   onTokenBlueprintClick,
 }: ContractTokenBlueprintTableProps) {
+  const brandOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          tokenBlueprints
+            .map((tokenBlueprint) => tokenBlueprint.brandName?.trim())
+            .filter((name): name is string => Boolean(name)),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, "ja"))
+        .map((name) => ({
+          value: name,
+          label: name,
+        })),
+    [tokenBlueprints],
+  );
+
+  const assigneeOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          tokenBlueprints
+            .map((tokenBlueprint) => tokenBlueprint.assigneeName?.trim())
+            .filter((name): name is string => Boolean(name)),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, "ja"))
+        .map((name) => ({
+          value: name,
+          label: name,
+        })),
+    [tokenBlueprints],
+  );
+
   const columns = useMemo<TableColumn<ContractTokenBlueprintRow>[]>(
     () => [
       {
         key: "name",
         header: "トークン",
         render: (tokenBlueprint) => tokenBlueprint.name || tokenBlueprint.id,
-        sortValue: (tokenBlueprint) => tokenBlueprint.name || tokenBlueprint.id,
-        filter: {
-          getValue: (tokenBlueprint) =>
-            [tokenBlueprint.name, tokenBlueprint.id].filter(Boolean).join(" "),
-          placeholder: "トークン名・IDで絞り込み",
-        },
         nowrap: true,
       },
       {
         key: "symbol",
         header: "シンボル",
         render: (tokenBlueprint) => tokenBlueprint.symbol || "-",
-        sortValue: (tokenBlueprint) => tokenBlueprint.symbol,
-        filter: {
-          getValue: (tokenBlueprint) => tokenBlueprint.symbol,
-          placeholder: "シンボルで絞り込み",
-        },
         nowrap: true,
       },
       {
         key: "brandName",
         header: "ブランド",
         render: (tokenBlueprint) => tokenBlueprint.brandName || "-",
-        sortValue: (tokenBlueprint) => tokenBlueprint.brandName,
         filter: {
           getValue: (tokenBlueprint) => tokenBlueprint.brandName,
-          placeholder: "ブランド名で絞り込み",
+          options: brandOptions,
         },
         nowrap: true,
       },
@@ -55,26 +77,9 @@ export default function ContractTokenBlueprintTable({
         key: "assigneeName",
         header: "担当者",
         render: (tokenBlueprint) => tokenBlueprint.assigneeName || "-",
-        sortValue: (tokenBlueprint) => tokenBlueprint.assigneeName,
         filter: {
           getValue: (tokenBlueprint) => tokenBlueprint.assigneeName,
-          placeholder: "担当者名で絞り込み",
-        },
-        nowrap: true,
-      },
-      {
-        key: "minted",
-        header: "ミント",
-        render: (tokenBlueprint) =>
-          tokenBlueprint.minted ? "ミント済み" : "未ミント",
-        sortValue: (tokenBlueprint) => tokenBlueprint.minted,
-        filter: {
-          getValue: (tokenBlueprint) =>
-            tokenBlueprint.minted ? "minted" : "not_minted",
-          options: [
-            { value: "minted", label: "ミント済み" },
-            { value: "not_minted", label: "未ミント" },
-          ],
+          options: assigneeOptions,
         },
         nowrap: true,
       },
@@ -95,7 +100,7 @@ export default function ContractTokenBlueprintTable({
         nowrap: true,
       },
     ],
-    [],
+    [assigneeOptions, brandOptions],
   );
 
   return (

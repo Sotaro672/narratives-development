@@ -22,32 +22,60 @@ function formatListStatus(status: string): string {
   }
 }
 
+function createOptions(values: Array<string | null | undefined>) {
+  return Array.from(
+    new Set(
+      values
+        .map((value) => value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    ),
+  )
+    .sort((a, b) => a.localeCompare(b, "ja"))
+    .map((value) => ({
+      value,
+      label: value,
+    }));
+}
+
 export default function ContractListTable({
   lists,
   onListClick,
 }: ContractListTableProps) {
+  const productOptions = useMemo(
+    () => createOptions(lists.map((list) => list.productName)),
+    [lists],
+  );
+
+  const tokenOptions = useMemo(
+    () => createOptions(lists.map((list) => list.tokenName)),
+    [lists],
+  );
+
+  const brandOptions = useMemo(
+    () => createOptions(lists.map((list) => list.brandName)),
+    [lists],
+  );
+
+  const assigneeOptions = useMemo(
+    () => createOptions(lists.map((list) => list.assigneeName)),
+    [lists],
+  );
+
   const columns = useMemo<TableColumn<ContractListRow>[]>(
     () => [
       {
         key: "title",
         header: "出品",
         render: (list) => list.title || list.readableId || list.id,
-        sortValue: (list) => list.title || list.readableId || list.id,
-        filter: {
-          getValue: (list) =>
-            [list.title, list.readableId, list.id].filter(Boolean).join(" "),
-          placeholder: "出品名・IDで絞り込み",
-        },
         nowrap: true,
       },
       {
         key: "productName",
         header: "商品",
         render: (list) => list.productName || "-",
-        sortValue: (list) => list.productName,
         filter: {
           getValue: (list) => list.productName,
-          placeholder: "商品名で絞り込み",
+          options: productOptions,
         },
         nowrap: true,
       },
@@ -55,10 +83,9 @@ export default function ContractListTable({
         key: "tokenName",
         header: "トークン設計",
         render: (list) => list.tokenName || "-",
-        sortValue: (list) => list.tokenName,
         filter: {
           getValue: (list) => list.tokenName,
-          placeholder: "トークン名で絞り込み",
+          options: tokenOptions,
         },
         nowrap: true,
       },
@@ -66,10 +93,9 @@ export default function ContractListTable({
         key: "brandName",
         header: "ブランド",
         render: (list) => list.brandName || "-",
-        sortValue: (list) => list.brandName,
         filter: {
           getValue: (list) => list.brandName,
-          placeholder: "ブランド名で絞り込み",
+          options: brandOptions,
         },
         nowrap: true,
       },
@@ -77,10 +103,9 @@ export default function ContractListTable({
         key: "assigneeName",
         header: "担当者",
         render: (list) => list.assigneeName || "-",
-        sortValue: (list) => list.assigneeName,
         filter: {
           getValue: (list) => list.assigneeName,
-          placeholder: "担当者名で絞り込み",
+          options: assigneeOptions,
         },
         nowrap: true,
       },
@@ -88,7 +113,6 @@ export default function ContractListTable({
         key: "status",
         header: "状態",
         render: (list) => formatListStatus(list.status),
-        sortValue: (list) => formatListStatus(list.status),
         filter: {
           getValue: (list) => list.status,
           options: [
@@ -106,7 +130,7 @@ export default function ContractListTable({
         nowrap: true,
       },
     ],
-    [],
+    [assigneeOptions, brandOptions, productOptions, tokenOptions],
   );
 
   return (

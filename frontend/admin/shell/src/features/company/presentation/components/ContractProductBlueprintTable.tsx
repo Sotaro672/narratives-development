@@ -17,6 +17,40 @@ export default function ContractProductBlueprintTable({
   productBlueprints,
   onProductBlueprintClick,
 }: ContractProductBlueprintTableProps) {
+  const brandOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          productBlueprints
+            .map((productBlueprint) => productBlueprint.brandName?.trim())
+            .filter((name): name is string => Boolean(name)),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, "ja"))
+        .map((name) => ({
+          value: name,
+          label: name,
+        })),
+    [productBlueprints],
+  );
+
+  const assigneeOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          productBlueprints
+            .map((productBlueprint) => productBlueprint.assigneeName?.trim())
+            .filter((name): name is string => Boolean(name)),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, "ja"))
+        .map((name) => ({
+          value: name,
+          label: name,
+        })),
+    [productBlueprints],
+  );
+
   const columns = useMemo<TableColumn<ContractProductBlueprintRow>[]>(
     () => [
       {
@@ -24,25 +58,15 @@ export default function ContractProductBlueprintTable({
         header: "プロダクト",
         render: (productBlueprint) =>
           productBlueprint.productName || productBlueprint.id,
-        sortValue: (productBlueprint) =>
-          productBlueprint.productName || productBlueprint.id,
-        filter: {
-          getValue: (productBlueprint) =>
-            [productBlueprint.productName, productBlueprint.id]
-              .filter(Boolean)
-              .join(" "),
-          placeholder: "商品名・IDで絞り込み",
-        },
         nowrap: true,
       },
       {
         key: "brandName",
         header: "ブランド",
         render: (productBlueprint) => productBlueprint.brandName || "-",
-        sortValue: (productBlueprint) => productBlueprint.brandName,
         filter: {
           getValue: (productBlueprint) => productBlueprint.brandName,
-          placeholder: "ブランド名で絞り込み",
+          options: brandOptions,
         },
         nowrap: true,
       },
@@ -50,10 +74,9 @@ export default function ContractProductBlueprintTable({
         key: "assigneeName",
         header: "担当者",
         render: (productBlueprint) => productBlueprint.assigneeName || "-",
-        sortValue: (productBlueprint) => productBlueprint.assigneeName,
         filter: {
           getValue: (productBlueprint) => productBlueprint.assigneeName,
-          placeholder: "担当者名で絞り込み",
+          options: assigneeOptions,
         },
         nowrap: true,
       },
@@ -76,7 +99,7 @@ export default function ContractProductBlueprintTable({
         nowrap: true,
       },
     ],
-    [],
+    [assigneeOptions, brandOptions],
   );
 
   return (
