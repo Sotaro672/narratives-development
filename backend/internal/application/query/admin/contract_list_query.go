@@ -11,6 +11,7 @@ import (
 	inventorydom "narratives/internal/domain/inventory"
 	listdom "narratives/internal/domain/list"
 	memberdom "narratives/internal/domain/member"
+	modeldom "narratives/internal/domain/model"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -52,6 +53,10 @@ type contractListImageReader interface {
 	ListByListID(ctx context.Context, listID string) ([]listdom.ListImage, error)
 }
 
+type contractListModelReader interface {
+	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
+}
+
 type ContractListQuery struct {
 	companyRepo          contractListCompanyReader
 	brandRepo            contractListBrandReader
@@ -61,6 +66,7 @@ type ContractListQuery struct {
 	inventoryRepo        contractListInventoryReader
 	listRepo             contractListReader
 	listImageRepo        contractListImageReader
+	modelRepo            contractListModelReader
 }
 
 func NewContractListQuery(
@@ -72,6 +78,7 @@ func NewContractListQuery(
 	inventoryRepo contractListInventoryReader,
 	listRepo contractListReader,
 	listImageRepo contractListImageReader,
+	modelRepo contractListModelReader,
 ) *ContractListQuery {
 	return &ContractListQuery{
 		companyRepo:          companyRepo,
@@ -82,6 +89,7 @@ func NewContractListQuery(
 		inventoryRepo:        inventoryRepo,
 		listRepo:             listRepo,
 		listImageRepo:        listImageRepo,
+		modelRepo:            modelRepo,
 	}
 }
 
@@ -121,8 +129,15 @@ type ContractListImageRow struct {
 }
 
 type ContractListPriceRow struct {
-	ModelID string `json:"modelId"`
-	Price   int    `json:"price"`
+	ModelID     string `json:"modelId"`
+	Kind        string `json:"kind"`
+	ModelNumber string `json:"modelNumber"`
+	Size        string `json:"size,omitempty"`
+	Color       string `json:"color,omitempty"`
+	RGB         *int   `json:"rgb,omitempty"`
+	VolumeValue *int   `json:"volumeValue,omitempty"`
+	VolumeUnit  string `json:"volumeUnit,omitempty"`
+	Price       int    `json:"price"`
 }
 
 func (q *ContractListQuery) Get(
@@ -130,7 +145,7 @@ func (q *ContractListQuery) Get(
 	companyID string,
 	listID string,
 ) (ContractListDetailResult, error) {
-	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.productBlueprintRepo == nil || q.tokenBlueprintRepo == nil || q.inventoryRepo == nil || q.listRepo == nil || q.listImageRepo == nil {
+	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.productBlueprintRepo == nil || q.tokenBlueprintRepo == nil || q.inventoryRepo == nil || q.listRepo == nil || q.listImageRepo == nil || q.modelRepo == nil {
 		return ContractListDetailResult{}, ErrContractListQueryNotConfigured
 	}
 	if companyID == "" {
@@ -217,10 +232,33 @@ func (q *ContractListQuery) Get(
 
 	prices := make([]ContractListPriceRow, 0, len(item.Prices))
 	for _, price := range item.Prices {
-		prices = append(prices, ContractListPriceRow{
+		row := ContractListPriceRow{
 			ModelID: price.ModelID,
 			Price:   price.Price,
-		})
+		}
+
+		if price.ModelID != "" {
+			variation, err := q.modelRepo.GetByID(ctx, price.ModelID)
+			if err == nil && variation != nil {
+				switch model := variation.(type) {
+				case modeldom.ApparelModelVariation:
+					rgb := model.Color.RGB
+					row.Kind = string(modeldom.ModelVariationKindApparel)
+					row.ModelNumber = model.ModelNumber
+					row.Size = model.Size
+					row.Color = model.Color.Name
+					row.RGB = &rgb
+				case modeldom.AlcoholModelVariation:
+					volumeValue := model.Volume.Value
+					row.Kind = string(modeldom.ModelVariationKindAlcohol)
+					row.ModelNumber = model.ModelNumber
+					row.VolumeValue = &volumeValue
+					row.VolumeUnit = model.Volume.Unit
+				}
+			}
+		}
+
+		prices = append(prices, row)
 	}
 
 	updatedAt := ""

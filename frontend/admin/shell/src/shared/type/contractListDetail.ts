@@ -4,6 +4,13 @@ import type { Company } from "./company";
 
 export type ContractListPriceRow = {
   modelId: string;
+  kind: string;
+  modelNumber: string;
+  size?: string;
+  color?: string;
+  rgb?: number;
+  volumeValue?: number;
+  volumeUnit?: string;
   price: number;
 };
 

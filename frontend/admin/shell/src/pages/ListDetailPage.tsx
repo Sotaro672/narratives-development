@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useContractListDetail } from "../features/company/presentation/hooks/useContractListDetail";
+import type { ContractListPriceRow } from "../shared/type/contractListDetail";
 import MediaGallery, { type MediaGalleryItem } from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
@@ -17,6 +18,29 @@ function formatListStatus(status: string): string {
     default:
       return status || "-";
   }
+}
+
+function formatModelMeta(price: ContractListPriceRow): string {
+  const values: string[] = [];
+
+  if (price.modelNumber) {
+    values.push(price.modelNumber);
+  }
+
+  if (price.kind === "apparel") {
+    if (price.size) {
+      values.push(price.size);
+    }
+    if (price.color) {
+      values.push(price.color);
+    }
+  }
+
+  if (price.kind === "alcohol" && price.volumeValue != null) {
+    values.push(`${price.volumeValue}${price.volumeUnit || ""}`);
+  }
+
+  return values.length > 0 ? values.join(" / ") : "モデル情報なし";
 }
 
 export default function ListDetailPage() {
@@ -89,8 +113,8 @@ export default function ListDetailPage() {
           {list.prices.length > 0 ? (
             <dl className="ui-detail-definition-list">
               {list.prices.map((price) => (
-                <div key={price.modelId}>
-                  <dt>{price.modelId || "モデル"}</dt>
+                <div className="ui-detail-price-row" key={price.modelId}>
+                  <dt>{formatModelMeta(price)}</dt>
                   <dd>{price.price.toLocaleString("ja-JP")}円</dd>
                 </div>
               ))}
@@ -144,7 +168,6 @@ export default function ListDetailPage() {
           aside={
             <>
               <section className="ui-detail-section">
-                <h2 className="ui-detail-section__title">商品情報</h2>
                 <dl className="ui-detail-definition-list">
                   <dt>商品名</dt>
                   <dd>{list.productName || "-"}</dd>
@@ -155,7 +178,6 @@ export default function ListDetailPage() {
               </section>
 
               <section className="ui-detail-section">
-                <h2 className="ui-detail-section__title">トークン情報</h2>
                 <dl className="ui-detail-definition-list">
                   <dt>トークン名</dt>
                   <dd>{list.tokenName || "-"}</dd>
@@ -166,7 +188,6 @@ export default function ListDetailPage() {
               </section>
 
               <section className="ui-detail-section">
-                <h2 className="ui-detail-section__title">出品情報</h2>
                 <dl className="ui-detail-definition-list">
                   <dt>出品ID</dt>
                   <dd>{list.readableId || list.id || "-"}</dd>
