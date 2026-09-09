@@ -143,7 +143,19 @@ export default function ListDetailPage() {
               <section className="ui-detail-section">
                 <dl className="ui-detail-definition-list ui-list-detail-meta-list">
                   <dt>商品名</dt>
-                  <dd>{list.productName || "-"}</dd>
+                  <dd>
+                    <button
+                      type="button"
+                      className="ui-list-detail-meta-link"
+                      onClick={() =>
+                        navigate(
+                          `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(list.productBlueprintId)}`,
+                        )
+                      }
+                    >
+                      {list.productName || "-"}
+                    </button>
+                  </dd>
 
                   <dt>商品ブランド名</dt>
                   <dd>{list.productBrandName || "-"}</dd>
@@ -153,7 +165,19 @@ export default function ListDetailPage() {
               <section className="ui-detail-section">
                 <dl className="ui-detail-definition-list ui-list-detail-meta-list">
                   <dt>トークン名</dt>
-                  <dd>{list.tokenName || "-"}</dd>
+                  <dd>
+                    <button
+                      type="button"
+                      className="ui-list-detail-meta-link"
+                      onClick={() =>
+                        navigate(
+                          `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(list.tokenBlueprintId)}`,
+                        )
+                      }
+                    >
+                      {list.tokenName || "-"}
+                    </button>
+                  </dd>
 
                   <dt>トークンブランド名</dt>
                   <dd>{list.tokenBrandName || "-"}</dd>
