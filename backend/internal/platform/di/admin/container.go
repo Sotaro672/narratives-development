@@ -176,6 +176,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		brandRepo,
 		memberRepo,
 		productBlueprintRepo,
+		modelRepo,
 	)
 
 	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)

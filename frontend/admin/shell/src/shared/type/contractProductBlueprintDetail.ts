@@ -5,6 +5,13 @@ import type { Company } from "./company";
 export type ContractProductBlueprintModelRef = {
   modelId: string;
   displayOrder: number;
+  kind: string;
+  modelNumber: string;
+  size?: string;
+  color?: string;
+  rgb?: number;
+  volumeValue?: number;
+  volumeUnit?: string;
 };
 
 export type ContractProductBlueprintDetail = {

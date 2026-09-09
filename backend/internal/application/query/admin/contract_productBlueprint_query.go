@@ -8,6 +8,7 @@ import (
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
+	modeldom "narratives/internal/domain/model"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
 )
 
@@ -32,11 +33,16 @@ type contractProductBlueprintReader interface {
 	GetByID(ctx context.Context, id string) (productblueprintdom.ProductBlueprint, error)
 }
 
+type contractProductBlueprintModelReader interface {
+	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
+}
+
 type ContractProductBlueprintQuery struct {
 	companyRepo          contractProductBlueprintCompanyReader
 	brandRepo            contractProductBlueprintBrandReader
 	memberRepo           contractProductBlueprintMemberReader
 	productBlueprintRepo contractProductBlueprintReader
+	modelRepo            contractProductBlueprintModelReader
 }
 
 func NewContractProductBlueprintQuery(
@@ -44,12 +50,14 @@ func NewContractProductBlueprintQuery(
 	brandRepo contractProductBlueprintBrandReader,
 	memberRepo contractProductBlueprintMemberReader,
 	productBlueprintRepo contractProductBlueprintReader,
+	modelRepo contractProductBlueprintModelReader,
 ) *ContractProductBlueprintQuery {
 	return &ContractProductBlueprintQuery{
 		companyRepo:          companyRepo,
 		brandRepo:            brandRepo,
 		memberRepo:           memberRepo,
 		productBlueprintRepo: productBlueprintRepo,
+		modelRepo:            modelRepo,
 	}
 }
 
@@ -79,6 +87,13 @@ type ContractProductBlueprintDetailRow struct {
 type ContractProductBlueprintModelRef struct {
 	ModelID      string `json:"modelId"`
 	DisplayOrder int    `json:"displayOrder"`
+	Kind         string `json:"kind"`
+	ModelNumber  string `json:"modelNumber"`
+	Size         string `json:"size,omitempty"`
+	Color        string `json:"color,omitempty"`
+	RGB          *int   `json:"rgb,omitempty"`
+	VolumeValue  *int   `json:"volumeValue,omitempty"`
+	VolumeUnit   string `json:"volumeUnit,omitempty"`
 }
 
 func (q *ContractProductBlueprintQuery) Get(
@@ -86,7 +101,12 @@ func (q *ContractProductBlueprintQuery) Get(
 	companyID string,
 	productBlueprintID string,
 ) (ContractProductBlueprintDetailResult, error) {
-	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.productBlueprintRepo == nil {
+	if q == nil ||
+		q.companyRepo == nil ||
+		q.brandRepo == nil ||
+		q.memberRepo == nil ||
+		q.productBlueprintRepo == nil ||
+		q.modelRepo == nil {
 		return ContractProductBlueprintDetailResult{}, ErrContractProductBlueprintQueryNotConfigured
 	}
 	if companyID == "" {
@@ -111,10 +131,34 @@ func (q *ContractProductBlueprintQuery) Get(
 
 	modelRefs := make([]ContractProductBlueprintModelRef, 0, len(productBlueprint.ModelRefs))
 	for _, modelRef := range productBlueprint.ModelRefs {
-		modelRefs = append(modelRefs, ContractProductBlueprintModelRef{
+		row := ContractProductBlueprintModelRef{
 			ModelID:      modelRef.ModelID,
 			DisplayOrder: modelRef.DisplayOrder,
-		})
+		}
+
+		if modelRef.ModelID != "" {
+			variation, err := q.modelRepo.GetByID(ctx, modelRef.ModelID)
+			if err == nil && variation != nil {
+				switch model := variation.(type) {
+				case modeldom.ApparelModelVariation:
+					rgb := model.Color.RGB
+					row.Kind = string(modeldom.ModelVariationKindApparel)
+					row.ModelNumber = model.ModelNumber
+					row.Size = model.Size
+					row.Color = model.Color.Name
+					row.RGB = &rgb
+
+				case modeldom.AlcoholModelVariation:
+					volumeValue := model.Volume.Value
+					row.Kind = string(modeldom.ModelVariationKindAlcohol)
+					row.ModelNumber = model.ModelNumber
+					row.VolumeValue = &volumeValue
+					row.VolumeUnit = model.Volume.Unit
+				}
+			}
+		}
+
+		modelRefs = append(modelRefs, row)
 	}
 
 	categoryFields := make(map[string]any, len(productBlueprint.CategoryFields))
@@ -163,10 +207,12 @@ func (q *ContractProductBlueprintQuery) resolveBrandName(ctx context.Context, br
 	if brandID == "" {
 		return "-"
 	}
+
 	brand, err := q.brandRepo.GetByID(ctx, brandID)
 	if err != nil || brand.Name == "" {
 		return brandID
 	}
+
 	return brand.Name
 }
 

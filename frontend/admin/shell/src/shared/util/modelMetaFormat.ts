@@ -1,25 +1,32 @@
 // frontend/admin/shell/src/shared/util/modelMetaFormat.ts
 
-import type { ContractListPriceRow } from "../type/contractListDetail";
+export type ModelMeta = {
+  kind: string;
+  modelNumber: string;
+  size?: string;
+  color?: string;
+  volumeValue?: number;
+  volumeUnit?: string;
+};
 
-export function formatModelMeta(price: ContractListPriceRow): string {
+export function formatModelMeta(model: ModelMeta): string {
   const values: string[] = [];
 
-  if (price.modelNumber) {
-    values.push(price.modelNumber);
+  if (model.modelNumber) {
+    values.push(model.modelNumber);
   }
 
-  if (price.kind === "apparel") {
-    if (price.size) {
-      values.push(price.size);
+  if (model.kind === "apparel") {
+    if (model.size) {
+      values.push(model.size);
     }
-    if (price.color) {
-      values.push(price.color);
+    if (model.color) {
+      values.push(model.color);
     }
   }
 
-  if (price.kind === "alcohol" && price.volumeValue != null) {
-    values.push(`${price.volumeValue}${price.volumeUnit || ""}`);
+  if (model.kind === "alcohol" && model.volumeValue != null) {
+    values.push(`${model.volumeValue}${model.volumeUnit || ""}`);
   }
 
   return values.length > 0 ? values.join(" / ") : "モデル情報なし";

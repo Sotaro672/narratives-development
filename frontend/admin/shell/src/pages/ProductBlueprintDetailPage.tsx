@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useContractProductBlueprintDetail } from "../features/company/presentation/hooks/useContractProductBlueprintDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
+import { formatModelMeta } from "../shared/util/modelMetaFormat";
 
 function formatPrinted(printed: boolean): string {
   return printed ? "印刷済み" : "未印刷";
@@ -67,11 +68,7 @@ export default function ProductBlueprintDetailPage() {
     return (
       <>
         <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">商品設計情報</h2>
           <dl className="ui-detail-definition-list">
-            <dt>商品名</dt>
-            <dd>{productBlueprint.productName || "-"}</dd>
-
             <dt>ブランド</dt>
             <dd>{productBlueprint.brandName || "-"}</dd>
 
@@ -83,9 +80,6 @@ export default function ProductBlueprintDetailPage() {
 
             <dt>タグ種別</dt>
             <dd>{productBlueprint.productIdTagType || "-"}</dd>
-
-            <dt>説明</dt>
-            <dd>{productBlueprint.description || "-"}</dd>
 
             <dt>作成日時</dt>
             <dd>{formatDateTime(productBlueprint.createdAt)}</dd>
@@ -121,31 +115,13 @@ export default function ProductBlueprintDetailPage() {
                 .sort((a, b) => a.displayOrder - b.displayOrder)
                 .map((modelRef) => (
                   <div key={modelRef.modelId}>
-                    <dt>モデル {modelRef.displayOrder + 1}</dt>
-                    <dd>{modelRef.modelId || "-"}</dd>
+                    <dd>{formatModelMeta(modelRef)}</dd>
                   </div>
                 ))}
             </dl>
           ) : (
             <p>モデル情報はありません。</p>
           )}
-        </section>
-
-        <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">関連ID</h2>
-          <dl className="ui-detail-definition-list">
-            <dt>商品設計ID</dt>
-            <dd>{productBlueprint.id || "-"}</dd>
-
-            <dt>企業ID</dt>
-            <dd>{productBlueprint.companyId || "-"}</dd>
-
-            <dt>ブランドID</dt>
-            <dd>{productBlueprint.brandId || "-"}</dd>
-
-            <dt>担当者ID</dt>
-            <dd>{productBlueprint.assigneeId || "-"}</dd>
-          </dl>
         </section>
       </>
     );
@@ -191,19 +167,9 @@ export default function ProductBlueprintDetailPage() {
           main={renderMain()}
           aside={
             <section className="ui-detail-section">
-              <h2 className="ui-detail-section__title">企業情報</h2>
               <dl className="ui-detail-definition-list">
                 <dt>企業名</dt>
                 <dd>{company.name || "-"}</dd>
-
-                <dt>代表者</dt>
-                <dd>{company.representativeName || "-"}</dd>
-
-                <dt>登録日時</dt>
-                <dd>{formatDateTime(company.createdAt)}</dd>
-
-                <dt>最終更新日</dt>
-                <dd>{formatDateTime(company.updatedAt)}</dd>
               </dl>
             </section>
           }
