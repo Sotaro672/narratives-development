@@ -9,12 +9,19 @@ import { formatModelMeta } from "../shared/util/modelMetaFormat";
 
 import "./ProductBlueprintDetailPage.css";
 
-function formatPrinted(printed: boolean): string {
-  return printed ? "印刷済み" : "未印刷";
-}
+const CATEGORY_FIELD_LABELS: Record<string, string> = {
+  weight: "重量",
+  vintage: "ヴィンテージ",
+  region: "地域・産地",
+  fit: "フィット",
+  material: "素材",
+  washTags: "洗濯表示",
+  alcoholContent: "アルコール度数",
+};
 
 function formatCategoryFields(
   categoryFields: Record<string, unknown>,
+  fieldLabels: Record<string, string>,
 ): string {
   const entries = Object.entries(categoryFields);
   if (entries.length === 0) {
@@ -23,13 +30,15 @@ function formatCategoryFields(
 
   return entries
     .map(([key, value]) => {
+      const label = fieldLabels[key] ?? key;
+
       if (value == null) {
-        return `${key}: -`;
+        return `${label}: -`;
       }
       if (typeof value === "object") {
-        return `${key}: ${JSON.stringify(value)}`;
+        return `${label}: ${JSON.stringify(value)}`;
       }
-      return `${key}: ${String(value)}`;
+      return `${label}: ${String(value)}`;
     })
     .join("\n");
 }
@@ -77,7 +86,10 @@ export default function ProductBlueprintDetailPage() {
                 : "-"}
             </dd>
             <dd style={{ whiteSpace: "pre-wrap" }}>
-              {formatCategoryFields(productBlueprint.categoryFields)}
+              {formatCategoryFields(
+                productBlueprint.categoryFields,
+                CATEGORY_FIELD_LABELS,
+              )}
             </dd>
           </dl>
         </section>
@@ -153,9 +165,6 @@ export default function ProductBlueprintDetailPage() {
 
                   <dt>担当者</dt>
                   <dd>{productBlueprint.assigneeName || "-"}</dd>
-
-                  <dt>印刷状態</dt>
-                  <dd>{formatPrinted(productBlueprint.printed)}</dd>
 
                   <dt>タグ種別</dt>
                   <dd>{productBlueprint.productIdTagType || "-"}</dd>
