@@ -1,8 +1,10 @@
 // frontend/admin/shell/src/pages/ListDetailPage.tsx
 
+import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useContractListDetail } from "../features/company/presentation/hooks/useContractListDetail";
+import MediaGallery, { type MediaGalleryItem } from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
@@ -23,12 +25,27 @@ export default function ListDetailPage() {
     companyId?: string;
     listId?: string;
   }>();
-  const { detail, loading, error, reload } = useContractListDetail(
-    companyId,
-    listId,
-  );
-
+  const { detail, loading, error, reload } = useContractListDetail(companyId, listId);
   const list = detail?.list ?? null;
+
+  const galleryItems = useMemo<MediaGalleryItem[]>(() => {
+    if (!list) {
+      return [];
+    }
+
+    return [...list.images]
+      .filter((image) => Boolean(image.id && image.url))
+      .sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) {
+          return a.displayOrder - b.displayOrder;
+        }
+        return a.id.localeCompare(b.id);
+      })
+      .map((image) => ({
+        id: image.id,
+        url: image.url,
+      }));
+  }, [list]);
 
   const renderMain = () => {
     if (loading && !detail) {
@@ -53,6 +70,15 @@ export default function ListDetailPage() {
 
     return (
       <>
+        <section className="ui-detail-section">
+          <h2 className="ui-detail-section__title">出品画像</h2>
+          <MediaGallery
+            items={galleryItems}
+            altFallback={list.title || list.productName || "出品画像"}
+            placeholderText="出品画像はありません。"
+          />
+        </section>
+
         <section className="ui-detail-section">
           <h2 className="ui-detail-section__title">出品情報</h2>
           <dl className="ui-detail-definition-list">

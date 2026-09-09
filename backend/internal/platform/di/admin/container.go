@@ -86,6 +86,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	productBlueprintRepo := fsrepo.NewProductBlueprintRepositoryFS(infra.Firestore)
 	tokenBlueprintRepo := fsrepo.NewTokenBlueprintRepositoryFS(infra.Firestore)
 	listRepo := fsrepo.NewListRepositoryFS(infra.Firestore)
+	listImageRepo := fsrepo.NewListImageRepositoryFS(infra.Firestore)
 	inventoryRepo := fsrepo.NewInventoryRepositoryFS(infra.Firestore)
 
 	newsRepo := fsrepo.NewNewsRepositoryFS(infra.Firestore)
@@ -158,6 +159,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		tokenBlueprintRepo,
 		inventoryRepo,
 		listRepo,
+		listImageRepo,
 	)
 
 	contractTokenBlueprintQuery := adminquery.NewContractTokenBlueprintQuery(

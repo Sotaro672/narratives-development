@@ -4,6 +4,7 @@ package query
 import (
 	"context"
 	"errors"
+	"sort"
 
 	branddom "narratives/internal/domain/brand"
 	companydom "narratives/internal/domain/company"
@@ -47,6 +48,10 @@ type contractListReader interface {
 	GetByID(ctx context.Context, id string) (listdom.List, error)
 }
 
+type contractListImageReader interface {
+	ListByListID(ctx context.Context, listID string) ([]listdom.ListImage, error)
+}
+
 type ContractListQuery struct {
 	companyRepo          contractListCompanyReader
 	brandRepo            contractListBrandReader
@@ -55,6 +60,7 @@ type ContractListQuery struct {
 	tokenBlueprintRepo   contractListTokenBlueprintReader
 	inventoryRepo        contractListInventoryReader
 	listRepo             contractListReader
+	listImageRepo        contractListImageReader
 }
 
 func NewContractListQuery(
@@ -65,6 +71,7 @@ func NewContractListQuery(
 	tokenBlueprintRepo contractListTokenBlueprintReader,
 	inventoryRepo contractListInventoryReader,
 	listRepo contractListReader,
+	listImageRepo contractListImageReader,
 ) *ContractListQuery {
 	return &ContractListQuery{
 		companyRepo:          companyRepo,
@@ -74,6 +81,7 @@ func NewContractListQuery(
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		inventoryRepo:        inventoryRepo,
 		listRepo:             listRepo,
+		listImageRepo:        listImageRepo,
 	}
 }
 
@@ -91,6 +99,7 @@ type ContractListDetailRow struct {
 	Title              string                 `json:"title"`
 	Description        string                 `json:"description"`
 	ImageID            string                 `json:"imageId"`
+	Images             []ContractListImageRow `json:"images"`
 	Prices             []ContractListPriceRow `json:"prices"`
 	ProductName        string                 `json:"productName"`
 	TokenName          string                 `json:"tokenName"`
@@ -103,6 +112,12 @@ type ContractListDetailRow struct {
 	UpdatedAt          string                 `json:"updatedAt"`
 }
 
+type ContractListImageRow struct {
+	ID           string `json:"id"`
+	URL          string `json:"url"`
+	DisplayOrder int    `json:"displayOrder"`
+}
+
 type ContractListPriceRow struct {
 	ModelID string `json:"modelId"`
 	Price   int    `json:"price"`
@@ -113,7 +128,7 @@ func (q *ContractListQuery) Get(
 	companyID string,
 	listID string,
 ) (ContractListDetailResult, error) {
-	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.productBlueprintRepo == nil || q.tokenBlueprintRepo == nil || q.inventoryRepo == nil || q.listRepo == nil {
+	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.productBlueprintRepo == nil || q.tokenBlueprintRepo == nil || q.inventoryRepo == nil || q.listRepo == nil || q.listImageRepo == nil {
 		return ContractListDetailResult{}, ErrContractListQueryNotConfigured
 	}
 	if companyID == "" {
@@ -169,6 +184,35 @@ func (q *ContractListQuery) Get(
 		return ContractListDetailResult{}, listdom.ErrNotFound
 	}
 
+	listImages, err := q.listImageRepo.ListByListID(ctx, item.ID)
+	if err != nil {
+		return ContractListDetailResult{}, err
+	}
+
+	images := make([]ContractListImageRow, 0, len(listImages))
+	seenImageIDs := make(map[string]struct{}, len(listImages))
+	for _, image := range listImages {
+		if image.ID == "" || image.URL == "" {
+			continue
+		}
+		if _, exists := seenImageIDs[image.ID]; exists {
+			continue
+		}
+		seenImageIDs[image.ID] = struct{}{}
+		images = append(images, ContractListImageRow{
+			ID:           image.ID,
+			URL:          image.URL,
+			DisplayOrder: image.DisplayOrder,
+		})
+	}
+
+	sort.SliceStable(images, func(i, j int) bool {
+		if images[i].DisplayOrder != images[j].DisplayOrder {
+			return images[i].DisplayOrder < images[j].DisplayOrder
+		}
+		return images[i].ID < images[j].ID
+	})
+
 	prices := make([]ContractListPriceRow, 0, len(item.Prices))
 	for _, price := range item.Prices {
 		prices = append(prices, ContractListPriceRow{
@@ -205,6 +249,7 @@ func (q *ContractListQuery) Get(
 			Title:              item.Title,
 			Description:        item.Description,
 			ImageID:            item.ImageID,
+			Images:             images,
 			Prices:             prices,
 			ProductName:        productBlueprint.ProductName,
 			TokenName:          tokenBlueprint.Name,
@@ -223,6 +268,7 @@ func (q *ContractListQuery) resolveBrandName(ctx context.Context, brandID string
 	if brandID == "" {
 		return "-"
 	}
+
 	brand, err := q.brandRepo.GetByID(ctx, brandID)
 	if err != nil || brand.Name == "" {
 		return brandID

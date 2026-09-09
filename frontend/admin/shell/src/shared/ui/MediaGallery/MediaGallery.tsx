@@ -1,4 +1,5 @@
 // frontend/admin/shell/src/shared/ui/MediaGallery/MediaGallery.tsx
+
 import { useEffect, useRef, useState, type TouchEvent } from "react";
 
 import "./MediaGallery.css";
@@ -6,7 +7,7 @@ import "./MediaGallery.css";
 export type MediaGalleryItem = {
   id: string;
   url: string;
-  fileName: string;
+  fileName?: string;
 };
 
 type MediaGalleryProps = {
@@ -20,8 +21,8 @@ const SWIPE_THRESHOLD = 48;
 
 export default function MediaGallery({
   items,
-  altFallback = "添付画像",
-  placeholderText = "添付ファイルはありません。",
+  altFallback = "画像",
+  placeholderText = "画像はありません。",
   onDownload,
 }: MediaGalleryProps) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -30,13 +31,13 @@ export default function MediaGallery({
 
   const activeItem = items[activeIndex];
   const hasMultipleItems = items.length > 1;
+  const showFooter = Boolean(activeItem?.fileName || onDownload);
 
   useEffect(() => {
     setActiveIndex((current) => {
       if (items.length === 0) {
         return 0;
       }
-
       return Math.min(current, items.length - 1);
     });
   }, [items.length]);
@@ -45,7 +46,6 @@ export default function MediaGallery({
     if (items.length <= 1) {
       return;
     }
-
     setActiveIndex((current) =>
       current === 0 ? items.length - 1 : current - 1,
     );
@@ -55,7 +55,6 @@ export default function MediaGallery({
     if (items.length <= 1) {
       return;
     }
-
     setActiveIndex((current) =>
       current === items.length - 1 ? 0 : current + 1,
     );
@@ -65,7 +64,6 @@ export default function MediaGallery({
     if (index < 0 || index >= items.length) {
       return;
     }
-
     setActiveIndex(index);
   };
 
@@ -76,7 +74,6 @@ export default function MediaGallery({
   const handleTouchEnd = (event: TouchEvent<HTMLDivElement>) => {
     const startX = touchStartXRef.current;
     const endX = event.changedTouches[0]?.clientX ?? null;
-
     touchStartXRef.current = null;
 
     if (startX === null || endX === null) {
@@ -84,7 +81,6 @@ export default function MediaGallery({
     }
 
     const diff = endX - startX;
-
     if (Math.abs(diff) < SWIPE_THRESHOLD) {
       return;
     }
@@ -103,7 +99,6 @@ export default function MediaGallery({
     }
 
     setDownloading(true);
-
     try {
       await onDownload(activeItem);
     } finally {
@@ -139,7 +134,7 @@ export default function MediaGallery({
               type="button"
               className="media-gallery__nav media-gallery__nav--prev"
               onClick={handlePrev}
-              aria-label="前の添付ファイルを表示"
+              aria-label="前の画像を表示"
             >
               ‹
             </button>
@@ -148,7 +143,7 @@ export default function MediaGallery({
               type="button"
               className="media-gallery__nav media-gallery__nav--next"
               onClick={handleNext}
-              aria-label="次の添付ファイルを表示"
+              aria-label="次の画像を表示"
             >
               ›
             </button>
@@ -171,11 +166,9 @@ export default function MediaGallery({
                 index === activeIndex
                   ? "media-gallery__thumbnail-button--active"
                   : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              ].filter(Boolean).join(" ")}
               onClick={() => handleSelect(index)}
-              aria-label={`${index + 1}番目の添付ファイルを表示`}
+              aria-label={`${index + 1}番目の画像を表示`}
               aria-current={index === activeIndex ? "true" : undefined}
             >
               <img
@@ -189,20 +182,28 @@ export default function MediaGallery({
         </div>
       ) : null}
 
-      <div className="media-gallery__footer">
-        <span className="media-gallery__file-name">{activeItem.fileName}</span>
+      {showFooter ? (
+        <div className="media-gallery__footer">
+          {activeItem.fileName ? (
+            <span className="media-gallery__file-name">
+              {activeItem.fileName}
+            </span>
+          ) : (
+            <span />
+          )}
 
-        {onDownload ? (
-          <button
-            type="button"
-            className="media-gallery__download"
-            onClick={() => void handleDownload()}
-            disabled={downloading}
-          >
-            {downloading ? "ダウンロード中..." : "ダウンロード"}
-          </button>
-        ) : null}
-      </div>
+          {onDownload ? (
+            <button
+              type="button"
+              className="media-gallery__download"
+              onClick={() => void handleDownload()}
+              disabled={downloading}
+            >
+              {downloading ? "ダウンロード中..." : "ダウンロード"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

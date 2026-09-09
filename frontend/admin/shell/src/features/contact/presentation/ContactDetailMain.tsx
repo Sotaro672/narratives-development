@@ -71,9 +71,9 @@ export default function ContactDetailMain({
     fileName: attachment.fileName,
   }));
 
-  const handleDownload = async (item: MediaGalleryItem) => {
-    await downloadContactAttachment(item.id, item.fileName);
-  };
+const handleDownload = async (item: MediaGalleryItem) => {
+  await downloadContactAttachment(item.id, item.fileName ?? item.id);
+};
 
   return (
     <>

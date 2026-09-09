@@ -7,6 +7,12 @@ export type ContractListPriceRow = {
   price: number;
 };
 
+export type ContractListImage = {
+  id: string;
+  url: string;
+  displayOrder: number;
+};
+
 export type ContractListDetail = {
   id: string;
   readableId: string;
@@ -16,6 +22,7 @@ export type ContractListDetail = {
   title: string;
   description: string;
   imageId: string;
+  images: ContractListImage[];
   prices: ContractListPriceRow[];
   productName: string;
   tokenName: string;
