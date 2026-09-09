@@ -151,11 +151,18 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		return nil, errors.New("di.admin: report repository is nil")
 	}
 
+	productBlueprintReviewRepo := fsrepo.NewProductBlueprintReviewRepositoryFS(infra.Firestore)
+	if productBlueprintReviewRepo == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: product blueprint review repository is nil")
+	}
+
 	contractDetailQuery := adminquery.NewContractDetailQuery(
 		companyRepo,
 		brandRepo,
 		memberRepo,
 		productBlueprintRepo,
+		productBlueprintReviewRepo,
 		tokenBlueprintRepo,
 		inventoryRepo,
 		listRepo,
@@ -180,12 +187,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	if reportDecisionNotificationRepo == nil {
 		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: report decision notification repository is nil")
-	}
-
-	productBlueprintReviewRepo := fsrepo.NewProductBlueprintReviewRepositoryFS(infra.Firestore)
-	if productBlueprintReviewRepo == nil {
-		_ = newsImageStorage.Close()
-		return nil, errors.New("di.admin: product blueprint review repository is nil")
 	}
 
 	contractProductBlueprintQuery := adminquery.NewContractProductBlueprintQuery(

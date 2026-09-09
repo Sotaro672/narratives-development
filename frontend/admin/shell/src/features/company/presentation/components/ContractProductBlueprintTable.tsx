@@ -34,23 +34,6 @@ export default function ContractProductBlueprintTable({
     [productBlueprints],
   );
 
-  const assigneeOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          productBlueprints
-            .map((productBlueprint) => productBlueprint.assigneeName?.trim())
-            .filter((name): name is string => Boolean(name)),
-        ),
-      )
-        .sort((a, b) => a.localeCompare(b, "ja"))
-        .map((name) => ({
-          value: name,
-          label: name,
-        })),
-    [productBlueprints],
-  );
-
   const columns = useMemo<TableColumn<ContractProductBlueprintRow>[]>(
     () => [
       {
@@ -71,13 +54,10 @@ export default function ContractProductBlueprintTable({
         nowrap: true,
       },
       {
-        key: "assigneeName",
-        header: "担当者",
-        render: (productBlueprint) => productBlueprint.assigneeName || "-",
-        filter: {
-          getValue: (productBlueprint) => productBlueprint.assigneeName,
-          options: assigneeOptions,
-        },
+        key: "reportCount",
+        header: "通報数",
+        render: (productBlueprint) => productBlueprint.reportCount,
+        sortValue: (productBlueprint) => productBlueprint.reportCount,
         nowrap: true,
       },
       {
@@ -99,7 +79,7 @@ export default function ContractProductBlueprintTable({
         nowrap: true,
       },
     ],
-    [assigneeOptions, brandOptions],
+    [brandOptions],
   );
 
   return (

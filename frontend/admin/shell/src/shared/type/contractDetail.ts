@@ -34,6 +34,7 @@ export type ContractProductBlueprintRow = {
   brandName: string;
   assigneeName: string;
   printed: boolean;
+  reportCount: number;
   createdAt: string;
   updatedAt: string;
 };

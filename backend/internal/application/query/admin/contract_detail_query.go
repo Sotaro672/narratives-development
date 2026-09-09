@@ -17,6 +17,7 @@ import (
 	listdom "narratives/internal/domain/list"
 	memberdom "narratives/internal/domain/member"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
+	productblueprintreviewdom "narratives/internal/domain/productBlueprintReview"
 	reportdom "narratives/internal/domain/report"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -64,6 +65,15 @@ type contractDetailProductBlueprintReader interface {
 	) ([]productblueprintdom.ProductBlueprint, error)
 }
 
+type contractDetailProductBlueprintReviewReader interface {
+	ListByProductBlueprintID(
+		ctx context.Context,
+		productBlueprintID string,
+		status productblueprintreviewdom.ReviewStatus,
+		page common.Page,
+	) (common.PageResult[productblueprintreviewdom.Review], error)
+}
+
 type contractDetailTokenBlueprintReader interface {
 	ListByCompanyID(
 		ctx context.Context,
@@ -98,14 +108,15 @@ type contractDetailReportCaseReader interface {
 // ============================================================
 
 type ContractDetailQuery struct {
-	companyRepo          contractDetailCompanyReader
-	brandRepo            contractDetailBrandReader
-	memberRepo           contractDetailMemberReader
-	productBlueprintRepo contractDetailProductBlueprintReader
-	tokenBlueprintRepo   contractDetailTokenBlueprintReader
-	inventoryRepo        contractDetailInventoryReader
-	listRepo             contractDetailListReader
-	reportCaseRepo       contractDetailReportCaseReader
+	companyRepo                contractDetailCompanyReader
+	brandRepo                  contractDetailBrandReader
+	memberRepo                 contractDetailMemberReader
+	productBlueprintRepo       contractDetailProductBlueprintReader
+	productBlueprintReviewRepo contractDetailProductBlueprintReviewReader
+	tokenBlueprintRepo         contractDetailTokenBlueprintReader
+	inventoryRepo              contractDetailInventoryReader
+	listRepo                   contractDetailListReader
+	reportCaseRepo             contractDetailReportCaseReader
 }
 
 func NewContractDetailQuery(
@@ -113,20 +124,22 @@ func NewContractDetailQuery(
 	brandRepo contractDetailBrandReader,
 	memberRepo contractDetailMemberReader,
 	productBlueprintRepo contractDetailProductBlueprintReader,
+	productBlueprintReviewRepo contractDetailProductBlueprintReviewReader,
 	tokenBlueprintRepo contractDetailTokenBlueprintReader,
 	inventoryRepo contractDetailInventoryReader,
 	listRepo contractDetailListReader,
 	reportCaseRepo contractDetailReportCaseReader,
 ) *ContractDetailQuery {
 	return &ContractDetailQuery{
-		companyRepo:          companyRepo,
-		brandRepo:            brandRepo,
-		memberRepo:           memberRepo,
-		productBlueprintRepo: productBlueprintRepo,
-		tokenBlueprintRepo:   tokenBlueprintRepo,
-		inventoryRepo:        inventoryRepo,
-		listRepo:             listRepo,
-		reportCaseRepo:       reportCaseRepo,
+		companyRepo:                companyRepo,
+		brandRepo:                  brandRepo,
+		memberRepo:                 memberRepo,
+		productBlueprintRepo:       productBlueprintRepo,
+		productBlueprintReviewRepo: productBlueprintReviewRepo,
+		tokenBlueprintRepo:         tokenBlueprintRepo,
+		inventoryRepo:              inventoryRepo,
+		listRepo:                   listRepo,
+		reportCaseRepo:             reportCaseRepo,
 	}
 }
 
@@ -182,6 +195,7 @@ type ContractProductBlueprintRow struct {
 	BrandName    string `json:"brandName"`
 	AssigneeName string `json:"assigneeName"`
 	Printed      bool   `json:"printed"`
+	ReportCount  int    `json:"reportCount"`
 	CreatedAt    string `json:"createdAt"`
 	UpdatedAt    string `json:"updatedAt"`
 }
@@ -199,6 +213,7 @@ func (q *ContractDetailQuery) Get(
 		q.brandRepo == nil ||
 		q.memberRepo == nil ||
 		q.productBlueprintRepo == nil ||
+		q.productBlueprintReviewRepo == nil ||
 		q.tokenBlueprintRepo == nil ||
 		q.inventoryRepo == nil ||
 		q.listRepo == nil ||
@@ -237,13 +252,16 @@ func (q *ContractDetailQuery) Get(
 	brandNameCache := make(map[string]string)
 	memberNameCache := make(map[string]string)
 
-	productRows := q.buildProductBlueprintRows(
+	productRows, err := q.buildProductBlueprintRows(
 		ctx,
 		companyID,
 		productBlueprints,
 		brandNameCache,
 		memberNameCache,
 	)
+	if err != nil {
+		return ContractDetailResult{}, err
+	}
 
 	tokenRows, tokenByID, err := q.buildTokenBlueprintRows(
 		ctx,
@@ -321,7 +339,7 @@ func (q *ContractDetailQuery) buildProductBlueprintRows(
 	productBlueprints []productblueprintdom.ProductBlueprint,
 	brandNameCache map[string]string,
 	memberNameCache map[string]string,
-) []ContractProductBlueprintRow {
+) ([]ContractProductBlueprintRow, error) {
 	rows := make(
 		[]ContractProductBlueprintRow,
 		0,
@@ -332,6 +350,14 @@ func (q *ContractDetailQuery) buildProductBlueprintRows(
 		if productBlueprint.ID == "" ||
 			productBlueprint.CompanyID != companyID {
 			continue
+		}
+
+		reportCount, err := q.resolveProductBlueprintReviewReportCount(
+			ctx,
+			productBlueprint.ID,
+		)
+		if err != nil {
+			return nil, err
 		}
 
 		rows = append(
@@ -349,7 +375,8 @@ func (q *ContractDetailQuery) buildProductBlueprintRows(
 					productBlueprint.AssigneeID,
 					memberNameCache,
 				),
-				Printed: productBlueprint.Printed,
+				Printed:     productBlueprint.Printed,
+				ReportCount: reportCount,
 				CreatedAt: formatContractDetailTime(
 					productBlueprint.CreatedAt,
 				),
@@ -360,7 +387,90 @@ func (q *ContractDetailQuery) buildProductBlueprintRows(
 		)
 	}
 
-	return rows
+	return rows, nil
+}
+
+func (q *ContractDetailQuery) resolveProductBlueprintReviewReportCount(
+	ctx context.Context,
+	productBlueprintID string,
+) (int, error) {
+	statuses := []productblueprintreviewdom.ReviewStatus{
+		productblueprintreviewdom.ReviewStatusPublished,
+		productblueprintreviewdom.ReviewStatusHidden,
+		productblueprintreviewdom.ReviewStatusRemoved,
+	}
+
+	const perPage = 100
+
+	reportCount := 0
+	seenReviewIDs := make(map[productblueprintreviewdom.ReviewID]struct{})
+
+	for _, reviewStatus := range statuses {
+		pageNumber := 1
+
+		for {
+			result, err := q.productBlueprintReviewRepo.ListByProductBlueprintID(
+				ctx,
+				productBlueprintID,
+				reviewStatus,
+				common.Page{
+					Number:  pageNumber,
+					PerPage: perPage,
+				},
+			)
+			if err != nil {
+				return 0, err
+			}
+
+			for _, review := range result.Items {
+				if review.ID == "" {
+					continue
+				}
+				if _, exists := seenReviewIDs[review.ID]; exists {
+					continue
+				}
+				seenReviewIDs[review.ID] = struct{}{}
+
+				caseID, err := reportdom.BuildCaseID(
+					reportdom.TargetTypeProductBlueprintReview,
+					string(review.ID),
+				)
+				if err != nil {
+					return 0, err
+				}
+
+				reportCase, err := q.reportCaseRepo.GetCase(ctx, caseID)
+				if err != nil {
+					if status.Code(err) == codes.NotFound {
+						continue
+					}
+					return 0, err
+				}
+
+				if reportCase.TargetType != reportdom.TargetTypeProductBlueprintReview {
+					return 0, reportdom.ErrInvalidTargetType
+				}
+				if reportCase.TargetID != string(review.ID) {
+					return 0, reportdom.ErrInvalidTargetID
+				}
+				if reportCase.TargetParentID != productBlueprintID {
+					return 0, reportdom.ErrInvalidTargetParentID
+				}
+				if reportCase.ReportCount <= 0 {
+					continue
+				}
+
+				reportCount += reportCase.ReportCount
+			}
+
+			if pageNumber >= result.TotalPages {
+				break
+			}
+			pageNumber++
+		}
+	}
+
+	return reportCount, nil
 }
 
 // ============================================================
