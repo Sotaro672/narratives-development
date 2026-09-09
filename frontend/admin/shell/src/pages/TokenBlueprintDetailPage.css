@@ -23,6 +23,28 @@
   overflow-wrap: anywhere;
 }
 
+.token-blueprint-detail-page__report-link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.token-blueprint-detail-page__report-link:hover {
+  color: #1d4ed8;
+}
+
+.token-blueprint-detail-page__report-link:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .token-blueprint-detail-page__summary {
   display: grid;
   grid-template-columns: minmax(152px, 176px) minmax(0, 1fr);

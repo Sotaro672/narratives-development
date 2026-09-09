@@ -6,9 +6,12 @@ import (
 	"errors"
 
 	branddom "narratives/internal/domain/brand"
+	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
+	reportdom "narratives/internal/domain/report"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
+	tokenblueprintreviewdom "narratives/internal/domain/tokenBlueprint_review"
 )
 
 var ErrContractTokenBlueprintQueryNotConfigured = errors.New(
@@ -32,11 +35,29 @@ type contractTokenBlueprintReader interface {
 	GetByID(ctx context.Context, id string) (*tokenblueprintdom.TokenBlueprint, error)
 }
 
+type contractTokenBlueprintReviewAggregateReader interface {
+	GetAggregate(
+		ctx context.Context,
+		tokenBlueprintID string,
+	) (tokenblueprintreviewdom.TokenBlueprintReviewAggregate, error)
+}
+
+type contractTokenBlueprintReportCaseReader interface {
+	ListCases(
+		ctx context.Context,
+		filter reportdom.CaseFilter,
+		sort common.Sort,
+		page common.Page,
+	) (common.PageResult[reportdom.ReportCase], error)
+}
+
 type ContractTokenBlueprintQuery struct {
-	companyRepo        contractTokenBlueprintCompanyReader
-	brandRepo          contractTokenBlueprintBrandReader
-	memberRepo         contractTokenBlueprintMemberReader
-	tokenBlueprintRepo contractTokenBlueprintReader
+	companyRepo           contractTokenBlueprintCompanyReader
+	brandRepo             contractTokenBlueprintBrandReader
+	memberRepo            contractTokenBlueprintMemberReader
+	tokenBlueprintRepo    contractTokenBlueprintReader
+	reviewAggregateReader contractTokenBlueprintReviewAggregateReader
+	reportCaseRepo        contractTokenBlueprintReportCaseReader
 }
 
 func NewContractTokenBlueprintQuery(
@@ -44,12 +65,16 @@ func NewContractTokenBlueprintQuery(
 	brandRepo contractTokenBlueprintBrandReader,
 	memberRepo contractTokenBlueprintMemberReader,
 	tokenBlueprintRepo contractTokenBlueprintReader,
+	reviewAggregateReader contractTokenBlueprintReviewAggregateReader,
+	reportCaseRepo contractTokenBlueprintReportCaseReader,
 ) *ContractTokenBlueprintQuery {
 	return &ContractTokenBlueprintQuery{
-		companyRepo:        companyRepo,
-		brandRepo:          brandRepo,
-		memberRepo:         memberRepo,
-		tokenBlueprintRepo: tokenBlueprintRepo,
+		companyRepo:           companyRepo,
+		brandRepo:             brandRepo,
+		memberRepo:            memberRepo,
+		tokenBlueprintRepo:    tokenBlueprintRepo,
+		reviewAggregateReader: reviewAggregateReader,
+		reportCaseRepo:        reportCaseRepo,
 	}
 }
 
@@ -73,6 +98,10 @@ type ContractTokenBlueprintDetailRow struct {
 	MetadataURI      string                              `json:"metadataUri"`
 	IconURL          string                              `json:"iconUrl"`
 	ContentFiles     []ContractTokenBlueprintContentFile `json:"contentFiles"`
+	LikeCount        int64                               `json:"likeCount"`
+	DislikeCount     int64                               `json:"dislikeCount"`
+	CommentCount     int64                               `json:"commentCount"`
+	ReportCount      int                                 `json:"reportCount"`
 	CreatedAt        string                              `json:"createdAt"`
 	UpdatedAt        string                              `json:"updatedAt"`
 }
@@ -94,7 +123,7 @@ func (q *ContractTokenBlueprintQuery) Get(
 	companyID string,
 	tokenBlueprintID string,
 ) (ContractTokenBlueprintDetailResult, error) {
-	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.tokenBlueprintRepo == nil {
+	if q == nil || q.companyRepo == nil || q.brandRepo == nil || q.memberRepo == nil || q.tokenBlueprintRepo == nil || q.reviewAggregateReader == nil || q.reportCaseRepo == nil {
 		return ContractTokenBlueprintDetailResult{}, ErrContractTokenBlueprintQueryNotConfigured
 	}
 	if companyID == "" {
@@ -132,6 +161,22 @@ func (q *ContractTokenBlueprintQuery) Get(
 		})
 	}
 
+	var likeCount int64
+	var dislikeCount int64
+	var commentCount int64
+
+	aggregate, err := q.reviewAggregateReader.GetAggregate(ctx, tokenBlueprintID)
+	if err == nil {
+		likeCount = aggregate.LikeCount
+		dislikeCount = aggregate.DislikeCount
+		commentCount = aggregate.TopLevelCommentCount
+	}
+
+	reportCount, err := q.resolveReportCount(ctx, tokenBlueprintID)
+	if err != nil {
+		return ContractTokenBlueprintDetailResult{}, err
+	}
+
 	representativeName := q.resolveMemberName(ctx, company.Admin)
 	if representativeName == "" || representativeName == company.Admin {
 		representativeName = "-"
@@ -161,10 +206,45 @@ func (q *ContractTokenBlueprintQuery) Get(
 			MetadataURI:      tokenBlueprint.MetadataURI,
 			IconURL:          tokenBlueprint.IconURL,
 			ContentFiles:     contentFiles,
+			LikeCount:        likeCount,
+			DislikeCount:     dislikeCount,
+			CommentCount:     commentCount,
+			ReportCount:      reportCount,
 			CreatedAt:        formatContractDetailTime(tokenBlueprint.CreatedAt),
 			UpdatedAt:        formatContractDetailTime(tokenBlueprint.UpdatedAt),
 		},
 	}, nil
+}
+
+func (q *ContractTokenBlueprintQuery) resolveReportCount(
+	ctx context.Context,
+	tokenBlueprintID string,
+) (int, error) {
+	targetType := reportdom.TargetTypeTokenBlueprint
+
+	result, err := q.reportCaseRepo.ListCases(
+		ctx,
+		reportdom.CaseFilter{
+			TargetType: &targetType,
+			TargetID:   tokenBlueprintID,
+		},
+		common.Sort{
+			Column: "createdAt",
+			Order:  common.SortDesc,
+		},
+		common.Page{
+			Number:  1,
+			PerPage: 1,
+		},
+	)
+	if err != nil {
+		return 0, err
+	}
+	if len(result.Items) == 0 {
+		return 0, nil
+	}
+
+	return result.Items[0].ReportCount, nil
 }
 
 func (q *ContractTokenBlueprintQuery) resolveBrandName(ctx context.Context, brandID string) string {

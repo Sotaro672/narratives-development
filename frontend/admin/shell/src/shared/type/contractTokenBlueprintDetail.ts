@@ -29,6 +29,10 @@ export type ContractTokenBlueprintDetail = {
   metadataUri: string;
   iconUrl: string;
   contentFiles: ContractTokenBlueprintContentFile[];
+  likeCount: number;
+  dislikeCount: number;
+  commentCount: number;
+  reportCount: number;
   createdAt: string;
   updatedAt: string;
 };

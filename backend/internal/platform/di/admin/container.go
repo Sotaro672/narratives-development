@@ -166,13 +166,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		modelRepo,
 	)
 
-	contractTokenBlueprintQuery := adminquery.NewContractTokenBlueprintQuery(
-		companyRepo,
-		brandRepo,
-		memberRepo,
-		tokenBlueprintRepo,
-	)
-
 	contractProductBlueprintQuery := adminquery.NewContractProductBlueprintQuery(
 		companyRepo,
 		brandRepo,
@@ -239,6 +232,15 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: token blueprint review usecase is nil")
 	}
+
+	contractTokenBlueprintQuery := adminquery.NewContractTokenBlueprintQuery(
+		companyRepo,
+		brandRepo,
+		memberRepo,
+		tokenBlueprintRepo,
+		tokenBlueprintReviewUsecase,
+		reportRepo,
+	)
 
 	contractTokenBlueprintReviewQuery := adminquery.NewContractTokenBlueprintReviewQuery(
 		companyRepo,
