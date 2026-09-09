@@ -30,22 +30,12 @@ export default function CompanyTable({
         key: "name",
         header: "企業名",
         render: (company) => company.name,
-        sortValue: (company) => company.name,
-        filter: {
-          getValue: (company) => company.name,
-          placeholder: "企業名で絞り込み",
-        },
         nowrap: true,
       },
       {
         key: "representativeName",
         header: "代表者",
         render: (company) => company.representativeName || "-",
-        sortValue: (company) => company.representativeName,
-        filter: {
-          getValue: (company) => company.representativeName,
-          placeholder: "代表者名で絞り込み",
-        },
         nowrap: true,
       },
       {

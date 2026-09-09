@@ -1,26 +1,14 @@
 // frontend/admin/shell/src/pages/ListDetailPage.tsx
 
-import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import ListDetailAside from "../features/company/presentation/components/ListDetailAside";
+import ListDetailPriceList from "../features/company/presentation/components/ListDetailPriceList";
+import ListDetailSummary from "../features/company/presentation/components/ListDetailSummary";
 import { useContractListDetail } from "../features/company/presentation/hooks/useContractListDetail";
-import MediaGallery, { type MediaGalleryItem } from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
-import { formatDateTime } from "../shared/util/dateFormat";
-import { formatModelMeta } from "../shared/util/modelMetaFormat";
 
 import "./ListDetailPage.css";
-
-function formatListStatus(status: string): string {
-  switch (status) {
-    case "listing":
-      return "出品中";
-    case "suspended":
-      return "停止中";
-    default:
-      return status || "-";
-  }
-}
 
 export default function ListDetailPage() {
   const navigate = useNavigate();
@@ -28,29 +16,12 @@ export default function ListDetailPage() {
     companyId?: string;
     listId?: string;
   }>();
-  const { detail, loading, error, reload } = useContractListDetail(companyId, listId);
+
+  const { detail, loading, error, reload } =
+    useContractListDetail(companyId, listId);
+
+  const company = detail?.company ?? null;
   const list = detail?.list ?? null;
-
-  const galleryItems = useMemo<MediaGalleryItem[]>(() => {
-    if (!list) {
-      return [];
-    }
-
-    const images = Array.isArray(list.images) ? list.images : [];
-
-    return [...images]
-      .filter((image) => Boolean(image.id && image.url))
-      .sort((a, b) => {
-        if (a.displayOrder !== b.displayOrder) {
-          return a.displayOrder - b.displayOrder;
-        }
-        return a.id.localeCompare(b.id);
-      })
-      .map((image) => ({
-        id: image.id,
-        url: image.url,
-      }));
-  }, [list]);
 
   const renderMain = () => {
     if (loading && !detail) {
@@ -75,33 +46,8 @@ export default function ListDetailPage() {
 
     return (
       <>
-        <section className="ui-detail-section">
-          <MediaGallery
-            items={galleryItems}
-            altFallback={list.title || list.productName || "出品画像"}
-            placeholderText="出品画像はありません。"
-          />
-        </section>
-
-        <section className="ui-detail-section">
-          <p className="ui-detail-section__text">{list.description || "-"}</p>
-        </section>
-
-        <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">価格</h2>
-          {list.prices.length > 0 ? (
-            <dl className="ui-detail-definition-list ui-list-detail-price-list">
-              {list.prices.map((price) => (
-                <div className="ui-detail-price-row" key={price.modelId}>
-                  <dt>{formatModelMeta(price)}</dt>
-                  <dd>{price.price.toLocaleString("ja-JP")}円</dd>
-                </div>
-              ))}
-            </dl>
-          ) : (
-            <p>価格情報はありません。</p>
-          )}
-        </section>
+        <ListDetailSummary list={list} />
+        <ListDetailPriceList prices={list.prices} />
       </>
     );
   };
@@ -135,85 +81,28 @@ export default function ListDetailPage() {
         }
       />
 
-      {list ? (
+      {company && list ? (
         <DetailPageBody
           main={renderMain()}
           aside={
-            <>
-              <section className="ui-detail-section">
-                <dl className="ui-detail-definition-list ui-list-detail-meta-list">
-                  <dt>企業名</dt>
-                  <dd>{detail?.company.name || "-"}</dd>
-                </dl>
-              </section>
-
-              <section className="ui-detail-section">
-                <dl className="ui-detail-definition-list ui-list-detail-meta-list">
-                  <dt>商品名</dt>
-                  <dd>
-                    <button
-                      type="button"
-                      className="ui-list-detail-meta-link"
-                      onClick={() =>
-                        navigate(
-                          `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(list.productBlueprintId)}`,
-                        )
-                      }
-                    >
-                      {list.productName || "-"}
-                    </button>
-                  </dd>
-
-                  <dt>商品ブランド名</dt>
-                  <dd>{list.productBrandName || "-"}</dd>
-                </dl>
-              </section>
-
-              <section className="ui-detail-section">
-                <dl className="ui-detail-definition-list ui-list-detail-meta-list">
-                  <dt>トークン名</dt>
-                  <dd>
-                    <button
-                      type="button"
-                      className="ui-list-detail-meta-link"
-                      onClick={() =>
-                        navigate(
-                          `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(list.tokenBlueprintId)}`,
-                        )
-                      }
-                    >
-                      {list.tokenName || "-"}
-                    </button>
-                  </dd>
-
-                  <dt>トークンブランド名</dt>
-                  <dd>{list.tokenBrandName || "-"}</dd>
-                </dl>
-              </section>
-
-              <section className="ui-detail-section">
-                <dl className="ui-detail-definition-list ui-list-detail-meta-list">
-                  <dt>出品ID</dt>
-                  <dd>{list.readableId || list.id || "-"}</dd>
-
-                  <dt>出品状態</dt>
-                  <dd>{formatListStatus(list.status)}</dd>
-
-                  <dt>担当者</dt>
-                  <dd>{list.assigneeName || "-"}</dd>
-
-                  <dt>作成日時</dt>
-                  <dd className="ui-detail-definition-list__nowrap">
-                    {formatDateTime(list.createdAt)}
-                  </dd>
-
-                  <dt>最終更新日時</dt>
-                  <dd className="ui-detail-definition-list__nowrap">
-                    {formatDateTime(list.updatedAt)}
-                  </dd>
-                </dl>
-              </section>
-            </>
+            <ListDetailAside
+              company={company}
+              list={list}
+              onOpenProductBlueprint={() =>
+                navigate(
+                  `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(
+                    list.productBlueprintId,
+                  )}`,
+                )
+              }
+              onOpenTokenBlueprint={() =>
+                navigate(
+                  `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(
+                    list.tokenBlueprintId,
+                  )}`,
+                )
+              }
+            />
           }
         />
       ) : (
