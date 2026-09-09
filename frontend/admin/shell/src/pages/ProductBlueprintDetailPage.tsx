@@ -2,6 +2,7 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import ProductBlueprintReviewTable from "../features/company/presentation/components/ProductBlueprintReviewTable";
 import { useContractProductBlueprintDetail } from "../features/company/presentation/hooks/useContractProductBlueprintDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
@@ -110,6 +111,15 @@ export default function ProductBlueprintDetailPage() {
           ) : (
             <p>モデル情報はありません。</p>
           )}
+        </section>
+
+        <section className="ui-detail-section">
+          <h2 className="ui-detail-section__title">レビュー</h2>
+          <ProductBlueprintReviewTable
+            companyId={companyId}
+            productBlueprintId={productBlueprintId}
+            perPage={20}
+          />
         </section>
       </>
     );

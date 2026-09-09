@@ -6,7 +6,12 @@ import type { Company, CompanyListResponse } from "../../../shared/type/company"
 import type { ContractDetailResponse } from "../../../shared/type/contractDetail";
 import type { ContractListDetailResponse } from "../../../shared/type/contractListDetail";
 import type { ContractProductBlueprintDetailResponse } from "../../../shared/type/contractProductBlueprintDetail";
+import type {
+  ContractProductBlueprintReviewResponse,
+  ContractProductBlueprintReviewStatus,
+} from "../../../shared/type/contractProductBlueprintReview";
 import type { ContractTokenBlueprintDetailResponse } from "../../../shared/type/contractTokenBlueprintDetail";
+import type { ContractTokenBlueprintReviewResponse } from "../../../shared/type/contractTokenBlueprintReview";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -126,5 +131,53 @@ export async function getContractProductBlueprintDetail(
   return getAdminJSON<ContractProductBlueprintDetailResponse>(
     `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/product-blueprints/${encodeURIComponent(normalizedProductBlueprintId)}`,
     "Failed to load contract product blueprint detail.",
+  );
+}
+
+export async function getContractTokenBlueprintReviews(
+  companyId: string,
+  tokenBlueprintId: string,
+  page = 1,
+  perPage = 20,
+): Promise<ContractTokenBlueprintReviewResponse> {
+  const normalizedCompanyId = requireID(companyId, "companyId");
+  const normalizedTokenBlueprintId = requireID(
+    tokenBlueprintId,
+    "tokenBlueprintId",
+  );
+
+  const query = new URLSearchParams({
+    page: String(page),
+    perPage: String(perPage),
+  });
+
+  return getAdminJSON<ContractTokenBlueprintReviewResponse>(
+    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/token-blueprints/${encodeURIComponent(normalizedTokenBlueprintId)}/reviews?${query.toString()}`,
+    "Failed to load contract token blueprint reviews.",
+  );
+}
+
+export async function getContractProductBlueprintReviews(
+  companyId: string,
+  productBlueprintId: string,
+  status: ContractProductBlueprintReviewStatus = "PUBLISHED",
+  page = 1,
+  perPage = 20,
+): Promise<ContractProductBlueprintReviewResponse> {
+  const normalizedCompanyId = requireID(companyId, "companyId");
+  const normalizedProductBlueprintId = requireID(
+    productBlueprintId,
+    "productBlueprintId",
+  );
+
+  const query = new URLSearchParams({
+    status,
+    page: String(page),
+    perPage: String(perPage),
+  });
+
+  return getAdminJSON<ContractProductBlueprintReviewResponse>(
+    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/product-blueprints/${encodeURIComponent(normalizedProductBlueprintId)}/reviews?${query.toString()}`,
+    "Failed to load contract product blueprint reviews.",
   );
 }

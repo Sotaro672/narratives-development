@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import TokenBlueprintReviewTable from "../features/company/presentation/components/TokenBlueprintReviewTable";
 import { useContractTokenBlueprintDetail } from "../features/company/presentation/hooks/useContractTokenBlueprintDetail";
 import MediaGallery, {
   type MediaGalleryItem,
@@ -111,6 +112,15 @@ export default function TokenBlueprintDetailPage() {
             items={galleryItems}
             altFallback={tokenBlueprint.name || "コンテンツ画像"}
             placeholderText="コンテンツ画像はありません。"
+          />
+        </section>
+
+        <section className="ui-detail-section">
+          <h2 className="ui-detail-section__title">レビュー</h2>
+          <TokenBlueprintReviewTable
+            companyId={companyId}
+            tokenBlueprintId={tokenBlueprintId}
+            perPage={20}
           />
         </section>
       </>

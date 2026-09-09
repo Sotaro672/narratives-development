@@ -24,27 +24,29 @@ const (
 type Container struct {
 	Infra *shared.Infra
 
-	adminFirebaseUID               string
-	adminEmail                     string
-	contactUsecase                 *usecase.ContactUsecase
-	newsUsecase                    *usecase.NewsUsecase
-	reportUsecase                  *usecase.ReportUsecase
-	companyRepo                    *fsrepo.CompanyRepositoryFS
-	memberRepo                     *fsrepo.MemberRepositoryFS
-	avatarRepo                     *fsrepo.AvatarRepositoryFS
-	brandRepo                      *fsrepo.BrandRepositoryFS
-	productBlueprintRepo           *fsrepo.ProductBlueprintRepositoryFS
-	tokenBlueprintRepo             *fsrepo.TokenBlueprintRepositoryFS
-	newsRepo                       *fsrepo.NewsRepositoryFS
-	newsReadRepo                   *fsrepo.NewsReadRepositoryFS
-	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
-	newsQuery                      *adminquery.NewsQuery
-	reportNameQuery                *adminquery.ReportNameQuery
-	contractDetailQuery            *adminquery.ContractDetailQuery
-	contractListQuery              *adminquery.ContractListQuery
-	contractTokenBlueprintQuery    *adminquery.ContractTokenBlueprintQuery
-	contractProductBlueprintQuery  *adminquery.ContractProductBlueprintQuery
-	gasBalanceQuery                *adminquery.GasBalanceQuery
+	adminFirebaseUID                    string
+	adminEmail                          string
+	contactUsecase                      *usecase.ContactUsecase
+	newsUsecase                         *usecase.NewsUsecase
+	reportUsecase                       *usecase.ReportUsecase
+	companyRepo                         *fsrepo.CompanyRepositoryFS
+	memberRepo                          *fsrepo.MemberRepositoryFS
+	avatarRepo                          *fsrepo.AvatarRepositoryFS
+	brandRepo                           *fsrepo.BrandRepositoryFS
+	productBlueprintRepo                *fsrepo.ProductBlueprintRepositoryFS
+	tokenBlueprintRepo                  *fsrepo.TokenBlueprintRepositoryFS
+	newsRepo                            *fsrepo.NewsRepositoryFS
+	newsReadRepo                        *fsrepo.NewsReadRepositoryFS
+	reportDecisionNotificationRepo      *fsrepo.ReportDecisionNotificationRepositoryFS
+	newsQuery                           *adminquery.NewsQuery
+	reportNameQuery                     *adminquery.ReportNameQuery
+	contractDetailQuery                 *adminquery.ContractDetailQuery
+	contractListQuery                   *adminquery.ContractListQuery
+	contractTokenBlueprintQuery         *adminquery.ContractTokenBlueprintQuery
+	contractProductBlueprintQuery       *adminquery.ContractProductBlueprintQuery
+	contractTokenBlueprintReviewQuery   *adminquery.ContractTokenBlueprintReviewQuery
+	contractProductBlueprintReviewQuery *adminquery.ContractProductBlueprintReviewQuery
+	gasBalanceQuery                     *adminquery.GasBalanceQuery
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -199,16 +201,26 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	productBlueprintReviewUsecase := usecase.NewProductBlueprintReviewUsecase(
 		productBlueprintReviewRepo,
+		productBlueprintRepo,
+		brandRepo,
+		memberRepo,
 		nil,
-		nil,
-		nil,
-		nil,
-		nil,
+		avatarRepo,
 		nil,
 	)
 	if productBlueprintReviewUsecase == nil {
 		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: product blueprint review usecase is nil")
+	}
+
+	contractProductBlueprintReviewQuery := adminquery.NewContractProductBlueprintReviewQuery(
+		companyRepo,
+		productBlueprintRepo,
+		productBlueprintReviewUsecase,
+	)
+	if contractProductBlueprintReviewQuery == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: contract product blueprint review query is nil")
 	}
 
 	tokenBlueprintReviewRepo := fsrepo.NewTokenBlueprintReviewRepositoryFS(infra.Firestore)
@@ -219,13 +231,23 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 
 	tokenBlueprintReviewUsecase := usecase.NewTokenBlueprintReviewUsecase(
 		tokenBlueprintReviewRepo,
-		nil,
-		nil,
-		nil,
+		avatarRepo,
+		tokenBlueprintRepo,
+		brandRepo,
 	)
 	if tokenBlueprintReviewUsecase == nil {
 		_ = newsImageStorage.Close()
 		return nil, errors.New("di.admin: token blueprint review usecase is nil")
+	}
+
+	contractTokenBlueprintReviewQuery := adminquery.NewContractTokenBlueprintReviewQuery(
+		companyRepo,
+		tokenBlueprintRepo,
+		tokenBlueprintReviewUsecase,
+	)
+	if contractTokenBlueprintReviewQuery == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: contract token blueprint review query is nil")
 	}
 
 	// Admin側のTokenBlueprintUsecaseは通報裁定によるAMOL上の非表示専用。
@@ -331,27 +353,29 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	)
 
 	return &Container{
-		Infra:                          infra,
-		adminFirebaseUID:               adminFirebaseUID,
-		adminEmail:                     adminEmail,
-		contactUsecase:                 contactUsecase,
-		newsUsecase:                    newsUsecase,
-		reportUsecase:                  reportUsecase,
-		companyRepo:                    companyRepo,
-		memberRepo:                     memberRepo,
-		avatarRepo:                     avatarRepo,
-		brandRepo:                      brandRepo,
-		productBlueprintRepo:           productBlueprintRepo,
-		tokenBlueprintRepo:             tokenBlueprintRepo,
-		newsRepo:                       newsRepo,
-		newsReadRepo:                   newsReadRepo,
-		reportDecisionNotificationRepo: reportDecisionNotificationRepo,
-		newsQuery:                      newsQuery,
-		reportNameQuery:                reportNameQuery,
-		contractDetailQuery:            contractDetailQuery,
-		contractListQuery:              contractListQuery,
-		contractTokenBlueprintQuery:    contractTokenBlueprintQuery,
-		contractProductBlueprintQuery:  contractProductBlueprintQuery,
-		gasBalanceQuery:                gasBalanceQuery,
+		Infra:                               infra,
+		adminFirebaseUID:                    adminFirebaseUID,
+		adminEmail:                          adminEmail,
+		contactUsecase:                      contactUsecase,
+		newsUsecase:                         newsUsecase,
+		reportUsecase:                       reportUsecase,
+		companyRepo:                         companyRepo,
+		memberRepo:                          memberRepo,
+		avatarRepo:                          avatarRepo,
+		brandRepo:                           brandRepo,
+		productBlueprintRepo:                productBlueprintRepo,
+		tokenBlueprintRepo:                  tokenBlueprintRepo,
+		newsRepo:                            newsRepo,
+		newsReadRepo:                        newsReadRepo,
+		reportDecisionNotificationRepo:      reportDecisionNotificationRepo,
+		newsQuery:                           newsQuery,
+		reportNameQuery:                     reportNameQuery,
+		contractDetailQuery:                 contractDetailQuery,
+		contractListQuery:                   contractListQuery,
+		contractTokenBlueprintQuery:         contractTokenBlueprintQuery,
+		contractProductBlueprintQuery:       contractProductBlueprintQuery,
+		contractTokenBlueprintReviewQuery:   contractTokenBlueprintReviewQuery,
+		contractProductBlueprintReviewQuery: contractProductBlueprintReviewQuery,
+		gasBalanceQuery:                     gasBalanceQuery,
 	}, nil
 }
