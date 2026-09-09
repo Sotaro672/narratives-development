@@ -2,47 +2,14 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import ProductBlueprintDetailAside from "../features/company/presentation/components/ProductBlueprintDetailAside";
+import ProductBlueprintModelList from "../features/company/presentation/components/ProductBlueprintModelList";
 import ProductBlueprintReviewTable from "../features/company/presentation/components/ProductBlueprintReviewTable";
+import ProductBlueprintSummary from "../features/company/presentation/components/ProductBlueprintSummary";
 import { useContractProductBlueprintDetail } from "../features/company/presentation/hooks/useContractProductBlueprintDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
-import { formatDateTime } from "../shared/util/dateFormat";
-import { formatModelMeta } from "../shared/util/modelMetaFormat";
 
 import "./ProductBlueprintDetailPage.css";
-
-const CATEGORY_FIELD_LABELS: Record<string, string> = {
-  weight: "重量",
-  vintage: "ヴィンテージ",
-  region: "地域・産地",
-  fit: "フィット",
-  material: "素材",
-  washTags: "洗濯表示",
-  alcoholContent: "アルコール度数",
-};
-
-function formatCategoryFields(
-  categoryFields: Record<string, unknown>,
-  fieldLabels: Record<string, string>,
-): string {
-  const entries = Object.entries(categoryFields);
-  if (entries.length === 0) {
-    return "-";
-  }
-
-  return entries
-    .map(([key, value]) => {
-      const label = fieldLabels[key] ?? key;
-
-      if (value == null) {
-        return `${label}: -`;
-      }
-      if (typeof value === "object") {
-        return `${label}: ${JSON.stringify(value)}`;
-      }
-      return `${label}: ${String(value)}`;
-    })
-    .join("\n");
-}
 
 export default function ProductBlueprintDetailPage() {
   const navigate = useNavigate();
@@ -50,6 +17,7 @@ export default function ProductBlueprintDetailPage() {
     companyId?: string;
     productBlueprintId?: string;
   }>();
+
   const { detail, loading, error, reload } =
     useContractProductBlueprintDetail(companyId, productBlueprintId);
 
@@ -79,39 +47,9 @@ export default function ProductBlueprintDetailPage() {
 
     return (
       <>
-        <section className="ui-detail-section">
-          <dl className="ui-detail-definition-list">
-            <dd>
-              {productBlueprint.productBlueprintCategoryPath.length > 0
-                ? productBlueprint.productBlueprintCategoryPath.join(" / ")
-                : "-"}
-            </dd>
-            <dd style={{ whiteSpace: "pre-wrap" }}>
-              {formatCategoryFields(
-                productBlueprint.categoryFields,
-                CATEGORY_FIELD_LABELS,
-              )}
-            </dd>
-          </dl>
-        </section>
+        <ProductBlueprintSummary productBlueprint={productBlueprint} />
 
-        <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">モデル</h2>
-          {productBlueprint.modelRefs.length > 0 ? (
-            <dl className="ui-detail-definition-list">
-              {productBlueprint.modelRefs
-                .slice()
-                .sort((a, b) => a.displayOrder - b.displayOrder)
-                .map((modelRef) => (
-                  <div key={modelRef.modelId}>
-                    <dd>{formatModelMeta(modelRef)}</dd>
-                  </div>
-                ))}
-            </dl>
-          ) : (
-            <p>モデル情報はありません。</p>
-          )}
-        </section>
+        <ProductBlueprintModelList modelRefs={productBlueprint.modelRefs} />
 
         <section className="ui-detail-section">
           <h2 className="ui-detail-section__title">レビュー</h2>
@@ -158,29 +96,10 @@ export default function ProductBlueprintDetailPage() {
         <DetailPageBody
           main={renderMain()}
           aside={
-            <div className="product-blueprint-detail-page__aside">
-              <section className="ui-detail-section">
-                <dl className="ui-detail-definition-list product-blueprint-detail-page__definition-list">
-                  <dt>企業名</dt>
-                  <dd>{company.name || "-"}</dd>
-
-                  <dt>ブランド</dt>
-                  <dd>{productBlueprint.brandName || "-"}</dd>
-
-                  <dt>担当者</dt>
-                  <dd>{productBlueprint.assigneeName || "-"}</dd>
-
-                  <dt>タグ種別</dt>
-                  <dd>{productBlueprint.productIdTagType || "-"}</dd>
-
-                  <dt>作成日時</dt>
-                  <dd>{formatDateTime(productBlueprint.createdAt)}</dd>
-
-                  <dt>最終更新日時</dt>
-                  <dd>{formatDateTime(productBlueprint.updatedAt)}</dd>
-                </dl>
-              </section>
-            </div>
+            <ProductBlueprintDetailAside
+              company={company}
+              productBlueprint={productBlueprint}
+            />
           }
         />
       ) : (
