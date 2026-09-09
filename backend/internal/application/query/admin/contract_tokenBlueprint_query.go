@@ -5,8 +5,10 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	branddom "narratives/internal/domain/brand"
-	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 	reportdom "narratives/internal/domain/report"
@@ -43,12 +45,10 @@ type contractTokenBlueprintReviewAggregateReader interface {
 }
 
 type contractTokenBlueprintReportCaseReader interface {
-	ListCases(
+	GetCase(
 		ctx context.Context,
-		filter reportdom.CaseFilter,
-		sort common.Sort,
-		page common.Page,
-	) (common.PageResult[reportdom.ReportCase], error)
+		caseID reportdom.CaseID,
+	) (reportdom.ReportCase, error)
 }
 
 type ContractTokenBlueprintQuery struct {
@@ -220,31 +220,30 @@ func (q *ContractTokenBlueprintQuery) resolveReportCount(
 	ctx context.Context,
 	tokenBlueprintID string,
 ) (int, error) {
-	targetType := reportdom.TargetTypeTokenBlueprint
-
-	result, err := q.reportCaseRepo.ListCases(
-		ctx,
-		reportdom.CaseFilter{
-			TargetType: &targetType,
-			TargetID:   tokenBlueprintID,
-		},
-		common.Sort{
-			Column: "createdAt",
-			Order:  common.SortDesc,
-		},
-		common.Page{
-			Number:  1,
-			PerPage: 1,
-		},
+	caseID, err := reportdom.BuildCaseID(
+		reportdom.TargetTypeTokenBlueprint,
+		tokenBlueprintID,
 	)
 	if err != nil {
 		return 0, err
 	}
-	if len(result.Items) == 0 {
-		return 0, nil
+
+	reportCase, err := q.reportCaseRepo.GetCase(ctx, caseID)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return 0, nil
+		}
+		return 0, err
 	}
 
-	return result.Items[0].ReportCount, nil
+	if reportCase.TargetType != reportdom.TargetTypeTokenBlueprint {
+		return 0, reportdom.ErrInvalidTargetType
+	}
+	if reportCase.TargetID != tokenBlueprintID {
+		return 0, reportdom.ErrInvalidTargetID
+	}
+
+	return reportCase.ReportCount, nil
 }
 
 func (q *ContractTokenBlueprintQuery) resolveBrandName(ctx context.Context, brandID string) string {
