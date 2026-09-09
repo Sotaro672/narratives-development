@@ -1,12 +1,20 @@
 /* frontend/admin/shell/src/pages/ListDetailPage.css */
 
+.ui-list-detail-price-list {
+  margin: 0;
+}
+
 .ui-detail-price-row {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
   width: 100%;
   min-width: 0;
+}
+
+.ui-detail-price-row + .ui-detail-price-row {
+  margin-top: 8px;
 }
 
 .ui-detail-price-row dt,
@@ -24,4 +32,27 @@
 .ui-detail-price-row dd {
   flex-shrink: 0;
   text-align: right;
+}
+
+.ui-list-detail-meta-list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 8px;
+  margin: 0;
+}
+
+.ui-list-detail-meta-list dt,
+.ui-list-detail-meta-list dd {
+  margin: 0;
+}
+
+.ui-list-detail-meta-list dt {
+  white-space: nowrap;
+}
+
+.ui-list-detail-meta-list dd {
+  min-width: 0;
+  white-space: nowrap;
 }
