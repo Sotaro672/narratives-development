@@ -5,9 +5,13 @@ import (
 	"context"
 	"errors"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
+	reportdom "narratives/internal/domain/report"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
@@ -42,21 +46,31 @@ type contractTokenBlueprintReviewLister interface {
 	) (common.PageResult[usecase.CommentView], error)
 }
 
+type contractTokenBlueprintReviewReportCaseReader interface {
+	GetCase(
+		ctx context.Context,
+		caseID reportdom.CaseID,
+	) (reportdom.ReportCase, error)
+}
+
 type ContractTokenBlueprintReviewQuery struct {
 	companyRepo        contractTokenBlueprintReviewCompanyReader
 	tokenBlueprintRepo contractTokenBlueprintReviewTokenBlueprintReader
 	reviewLister       contractTokenBlueprintReviewLister
+	reportCaseRepo     contractTokenBlueprintReviewReportCaseReader
 }
 
 func NewContractTokenBlueprintReviewQuery(
 	companyRepo contractTokenBlueprintReviewCompanyReader,
 	tokenBlueprintRepo contractTokenBlueprintReviewTokenBlueprintReader,
 	reviewLister contractTokenBlueprintReviewLister,
+	reportCaseRepo contractTokenBlueprintReviewReportCaseReader,
 ) *ContractTokenBlueprintReviewQuery {
 	return &ContractTokenBlueprintReviewQuery{
 		companyRepo:        companyRepo,
 		tokenBlueprintRepo: tokenBlueprintRepo,
 		reviewLister:       reviewLister,
+		reportCaseRepo:     reportCaseRepo,
 	}
 }
 
@@ -85,6 +99,7 @@ type ContractTokenBlueprintReviewRow struct {
 	LikeCount    int64  `json:"likeCount"`
 	DislikeCount int64  `json:"dislikeCount"`
 	ChildCount   int64  `json:"childCount"`
+	ReportCount  int    `json:"reportCount"`
 	Deleted      bool   `json:"deleted"`
 
 	CreatedAt string `json:"createdAt"`
@@ -100,7 +115,8 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 	if q == nil ||
 		q.companyRepo == nil ||
 		q.tokenBlueprintRepo == nil ||
-		q.reviewLister == nil {
+		q.reviewLister == nil ||
+		q.reportCaseRepo == nil {
 		return ContractTokenBlueprintReviewResult{},
 			ErrContractTokenBlueprintReviewQueryNotConfigured
 	}
@@ -117,10 +133,7 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 		return ContractTokenBlueprintReviewResult{}, err
 	}
 
-	tokenBlueprint, err := q.tokenBlueprintRepo.GetByID(
-		ctx,
-		tokenBlueprintID,
-	)
+	tokenBlueprint, err := q.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
 	if err != nil {
 		return ContractTokenBlueprintReviewResult{}, err
 	}
@@ -177,6 +190,15 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 			authorName = comment.AuthorID
 		}
 
+		reportCount, err := q.resolveReportCount(
+			ctx,
+			tokenBlueprintID,
+			comment.CommentID,
+		)
+		if err != nil {
+			return ContractTokenBlueprintReviewResult{}, err
+		}
+
 		items = append(items, ContractTokenBlueprintReviewRow{
 			CommentID:        comment.CommentID,
 			TokenBlueprintID: comment.TokenBlueprintID,
@@ -191,6 +213,7 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 			LikeCount:        comment.LikeCount,
 			DislikeCount:     comment.DislikeCount,
 			ChildCount:       comment.ChildCount,
+			ReportCount:      reportCount,
 			Deleted:          comment.Deleted,
 			CreatedAt:        formatContractDetailTime(comment.CreatedAt),
 			UpdatedAt:        formatContractDetailTime(comment.UpdatedAt),
@@ -205,6 +228,40 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 		Page:             result.Page,
 		PerPage:          result.PerPage,
 	}, nil
+}
+
+func (q *ContractTokenBlueprintReviewQuery) resolveReportCount(
+	ctx context.Context,
+	tokenBlueprintID string,
+	commentID string,
+) (int, error) {
+	caseID, err := reportdom.BuildCaseID(
+		reportdom.TargetTypeTokenBlueprintComment,
+		commentID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	reportCase, err := q.reportCaseRepo.GetCase(ctx, caseID)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	if reportCase.TargetType != reportdom.TargetTypeTokenBlueprintComment {
+		return 0, reportdom.ErrInvalidTargetType
+	}
+	if reportCase.TargetID != commentID {
+		return 0, reportdom.ErrInvalidTargetID
+	}
+	if reportCase.TargetParentID != tokenBlueprintID {
+		return 0, reportdom.ErrInvalidTargetParentID
+	}
+
+	return reportCase.ReportCount, nil
 }
 
 func normalizeContractTokenBlueprintReviewPage(

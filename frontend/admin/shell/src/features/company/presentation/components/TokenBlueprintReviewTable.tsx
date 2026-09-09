@@ -36,9 +36,10 @@ export default function TokenBlueprintReviewTable({
   const columns = useMemo<TableColumn<ContractTokenBlueprintReview>[]>(
     () => [
       {
-        key: "authorName",
-        header: "投稿者",
-        render: (review) => review.authorName || review.authorId || "-",
+        key: "reportCount",
+        header: "通報数",
+        render: (review) => review.reportCount,
+        sortValue: (review) => review.reportCount,
         nowrap: true,
       },
       {

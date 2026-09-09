@@ -18,6 +18,7 @@ export type ContractTokenBlueprintReview = {
   likeCount: number;
   dislikeCount: number;
   childCount: number;
+  reportCount: number;
   deleted: boolean;
   createdAt: string;
   updatedAt: string;

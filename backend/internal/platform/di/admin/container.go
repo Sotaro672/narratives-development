@@ -255,6 +255,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		companyRepo,
 		tokenBlueprintRepo,
 		tokenBlueprintReviewUsecase,
+		reportRepo,
 	)
 	if contractTokenBlueprintReviewQuery == nil {
 		_ = newsImageStorage.Close()
