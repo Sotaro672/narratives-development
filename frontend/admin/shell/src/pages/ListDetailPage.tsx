@@ -7,8 +7,31 @@ import ListDetailPriceList from "../features/company/presentation/components/Lis
 import ListDetailSummary from "../features/company/presentation/components/ListDetailSummary";
 import { useContractListDetail } from "../features/company/presentation/hooks/useContractListDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
 
 import "./ListDetailPage.css";
+
+function formatListStatus(status: string): string {
+  switch (status) {
+    case "listing":
+      return "出品中";
+    case "suspended":
+      return "停止中";
+    default:
+      return status || "-";
+  }
+}
+
+function getListStatusTone(status: string): TabTone {
+  switch (status) {
+    case "listing":
+      return "success";
+    case "suspended":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
 
 export default function ListDetailPage() {
   const navigate = useNavigate();
@@ -56,6 +79,16 @@ export default function ListDetailPage() {
     <Page>
       <PageHeader
         title={list?.title || list?.readableId || "出品詳細"}
+        meta={
+          list?.status ? (
+            <Tab
+              tone={getListStatusTone(list.status)}
+              aria-label={`出品状態 ${formatListStatus(list.status)}`}
+            >
+              {formatListStatus(list.status)}
+            </Tab>
+          ) : undefined
+        }
         leading={
           <button
             type="button"

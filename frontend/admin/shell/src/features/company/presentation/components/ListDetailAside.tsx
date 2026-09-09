@@ -11,17 +11,6 @@ type ListDetailAsideProps = {
   onOpenTokenBlueprint: () => void;
 };
 
-function formatListStatus(status: string): string {
-  switch (status) {
-    case "listing":
-      return "出品中";
-    case "suspended":
-      return "停止中";
-    default:
-      return status || "-";
-  }
-}
-
 export default function ListDetailAside({
   company,
   list,
@@ -77,9 +66,6 @@ export default function ListDetailAside({
         <dl className="ui-detail-definition-list ui-list-detail-meta-list">
           <dt>出品ID</dt>
           <dd>{list.readableId || list.id || "-"}</dd>
-
-          <dt>出品状態</dt>
-          <dd>{formatListStatus(list.status)}</dd>
 
           <dt>担当者</dt>
           <dd>{list.assigneeName || "-"}</dd>
