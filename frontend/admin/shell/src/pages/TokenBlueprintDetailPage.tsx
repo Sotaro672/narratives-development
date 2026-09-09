@@ -1,8 +1,12 @@
 // frontend/admin/shell/src/pages/TokenBlueprintDetailPage.tsx
 
+import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useContractTokenBlueprintDetail } from "../features/company/presentation/hooks/useContractTokenBlueprintDetail";
+import MediaGallery, {
+  type MediaGalleryItem,
+} from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
@@ -21,6 +25,25 @@ export default function TokenBlueprintDetailPage() {
 
   const company = detail?.company ?? null;
   const tokenBlueprint = detail?.tokenBlueprint ?? null;
+
+  const galleryItems = useMemo<MediaGalleryItem[]>(() => {
+    if (!tokenBlueprint) {
+      return [];
+    }
+
+    return tokenBlueprint.contentFiles
+      .filter(
+        (file) =>
+          file.type === "image" &&
+          Boolean(file.id) &&
+          Boolean(file.url),
+      )
+      .map((file) => ({
+        id: file.id,
+        url: file.url,
+        fileName: file.name || undefined,
+      }));
+  }, [tokenBlueprint]);
 
   const renderMain = () => {
     if (loading && !detail) {
@@ -50,23 +73,8 @@ export default function TokenBlueprintDetailPage() {
             <dt>シンボル</dt>
             <dd>{tokenBlueprint.symbol || "-"}</dd>
 
-            <dt>ブランド</dt>
-            <dd>{tokenBlueprint.brandName || "-"}</dd>
-
-            <dt>担当者</dt>
-            <dd>{tokenBlueprint.assigneeName || "-"}</dd>
-
-            <dt>モデレーション状態</dt>
-            <dd>{tokenBlueprint.moderationStatus || "-"}</dd>
-
             <dt>説明</dt>
             <dd>{tokenBlueprint.description || "-"}</dd>
-
-            <dt>作成日時</dt>
-            <dd>{formatDateTime(tokenBlueprint.createdAt)}</dd>
-
-            <dt>最終更新日時</dt>
-            <dd>{formatDateTime(tokenBlueprint.updatedAt)}</dd>
           </dl>
         </section>
 
@@ -76,45 +84,26 @@ export default function TokenBlueprintDetailPage() {
             <dd>{tokenBlueprint.metadataUri || "-"}</dd>
 
             <dt>アイコンURL</dt>
-            <dd>{tokenBlueprint.iconUrl || "-"}</dd>
+            <dd className="token-blueprint-detail-page__icon-cell">
+              {tokenBlueprint.iconUrl ? (
+                <img
+                  src={tokenBlueprint.iconUrl}
+                  alt={`${tokenBlueprint.name || "トークン"}のアイコン`}
+                  className="token-blueprint-detail-page__icon"
+                />
+              ) : (
+                "-"
+              )}
+            </dd>
           </dl>
         </section>
 
         <section className="ui-detail-section">
-          {tokenBlueprint.contentFiles.length > 0 ? (
-            tokenBlueprint.contentFiles.map((file) => (
-              <dl
-                key={file.id}
-                className="ui-detail-definition-list token-blueprint-detail-page__definition-list"
-              >
-                <dt>ファイル名</dt>
-                <dd>{file.name || "-"}</dd>
-
-                <dt>タイプ</dt>
-                <dd>{file.type || "-"}</dd>
-
-                <dt>Content-Type</dt>
-                <dd>{file.contentType || "-"}</dd>
-
-                <dt>公開状態</dt>
-                <dd>{file.isPublic ? "公開" : "非公開"}</dd>
-
-                <dt>サイズ</dt>
-                <dd>{file.size.toLocaleString("ja-JP")} bytes</dd>
-
-                <dt>URL</dt>
-                <dd>{file.url || "-"}</dd>
-
-                <dt>作成日時</dt>
-                <dd>{formatDateTime(file.createdAt)}</dd>
-
-                <dt>最終更新日時</dt>
-                <dd>{formatDateTime(file.updatedAt)}</dd>
-              </dl>
-            ))
-          ) : (
-            <p>コンテンツファイルはありません。</p>
-          )}
+          <MediaGallery
+            items={galleryItems}
+            altFallback={tokenBlueprint.name || "コンテンツ画像"}
+            placeholderText="コンテンツ画像はありません。"
+          />
         </section>
       </>
     );
@@ -155,7 +144,7 @@ export default function TokenBlueprintDetailPage() {
         }
       />
 
-      {company ? (
+      {company && tokenBlueprint ? (
         <DetailPageBody
           main={renderMain()}
           aside={
@@ -163,6 +152,21 @@ export default function TokenBlueprintDetailPage() {
               <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
                 <dt>企業名</dt>
                 <dd>{company.name || "-"}</dd>
+
+                <dt>ブランド</dt>
+                <dd>{tokenBlueprint.brandName || "-"}</dd>
+
+                <dt>担当者</dt>
+                <dd>{tokenBlueprint.assigneeName || "-"}</dd>
+
+                <dt>モデレーション状態</dt>
+                <dd>{tokenBlueprint.moderationStatus || "-"}</dd>
+
+                <dt>作成日時</dt>
+                <dd>{formatDateTime(tokenBlueprint.createdAt)}</dd>
+
+                <dt>最終更新日時</dt>
+                <dd>{formatDateTime(tokenBlueprint.updatedAt)}</dd>
               </dl>
             </section>
           }
