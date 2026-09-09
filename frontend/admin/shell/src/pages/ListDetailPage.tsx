@@ -73,7 +73,6 @@ export default function ListDetailPage() {
     return (
       <>
         <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">出品画像</h2>
           <MediaGallery
             items={galleryItems}
             altFallback={list.title || list.productName || "出品画像"}
