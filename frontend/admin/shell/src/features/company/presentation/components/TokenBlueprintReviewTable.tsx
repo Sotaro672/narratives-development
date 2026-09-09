@@ -73,21 +73,6 @@ export default function TokenBlueprintReviewTable({
         minWidth: "320px",
       },
       {
-        key: "isOwnerComment",
-        header: "オーナー",
-        render: (review) => (review.isOwnerComment ? "はい" : "いいえ"),
-        sortValue: (review) => review.isOwnerComment,
-        filter: {
-          getValue: (review) =>
-            review.isOwnerComment ? "owner" : "not_owner",
-          options: [
-            { value: "owner", label: "オーナーコメント" },
-            { value: "not_owner", label: "その他" },
-          ],
-        },
-        nowrap: true,
-      },
-      {
         key: "likeCount",
         header: "いいね",
         render: (review) => review.likeCount,
@@ -114,8 +99,7 @@ export default function TokenBlueprintReviewTable({
         render: (review) => (review.deleted ? "削除済み" : "表示中"),
         sortValue: (review) => review.deleted,
         filter: {
-          getValue: (review) =>
-            review.deleted ? "deleted" : "visible",
+          getValue: (review) => review.deleted ? "deleted" : "visible",
           options: [
             { value: "visible", label: "表示中" },
             { value: "deleted", label: "削除済み" },

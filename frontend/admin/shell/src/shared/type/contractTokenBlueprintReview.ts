@@ -14,7 +14,6 @@ export type ContractTokenBlueprintReview = {
   authorType: ContractTokenBlueprintReviewAuthorType;
   authorName: string;
   authorIcon: string;
-  isOwnerComment: boolean;
   body: string;
   likeCount: number;
   dislikeCount: number;
