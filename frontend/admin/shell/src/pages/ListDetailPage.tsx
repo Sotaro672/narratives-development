@@ -28,7 +28,6 @@ export default function ListDetailPage() {
     listId,
   );
 
-  const company = detail?.company ?? null;
   const list = detail?.list ?? null;
 
   const renderMain = () => {
@@ -60,52 +59,8 @@ export default function ListDetailPage() {
             <dt>出品名</dt>
             <dd>{list.title || "-"}</dd>
 
-            <dt>出品ID</dt>
-            <dd>{list.readableId || list.id || "-"}</dd>
-
-            <dt>状態</dt>
-            <dd>{formatListStatus(list.status)}</dd>
-
-            <dt>商品</dt>
-            <dd>{list.productName || "-"}</dd>
-
-            <dt>トークン設計</dt>
-            <dd>{list.tokenName || "-"}</dd>
-
-            <dt>ブランド</dt>
-            <dd>{list.brandName || "-"}</dd>
-
-            <dt>担当者</dt>
-            <dd>{list.assigneeName || "-"}</dd>
-
             <dt>説明</dt>
             <dd>{list.description || "-"}</dd>
-
-            <dt>作成日時</dt>
-            <dd>{formatDateTime(list.createdAt)}</dd>
-
-            <dt>最終更新日時</dt>
-            <dd>{formatDateTime(list.updatedAt)}</dd>
-          </dl>
-        </section>
-
-        <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">関連ID</h2>
-          <dl className="ui-detail-definition-list">
-            <dt>内部ID</dt>
-            <dd>{list.id || "-"}</dd>
-
-            <dt>在庫ID</dt>
-            <dd>{list.inventoryId || "-"}</dd>
-
-            <dt>商品設計ID</dt>
-            <dd>{list.productBlueprintId || "-"}</dd>
-
-            <dt>トークン設計ID</dt>
-            <dd>{list.tokenBlueprintId || "-"}</dd>
-
-            <dt>画像ID</dt>
-            <dd>{list.imageId || "-"}</dd>
           </dl>
         </section>
 
@@ -163,24 +118,36 @@ export default function ListDetailPage() {
         }
       />
 
-      {company ? (
+      {list ? (
         <DetailPageBody
           main={renderMain()}
           aside={
             <section className="ui-detail-section">
-              <h2 className="ui-detail-section__title">企業情報</h2>
+              <h2 className="ui-detail-section__title">関連情報</h2>
               <dl className="ui-detail-definition-list">
-                <dt>企業名</dt>
-                <dd>{company.name || "-"}</dd>
+                <dt>ブランド名</dt>
+                <dd>{list.brandName || "-"}</dd>
 
-                <dt>代表者</dt>
-                <dd>{company.representativeName || "-"}</dd>
+                <dt>トークン設計名</dt>
+                <dd>{list.tokenName || "-"}</dd>
 
-                <dt>登録日時</dt>
-                <dd>{formatDateTime(company.createdAt)}</dd>
+                <dt>商品名</dt>
+                <dd>{list.productName || "-"}</dd>
 
-                <dt>最終更新日</dt>
-                <dd>{formatDateTime(company.updatedAt)}</dd>
+                <dt>出品ID</dt>
+                <dd>{list.readableId || list.id || "-"}</dd>
+
+                <dt>出品状態</dt>
+                <dd>{formatListStatus(list.status)}</dd>
+
+                <dt>担当者</dt>
+                <dd>{list.assigneeName || "-"}</dd>
+
+                <dt>作成日時</dt>
+                <dd>{formatDateTime(list.createdAt)}</dd>
+
+                <dt>最終更新日時</dt>
+                <dd>{formatDateTime(list.updatedAt)}</dd>
               </dl>
             </section>
           }
