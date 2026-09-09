@@ -136,13 +136,7 @@ export default function TokenBlueprintDetailPage() {
             type="button"
             className="ui-page-header__back"
             aria-label="戻る"
-            onClick={() =>
-              navigate(
-                companyId
-                  ? `/contracts/${encodeURIComponent(companyId)}`
-                  : "/contracts",
-              )
-            }
+            onClick={() => navigate(-1)}
           >
             <svg
               width="18"

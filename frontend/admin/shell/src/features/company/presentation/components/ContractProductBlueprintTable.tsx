@@ -58,22 +58,6 @@ export default function ContractProductBlueprintTable({
         nowrap: true,
       },
       {
-        key: "printed",
-        header: "印刷",
-        render: (productBlueprint) =>
-          productBlueprint.printed ? "印刷済み" : "未印刷",
-        sortValue: (productBlueprint) => productBlueprint.printed,
-        filter: {
-          getValue: (productBlueprint) =>
-            productBlueprint.printed ? "printed" : "not_printed",
-          options: [
-            { value: "printed", label: "印刷済み" },
-            { value: "not_printed", label: "未印刷" },
-          ],
-        },
-        nowrap: true,
-      },
-      {
         key: "createdAt",
         header: "作成日時",
         render: (productBlueprint) =>
