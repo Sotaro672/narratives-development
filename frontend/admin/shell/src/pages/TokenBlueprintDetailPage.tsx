@@ -1,0 +1,208 @@
+// frontend/admin/shell/src/pages/TokenBlueprintDetailPage.tsx
+
+import { useNavigate, useParams } from "react-router-dom";
+
+import { useContractTokenBlueprintDetail } from "../features/company/presentation/hooks/useContractTokenBlueprintDetail";
+import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+import { formatDateTime } from "../shared/util/dateFormat";
+
+function formatMinted(minted: boolean): string {
+  return minted ? "ミント済み" : "未ミント";
+}
+
+export default function TokenBlueprintDetailPage() {
+  const navigate = useNavigate();
+  const { companyId = "", tokenBlueprintId = "" } = useParams<{
+    companyId?: string;
+    tokenBlueprintId?: string;
+  }>();
+  const { detail, loading, error, reload } = useContractTokenBlueprintDetail(
+    companyId,
+    tokenBlueprintId,
+  );
+
+  const company = detail?.company ?? null;
+  const tokenBlueprint = detail?.tokenBlueprint ?? null;
+
+  const renderMain = () => {
+    if (loading && !detail) {
+      return <p>トークン設計詳細を取得しています...</p>;
+    }
+
+    if (error && !detail) {
+      return (
+        <div role="alert">
+          <p>トークン設計詳細を取得できませんでした。</p>
+          <p>{error}</p>
+          <button type="button" onClick={() => void reload()}>
+            再読み込み
+          </button>
+        </div>
+      );
+    }
+
+    if (!tokenBlueprint) {
+      return <p role="alert">トークン設計情報を取得できませんでした。</p>;
+    }
+
+    return (
+      <>
+        <section className="ui-detail-section">
+          <h2 className="ui-detail-section__title">トークン設計情報</h2>
+          <dl className="ui-detail-definition-list">
+            <dt>トークン名</dt>
+            <dd>{tokenBlueprint.name || "-"}</dd>
+
+            <dt>シンボル</dt>
+            <dd>{tokenBlueprint.symbol || "-"}</dd>
+
+            <dt>ブランド</dt>
+            <dd>{tokenBlueprint.brandName || "-"}</dd>
+
+            <dt>担当者</dt>
+            <dd>{tokenBlueprint.assigneeName || "-"}</dd>
+
+            <dt>ミント状態</dt>
+            <dd>{formatMinted(tokenBlueprint.minted)}</dd>
+
+            <dt>モデレーション状態</dt>
+            <dd>{tokenBlueprint.moderationStatus || "-"}</dd>
+
+            <dt>説明</dt>
+            <dd>{tokenBlueprint.description || "-"}</dd>
+
+            <dt>作成日時</dt>
+            <dd>{formatDateTime(tokenBlueprint.createdAt)}</dd>
+
+            <dt>最終更新日時</dt>
+            <dd>{formatDateTime(tokenBlueprint.updatedAt)}</dd>
+          </dl>
+        </section>
+
+        <section className="ui-detail-section">
+          <h2 className="ui-detail-section__title">メタデータ</h2>
+          <dl className="ui-detail-definition-list">
+            <dt>トークン設計ID</dt>
+            <dd>{tokenBlueprint.id || "-"}</dd>
+
+            <dt>企業ID</dt>
+            <dd>{tokenBlueprint.companyId || "-"}</dd>
+
+            <dt>ブランドID</dt>
+            <dd>{tokenBlueprint.brandId || "-"}</dd>
+
+            <dt>担当者ID</dt>
+            <dd>{tokenBlueprint.assigneeId || "-"}</dd>
+
+            <dt>Metadata URI</dt>
+            <dd>{tokenBlueprint.metadataUri || "-"}</dd>
+
+            <dt>アイコンURL</dt>
+            <dd>{tokenBlueprint.iconUrl || "-"}</dd>
+          </dl>
+        </section>
+
+        <section className="ui-detail-section">
+          <h2 className="ui-detail-section__title">コンテンツファイル</h2>
+          {tokenBlueprint.contentFiles.length > 0 ? (
+            tokenBlueprint.contentFiles.map((file) => (
+              <dl
+                key={file.id}
+                className="ui-detail-definition-list"
+              >
+                <dt>ファイル名</dt>
+                <dd>{file.name || "-"}</dd>
+
+                <dt>タイプ</dt>
+                <dd>{file.type || "-"}</dd>
+
+                <dt>Content-Type</dt>
+                <dd>{file.contentType || "-"}</dd>
+
+                <dt>公開状態</dt>
+                <dd>{file.isPublic ? "公開" : "非公開"}</dd>
+
+                <dt>サイズ</dt>
+                <dd>{file.size.toLocaleString("ja-JP")} bytes</dd>
+
+                <dt>URL</dt>
+                <dd>{file.url || "-"}</dd>
+
+                <dt>作成日時</dt>
+                <dd>{formatDateTime(file.createdAt)}</dd>
+
+                <dt>最終更新日時</dt>
+                <dd>{formatDateTime(file.updatedAt)}</dd>
+              </dl>
+            ))
+          ) : (
+            <p>コンテンツファイルはありません。</p>
+          )}
+        </section>
+      </>
+    );
+  };
+
+  return (
+    <Page>
+      <PageHeader
+        title={tokenBlueprint?.name || "トークン設計詳細"}
+        leading={
+          <button
+            type="button"
+            className="ui-page-header__back"
+            aria-label="戻る"
+            onClick={() =>
+              navigate(
+                companyId
+                  ? `/contracts/${encodeURIComponent(companyId)}`
+                  : "/contracts",
+              )
+            }
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M19 12H5" />
+              <path d="M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+        }
+      />
+
+      {company ? (
+        <DetailPageBody
+          main={renderMain()}
+          aside={
+            <section className="ui-detail-section">
+              <h2 className="ui-detail-section__title">企業情報</h2>
+              <dl className="ui-detail-definition-list">
+                <dt>企業名</dt>
+                <dd>{company.name || "-"}</dd>
+
+                <dt>代表者</dt>
+                <dd>{company.representativeName || "-"}</dd>
+
+                <dt>登録日時</dt>
+                <dd>{formatDateTime(company.createdAt)}</dd>
+
+                <dt>最終更新日</dt>
+                <dd>{formatDateTime(company.updatedAt)}</dd>
+              </dl>
+            </section>
+          }
+        />
+      ) : (
+        renderMain()
+      )}
+    </Page>
+  );
+}

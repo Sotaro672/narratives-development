@@ -3,17 +3,19 @@
 import { useMemo } from "react";
 
 import type { ContractProductBlueprintRow } from "../../../../shared/type/contractDetail";
-import Table, {
-  type TableColumn,
-} from "../../../../shared/ui/Table/Table";
+import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ContractProductBlueprintTableProps = {
   productBlueprints: ContractProductBlueprintRow[];
+  onProductBlueprintClick?: (
+    productBlueprint: ContractProductBlueprintRow,
+  ) => void;
 };
 
 export default function ContractProductBlueprintTable({
   productBlueprints,
+  onProductBlueprintClick,
 }: ContractProductBlueprintTableProps) {
   const columns = useMemo<TableColumn<ContractProductBlueprintRow>[]>(
     () => [
@@ -36,13 +38,10 @@ export default function ContractProductBlueprintTable({
       {
         key: "brandName",
         header: "ブランド",
-        render: (productBlueprint) =>
-          productBlueprint.brandName || "-",
-        sortValue: (productBlueprint) =>
-          productBlueprint.brandName,
+        render: (productBlueprint) => productBlueprint.brandName || "-",
+        sortValue: (productBlueprint) => productBlueprint.brandName,
         filter: {
-          getValue: (productBlueprint) =>
-            productBlueprint.brandName,
+          getValue: (productBlueprint) => productBlueprint.brandName,
           placeholder: "ブランド名で絞り込み",
         },
         nowrap: true,
@@ -50,13 +49,10 @@ export default function ContractProductBlueprintTable({
       {
         key: "assigneeName",
         header: "担当者",
-        render: (productBlueprint) =>
-          productBlueprint.assigneeName || "-",
-        sortValue: (productBlueprint) =>
-          productBlueprint.assigneeName,
+        render: (productBlueprint) => productBlueprint.assigneeName || "-",
+        sortValue: (productBlueprint) => productBlueprint.assigneeName,
         filter: {
-          getValue: (productBlueprint) =>
-            productBlueprint.assigneeName,
+          getValue: (productBlueprint) => productBlueprint.assigneeName,
           placeholder: "担当者名で絞り込み",
         },
         nowrap: true,
@@ -66,8 +62,7 @@ export default function ContractProductBlueprintTable({
         header: "印刷",
         render: (productBlueprint) =>
           productBlueprint.printed ? "印刷済み" : "未印刷",
-        sortValue: (productBlueprint) =>
-          productBlueprint.printed,
+        sortValue: (productBlueprint) => productBlueprint.printed,
         filter: {
           getValue: (productBlueprint) =>
             productBlueprint.printed ? "printed" : "not_printed",
@@ -105,6 +100,7 @@ export default function ContractProductBlueprintTable({
       columns={columns}
       rows={productBlueprints}
       getRowKey={(productBlueprint) => productBlueprint.id}
+      onRowClick={onProductBlueprintClick}
       emptyMessage="商品設計はありません。"
       filteredEmptyMessage="条件に一致する商品設計はありません。"
     />

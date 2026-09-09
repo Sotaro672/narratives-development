@@ -3,17 +3,17 @@
 import { useMemo } from "react";
 
 import type { ContractTokenBlueprintRow } from "../../../../shared/type/contractDetail";
-import Table, {
-  type TableColumn,
-} from "../../../../shared/ui/Table/Table";
+import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ContractTokenBlueprintTableProps = {
   tokenBlueprints: ContractTokenBlueprintRow[];
+  onTokenBlueprintClick?: (tokenBlueprint: ContractTokenBlueprintRow) => void;
 };
 
 export default function ContractTokenBlueprintTable({
   tokenBlueprints,
+  onTokenBlueprintClick,
 }: ContractTokenBlueprintTableProps) {
   const columns = useMemo<TableColumn<ContractTokenBlueprintRow>[]>(
     () => [
@@ -21,13 +21,10 @@ export default function ContractTokenBlueprintTable({
         key: "name",
         header: "トークン",
         render: (tokenBlueprint) => tokenBlueprint.name || tokenBlueprint.id,
-        sortValue: (tokenBlueprint) =>
-          tokenBlueprint.name || tokenBlueprint.id,
+        sortValue: (tokenBlueprint) => tokenBlueprint.name || tokenBlueprint.id,
         filter: {
           getValue: (tokenBlueprint) =>
-            [tokenBlueprint.name, tokenBlueprint.id]
-              .filter(Boolean)
-              .join(" "),
+            [tokenBlueprint.name, tokenBlueprint.id].filter(Boolean).join(" "),
           placeholder: "トークン名・IDで絞り込み",
         },
         nowrap: true,
@@ -84,8 +81,7 @@ export default function ContractTokenBlueprintTable({
       {
         key: "createdAt",
         header: "作成日時",
-        render: (tokenBlueprint) =>
-          formatDateTime(tokenBlueprint.createdAt),
+        render: (tokenBlueprint) => formatDateTime(tokenBlueprint.createdAt),
         sortValue: (tokenBlueprint) =>
           new Date(tokenBlueprint.createdAt).getTime(),
         nowrap: true,
@@ -93,8 +89,7 @@ export default function ContractTokenBlueprintTable({
       {
         key: "updatedAt",
         header: "最終更新日時",
-        render: (tokenBlueprint) =>
-          formatDateTime(tokenBlueprint.updatedAt),
+        render: (tokenBlueprint) => formatDateTime(tokenBlueprint.updatedAt),
         sortValue: (tokenBlueprint) =>
           new Date(tokenBlueprint.updatedAt).getTime(),
         nowrap: true,
@@ -108,6 +103,7 @@ export default function ContractTokenBlueprintTable({
       columns={columns}
       rows={tokenBlueprints}
       getRowKey={(tokenBlueprint) => tokenBlueprint.id}
+      onRowClick={onTokenBlueprintClick}
       emptyMessage="トークン設計はありません。"
       filteredEmptyMessage="条件に一致するトークン設計はありません。"
     />

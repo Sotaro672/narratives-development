@@ -31,6 +31,9 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.companyRepo,
 		cont.memberRepo,
 		cont.contractDetailQuery,
+		cont.contractListQuery,
+		cont.contractTokenBlueprintQuery,
+		cont.contractProductBlueprintQuery,
 	)
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	newsHandler := adminhandler.NewNewsHandler(cont.newsUsecase, cont.newsQuery)

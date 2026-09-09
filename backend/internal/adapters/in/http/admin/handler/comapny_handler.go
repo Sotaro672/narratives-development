@@ -11,7 +11,11 @@ import (
 
 	adminquery "narratives/internal/application/query/admin"
 	companydom "narratives/internal/domain/company"
+	inventorydom "narratives/internal/domain/inventory"
+	listdom "narratives/internal/domain/list"
 	memberdom "narratives/internal/domain/member"
+	productblueprintdom "narratives/internal/domain/productBlueprint"
+	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 const (
@@ -31,10 +35,25 @@ type ContractDetailReader interface {
 	Get(ctx context.Context, companyID string) (adminquery.ContractDetailResult, error)
 }
 
+type ContractListReader interface {
+	Get(ctx context.Context, companyID string, listID string) (adminquery.ContractListDetailResult, error)
+}
+
+type ContractTokenBlueprintReader interface {
+	Get(ctx context.Context, companyID string, tokenBlueprintID string) (adminquery.ContractTokenBlueprintDetailResult, error)
+}
+
+type ContractProductBlueprintReader interface {
+	Get(ctx context.Context, companyID string, productBlueprintID string) (adminquery.ContractProductBlueprintDetailResult, error)
+}
+
 type CompanyHandler struct {
-	companyRepo         CompanyListReader
-	memberRepo          MemberReader
-	contractDetailQuery ContractDetailReader
+	companyRepo                   CompanyListReader
+	memberRepo                    MemberReader
+	contractDetailQuery           ContractDetailReader
+	contractListQuery             ContractListReader
+	contractTokenBlueprintQuery   ContractTokenBlueprintReader
+	contractProductBlueprintQuery ContractProductBlueprintReader
 }
 
 type companyResponse struct {
@@ -54,11 +73,17 @@ func NewCompanyHandler(
 	companyRepo CompanyListReader,
 	memberRepo MemberReader,
 	contractDetailQuery ContractDetailReader,
+	contractListQuery ContractListReader,
+	contractTokenBlueprintQuery ContractTokenBlueprintReader,
+	contractProductBlueprintQuery ContractProductBlueprintReader,
 ) http.Handler {
 	return http.HandlerFunc((&CompanyHandler{
-		companyRepo:         companyRepo,
-		memberRepo:          memberRepo,
-		contractDetailQuery: contractDetailQuery,
+		companyRepo:                   companyRepo,
+		memberRepo:                    memberRepo,
+		contractDetailQuery:           contractDetailQuery,
+		contractListQuery:             contractListQuery,
+		contractTokenBlueprintQuery:   contractTokenBlueprintQuery,
+		contractProductBlueprintQuery: contractProductBlueprintQuery,
 	}).handle)
 }
 
@@ -70,13 +95,27 @@ func (h *CompanyHandler) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	companyID, ok := parseContractDetailCompanyID(path)
-	if !ok {
-		writeJSONError(w, http.StatusNotFound, "company_not_found")
+	if companyID, ok := parseContractDetailCompanyID(path); ok {
+		h.handleContractDetail(w, r, companyID)
 		return
 	}
 
-	h.handleContractDetail(w, r, companyID)
+	if companyID, listID, ok := parseContractResourcePath(path, "lists"); ok {
+		h.handleContractListDetail(w, r, companyID, listID)
+		return
+	}
+
+	if companyID, tokenBlueprintID, ok := parseContractResourcePath(path, "token-blueprints"); ok {
+		h.handleContractTokenBlueprintDetail(w, r, companyID, tokenBlueprintID)
+		return
+	}
+
+	if companyID, productBlueprintID, ok := parseContractResourcePath(path, "product-blueprints"); ok {
+		h.handleContractProductBlueprintDetail(w, r, companyID, productBlueprintID)
+		return
+	}
+
+	writeJSONError(w, http.StatusNotFound, "company_resource_not_found")
 }
 
 func (h *CompanyHandler) handleList(w http.ResponseWriter, r *http.Request) {
@@ -106,13 +145,10 @@ func (h *CompanyHandler) handleList(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusInternalServerError, "company_representative_resolve_failed")
 			return
 		}
-
 		items = append(items, toAdminCompanyResponse(company, representativeName))
 	}
 
-	writeJSON(w, http.StatusOK, companyListResponse{
-		Items: items,
-	})
+	writeJSON(w, http.StatusOK, companyListResponse{Items: items})
 }
 
 func (h *CompanyHandler) handleContractDetail(
@@ -132,13 +168,116 @@ func (h *CompanyHandler) handleContractDetail(
 	result, err := h.contractDetailQuery.Get(r.Context(), companyID)
 	if err != nil {
 		switch {
-		case errors.Is(err, companydom.ErrNotFound),
-			errors.Is(err, companydom.ErrInvalidID):
+		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
 			writeJSONError(w, http.StatusNotFound, "company_not_found")
 		case errors.Is(err, adminquery.ErrContractDetailQueryNotConfigured):
 			writeJSONError(w, http.StatusServiceUnavailable, "contract_detail_query_not_initialized")
 		default:
 			writeJSONError(w, http.StatusInternalServerError, "contract_detail_get_failed")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *CompanyHandler) handleContractListDetail(
+	w http.ResponseWriter,
+	r *http.Request,
+	companyID string,
+	listID string,
+) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+		return
+	}
+	if h.contractListQuery == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "contract_list_query_not_initialized")
+		return
+	}
+
+	result, err := h.contractListQuery.Get(r.Context(), companyID, listID)
+	if err != nil {
+		switch {
+		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
+			writeJSONError(w, http.StatusNotFound, "company_not_found")
+		case errors.Is(err, listdom.ErrNotFound),
+			errors.Is(err, listdom.ErrInvalidID),
+			errors.Is(err, inventorydom.ErrNotFound),
+			errors.Is(err, inventorydom.ErrInvalidMintID),
+			errors.Is(err, productblueprintdom.ErrNotFound),
+			errors.Is(err, tokenblueprintdom.ErrNotFound):
+			writeJSONError(w, http.StatusNotFound, "list_not_found")
+		case errors.Is(err, adminquery.ErrContractListQueryNotConfigured):
+			writeJSONError(w, http.StatusServiceUnavailable, "contract_list_query_not_initialized")
+		default:
+			writeJSONError(w, http.StatusInternalServerError, "contract_list_get_failed")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *CompanyHandler) handleContractTokenBlueprintDetail(
+	w http.ResponseWriter,
+	r *http.Request,
+	companyID string,
+	tokenBlueprintID string,
+) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+		return
+	}
+	if h.contractTokenBlueprintQuery == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "contract_token_blueprint_query_not_initialized")
+		return
+	}
+
+	result, err := h.contractTokenBlueprintQuery.Get(r.Context(), companyID, tokenBlueprintID)
+	if err != nil {
+		switch {
+		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
+			writeJSONError(w, http.StatusNotFound, "company_not_found")
+		case errors.Is(err, tokenblueprintdom.ErrNotFound), errors.Is(err, tokenblueprintdom.ErrInvalidID):
+			writeJSONError(w, http.StatusNotFound, "token_blueprint_not_found")
+		case errors.Is(err, adminquery.ErrContractTokenBlueprintQueryNotConfigured):
+			writeJSONError(w, http.StatusServiceUnavailable, "contract_token_blueprint_query_not_initialized")
+		default:
+			writeJSONError(w, http.StatusInternalServerError, "contract_token_blueprint_get_failed")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *CompanyHandler) handleContractProductBlueprintDetail(
+	w http.ResponseWriter,
+	r *http.Request,
+	companyID string,
+	productBlueprintID string,
+) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
+		return
+	}
+	if h.contractProductBlueprintQuery == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "contract_product_blueprint_query_not_initialized")
+		return
+	}
+
+	result, err := h.contractProductBlueprintQuery.Get(r.Context(), companyID, productBlueprintID)
+	if err != nil {
+		switch {
+		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
+			writeJSONError(w, http.StatusNotFound, "company_not_found")
+		case errors.Is(err, productblueprintdom.ErrNotFound), errors.Is(err, productblueprintdom.ErrInvalidID):
+			writeJSONError(w, http.StatusNotFound, "product_blueprint_not_found")
+		case errors.Is(err, adminquery.ErrContractProductBlueprintQueryNotConfigured):
+			writeJSONError(w, http.StatusServiceUnavailable, "contract_product_blueprint_query_not_initialized")
+		default:
+			writeJSONError(w, http.StatusInternalServerError, "contract_product_blueprint_get_failed")
 		}
 		return
 	}
@@ -155,12 +294,33 @@ func parseContractDetailCompanyID(path string) (string, bool) {
 	companyID := strings.TrimSuffix(strings.TrimPrefix(path, prefix), adminContractDetailPathSuffix)
 	companyID = strings.TrimSuffix(companyID, "/")
 	companyID = strings.TrimSpace(companyID)
-
 	if companyID == "" || strings.Contains(companyID, "/") {
 		return "", false
 	}
-
 	return companyID, true
+}
+
+func parseContractResourcePath(
+	path string,
+	resource string,
+) (companyID string, resourceID string, ok bool) {
+	prefix := adminCompaniesPath + "/"
+	if !strings.HasPrefix(path, prefix) {
+		return "", "", false
+	}
+
+	relativePath := strings.TrimPrefix(path, prefix)
+	parts := strings.Split(relativePath, "/")
+	if len(parts) != 3 || parts[1] != resource {
+		return "", "", false
+	}
+
+	companyID = strings.TrimSpace(parts[0])
+	resourceID = strings.TrimSpace(parts[2])
+	if companyID == "" || resourceID == "" {
+		return "", "", false
+	}
+	return companyID, resourceID, true
 }
 
 func (h *CompanyHandler) resolveRepresentativeName(
@@ -183,7 +343,6 @@ func (h *CompanyHandler) resolveRepresentativeName(
 	if name == "" {
 		return "-", nil
 	}
-
 	return name, nil
 }
 

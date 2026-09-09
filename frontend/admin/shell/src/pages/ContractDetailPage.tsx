@@ -22,6 +22,33 @@ export default function ContractDetailPage() {
 
   const company = detail?.company ?? null;
 
+  const handleListClick = (listId: string) => {
+    if (!companyId || !listId) {
+      return;
+    }
+    navigate(
+      `/contracts/${encodeURIComponent(companyId)}/lists/${encodeURIComponent(listId)}`,
+    );
+  };
+
+  const handleTokenBlueprintClick = (tokenBlueprintId: string) => {
+    if (!companyId || !tokenBlueprintId) {
+      return;
+    }
+    navigate(
+      `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(tokenBlueprintId)}`,
+    );
+  };
+
+  const handleProductBlueprintClick = (productBlueprintId: string) => {
+    if (!companyId || !productBlueprintId) {
+      return;
+    }
+    navigate(
+      `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(productBlueprintId)}`,
+    );
+  };
+
   const renderMain = () => {
     if (loading && !detail) {
       return <p>契約詳細を取得しています...</p>;
@@ -107,7 +134,10 @@ export default function ContractDetailPage() {
             role="tabpanel"
             aria-labelledby="contract-detail-tab-lists"
           >
-            <ContractListTable lists={detail.lists} />
+            <ContractListTable
+              lists={detail.lists}
+              onListClick={(list) => handleListClick(list.id)}
+            />
           </div>
         )}
 
@@ -120,6 +150,9 @@ export default function ContractDetailPage() {
           >
             <ContractTokenBlueprintTable
               tokenBlueprints={detail.tokenBlueprints}
+              onTokenBlueprintClick={(tokenBlueprint) =>
+                handleTokenBlueprintClick(tokenBlueprint.id)
+              }
             />
           </div>
         )}
@@ -133,6 +166,9 @@ export default function ContractDetailPage() {
           >
             <ContractProductBlueprintTable
               productBlueprints={detail.productBlueprints}
+              onProductBlueprintClick={(productBlueprint) =>
+                handleProductBlueprintClick(productBlueprint.id)
+              }
             />
           </div>
         )}
@@ -175,14 +211,11 @@ export default function ContractDetailPage() {
           aside={
             <section className="ui-detail-section">
               <h2 className="ui-detail-section__title">企業情報</h2>
-
               <dl className="ui-detail-definition-list">
                 <dt>代表者</dt>
                 <dd>{company.representativeName || "-"}</dd>
-
                 <dt>登録日時</dt>
                 <dd>{formatDateTime(company.createdAt)}</dd>
-
                 <dt>最終更新日</dt>
                 <dd>{formatDateTime(company.updatedAt)}</dd>
               </dl>

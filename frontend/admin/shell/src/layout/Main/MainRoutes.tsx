@@ -8,11 +8,14 @@ import ContractsPage from "../../pages/ContractsPage";
 import GasPage from "../../pages/GasPage";
 import InquiryDetailPage from "../../pages/InquiryDetailPage";
 import InquiriesPage from "../../pages/InquiriesPage";
+import ListDetailPage from "../../pages/ListDetailPage";
 import NewsCreatePage from "../../pages/NewsCreatePage";
 import NewsDetailPage from "../../pages/NewsDetailPage";
 import NewsPage from "../../pages/NewsPage";
+import ProductBlueprintDetailPage from "../../pages/ProductBlueprintDetailPage";
 import ReportDetailPage from "../../pages/ReportDetailPage";
 import ReportsPage from "../../pages/ReportsPage";
+import TokenBlueprintDetailPage from "../../pages/TokenBlueprintDetailPage";
 
 export default function MainRoutes() {
   return (
@@ -26,6 +29,18 @@ export default function MainRoutes() {
       <Route path="/news/:newsId" element={<NewsDetailPage />} />
       <Route path="/contracts" element={<ContractsPage />} />
       <Route path="/contracts/:companyId" element={<ContractDetailPage />} />
+      <Route
+        path="/contracts/:companyId/lists/:listId"
+        element={<ListDetailPage />}
+      />
+      <Route
+        path="/contracts/:companyId/token-blueprints/:tokenBlueprintId"
+        element={<TokenBlueprintDetailPage />}
+      />
+      <Route
+        path="/contracts/:companyId/product-blueprints/:productBlueprintId"
+        element={<ProductBlueprintDetailPage />}
+      />
       <Route path="/reports" element={<ReportsPage />} />
       <Route path="/reports/:reportId" element={<ReportDetailPage />} />
       <Route path="/billing" element={<BillingPage />} />

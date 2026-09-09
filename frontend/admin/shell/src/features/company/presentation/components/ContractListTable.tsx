@@ -3,13 +3,12 @@
 import { useMemo } from "react";
 
 import type { ContractListRow } from "../../../../shared/type/contractDetail";
-import Table, {
-  type TableColumn,
-} from "../../../../shared/ui/Table/Table";
+import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ContractListTableProps = {
   lists: ContractListRow[];
+  onListClick?: (list: ContractListRow) => void;
 };
 
 function formatListStatus(status: string): string {
@@ -25,6 +24,7 @@ function formatListStatus(status: string): string {
 
 export default function ContractListTable({
   lists,
+  onListClick,
 }: ContractListTableProps) {
   const columns = useMemo<TableColumn<ContractListRow>[]>(
     () => [
@@ -35,9 +35,7 @@ export default function ContractListTable({
         sortValue: (list) => list.title || list.readableId || list.id,
         filter: {
           getValue: (list) =>
-            [list.title, list.readableId, list.id]
-              .filter(Boolean)
-              .join(" "),
+            [list.title, list.readableId, list.id].filter(Boolean).join(" "),
           placeholder: "出品名・IDで絞り込み",
         },
         nowrap: true,
@@ -116,6 +114,7 @@ export default function ContractListTable({
       columns={columns}
       rows={lists}
       getRowKey={(list) => list.id}
+      onRowClick={onListClick}
       emptyMessage="出品はありません。"
       filteredEmptyMessage="条件に一致する出品はありません。"
     />

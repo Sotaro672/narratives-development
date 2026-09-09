@@ -2,11 +2,11 @@
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
-import type {
-  Company,
-  CompanyListResponse,
-} from "../../../shared/type/company";
+import type { Company, CompanyListResponse } from "../../../shared/type/company";
 import type { ContractDetailResponse } from "../../../shared/type/contractDetail";
+import type { ContractListDetailResponse } from "../../../shared/type/contractListDetail";
+import type { ContractProductBlueprintDetailResponse } from "../../../shared/type/contractProductBlueprintDetail";
+import type { ContractTokenBlueprintDetailResponse } from "../../../shared/type/contractTokenBlueprintDetail";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -16,6 +16,14 @@ function requireBackendBaseUrl(): string {
     throw new Error("VITE_BACKEND_BASE_URL is not configured.");
   }
   return BACKEND_BASE_URL;
+}
+
+function requireID(value: string, name: string): string {
+  const normalized = value.trim();
+  if (!normalized) {
+    throw new Error(`${name} is required.`);
+  }
+  return normalized;
 }
 
 async function requireOk(
@@ -37,50 +45,86 @@ async function requireOk(
   throw new Error(`${message} status=${response.status}${detail}`);
 }
 
-export async function listCompanies(): Promise<Company[]> {
+async function getAdminJSON<T>(
+  path: string,
+  errorMessage: string,
+): Promise<T> {
   const backendBaseUrl = requireBackendBaseUrl();
   const authHeaders = await getAuthHeaders();
 
-  const response = await fetch(
-    `${backendBaseUrl}/admin/companies`,
-    {
-      method: "GET",
-      headers: {
-        ...authHeaders,
-        Accept: "application/json",
-      },
+  const response = await fetch(`${backendBaseUrl}${path}`, {
+    method: "GET",
+    headers: {
+      ...authHeaders,
+      Accept: "application/json",
     },
+  });
+
+  await requireOk(response, errorMessage);
+  return (await response.json()) as T;
+}
+
+export async function listCompanies(): Promise<Company[]> {
+  const body = await getAdminJSON<CompanyListResponse>(
+    "/admin/companies",
+    "Failed to load companies.",
   );
 
-  await requireOk(response, "Failed to load companies.");
-
-  const body = (await response.json()) as CompanyListResponse;
   return Array.isArray(body.items) ? body.items : [];
 }
 
 export async function getContractDetail(
   companyId: string,
 ): Promise<ContractDetailResponse> {
-  const normalizedCompanyId = companyId.trim();
-  if (!normalizedCompanyId) {
-    throw new Error("companyId is required.");
-  }
+  const normalizedCompanyId = requireID(companyId, "companyId");
 
-  const backendBaseUrl = requireBackendBaseUrl();
-  const authHeaders = await getAuthHeaders();
+  return getAdminJSON<ContractDetailResponse>(
+    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/contract-detail`,
+    "Failed to load contract detail.",
+  );
+}
 
-  const response = await fetch(
-    `${backendBaseUrl}/admin/companies/${encodeURIComponent(normalizedCompanyId)}/contract-detail`,
-    {
-      method: "GET",
-      headers: {
-        ...authHeaders,
-        Accept: "application/json",
-      },
-    },
+export async function getContractListDetail(
+  companyId: string,
+  listId: string,
+): Promise<ContractListDetailResponse> {
+  const normalizedCompanyId = requireID(companyId, "companyId");
+  const normalizedListId = requireID(listId, "listId");
+
+  return getAdminJSON<ContractListDetailResponse>(
+    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/lists/${encodeURIComponent(normalizedListId)}`,
+    "Failed to load contract list detail.",
+  );
+}
+
+export async function getContractTokenBlueprintDetail(
+  companyId: string,
+  tokenBlueprintId: string,
+): Promise<ContractTokenBlueprintDetailResponse> {
+  const normalizedCompanyId = requireID(companyId, "companyId");
+  const normalizedTokenBlueprintId = requireID(
+    tokenBlueprintId,
+    "tokenBlueprintId",
   );
 
-  await requireOk(response, "Failed to load contract detail.");
+  return getAdminJSON<ContractTokenBlueprintDetailResponse>(
+    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/token-blueprints/${encodeURIComponent(normalizedTokenBlueprintId)}`,
+    "Failed to load contract token blueprint detail.",
+  );
+}
 
-  return (await response.json()) as ContractDetailResponse;
+export async function getContractProductBlueprintDetail(
+  companyId: string,
+  productBlueprintId: string,
+): Promise<ContractProductBlueprintDetailResponse> {
+  const normalizedCompanyId = requireID(companyId, "companyId");
+  const normalizedProductBlueprintId = requireID(
+    productBlueprintId,
+    "productBlueprintId",
+  );
+
+  return getAdminJSON<ContractProductBlueprintDetailResponse>(
+    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/product-blueprints/${encodeURIComponent(normalizedProductBlueprintId)}`,
+    "Failed to load contract product blueprint detail.",
+  );
 }

@@ -41,6 +41,9 @@ type Container struct {
 	newsQuery                      *adminquery.NewsQuery
 	reportNameQuery                *adminquery.ReportNameQuery
 	contractDetailQuery            *adminquery.ContractDetailQuery
+	contractListQuery              *adminquery.ContractListQuery
+	contractTokenBlueprintQuery    *adminquery.ContractTokenBlueprintQuery
+	contractProductBlueprintQuery  *adminquery.ContractProductBlueprintQuery
 	gasBalanceQuery                *adminquery.GasBalanceQuery
 }
 
@@ -145,6 +148,30 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		tokenBlueprintRepo,
 		inventoryRepo,
 		listRepo,
+	)
+
+	contractListQuery := adminquery.NewContractListQuery(
+		companyRepo,
+		brandRepo,
+		memberRepo,
+		productBlueprintRepo,
+		tokenBlueprintRepo,
+		inventoryRepo,
+		listRepo,
+	)
+
+	contractTokenBlueprintQuery := adminquery.NewContractTokenBlueprintQuery(
+		companyRepo,
+		brandRepo,
+		memberRepo,
+		tokenBlueprintRepo,
+	)
+
+	contractProductBlueprintQuery := adminquery.NewContractProductBlueprintQuery(
+		companyRepo,
+		brandRepo,
+		memberRepo,
+		productBlueprintRepo,
 	)
 
 	reportRepo := fsrepo.NewReportRepositoryFS(infra.Firestore)
@@ -317,6 +344,9 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		newsQuery:                      newsQuery,
 		reportNameQuery:                reportNameQuery,
 		contractDetailQuery:            contractDetailQuery,
+		contractListQuery:              contractListQuery,
+		contractTokenBlueprintQuery:    contractTokenBlueprintQuery,
+		contractProductBlueprintQuery:  contractProductBlueprintQuery,
 		gasBalanceQuery:                gasBalanceQuery,
 	}, nil
 }
