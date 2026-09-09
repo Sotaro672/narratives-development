@@ -4,12 +4,19 @@ package query
 import (
 	"context"
 	"errors"
+	"time"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	branddom "narratives/internal/domain/brand"
+	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
 	memberdom "narratives/internal/domain/member"
 	modeldom "narratives/internal/domain/model"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
+	productblueprintreviewdom "narratives/internal/domain/productBlueprintReview"
+	reportdom "narratives/internal/domain/report"
 )
 
 var ErrContractProductBlueprintQueryNotConfigured = errors.New(
@@ -37,12 +44,35 @@ type contractProductBlueprintModelReader interface {
 	GetByID(ctx context.Context, variationID string) (modeldom.ModelVariation, error)
 }
 
+type contractProductBlueprintReviewReader interface {
+	GetProductSummary(
+		ctx context.Context,
+		productBlueprintID string,
+		status productblueprintreviewdom.ReviewStatus,
+	) (productblueprintreviewdom.ProductReviewSummary, error)
+	ListByProductBlueprintID(
+		ctx context.Context,
+		productBlueprintID string,
+		status productblueprintreviewdom.ReviewStatus,
+		page common.Page,
+	) (common.PageResult[productblueprintreviewdom.Review], error)
+}
+
+type contractProductBlueprintReportCaseReader interface {
+	GetCase(
+		ctx context.Context,
+		caseID reportdom.CaseID,
+	) (reportdom.ReportCase, error)
+}
+
 type ContractProductBlueprintQuery struct {
 	companyRepo          contractProductBlueprintCompanyReader
 	brandRepo            contractProductBlueprintBrandReader
 	memberRepo           contractProductBlueprintMemberReader
 	productBlueprintRepo contractProductBlueprintReader
 	modelRepo            contractProductBlueprintModelReader
+	reviewRepo           contractProductBlueprintReviewReader
+	reportCaseRepo       contractProductBlueprintReportCaseReader
 }
 
 func NewContractProductBlueprintQuery(
@@ -51,6 +81,8 @@ func NewContractProductBlueprintQuery(
 	memberRepo contractProductBlueprintMemberReader,
 	productBlueprintRepo contractProductBlueprintReader,
 	modelRepo contractProductBlueprintModelReader,
+	reviewRepo contractProductBlueprintReviewReader,
+	reportCaseRepo contractProductBlueprintReportCaseReader,
 ) *ContractProductBlueprintQuery {
 	return &ContractProductBlueprintQuery{
 		companyRepo:          companyRepo,
@@ -58,6 +90,8 @@ func NewContractProductBlueprintQuery(
 		memberRepo:           memberRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		modelRepo:            modelRepo,
+		reviewRepo:           reviewRepo,
+		reportCaseRepo:       reportCaseRepo,
 	}
 }
 
@@ -80,6 +114,10 @@ type ContractProductBlueprintDetailRow struct {
 	AssigneeName                 string                             `json:"assigneeName"`
 	ModelRefs                    []ContractProductBlueprintModelRef `json:"modelRefs"`
 	Printed                      bool                               `json:"printed"`
+	CommentCount                 int                                `json:"commentCount"`
+	AverageRating                float64                            `json:"averageRating"`
+	ReportCount                  int                                `json:"reportCount"`
+	LatestReportCaseID           string                             `json:"latestReportCaseId"`
 	CreatedAt                    string                             `json:"createdAt"`
 	UpdatedAt                    string                             `json:"updatedAt"`
 }
@@ -106,7 +144,9 @@ func (q *ContractProductBlueprintQuery) Get(
 		q.brandRepo == nil ||
 		q.memberRepo == nil ||
 		q.productBlueprintRepo == nil ||
-		q.modelRepo == nil {
+		q.modelRepo == nil ||
+		q.reviewRepo == nil ||
+		q.reportCaseRepo == nil {
 		return ContractProductBlueprintDetailResult{}, ErrContractProductBlueprintQueryNotConfigured
 	}
 	if companyID == "" {
@@ -147,7 +187,6 @@ func (q *ContractProductBlueprintQuery) Get(
 					row.Size = model.Size
 					row.Color = model.Color.Name
 					row.RGB = &rgb
-
 				case modeldom.AlcoholModelVariation:
 					volumeValue := model.Volume.Value
 					row.Kind = string(modeldom.ModelVariationKindAlcohol)
@@ -164,6 +203,23 @@ func (q *ContractProductBlueprintQuery) Get(
 	categoryFields := make(map[string]any, len(productBlueprint.CategoryFields))
 	for key, value := range productBlueprint.CategoryFields {
 		categoryFields[key] = value
+	}
+
+	reviewSummary, err := q.reviewRepo.GetProductSummary(
+		ctx,
+		productBlueprintID,
+		productblueprintreviewdom.ReviewStatusPublished,
+	)
+	if err != nil {
+		return ContractProductBlueprintDetailResult{}, err
+	}
+
+	reportCount, latestReportCaseID, err := q.resolveReviewReports(
+		ctx,
+		productBlueprintID,
+	)
+	if err != nil {
+		return ContractProductBlueprintDetailResult{}, err
 	}
 
 	representativeName := q.resolveMemberName(ctx, company.Admin)
@@ -191,16 +247,110 @@ func (q *ContractProductBlueprintQuery) Get(
 				[]string(nil),
 				productBlueprint.ProductBlueprintCategoryPath...,
 			),
-			CategoryFields:   categoryFields,
-			ProductIDTagType: string(productBlueprint.ProductIdTag.Type),
-			AssigneeID:       productBlueprint.AssigneeID,
-			AssigneeName:     q.resolveMemberName(ctx, productBlueprint.AssigneeID),
-			ModelRefs:        modelRefs,
-			Printed:          productBlueprint.Printed,
-			CreatedAt:        formatContractDetailTime(productBlueprint.CreatedAt),
-			UpdatedAt:        formatContractDetailTime(productBlueprint.UpdatedAt),
+			CategoryFields:     categoryFields,
+			ProductIDTagType:   string(productBlueprint.ProductIdTag.Type),
+			AssigneeID:         productBlueprint.AssigneeID,
+			AssigneeName:       q.resolveMemberName(ctx, productBlueprint.AssigneeID),
+			ModelRefs:          modelRefs,
+			Printed:            productBlueprint.Printed,
+			CommentCount:       reviewSummary.TotalCount,
+			AverageRating:      reviewSummary.AverageRating,
+			ReportCount:        reportCount,
+			LatestReportCaseID: latestReportCaseID,
+			CreatedAt:          formatContractDetailTime(productBlueprint.CreatedAt),
+			UpdatedAt:          formatContractDetailTime(productBlueprint.UpdatedAt),
 		},
 	}, nil
+}
+
+func (q *ContractProductBlueprintQuery) resolveReviewReports(
+	ctx context.Context,
+	productBlueprintID string,
+) (int, string, error) {
+	statuses := []productblueprintreviewdom.ReviewStatus{
+		productblueprintreviewdom.ReviewStatusPublished,
+		productblueprintreviewdom.ReviewStatusHidden,
+		productblueprintreviewdom.ReviewStatusRemoved,
+	}
+
+	const perPage = 100
+
+	reportCount := 0
+	latestReportCaseID := ""
+	var latestUpdatedAt time.Time
+	seenReviewIDs := make(map[productblueprintreviewdom.ReviewID]struct{})
+
+	for _, reviewStatus := range statuses {
+		pageNumber := 1
+
+		for {
+			result, err := q.reviewRepo.ListByProductBlueprintID(
+				ctx,
+				productBlueprintID,
+				reviewStatus,
+				common.Page{
+					Number:  pageNumber,
+					PerPage: perPage,
+				},
+			)
+			if err != nil {
+				return 0, "", err
+			}
+
+			for _, review := range result.Items {
+				if review.ID == "" {
+					continue
+				}
+				if _, exists := seenReviewIDs[review.ID]; exists {
+					continue
+				}
+				seenReviewIDs[review.ID] = struct{}{}
+
+				caseID, err := reportdom.BuildCaseID(
+					reportdom.TargetTypeProductBlueprintReview,
+					string(review.ID),
+				)
+				if err != nil {
+					return 0, "", err
+				}
+
+				reportCase, err := q.reportCaseRepo.GetCase(ctx, caseID)
+				if err != nil {
+					if status.Code(err) == codes.NotFound {
+						continue
+					}
+					return 0, "", err
+				}
+
+				if reportCase.TargetType != reportdom.TargetTypeProductBlueprintReview {
+					return 0, "", reportdom.ErrInvalidTargetType
+				}
+				if reportCase.TargetID != string(review.ID) {
+					return 0, "", reportdom.ErrInvalidTargetID
+				}
+				if reportCase.TargetParentID != productBlueprintID {
+					return 0, "", reportdom.ErrInvalidTargetParentID
+				}
+				if reportCase.ReportCount <= 0 {
+					continue
+				}
+
+				reportCount += reportCase.ReportCount
+
+				if latestReportCaseID == "" || reportCase.UpdatedAt.After(latestUpdatedAt) {
+					latestReportCaseID = string(reportCase.ID)
+					latestUpdatedAt = reportCase.UpdatedAt
+				}
+			}
+
+			if pageNumber >= result.TotalPages {
+				break
+			}
+			pageNumber++
+		}
+	}
+
+	return reportCount, latestReportCaseID, nil
 }
 
 func (q *ContractProductBlueprintQuery) resolveBrandName(ctx context.Context, brandID string) string {

@@ -99,6 +99,9 @@ export default function ProductBlueprintDetailPage() {
             <ProductBlueprintDetailAside
               company={company}
               productBlueprint={productBlueprint}
+              onOpenReport={(reportCaseId) =>
+                navigate(`/reports/${encodeURIComponent(reportCaseId)}`)
+              }
             />
           }
         />

@@ -28,6 +28,10 @@ export type ContractProductBlueprintDetail = {
   assigneeName: string;
   modelRefs: ContractProductBlueprintModelRef[];
   printed: boolean;
+  commentCount: number;
+  averageRating: number;
+  reportCount: number;
+  latestReportCaseId: string;
   createdAt: string;
   updatedAt: string;
 };
