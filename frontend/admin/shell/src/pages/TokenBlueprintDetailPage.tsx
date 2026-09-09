@@ -6,6 +6,8 @@ import { useContractTokenBlueprintDetail } from "../features/company/presentatio
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
+import "./TokenBlueprintDetailPage.css";
+
 function formatMinted(minted: boolean): string {
   return minted ? "ミント済み" : "未ミント";
 }
@@ -48,8 +50,7 @@ export default function TokenBlueprintDetailPage() {
     return (
       <>
         <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">トークン設計情報</h2>
-          <dl className="ui-detail-definition-list">
+          <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
             <dt>トークン名</dt>
             <dd>{tokenBlueprint.name || "-"}</dd>
 
@@ -80,8 +81,7 @@ export default function TokenBlueprintDetailPage() {
         </section>
 
         <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">メタデータ</h2>
-          <dl className="ui-detail-definition-list">
+          <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
             <dt>トークン設計ID</dt>
             <dd>{tokenBlueprint.id || "-"}</dd>
 
@@ -103,12 +103,11 @@ export default function TokenBlueprintDetailPage() {
         </section>
 
         <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">コンテンツファイル</h2>
           {tokenBlueprint.contentFiles.length > 0 ? (
             tokenBlueprint.contentFiles.map((file) => (
               <dl
                 key={file.id}
-                className="ui-detail-definition-list"
+                className="ui-detail-definition-list token-blueprint-detail-page__definition-list"
               >
                 <dt>ファイル名</dt>
                 <dd>{file.name || "-"}</dd>
@@ -183,19 +182,9 @@ export default function TokenBlueprintDetailPage() {
           main={renderMain()}
           aside={
             <section className="ui-detail-section">
-              <h2 className="ui-detail-section__title">企業情報</h2>
-              <dl className="ui-detail-definition-list">
+              <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
                 <dt>企業名</dt>
                 <dd>{company.name || "-"}</dd>
-
-                <dt>代表者</dt>
-                <dd>{company.representativeName || "-"}</dd>
-
-                <dt>登録日時</dt>
-                <dd>{formatDateTime(company.createdAt)}</dd>
-
-                <dt>最終更新日</dt>
-                <dd>{formatDateTime(company.updatedAt)}</dd>
               </dl>
             </section>
           }
