@@ -217,9 +217,6 @@ func (r *commentRepoFS) List(ctx context.Context, filter tbReview.FilterComment,
 	if filter.AuthorType != nil {
 		q = q.Where("AuthorType", "==", *filter.AuthorType)
 	}
-	if filter.IsOwnerComment != nil {
-		q = q.Where("IsOwnerComment", "==", *filter.IsOwnerComment)
-	}
 	if filter.Deleted != nil {
 		q = q.Where("Deleted", "==", *filter.Deleted)
 	}
@@ -303,6 +300,7 @@ func (r *commentRepoFS) GetByParentID(ctx context.Context, tokenBlueprintID, com
 	if r.root == nil || r.root.fs == nil {
 		return tbReview.Comment{}, errTBReviewNotConfigured
 	}
+
 	snap, err := r.root.commentsCol(tokenBlueprintID).Doc(commentID).Get(ctx)
 	if err != nil {
 		if isNotFoundErr(err) {
@@ -310,6 +308,7 @@ func (r *commentRepoFS) GetByParentID(ctx context.Context, tokenBlueprintID, com
 		}
 		return tbReview.Comment{}, err
 	}
+
 	var out tbReview.Comment
 	if err := snap.DataTo(&out); err != nil {
 		return tbReview.Comment{}, err
@@ -360,15 +359,12 @@ func (r *commentRepoFS) UpdateUnderParent(ctx context.Context, tokenBlueprintID,
 
 	docRef := r.root.commentsCol(tokenBlueprintID).Doc(commentID)
 
-	updates := make([]firestore.Update, 0, 9)
+	updates := make([]firestore.Update, 0, 8)
 	if patch.Body != nil {
 		updates = append(updates, firestore.Update{Path: "Body", Value: *patch.Body})
 	}
 	if patch.Deleted != nil {
 		updates = append(updates, firestore.Update{Path: "Deleted", Value: *patch.Deleted})
-	}
-	if patch.IsOwnerComment != nil {
-		updates = append(updates, firestore.Update{Path: "IsOwnerComment", Value: *patch.IsOwnerComment})
 	}
 	if patch.LikeCount != nil {
 		updates = append(updates, firestore.Update{Path: "LikeCount", Value: *patch.LikeCount})
@@ -410,6 +406,7 @@ func (r *commentRepoFS) DeleteUnderParent(ctx context.Context, tokenBlueprintID,
 	if r.root == nil || r.root.fs == nil {
 		return errTBReviewNotConfigured
 	}
+
 	_, err := r.root.commentsCol(tokenBlueprintID).Doc(commentID).Delete(ctx)
 	return err
 }
@@ -426,6 +423,7 @@ func (r *tokenBlueprintReactionRepoFS) FindByActor(ctx context.Context, tokenBlu
 	if r.root == nil || r.root.fs == nil {
 		return tbReview.TokenBlueprintReaction{}, errTBReviewNotConfigured
 	}
+
 	docID := tokenReactionDocID(actorType, actorID)
 	snap, err := r.root.tokenReactionsCol(tokenBlueprintID).Doc(docID).Get(ctx)
 	if err != nil {
@@ -524,6 +522,7 @@ func (r *commentReactionRepoFS) Upsert(ctx context.Context, reaction tbReview.Co
 func countDocs(ctx context.Context, q firestore.Query) (int, error) {
 	it := q.Documents(ctx)
 	n := 0
+
 	for {
 		_, err := it.Next()
 		if err != nil {

@@ -76,11 +76,10 @@ type ContractTokenBlueprintReviewRow struct {
 	RootCommentID    string `json:"rootCommentId"`
 	Depth            int    `json:"depth"`
 
-	AuthorID       string `json:"authorId"`
-	AuthorType     string `json:"authorType"`
-	AuthorName     string `json:"authorName"`
-	AuthorIcon     string `json:"authorIcon"`
-	IsOwnerComment bool   `json:"isOwnerComment"`
+	AuthorID   string `json:"authorId"`
+	AuthorType string `json:"authorType"`
+	AuthorName string `json:"authorName"`
+	AuthorIcon string `json:"authorIcon"`
 
 	Body         string `json:"body"`
 	LikeCount    int64  `json:"likeCount"`
@@ -132,13 +131,13 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 			tokenblueprintdom.ErrNotFound
 	}
 
-	depth := 0
+	parentCommentID := ""
 
 	result, err := q.reviewLister.ListComments(
 		ctx,
 		usecase.ListCommentsInput{
 			TokenBlueprintID: tokenBlueprintID,
-			Depth:            &depth,
+			ParentCommentID:  &parentCommentID,
 			Sort: common.Sort{
 				Column: "createdAt",
 				Order:  common.SortDesc,
@@ -188,7 +187,6 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 			AuthorType:       string(comment.AuthorType),
 			AuthorName:       authorName,
 			AuthorIcon:       authorIcon,
-			IsOwnerComment:   comment.IsOwnerComment,
 			Body:             comment.Body,
 			LikeCount:        comment.LikeCount,
 			DislikeCount:     comment.DislikeCount,

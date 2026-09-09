@@ -47,19 +47,17 @@ type FilterComment struct {
 	RootCommentID       string      `json:"rootCommentId"`    // optional
 	AuthorID            string      `json:"authorId"`         // optional
 	AuthorType          *AuthorType `json:"authorType"`       // optional
-	IsOwnerComment      *bool       `json:"isOwnerComment"`   // optional
 	Deleted             *bool       `json:"deleted"`          // optional
 	Depth               *int        `json:"depth"`            // optional
 }
 
 // PatchComment is a partial update model for comment doc.
 type PatchComment struct {
-	Body           *string `json:"body"`
-	Deleted        *bool   `json:"deleted"`
-	IsOwnerComment *bool   `json:"isOwnerComment"`
-	LikeCount      *int64  `json:"likeCount"`
-	DislikeCount   *int64  `json:"dislikeCount"`
-	ChildCount     *int64  `json:"childCount"`
+	Body         *string `json:"body"`
+	Deleted      *bool   `json:"deleted"`
+	LikeCount    *int64  `json:"likeCount"`
+	DislikeCount *int64  `json:"dislikeCount"`
+	ChildCount   *int64  `json:"childCount"`
 }
 
 // NewChildCountPatchFromComment creates a patch for persisting only the

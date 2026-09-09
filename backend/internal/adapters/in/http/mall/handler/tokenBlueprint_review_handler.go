@@ -614,10 +614,9 @@ func (h *TokenBlueprintReviewHandler) createComment(
 			ParentCommentID: ptrStr(
 				request.ParentCommentID,
 			),
-			AuthorID:       authorAvatarID,
-			AuthorType:     h.query.AuthorType(),
-			IsOwnerComment: false,
-			Body:           request.Body,
+			AuthorID:   authorAvatarID,
+			AuthorType: h.query.AuthorType(),
+			Body:       request.Body,
 		},
 	)
 	if err != nil {
@@ -677,7 +676,6 @@ func (h *TokenBlueprintReviewHandler) createReplyComment(
 			ParentCommentID:  parentCommentID,
 			AuthorID:         authorAvatarID,
 			AuthorType:       h.query.AuthorType(),
-			IsOwnerComment:   false,
 			Body:             request.Body,
 		},
 	)

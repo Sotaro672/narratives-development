@@ -340,7 +340,6 @@ func (h *TokenBlueprintReviewHandler) CreateCommentAsBrand(
 			ParentCommentID:  ptrStr(request.ParentCommentID),
 			AuthorID:         actor.BrandID,
 			AuthorType:       h.query.AuthorType(),
-			IsOwnerComment:   true,
 			Body:             request.Body,
 		},
 	)
@@ -392,7 +391,6 @@ func (h *TokenBlueprintReviewHandler) CreateBrandReply(
 			ParentCommentID:  parentCommentID,
 			AuthorID:         actor.BrandID,
 			AuthorType:       h.query.AuthorType(),
-			IsOwnerComment:   true,
 			Body:             request.Body,
 		},
 	)

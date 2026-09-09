@@ -133,7 +133,6 @@ type ConsoleTokenBlueprintCommentReadModel struct {
 	AuthorAvatarIcon *string `json:"authorAvatarIcon"`
 	BrandName        string  `json:"brandName"`
 	BrandIcon        *string `json:"brandIcon"`
-	IsOwnerComment   bool    `json:"isOwnerComment"`
 
 	Body         string `json:"body"`
 	LikeCount    int64  `json:"likeCount"`
@@ -288,7 +287,6 @@ func (q *TokenBlueprintReviewConsoleQuery) ToCommentReadModel(view usecase.Comme
 		AuthorAvatarIcon: view.AuthorAvatarIcon,
 		BrandName:        view.BrandName,
 		BrandIcon:        view.BrandIcon,
-		IsOwnerComment:   comment.IsOwnerComment,
 
 		Body:         comment.Body,
 		LikeCount:    comment.LikeCount,

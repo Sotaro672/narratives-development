@@ -80,8 +80,6 @@ type MallTokenBlueprintCommentReadModel struct {
 	BrandName string  `json:"BrandName"`
 	BrandIcon *string `json:"BrandIcon"`
 
-	IsOwnerComment bool `json:"IsOwnerComment"`
-
 	Body         string `json:"Body"`
 	LikeCount    int64  `json:"LikeCount"`
 	DislikeCount int64  `json:"DislikeCount"`
@@ -232,9 +230,8 @@ func (q *TokenBlueprintReviewMallQuery) ToCommentReadModel(
 		AuthorAvatarName: view.AuthorAvatarName,
 		AuthorAvatarIcon: view.AuthorAvatarIcon,
 
-		BrandName:      view.BrandName,
-		BrandIcon:      view.BrandIcon,
-		IsOwnerComment: c.IsOwnerComment,
+		BrandName: view.BrandName,
+		BrandIcon: view.BrandIcon,
 
 		Body:         c.Body,
 		LikeCount:    c.LikeCount,

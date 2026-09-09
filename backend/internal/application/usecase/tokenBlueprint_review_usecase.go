@@ -196,7 +196,10 @@ func (u *TokenBlueprintReviewUsecase) ensureAggregate(
 		return aggregate, nil
 	}
 
-	created, createErr := tokenBlueprint_review.NewTokenBlueprintReviewAggregate(tokenBlueprintID, now)
+	created, createErr := tokenBlueprint_review.NewTokenBlueprintReviewAggregate(
+		tokenBlueprintID,
+		now,
+	)
 	if createErr != nil {
 		return tokenBlueprint_review.TokenBlueprintReviewAggregate{}, createErr
 	}
@@ -237,7 +240,11 @@ func (u *TokenBlueprintReviewUsecase) incrementParentChildCount(
 		return err
 	}
 
-	parent, err := u.repos.Comments().GetByParentID(ctx, tokenBlueprintID, parentCommentID)
+	parent, err := u.repos.Comments().GetByParentID(
+		ctx,
+		tokenBlueprintID,
+		parentCommentID,
+	)
 	if err != nil {
 		return err
 	}
@@ -265,7 +272,11 @@ func (u *TokenBlueprintReviewUsecase) decrementParentChildCount(
 		return err
 	}
 
-	parent, err := u.repos.Comments().GetByParentID(ctx, tokenBlueprintID, parentCommentID)
+	parent, err := u.repos.Comments().GetByParentID(
+		ctx,
+		tokenBlueprintID,
+		parentCommentID,
+	)
 	if err != nil {
 		return err
 	}
@@ -300,7 +311,8 @@ func (u *TokenBlueprintReviewUsecase) GetTokenBlueprintPatchByID(
 		return tokenBlueprint.Patch{}, err
 	}
 	if tokenBlueprintEntity == nil {
-		return tokenBlueprint.Patch{}, errors.New("tokenBlueprint_review_usecase: token blueprint not found")
+		return tokenBlueprint.Patch{},
+			errors.New("tokenBlueprint_review_usecase: token blueprint not found")
 	}
 
 	patch := tokenBlueprint.Patch{
@@ -356,7 +368,11 @@ func (u *TokenBlueprintReviewUsecase) ListAggregatesByCompanyTokenBlueprints(
 	}
 
 	aggregateRepository := u.repos.TokenBlueprintAggregates()
-	items := make([]tokenBlueprint_review.TokenBlueprintReviewAggregate, 0, len(tokenBlueprintIDs))
+	items := make(
+		[]tokenBlueprint_review.TokenBlueprintReviewAggregate,
+		0,
+		len(tokenBlueprintIDs),
+	)
 
 	for _, tokenBlueprintID := range tokenBlueprintIDs {
 		aggregate, err := aggregateRepository.GetByID(ctx, tokenBlueprintID)
@@ -385,7 +401,10 @@ func (u *TokenBlueprintReviewUsecase) listAllTokenBlueprintIDsByCompany(
 		result, err := u.tokenBlueprintRepo.ListByCompanyID(
 			ctx,
 			companyID,
-			common.Page{Number: pageNumber, PerPage: perPage},
+			common.Page{
+				Number:  pageNumber,
+				PerPage: perPage,
+			},
 		)
 		if err != nil {
 			return nil, err
@@ -397,7 +416,9 @@ func (u *TokenBlueprintReviewUsecase) listAllTokenBlueprintIDsByCompany(
 			}
 		}
 
-		if result.TotalPages <= 0 || pageNumber >= result.TotalPages || len(result.Items) == 0 {
+		if result.TotalPages <= 0 ||
+			pageNumber >= result.TotalPages ||
+			len(result.Items) == 0 {
 			break
 		}
 		pageNumber++
@@ -437,12 +458,20 @@ func (u *TokenBlueprintReviewUsecase) ReactToTokenBlueprintDetailed(
 	now := u.now()
 	oldType := tokenBlueprint_review.ReactionComment
 
-	existingReaction, err := u.repos.TokenBlueprintReactions().FindByActor(ctx, tokenBlueprintID, actorType, actorID)
+	existingReaction, err := u.repos.TokenBlueprintReactions().FindByActor(
+		ctx,
+		tokenBlueprintID,
+		actorType,
+		actorID,
+	)
 	if err == nil {
 		oldType = existingReaction.Type
 	}
 
-	nextType, err := tokenBlueprint_review.NextReactionType(oldType, pressedType)
+	nextType, err := tokenBlueprint_review.NextReactionType(
+		oldType,
+		pressedType,
+	)
 	if err != nil {
 		return TokenBlueprintReactionResult{}, err
 	}
@@ -471,7 +500,11 @@ func (u *TokenBlueprintReviewUsecase) ReactToTokenBlueprintDetailed(
 		return TokenBlueprintReactionResult{}, err
 	}
 
-	updatedAggregate, err := u.updateAggregate(ctx, tokenBlueprintID, aggregate)
+	updatedAggregate, err := u.updateAggregate(
+		ctx,
+		tokenBlueprintID,
+		aggregate,
+	)
 	if err != nil {
 		return TokenBlueprintReactionResult{}, err
 	}
@@ -494,7 +527,6 @@ type ListCommentsInput struct {
 	RootCommentID   string
 	AuthorID        string
 	AuthorType      *tokenBlueprint_review.AuthorType
-	IsOwnerComment  *bool
 	Deleted         *bool
 	Depth           *int
 
@@ -522,12 +554,16 @@ func (u *TokenBlueprintReviewUsecase) ListComments(
 		RootCommentID:    input.RootCommentID,
 		AuthorID:         input.AuthorID,
 		AuthorType:       input.AuthorType,
-		IsOwnerComment:   input.IsOwnerComment,
 		Deleted:          input.Deleted,
 		Depth:            input.Depth,
 	}
 
-	result, err := u.repos.Comments().List(ctx, filter, input.Sort, input.Page)
+	result, err := u.repos.Comments().List(
+		ctx,
+		filter,
+		input.Sort,
+		input.Page,
+	)
 	if err != nil {
 		return common.PageResult[CommentView]{}, err
 	}
@@ -551,7 +587,6 @@ type CreateCommentInput struct {
 	ParentCommentID  string
 	AuthorID         string
 	AuthorType       tokenBlueprint_review.AuthorType
-	IsOwnerComment   bool
 	Body             string
 }
 
@@ -578,7 +613,6 @@ func (u *TokenBlueprintReviewUsecase) CreateComment(
 			input.TokenBlueprintID,
 			input.AuthorID,
 			input.AuthorType,
-			input.IsOwnerComment,
 			input.Body,
 			now,
 		)
@@ -586,7 +620,11 @@ func (u *TokenBlueprintReviewUsecase) CreateComment(
 			return tokenBlueprint_review.Comment{}, err
 		}
 	} else {
-		parent, err := u.repos.Comments().GetByParentID(ctx, input.TokenBlueprintID, input.ParentCommentID)
+		parent, err := u.repos.Comments().GetByParentID(
+			ctx,
+			input.TokenBlueprintID,
+			input.ParentCommentID,
+		)
 		if err != nil {
 			return tokenBlueprint_review.Comment{}, err
 		}
@@ -597,7 +635,6 @@ func (u *TokenBlueprintReviewUsecase) CreateComment(
 			&parent,
 			input.AuthorID,
 			input.AuthorType,
-			input.IsOwnerComment,
 			input.Body,
 			now,
 		)
@@ -606,22 +643,39 @@ func (u *TokenBlueprintReviewUsecase) CreateComment(
 		}
 	}
 
-	created, err := u.repos.Comments().CreateUnderParent(ctx, input.TokenBlueprintID, *comment)
+	created, err := u.repos.Comments().CreateUnderParent(
+		ctx,
+		input.TokenBlueprintID,
+		*comment,
+	)
 	if err != nil {
 		return tokenBlueprint_review.Comment{}, err
 	}
 
-	if err := u.incrementParentChildCount(ctx, input.TokenBlueprintID, input.ParentCommentID, now); err != nil {
+	if err := u.incrementParentChildCount(
+		ctx,
+		input.TokenBlueprintID,
+		input.ParentCommentID,
+		now,
+	); err != nil {
 		return tokenBlueprint_review.Comment{}, err
 	}
 
-	aggregate, err := u.ensureAggregate(ctx, input.TokenBlueprintID, now)
+	aggregate, err := u.ensureAggregate(
+		ctx,
+		input.TokenBlueprintID,
+		now,
+	)
 	if err != nil {
 		return tokenBlueprint_review.Comment{}, err
 	}
 
 	aggregate.ApplyCommentCreated(created, now)
-	if _, err := u.updateAggregate(ctx, input.TokenBlueprintID, aggregate); err != nil {
+	if _, err := u.updateAggregate(
+		ctx,
+		input.TokenBlueprintID,
+		aggregate,
+	); err != nil {
 		return tokenBlueprint_review.Comment{}, err
 	}
 
@@ -635,7 +689,10 @@ type DeleteCommentInput struct {
 	AuthorType       tokenBlueprint_review.AuthorType
 }
 
-func (u *TokenBlueprintReviewUsecase) DeleteComment(ctx context.Context, input DeleteCommentInput) error {
+func (u *TokenBlueprintReviewUsecase) DeleteComment(
+	ctx context.Context,
+	input DeleteCommentInput,
+) error {
 	if err := u.ensureConfigured(); err != nil {
 		return err
 	}
@@ -652,15 +709,24 @@ func (u *TokenBlueprintReviewUsecase) DeleteComment(ctx context.Context, input D
 		return err
 	}
 
-	comment, err := u.repos.Comments().GetByParentID(ctx, input.TokenBlueprintID, input.CommentID)
+	comment, err := u.repos.Comments().GetByParentID(
+		ctx,
+		input.TokenBlueprintID,
+		input.CommentID,
+	)
 	if err != nil {
 		return err
 	}
-	if comment.AuthorID != input.AuthorID || comment.AuthorType != input.AuthorType {
+	if comment.AuthorID != input.AuthorID ||
+		comment.AuthorType != input.AuthorType {
 		return ErrCommentDeleteForbidden
 	}
 
-	return u.removeComment(ctx, input.TokenBlueprintID, comment)
+	return u.removeComment(
+		ctx,
+		input.TokenBlueprintID,
+		comment,
+	)
 }
 
 type RemoveCommentByAdminInput struct {
@@ -685,12 +751,20 @@ func (u *TokenBlueprintReviewUsecase) RemoveCommentByAdmin(
 		return errCommentIDRequired
 	}
 
-	comment, err := u.repos.Comments().GetByParentID(ctx, input.TokenBlueprintID, input.CommentID)
+	comment, err := u.repos.Comments().GetByParentID(
+		ctx,
+		input.TokenBlueprintID,
+		input.CommentID,
+	)
 	if err != nil {
 		return err
 	}
 
-	return u.removeComment(ctx, input.TokenBlueprintID, comment)
+	return u.removeComment(
+		ctx,
+		input.TokenBlueprintID,
+		comment,
+	)
 }
 
 func (u *TokenBlueprintReviewUsecase) removeComment(
@@ -727,7 +801,10 @@ func (u *TokenBlueprintReviewUsecase) removeComment(
 		return err
 	}
 
-	aggregate, err := u.repos.TokenBlueprintAggregates().GetByID(ctx, tokenBlueprintID)
+	aggregate, err := u.repos.TokenBlueprintAggregates().GetByID(
+		ctx,
+		tokenBlueprintID,
+	)
 	if err != nil {
 		return nil
 	}
@@ -735,7 +812,11 @@ func (u *TokenBlueprintReviewUsecase) removeComment(
 		return err
 	}
 
-	_, err = u.updateAggregate(ctx, tokenBlueprintID, aggregate)
+	_, err = u.updateAggregate(
+		ctx,
+		tokenBlueprintID,
+		aggregate,
+	)
 	return err
 }
 
@@ -764,7 +845,11 @@ func (u *TokenBlueprintReviewUsecase) ReactToComment(
 	}
 
 	now := u.now()
-	comment, err := u.repos.Comments().GetByParentID(ctx, tokenBlueprintID, commentID)
+	comment, err := u.repos.Comments().GetByParentID(
+		ctx,
+		tokenBlueprintID,
+		commentID,
+	)
 	if err != nil {
 		return tokenBlueprint_review.Comment{}, err
 	}
@@ -781,12 +866,19 @@ func (u *TokenBlueprintReviewUsecase) ReactToComment(
 		oldType = existingReaction.Type
 	}
 
-	nextType, err := tokenBlueprint_review.NextReactionType(oldType, pressedType)
+	nextType, err := tokenBlueprint_review.NextReactionType(
+		oldType,
+		pressedType,
+	)
 	if err != nil {
 		return tokenBlueprint_review.Comment{}, err
 	}
 
-	if err := comment.ApplyReaction(oldType, nextType, now); err != nil {
+	if err := comment.ApplyReaction(
+		oldType,
+		nextType,
+		now,
+	); err != nil {
 		return tokenBlueprint_review.Comment{}, err
 	}
 

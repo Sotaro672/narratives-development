@@ -29,7 +29,6 @@ import (
 //       - depth             // 0 = top-level, 1 = reply, 2 = reply to reply...
 //       - authorId
 //       - authorType
-//       - isOwnerComment    // true when author brand == tokenBlueprint owner brand
 //       - body
 //       - likeCount
 //       - dislikeCount
@@ -44,8 +43,6 @@ import (
 // - This file is domain-only. No Firestore / authentication / authorization code here.
 // - Whether mall can post only as avatar, or console can post only as brand,
 //   must be controlled by application.usecase.
-// - Whether a brand is the tokenBlueprint owner and therefore allowed to create
-//   owner comments / replies must also be determined by application.usecase.
 // ============================================================
 
 // ---------------------------
@@ -197,10 +194,14 @@ type TokenBlueprintReviewAggregate struct {
 	UpdatedAt            time.Time
 }
 
-func NewTokenBlueprintReviewAggregate(tokenBlueprintID string, now time.Time) (*TokenBlueprintReviewAggregate, error) {
+func NewTokenBlueprintReviewAggregate(
+	tokenBlueprintID string,
+	now time.Time,
+) (*TokenBlueprintReviewAggregate, error) {
 	if tokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	return &TokenBlueprintReviewAggregate{
 		TokenBlueprintID:     tokenBlueprintID,
 		LikeCount:            0,
@@ -215,7 +216,11 @@ func NewTokenBlueprintReviewAggregate(tokenBlueprintID string, now time.Time) (*
 
 // ApplyReaction changes counters based on actor's reaction change (old -> new).
 // The per-actor reaction document itself should be stored in subcollection by repository layer.
-func (a *TokenBlueprintReviewAggregate) ApplyReaction(oldType, newType ReactionType, now time.Time) error {
+func (a *TokenBlueprintReviewAggregate) ApplyReaction(
+	oldType,
+	newType ReactionType,
+	now time.Time,
+) error {
 	if err := oldType.Validate(); err != nil {
 		return err
 	}
@@ -235,29 +240,39 @@ func (a *TokenBlueprintReviewAggregate) ApplyReaction(oldType, newType ReactionT
 	return nil
 }
 
-func (a *TokenBlueprintReviewAggregate) IncrementTopLevelCommentCount(now time.Time) {
+func (a *TokenBlueprintReviewAggregate) IncrementTopLevelCommentCount(
+	now time.Time,
+) {
 	a.TopLevelCommentCount += 1
 	a.UpdatedAt = now
 }
 
-func (a *TokenBlueprintReviewAggregate) DecrementTopLevelCommentCount(now time.Time) error {
+func (a *TokenBlueprintReviewAggregate) DecrementTopLevelCommentCount(
+	now time.Time,
+) error {
 	if a.TopLevelCommentCount-1 < 0 {
 		return ErrNegativeCounter
 	}
+
 	a.TopLevelCommentCount -= 1
 	a.UpdatedAt = now
 	return nil
 }
 
-func (a *TokenBlueprintReviewAggregate) IncrementTotalCommentCount(now time.Time) {
+func (a *TokenBlueprintReviewAggregate) IncrementTotalCommentCount(
+	now time.Time,
+) {
 	a.TotalCommentCount += 1
 	a.UpdatedAt = now
 }
 
-func (a *TokenBlueprintReviewAggregate) DecrementTotalCommentCount(now time.Time) error {
+func (a *TokenBlueprintReviewAggregate) DecrementTotalCommentCount(
+	now time.Time,
+) error {
 	if a.TotalCommentCount-1 < 0 {
 		return ErrNegativeCounter
 	}
+
 	a.TotalCommentCount -= 1
 	a.UpdatedAt = now
 	return nil
@@ -265,10 +280,14 @@ func (a *TokenBlueprintReviewAggregate) DecrementTotalCommentCount(now time.Time
 
 // PinComment / UnpinComment are domain-safe setters.
 // Whether the caller is allowed to pin is application.usecase responsibility.
-func (a *TokenBlueprintReviewAggregate) PinComment(commentID string, now time.Time) error {
+func (a *TokenBlueprintReviewAggregate) PinComment(
+	commentID string,
+	now time.Time,
+) error {
 	if commentID == "" {
 		return fmt.Errorf("%w: commentID", ErrInvalidID)
 	}
+
 	a.PinnedCommentID = commentID
 	a.UpdatedAt = now
 	return nil
@@ -294,7 +313,13 @@ type TokenBlueprintReaction struct {
 	UpdatedAt        time.Time
 }
 
-func NewTokenBlueprintReaction(tokenBlueprintID, actorID string, actorType ActorType, t ReactionType, now time.Time) (*TokenBlueprintReaction, error) {
+func NewTokenBlueprintReaction(
+	tokenBlueprintID,
+	actorID string,
+	actorType ActorType,
+	t ReactionType,
+	now time.Time,
+) (*TokenBlueprintReaction, error) {
 	if tokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
@@ -307,6 +332,7 @@ func NewTokenBlueprintReaction(tokenBlueprintID, actorID string, actorType Actor
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
+
 	return &TokenBlueprintReaction{
 		TokenBlueprintID: tokenBlueprintID,
 		ActorID:          actorID,
@@ -317,10 +343,14 @@ func NewTokenBlueprintReaction(tokenBlueprintID, actorID string, actorType Actor
 	}, nil
 }
 
-func (r *TokenBlueprintReaction) ChangeType(newT ReactionType, now time.Time) error {
+func (r *TokenBlueprintReaction) ChangeType(
+	newT ReactionType,
+	now time.Time,
+) error {
 	if err := newT.Validate(); err != nil {
 		return err
 	}
+
 	r.Type = newT
 	r.UpdatedAt = now
 	return nil
@@ -335,6 +365,7 @@ func (r *TokenBlueprintReaction) ReactionDocumentID() (string, error) {
 	if err := r.ActorType.Validate(); err != nil {
 		return "", err
 	}
+
 	return fmt.Sprintf("%s_%s", r.ActorType, r.ActorID), nil
 }
 
@@ -351,10 +382,9 @@ type Comment struct {
 	RootCommentID    string
 	Depth            int
 
-	AuthorID       string
-	AuthorType     AuthorType
-	IsOwnerComment bool
-	Body           string
+	AuthorID   string
+	AuthorType AuthorType
+	Body       string
 
 	LikeCount    int64
 	DislikeCount int64
@@ -371,17 +401,11 @@ type Comment struct {
 // - ParentCommentID = ""
 // - RootCommentID   = CommentID
 // - Depth           = 0
-//
-// isOwnerComment should be decided by application.usecase.
-// Example:
-// - avatar comment from mall     => false
-// - brand comment from console   => true only when brand is tokenBlueprint owner
 func NewTopLevelComment(
 	commentID,
 	tokenBlueprintID,
 	authorID string,
 	authorType AuthorType,
-	isOwnerComment bool,
 	body string,
 	now time.Time,
 ) (*Comment, error) {
@@ -409,7 +433,6 @@ func NewTopLevelComment(
 		Depth:            0,
 		AuthorID:         authorID,
 		AuthorType:       authorType,
-		IsOwnerComment:   isOwnerComment,
 		Body:             body,
 		LikeCount:        0,
 		DislikeCount:     0,
@@ -427,15 +450,12 @@ func NewTopLevelComment(
 // - ParentCommentID = parent.CommentID
 // - RootCommentID   = parent.RootCommentID
 // - Depth           = parent.Depth + 1
-//
-// isOwnerComment should be decided by application.usecase.
 func NewReplyComment(
 	commentID,
 	tokenBlueprintID string,
 	parent *Comment,
 	authorID string,
 	authorType AuthorType,
-	isOwnerComment bool,
 	body string,
 	now time.Time,
 ) (*Comment, error) {
@@ -478,7 +498,6 @@ func NewReplyComment(
 		Depth:            parent.Depth + 1,
 		AuthorID:         authorID,
 		AuthorType:       authorType,
-		IsOwnerComment:   isOwnerComment,
 		Body:             body,
 		LikeCount:        0,
 		DislikeCount:     0,
@@ -490,16 +509,22 @@ func NewReplyComment(
 }
 
 func (c *Comment) IsTopLevel() bool {
-	return c.ParentCommentID == "" && c.Depth == 0 && c.RootCommentID == c.CommentID
+	return c.ParentCommentID == "" &&
+		c.Depth == 0 &&
+		c.RootCommentID == c.CommentID
 }
 
-func (c *Comment) UpdateBody(body string, now time.Time) error {
+func (c *Comment) UpdateBody(
+	body string,
+	now time.Time,
+) error {
 	if body == "" {
 		return ErrEmptyBody
 	}
 	if c.Deleted {
 		return ErrDeletedComment
 	}
+
 	c.Body = body
 	c.UpdatedAt = now
 	return nil
@@ -516,7 +541,11 @@ func (c *Comment) MarkDeleted(now time.Time) {
 // ApplyReaction changes counters based on actor's reaction change (old -> new).
 // The per-actor reaction document is stored under:
 // comments/{commentId}/reactions/{actorType_actorId}
-func (c *Comment) ApplyReaction(oldType, newType ReactionType, now time.Time) error {
+func (c *Comment) ApplyReaction(
+	oldType,
+	newType ReactionType,
+	now time.Time,
+) error {
 	if err := oldType.Validate(); err != nil {
 		return err
 	}
@@ -544,6 +573,7 @@ func (c *Comment) DecrementChildCount(now time.Time) error {
 	if c.ChildCount-1 < 0 {
 		return ErrNegativeCounter
 	}
+
 	c.ChildCount -= 1
 	c.UpdatedAt = now
 	return nil
@@ -565,7 +595,14 @@ type CommentReaction struct {
 	UpdatedAt        time.Time
 }
 
-func NewCommentReaction(tokenBlueprintID, commentID, actorID string, actorType ActorType, t ReactionType, now time.Time) (*CommentReaction, error) {
+func NewCommentReaction(
+	tokenBlueprintID,
+	commentID,
+	actorID string,
+	actorType ActorType,
+	t ReactionType,
+	now time.Time,
+) (*CommentReaction, error) {
 	if tokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
@@ -593,10 +630,14 @@ func NewCommentReaction(tokenBlueprintID, commentID, actorID string, actorType A
 	}, nil
 }
 
-func (r *CommentReaction) ChangeType(newT ReactionType, now time.Time) error {
+func (r *CommentReaction) ChangeType(
+	newT ReactionType,
+	now time.Time,
+) error {
 	if err := newT.Validate(); err != nil {
 		return err
 	}
+
 	r.Type = newT
 	r.UpdatedAt = now
 	return nil
@@ -611,6 +652,7 @@ func (r *CommentReaction) ReactionDocumentID() (string, error) {
 	if err := r.ActorType.Validate(); err != nil {
 		return "", err
 	}
+
 	return fmt.Sprintf("%s_%s", r.ActorType, r.ActorID), nil
 }
 
@@ -645,7 +687,6 @@ func ValidateComment(c *Comment) error {
 	if c.IsTopLevel() {
 		return nil
 	}
-
 	if c.ParentCommentID == "" {
 		return ErrInvalidParent
 	}
@@ -660,10 +701,15 @@ func ValidateComment(c *Comment) error {
 }
 
 // ValidateCommentParentRelation ensures child belongs to the given parent and tokenBlueprint.
-func ValidateCommentParentRelation(tokenBlueprintID string, parent, child *Comment) error {
+func ValidateCommentParentRelation(
+	tokenBlueprintID string,
+	parent,
+	child *Comment,
+) error {
 	if parent == nil || child == nil {
 		return ErrInvalidParent
 	}
+
 	if err := ValidateComment(parent); err != nil {
 		return err
 	}
@@ -694,7 +740,9 @@ func ValidateCommentParentRelation(tokenBlueprintID string, parent, child *Comme
 	return nil
 }
 
-func ValidateTokenBlueprintReaction(r *TokenBlueprintReaction) error {
+func ValidateTokenBlueprintReaction(
+	r *TokenBlueprintReaction,
+) error {
 	if r == nil {
 		return ErrInvalidParent
 	}
@@ -710,6 +758,7 @@ func ValidateTokenBlueprintReaction(r *TokenBlueprintReaction) error {
 	if err := r.Type.Validate(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -732,6 +781,7 @@ func ValidateCommentReaction(r *CommentReaction) error {
 	if err := r.Type.Validate(); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -742,6 +792,7 @@ func (a *TokenBlueprintReviewAggregate) ApplyCommentCreated(
 	if comment.IsTopLevel() {
 		a.IncrementTopLevelCommentCount(now)
 	}
+
 	a.IncrementTotalCommentCount(now)
 }
 
@@ -754,5 +805,6 @@ func (a *TokenBlueprintReviewAggregate) ApplyCommentDeleted(
 			return err
 		}
 	}
+
 	return a.DecrementTotalCommentCount(now)
 }
