@@ -42,6 +42,7 @@ type reportCaseResponse struct {
 	TargetID         string               `json:"targetId"`
 	TargetParentID   string               `json:"targetParentId"`
 	TargetParentName string               `json:"targetParentName,omitempty"`
+	TargetCompanyID  string               `json:"targetCompanyId,omitempty"`
 	TargetAuthorID   string               `json:"targetAuthorId"`
 	TargetAuthorName string               `json:"targetAuthorName,omitempty"`
 	TargetAuthorType reportdom.ActorType  `json:"targetAuthorType"`
@@ -483,11 +484,19 @@ func (h *ReportHandler) toReportDetailCaseResponse(
 		reportCase.TargetType,
 		reportCase.TargetParentID,
 	)
+	response.TargetCompanyID = h.nameQuery.ResolveTargetCompanyID(
+		ctx,
+		reportCase.TargetType,
+		reportCase.TargetParentID,
+		reportCase.TargetAuthorType,
+		reportCase.TargetAuthorID,
+	)
 	response.TargetAuthorName = h.nameQuery.ResolveTargetAuthorName(
 		ctx,
 		reportCase.TargetAuthorType,
 		reportCase.TargetAuthorID,
 	)
+
 	return response
 }
 

@@ -49,6 +49,7 @@ export type ReportCase = {
   targetId: string;
   targetParentId: string;
   targetParentName?: string;
+  targetCompanyId?: string;
   targetAuthorId: string;
   targetAuthorName?: string;
   targetAuthorType: ReportActorType;

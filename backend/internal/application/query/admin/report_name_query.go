@@ -115,6 +115,21 @@ func (q *ReportNameQuery) ResolveBrandName(ctx context.Context, brandID string) 
 	return entity.Name
 }
 
+// ResolveBrandCompanyID は brandId から companyId を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveBrandCompanyID(ctx context.Context, brandID string) string {
+	if q == nil || q.brandRepo == nil || brandID == "" {
+		return ""
+	}
+
+	entity, err := q.brandRepo.GetByID(ctx, brandID)
+	if err != nil {
+		return ""
+	}
+
+	return entity.CompanyID
+}
+
 // ResolveCompanyName は companyId から companyName を解決する。
 // 解決できない場合は空文字列を返す。
 func (q *ReportNameQuery) ResolveCompanyName(ctx context.Context, companyID string) string {
@@ -183,6 +198,21 @@ func (q *ReportNameQuery) ResolveProductName(ctx context.Context, productBluepri
 	return entity.ProductName
 }
 
+// ResolveProductCompanyID は productBlueprintId から companyId を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveProductCompanyID(ctx context.Context, productBlueprintID string) string {
+	if q == nil || q.productBlueprintRepo == nil || productBlueprintID == "" {
+		return ""
+	}
+
+	entity, err := q.productBlueprintRepo.GetByID(ctx, productBlueprintID)
+	if err != nil {
+		return ""
+	}
+
+	return entity.CompanyID
+}
+
 // ResolveTokenName は tokenBlueprintId から tokenName を解決する。
 // 解決できない場合は空文字列を返す。
 func (q *ReportNameQuery) ResolveTokenName(ctx context.Context, tokenBlueprintID string) string {
@@ -196,6 +226,21 @@ func (q *ReportNameQuery) ResolveTokenName(ctx context.Context, tokenBlueprintID
 	}
 
 	return entity.Name
+}
+
+// ResolveTokenCompanyID は tokenBlueprintId から companyId を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveTokenCompanyID(ctx context.Context, tokenBlueprintID string) string {
+	if q == nil || q.tokenBlueprintRepo == nil || tokenBlueprintID == "" {
+		return ""
+	}
+
+	entity, err := q.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
+	if err != nil || entity == nil {
+		return ""
+	}
+
+	return entity.CompanyID
 }
 
 // ============================================================
@@ -261,6 +306,38 @@ func (q *ReportNameQuery) ResolveTargetParentName(
 
 	case reportdom.TargetTypeAvatar:
 		return q.ResolveAvatarName(ctx, targetParentID)
+
+	default:
+		return ""
+	}
+}
+
+// ResolveTargetCompanyID は Admin の report detail から契約詳細配下へ遷移するため、
+// 通報対象に紐づく companyId を解決する。
+// ProductBlueprintReview は targetParentID=productBlueprintId、
+// TokenBlueprint / TokenBlueprintComment は targetParentID=tokenBlueprintId、
+// List は targetAuthorID=brandId から companyId を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveTargetCompanyID(
+	ctx context.Context,
+	targetType reportdom.TargetType,
+	targetParentID string,
+	targetAuthorType reportdom.ActorType,
+	targetAuthorID string,
+) string {
+	switch targetType {
+	case reportdom.TargetTypeProductBlueprintReview:
+		return q.ResolveProductCompanyID(ctx, targetParentID)
+
+	case reportdom.TargetTypeTokenBlueprint,
+		reportdom.TargetTypeTokenBlueprintComment:
+		return q.ResolveTokenCompanyID(ctx, targetParentID)
+
+	case reportdom.TargetTypeList:
+		if targetAuthorType != reportdom.ActorTypeBrand {
+			return ""
+		}
+		return q.ResolveBrandCompanyID(ctx, targetAuthorID)
 
 	default:
 		return ""

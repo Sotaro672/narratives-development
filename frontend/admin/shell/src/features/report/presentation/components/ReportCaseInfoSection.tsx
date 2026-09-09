@@ -1,5 +1,7 @@
 // frontend/admin/shell/src/features/report/presentation/components/ReportCaseInfoSection.tsx
 
+import { Link } from "react-router-dom";
+
 import type { ReportCase } from "../../../../shared/type/report";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 import {
@@ -14,9 +16,43 @@ type ReportCaseInfoSectionProps = {
   reportCase: ReportCase;
 };
 
+function buildTargetDetailPath(reportCase: ReportCase): string | null {
+  const companyId = reportCase.targetCompanyId?.trim() || "";
+  const targetParentId = reportCase.targetParentId?.trim() || "";
+
+  if (!companyId || !targetParentId) {
+    return null;
+  }
+
+  const encodedCompanyId = encodeURIComponent(companyId);
+  const encodedTargetParentId = encodeURIComponent(targetParentId);
+
+  switch (reportCase.targetType) {
+    case "LIST":
+      return `/contracts/${encodedCompanyId}/lists/${encodedTargetParentId}`;
+
+    case "TOKEN_BLUEPRINT":
+    case "TOKEN_BLUEPRINT_COMMENT":
+      return `/contracts/${encodedCompanyId}/token-blueprints/${encodedTargetParentId}`;
+
+    case "PRODUCT_BLUEPRINT_REVIEW":
+      return `/contracts/${encodedCompanyId}/product-blueprints/${encodedTargetParentId}`;
+
+    default:
+      return null;
+  }
+}
+
 export default function ReportCaseInfoSection({
   reportCase,
 }: ReportCaseInfoSectionProps) {
+  const targetParentLabel =
+    reportCase.targetParentName ||
+    reportCase.targetParentId ||
+    "-";
+
+  const targetDetailPath = buildTargetDetailPath(reportCase);
+
   return (
     <section className="report-detail-page__section">
       <h2 className="report-detail-page__section-title">
@@ -27,9 +63,16 @@ export default function ReportCaseInfoSection({
         <ReportDetailField
           label={getTargetParentLabel(reportCase.targetType)}
           value={
-            reportCase.targetParentName ||
-            reportCase.targetParentId ||
-            "-"
+            targetDetailPath ? (
+              <Link
+                to={targetDetailPath}
+                className="report-detail-page__target-link"
+              >
+                {targetParentLabel}
+              </Link>
+            ) : (
+              targetParentLabel
+            )
           }
         />
 
