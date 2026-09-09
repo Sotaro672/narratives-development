@@ -49,12 +49,6 @@ export default function ProductBlueprintReviewTable({
         key: "avatarName",
         header: "投稿者",
         render: (review) => review.avatarName || review.avatarId || "-",
-        sortValue: (review) => review.avatarName || review.avatarId,
-        filter: {
-          getValue: (review) =>
-            [review.avatarName, review.avatarId].filter(Boolean).join(" "),
-          placeholder: "投稿者名・IDで絞り込み",
-        },
         nowrap: true,
       },
       {
@@ -78,17 +72,12 @@ export default function ProductBlueprintReviewTable({
         key: "body",
         header: "本文",
         render: (review) => review.body || "-",
-        filter: {
-          getValue: (review) => review.body,
-          placeholder: "本文で絞り込み",
-        },
         minWidth: "280px",
       },
       {
         key: "status",
         header: "状態",
         render: (review) => REVIEW_STATUS_LABELS[review.status] ?? review.status,
-        sortValue: (review) => review.status,
         filter: {
           getValue: (review) => review.status,
           options: [

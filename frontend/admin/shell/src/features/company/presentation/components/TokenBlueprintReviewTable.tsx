@@ -39,12 +39,6 @@ export default function TokenBlueprintReviewTable({
         key: "authorName",
         header: "投稿者",
         render: (review) => review.authorName || review.authorId || "-",
-        sortValue: (review) => review.authorName || review.authorId,
-        filter: {
-          getValue: (review) =>
-            [review.authorName, review.authorId].filter(Boolean).join(" "),
-          placeholder: "投稿者名・IDで絞り込み",
-        },
         nowrap: true,
       },
       {
@@ -52,7 +46,6 @@ export default function TokenBlueprintReviewTable({
         header: "種別",
         render: (review) =>
           AUTHOR_TYPE_LABELS[review.authorType] ?? review.authorType,
-        sortValue: (review) => review.authorType,
         filter: {
           getValue: (review) => review.authorType,
           options: [
@@ -66,10 +59,6 @@ export default function TokenBlueprintReviewTable({
         key: "body",
         header: "コメント",
         render: (review) => review.body || "-",
-        filter: {
-          getValue: (review) => review.body,
-          placeholder: "コメントで絞り込み",
-        },
         minWidth: "320px",
       },
       {
@@ -97,7 +86,6 @@ export default function TokenBlueprintReviewTable({
         key: "deleted",
         header: "状態",
         render: (review) => (review.deleted ? "削除済み" : "表示中"),
-        sortValue: (review) => review.deleted,
         filter: {
           getValue: (review) => review.deleted ? "deleted" : "visible",
           options: [
