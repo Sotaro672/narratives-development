@@ -142,6 +142,13 @@ export default function ListDetailPage() {
             <>
               <section className="ui-detail-section">
                 <dl className="ui-detail-definition-list ui-list-detail-meta-list">
+                  <dt>企業名</dt>
+                  <dd>{detail?.company.name || "-"}</dd>
+                </dl>
+              </section>
+
+              <section className="ui-detail-section">
+                <dl className="ui-detail-definition-list ui-list-detail-meta-list">
                   <dt>商品名</dt>
                   <dd>
                     <button
