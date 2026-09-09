@@ -220,7 +220,6 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(
 		ProductBlueprintID: productBlueprintID,
 		AvatarID:           avatarID,
 		Rating:             pbr.Rating(req.Rating),
-		Title:              req.Title,
 		Body:               req.Body,
 		ReviewedAt:         reviewedAt,
 		CreatedAt:          createdAt,
@@ -311,7 +310,6 @@ type catalogReviewDTO struct {
 	ProductBlueprint string `json:"productBlueprintId"`
 	AvatarID         string `json:"avatarId"`
 	Rating           int    `json:"rating"`
-	Title            string `json:"title"`
 	Body             string `json:"body"`
 	HelpfulVotes     int    `json:"helpfulVotes"`
 	TotalVotes       int    `json:"totalVotes"`
@@ -378,7 +376,6 @@ func toCatalogReviewDTOWithAvatar(
 		ProductBlueprint: v.ProductBlueprintID,
 		AvatarID:         v.AvatarID,
 		Rating:           int(v.Rating),
-		Title:            v.Title,
 		Body:             v.Body,
 		HelpfulVotes:     v.HelpfulVotes,
 		TotalVotes:       v.TotalVotes,
@@ -400,7 +397,6 @@ func toCatalogReviewDTO(v pbr.Review) catalogReviewDTO {
 		ProductBlueprint: v.ProductBlueprintID,
 		AvatarID:         v.AvatarID,
 		Rating:           int(v.Rating),
-		Title:            v.Title,
 		Body:             v.Body,
 		HelpfulVotes:     v.HelpfulVotes,
 		TotalVotes:       v.TotalVotes,
@@ -430,7 +426,6 @@ func toProductBlueprintReviewReportResponse(
 
 type createProductBlueprintReviewRequest struct {
 	Rating     int       `json:"rating"`
-	Title      string    `json:"title"`
 	Body       string    `json:"body"`
 	ReviewedAt time.Time `json:"reviewedAt"`
 	CreatedAt  time.Time `json:"createdAt"`

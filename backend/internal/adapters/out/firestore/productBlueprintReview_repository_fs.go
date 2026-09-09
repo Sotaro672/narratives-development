@@ -595,7 +595,6 @@ func encodeReviewDoc(v pbr.Review) map[string]any {
 		"productBlueprintId": v.ProductBlueprintID,
 		"avatarId":           v.AvatarID,
 		"rating":             int(v.Rating),
-		"title":              v.Title,
 		"body":               v.Body,
 		"helpfulVotes":       v.HelpfulVotes,
 		"totalVotes":         v.TotalVotes,
@@ -644,7 +643,6 @@ func decodeReviewDoc(id string, data map[string]any) (pbr.Review, error) {
 		ProductBlueprintID: getString("productBlueprintId"),
 		AvatarID:           getString("avatarId"),
 		Rating:             pbr.Rating(getIntFromAny(data["rating"])),
-		Title:              getString("title"),
 		Body:               getString("body"),
 		HelpfulVotes:       getIntFromAny(data["helpfulVotes"]),
 		TotalVotes:         getIntFromAny(data["totalVotes"]),
@@ -743,12 +741,6 @@ func ratingCountField(rating pbr.Rating) string {
 func applyReviewPatch(current pbr.Review, patch pbr.Patch, now func() time.Time) (pbr.Review, error) {
 	next := current
 
-	if patch.Title != nil {
-		if *patch.Title == "" {
-			return pbr.Review{}, pbr.ErrInvalid
-		}
-		next.Title = *patch.Title
-	}
 	if patch.Body != nil {
 		if *patch.Body == "" {
 			return pbr.Review{}, pbr.ErrInvalid
@@ -797,7 +789,7 @@ func applyReviewPatch(current pbr.Review, patch pbr.Patch, now func() time.Time)
 		next.UpdatedBy = *patch.UpdatedBy
 	}
 
-	if next.ProductBlueprintID == "" || next.AvatarID == "" || next.Title == "" || next.Body == "" ||
+	if next.ProductBlueprintID == "" || next.AvatarID == "" || next.Body == "" ||
 		next.Rating < pbr.RatingMin || next.Rating > pbr.RatingMax ||
 		next.CreatedAt.IsZero() || next.CreatedBy == "" || next.UpdatedAt.IsZero() || next.UpdatedBy == "" ||
 		next.HelpfulVotes < 0 || next.TotalVotes < 0 || next.HelpfulVotes > next.TotalVotes {

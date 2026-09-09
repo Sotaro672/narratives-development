@@ -183,7 +183,6 @@ func reportNewProductReviewCaseParams(
 		TargetParentID:   review.ProductBlueprintID,
 		TargetAuthorID:   review.AvatarID,
 		TargetAuthorType: reportdom.ActorTypeAvatar,
-		SnapshotTitle:    review.Title,
 		SnapshotBody:     review.Body,
 		SnapshotRating:   &rating,
 		CreatedAt:        now,

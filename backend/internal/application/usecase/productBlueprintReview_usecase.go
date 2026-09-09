@@ -349,7 +349,6 @@ func (uc *ProductBlueprintReviewUsecase) CreateProductBlueprintReview(
 		ProductBlueprintID: in.ProductBlueprintID,
 		AvatarID:           in.AvatarID,
 		Rating:             in.Rating,
-		Title:              in.Title,
 		Body:               in.Body,
 		ReviewedAt:         reviewedAt,
 		CreatedAt:          createdAt,

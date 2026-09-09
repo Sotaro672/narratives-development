@@ -168,7 +168,6 @@ func (q *ContractProductBlueprintReviewQuery) List(
 			AvatarName:         item.AvatarName,
 			AvatarIcon:         item.AvatarIcon,
 			Rating:             int(item.Rating),
-			Title:              item.Title,
 			Body:               item.Body,
 			HelpfulVotes:       item.HelpfulVotes,
 			TotalVotes:         item.TotalVotes,

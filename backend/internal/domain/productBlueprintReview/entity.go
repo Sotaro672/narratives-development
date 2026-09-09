@@ -84,7 +84,6 @@ type Review struct {
 	AvatarID string
 
 	Rating Rating
-	Title  string
 	Body   string
 
 	// Helpful 投票（集計）
@@ -113,7 +112,6 @@ var (
 	ErrInvalidID                 = errors.New("productBlueprintReview: invalid id")
 	ErrInvalidProductBlueprintID = errors.New("productBlueprintReview: invalid productBlueprintId")
 	ErrInvalidAvatarID           = errors.New("productBlueprintReview: invalid avatarId")
-	ErrInvalidTitle              = errors.New("productBlueprintReview: invalid title")
 	ErrInvalidBody               = errors.New("productBlueprintReview: invalid body")
 	ErrInvalidReviewedAt         = errors.New("productBlueprintReview: invalid reviewedAt")
 	ErrInvalidCreatedAt          = errors.New("productBlueprintReview: invalid createdAt")
@@ -131,7 +129,6 @@ type NewReviewParams struct {
 	AvatarID           string
 
 	Rating Rating
-	Title  string
 	Body   string
 
 	ReviewedAt time.Time
@@ -146,7 +143,6 @@ func New(p NewReviewParams) (Review, error) {
 		ProductBlueprintID: p.ProductBlueprintID,
 		AvatarID:           p.AvatarID,
 		Rating:             p.Rating,
-		Title:              p.Title,
 		Body:               p.Body,
 		HelpfulVotes:       0,
 		TotalVotes:         0,
@@ -233,12 +229,9 @@ func (r *Review) AddNotHelpfulVote() error {
 	return nil
 }
 
-func (r *Review) UpdateContent(title, body string, rating Rating, now time.Time, updatedBy string) error {
+func (r *Review) UpdateContent(body string, rating Rating, now time.Time, updatedBy string) error {
 	if r.Status == ReviewStatusRemoved {
 		return ErrForbidden
-	}
-	if title == "" {
-		return ErrInvalidTitle
 	}
 	if body == "" {
 		return ErrInvalidBody
@@ -250,7 +243,6 @@ func (r *Review) UpdateContent(title, body string, rating Rating, now time.Time,
 		return ErrInvalidCreatedBy
 	}
 
-	r.Title = title
 	r.Body = body
 	r.Rating = rating
 	r.touch(now, updatedBy)
@@ -273,9 +265,6 @@ func (r Review) validate() error {
 	}
 	if err := r.Rating.validate(); err != nil {
 		return err
-	}
-	if r.Title == "" {
-		return ErrInvalidTitle
 	}
 	if r.Body == "" {
 		return ErrInvalidBody

@@ -41,7 +41,6 @@ type Filter struct {
 // 口コミ編集・ステータス変更・モデレーション理由など、更新対象を絞って扱う。
 // ※ 投票系は専用メソッド（Increment）に分ける設計を推奨。
 type Patch struct {
-	Title  *string `json:"title"`
 	Body   *string `json:"body"`
 	Rating *Rating `json:"rating"`
 
