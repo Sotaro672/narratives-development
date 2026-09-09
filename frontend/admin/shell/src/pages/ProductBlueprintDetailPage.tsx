@@ -70,16 +70,12 @@ export default function ProductBlueprintDetailPage() {
     return (
       <>
         <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">カテゴリ</h2>
           <dl className="ui-detail-definition-list">
-            <dt>カテゴリパス</dt>
             <dd>
               {productBlueprint.productBlueprintCategoryPath.length > 0
                 ? productBlueprint.productBlueprintCategoryPath.join(" / ")
                 : "-"}
             </dd>
-
-            <dt>カテゴリ項目</dt>
             <dd style={{ whiteSpace: "pre-wrap" }}>
               {formatCategoryFields(productBlueprint.categoryFields)}
             </dd>
