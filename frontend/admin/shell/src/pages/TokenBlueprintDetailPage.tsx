@@ -69,18 +69,8 @@ export default function TokenBlueprintDetailPage() {
     return (
       <>
         <section className="ui-detail-section">
-          <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
-            <dt>シンボル</dt>
-            <dd>{tokenBlueprint.symbol || "-"}</dd>
-
-            <dt>説明</dt>
-            <dd>{tokenBlueprint.description || "-"}</dd>
-          </dl>
-        </section>
-
-        <section className="ui-detail-section">
-          <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
-            <dd className="token-blueprint-detail-page__icon-cell">
+          <div className="token-blueprint-detail-page__summary">
+            <div className="token-blueprint-detail-page__icon-area">
               {tokenBlueprint.iconUrl ? (
                 <img
                   src={tokenBlueprint.iconUrl}
@@ -88,10 +78,32 @@ export default function TokenBlueprintDetailPage() {
                   className="token-blueprint-detail-page__icon"
                 />
               ) : (
-                "-"
+                <div className="token-blueprint-detail-page__icon-placeholder">
+                  アイコン未設定
+                </div>
               )}
-            </dd>
-          </dl>
+            </div>
+
+            <div className="token-blueprint-detail-page__summary-fields">
+              <div className="token-blueprint-detail-page__field">
+                <div className="token-blueprint-detail-page__field-label">
+                  シンボル
+                </div>
+                <div className="token-blueprint-detail-page__field-value">
+                  {tokenBlueprint.symbol || "-"}
+                </div>
+              </div>
+
+              <div className="token-blueprint-detail-page__field">
+                <div className="token-blueprint-detail-page__field-label">
+                  説明
+                </div>
+                <div className="token-blueprint-detail-page__description">
+                  {tokenBlueprint.description || "-"}
+                </div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <section className="ui-detail-section">
