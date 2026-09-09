@@ -75,17 +75,6 @@ export default function ProductBlueprintReviewTable({
         nowrap: true,
       },
       {
-        key: "title",
-        header: "タイトル",
-        render: (review) => review.title || "-",
-        sortValue: (review) => review.title,
-        filter: {
-          getValue: (review) => review.title,
-          placeholder: "タイトルで絞り込み",
-        },
-        minWidth: "180px",
-      },
-      {
         key: "body",
         header: "本文",
         render: (review) => review.body || "-",

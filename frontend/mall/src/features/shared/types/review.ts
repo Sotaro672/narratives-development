@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/types/review.ts
+// frontend\mall\src\features\shared\types\review.ts
 
 export type ProductBlueprintReview = {
   id: string;
@@ -7,7 +7,6 @@ export type ProductBlueprintReview = {
   avatarName: string;
   avatarIcon: string;
   rating: number;
-  title: string;
   body: string;
   helpfulVotes: number;
   totalVotes: number;

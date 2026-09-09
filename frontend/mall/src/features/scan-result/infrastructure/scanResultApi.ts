@@ -1,4 +1,4 @@
-// frontend/amol/src/features/scan-result/infrastructure/scanResultApi.ts
+// frontend\mall\src\features\scan-result\infrastructure\scanResultApi.ts
 import { requestJson } from "../../../lib/http";
 import { getOptionalAuthHeaders } from "../../../lib/authHeaders";
 import { HttpError } from "../../../lib/http/httpError";
@@ -43,13 +43,9 @@ export class ReturnInProgressOpenedError extends Error {
     RETURN_IN_PROGRESS_OPENED_ERROR_CODE;
 
   readonly status = 409;
-
   readonly avatarId: string;
-
   readonly productId: string;
-
   readonly matchedOrderId: string;
-
   readonly matchedItemIndex: number;
 
   constructor(
@@ -308,7 +304,6 @@ export async function createProductBlueprintReview(args: {
   productBlueprintId: string;
   body: string;
   rating: number;
-  title?: string;
   headers?: HeadersInit;
 }): Promise<ProductBlueprintReview> {
   const productBlueprintId = args.productBlueprintId.trim();
@@ -323,7 +318,6 @@ export async function createProductBlueprintReview(args: {
   }
 
   const rating = Math.max(1, Math.min(5, Math.trunc(args.rating)));
-  const title = args.title?.trim() || "Review";
 
   return requestJson<ProductBlueprintReview>(
     `/mall/me/catalog/product-blueprints/${encodeURIComponent(productBlueprintId)}/reviews`,
@@ -334,7 +328,6 @@ export async function createProductBlueprintReview(args: {
       json: {
         body,
         rating,
-        title,
       },
       messages: {
         requestErrorMessage: "createProductBlueprintReview failed",

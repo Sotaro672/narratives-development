@@ -1,5 +1,4 @@
-// frontend/amol/src/features/scan-result/application/scanReviewUsecase.ts
-
+// frontend\mall\src\features\scan-result\application\scanReviewUsecase.ts
 import type {
   ProductBlueprintReviewPage,
 } from "../../shared/types/review";
@@ -18,7 +17,6 @@ export type ScanReviewUsecaseDeps = {
       productBlueprintId: string;
       body: string;
       rating: number;
-      title: string;
       headers?: HeadersInit;
     },
   ) => Promise<unknown>;
@@ -41,9 +39,7 @@ export function validateScanReviewInput(
     return "本文を入力してください";
   }
 
-  if (
-    !input.productBlueprintId.trim()
-  ) {
+  if (!input.productBlueprintId.trim()) {
     return "productBlueprintId が取得できませんでした";
   }
 
@@ -97,8 +93,6 @@ export async function submitScanReview(
       input.body.trim(),
     rating:
       input.rating,
-    title:
-      "Review",
     headers,
   });
 }

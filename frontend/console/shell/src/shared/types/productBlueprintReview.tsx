@@ -24,7 +24,6 @@ export type Review = {
   AvatarIcon?: string;
 
   Rating: number;
-  Title: string;
   Body: string;
 
   HelpfulVotes: number;

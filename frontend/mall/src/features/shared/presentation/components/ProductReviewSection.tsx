@@ -14,7 +14,6 @@ export type ProductReviewItem = {
   avatarName?: string | null;
   avatarIcon?: string | null;
   rating?: number | null;
-  title?: string | null;
   body?: string | null;
   reviewedAt?: string | null;
   helpfulVotes?: number | null;
@@ -199,7 +198,6 @@ function ProductReviewItemView({
   const avatarId = review.avatarId?.trim() || "";
   const avatarName = review.avatarName?.trim() || "匿名ユーザー";
   const avatarIcon = review.avatarIcon?.trim() || "";
-  const reviewTitle = review.title?.trim() || "";
   const reviewBody = review.body?.trim() || "";
   const reviewedAt = review.reviewedAt?.trim() || "";
   const reviewedAtLabel = reviewedAt ? formatDateTime(reviewedAt) : "-";
@@ -268,10 +266,6 @@ function ProductReviewItemView({
           </button>
         ) : null}
       </div>
-
-      {reviewTitle ? (
-        <h3 className="product-review__title">{reviewTitle}</h3>
-      ) : null}
 
       {reviewBody ? (
         <p className="product-review__body">{reviewBody}</p>
