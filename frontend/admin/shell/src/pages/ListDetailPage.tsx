@@ -33,7 +33,9 @@ export default function ListDetailPage() {
       return [];
     }
 
-    return [...list.images]
+    const images = Array.isArray(list.images) ? list.images : [];
+
+    return [...images]
       .filter((image) => Boolean(image.id && image.url))
       .sort((a, b) => {
         if (a.displayOrder !== b.displayOrder) {
@@ -80,14 +82,7 @@ export default function ListDetailPage() {
         </section>
 
         <section className="ui-detail-section">
-          <h2 className="ui-detail-section__title">出品情報</h2>
-          <dl className="ui-detail-definition-list">
-            <dt>出品名</dt>
-            <dd>{list.title || "-"}</dd>
-
-            <dt>説明</dt>
-            <dd>{list.description || "-"}</dd>
-          </dl>
+          <p className="ui-detail-section__text">{list.description || "-"}</p>
         </section>
 
         <section className="ui-detail-section">
@@ -148,34 +143,53 @@ export default function ListDetailPage() {
         <DetailPageBody
           main={renderMain()}
           aside={
-            <section className="ui-detail-section">
-              <h2 className="ui-detail-section__title">関連情報</h2>
-              <dl className="ui-detail-definition-list">
-                <dt>ブランド名</dt>
-                <dd>{list.brandName || "-"}</dd>
+            <>
+              <section className="ui-detail-section">
+                <h2 className="ui-detail-section__title">商品情報</h2>
+                <dl className="ui-detail-definition-list">
+                  <dt>商品名</dt>
+                  <dd>{list.productName || "-"}</dd>
 
-                <dt>トークン設計名</dt>
-                <dd>{list.tokenName || "-"}</dd>
+                  <dt>商品ブランド名</dt>
+                  <dd>{list.productBrandName || "-"}</dd>
+                </dl>
+              </section>
 
-                <dt>商品名</dt>
-                <dd>{list.productName || "-"}</dd>
+              <section className="ui-detail-section">
+                <h2 className="ui-detail-section__title">トークン情報</h2>
+                <dl className="ui-detail-definition-list">
+                  <dt>トークン名</dt>
+                  <dd>{list.tokenName || "-"}</dd>
 
-                <dt>出品ID</dt>
-                <dd>{list.readableId || list.id || "-"}</dd>
+                  <dt>トークンブランド名</dt>
+                  <dd>{list.tokenBrandName || "-"}</dd>
+                </dl>
+              </section>
 
-                <dt>出品状態</dt>
-                <dd>{formatListStatus(list.status)}</dd>
+              <section className="ui-detail-section">
+                <h2 className="ui-detail-section__title">出品情報</h2>
+                <dl className="ui-detail-definition-list">
+                  <dt>出品ID</dt>
+                  <dd>{list.readableId || list.id || "-"}</dd>
 
-                <dt>担当者</dt>
-                <dd>{list.assigneeName || "-"}</dd>
+                  <dt>出品状態</dt>
+                  <dd>{formatListStatus(list.status)}</dd>
 
-                <dt>作成日時</dt>
-                <dd>{formatDateTime(list.createdAt)}</dd>
+                  <dt>担当者</dt>
+                  <dd>{list.assigneeName || "-"}</dd>
 
-                <dt>最終更新日時</dt>
-                <dd>{formatDateTime(list.updatedAt)}</dd>
-              </dl>
-            </section>
+                  <dt>作成日時</dt>
+                  <dd className="ui-detail-definition-list__nowrap">
+                    {formatDateTime(list.createdAt)}
+                  </dd>
+
+                  <dt>最終更新日時</dt>
+                  <dd className="ui-detail-definition-list__nowrap">
+                    {formatDateTime(list.updatedAt)}
+                  </dd>
+                </dl>
+              </section>
+            </>
           }
         />
       ) : (

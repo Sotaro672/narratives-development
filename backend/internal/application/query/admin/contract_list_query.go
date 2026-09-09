@@ -103,8 +103,10 @@ type ContractListDetailRow struct {
 	Prices             []ContractListPriceRow `json:"prices"`
 	ProductName        string                 `json:"productName"`
 	TokenName          string                 `json:"tokenName"`
-	BrandID            string                 `json:"brandId"`
-	BrandName          string                 `json:"brandName"`
+	ProductBrandID     string                 `json:"productBrandId"`
+	ProductBrandName   string                 `json:"productBrandName"`
+	TokenBrandID       string                 `json:"tokenBrandId"`
+	TokenBrandName     string                 `json:"tokenBrandName"`
 	AssigneeID         string                 `json:"assigneeId"`
 	AssigneeName       string                 `json:"assigneeName"`
 	Status             string                 `json:"status"`
@@ -253,8 +255,10 @@ func (q *ContractListQuery) Get(
 			Prices:             prices,
 			ProductName:        productBlueprint.ProductName,
 			TokenName:          tokenBlueprint.Name,
-			BrandID:            productBlueprint.BrandID,
-			BrandName:          q.resolveBrandName(ctx, productBlueprint.BrandID),
+			ProductBrandID:     productBlueprint.BrandID,
+			ProductBrandName:   q.resolveBrandName(ctx, productBlueprint.BrandID),
+			TokenBrandID:       tokenBlueprint.BrandID,
+			TokenBrandName:     q.resolveBrandName(ctx, tokenBlueprint.BrandID),
 			AssigneeID:         item.AssigneeID,
 			AssigneeName:       q.resolveMemberName(ctx, item.AssigneeID),
 			Status:             string(item.Status),

@@ -132,10 +132,10 @@
 
 .ui-detail-page__main,
 .ui-detail-page__aside {
-  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  min-width: 0;
 }
 
 .ui-detail-page__aside {
@@ -150,6 +150,10 @@
 
 .ui-detail-definition-list dd {
   font-weight: 400;
+}
+
+.ui-detail-definition-list__nowrap {
+  white-space: nowrap;
 }
 
 @media (max-width: 960px) {

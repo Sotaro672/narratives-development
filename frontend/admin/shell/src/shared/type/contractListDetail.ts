@@ -26,8 +26,10 @@ export type ContractListDetail = {
   prices: ContractListPriceRow[];
   productName: string;
   tokenName: string;
-  brandId: string;
-  brandName: string;
+  productBrandId: string;
+  productBrandName: string;
+  tokenBrandId: string;
+  tokenBrandName: string;
   assigneeId: string;
   assigneeName: string;
   status: string;
