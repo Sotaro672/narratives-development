@@ -80,10 +80,6 @@ export default function TokenBlueprintDetailPage() {
 
         <section className="ui-detail-section">
           <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
-            <dt>Metadata URI</dt>
-            <dd>{tokenBlueprint.metadataUri || "-"}</dd>
-
-            <dt>アイコンURL</dt>
             <dd className="token-blueprint-detail-page__icon-cell">
               {tokenBlueprint.iconUrl ? (
                 <img
