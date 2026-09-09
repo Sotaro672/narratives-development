@@ -8,10 +8,6 @@ import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./TokenBlueprintDetailPage.css";
 
-function formatMinted(minted: boolean): string {
-  return minted ? "ミント済み" : "未ミント";
-}
-
 export default function TokenBlueprintDetailPage() {
   const navigate = useNavigate();
   const { companyId = "", tokenBlueprintId = "" } = useParams<{
@@ -51,9 +47,6 @@ export default function TokenBlueprintDetailPage() {
       <>
         <section className="ui-detail-section">
           <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
-            <dt>トークン名</dt>
-            <dd>{tokenBlueprint.name || "-"}</dd>
-
             <dt>シンボル</dt>
             <dd>{tokenBlueprint.symbol || "-"}</dd>
 
@@ -62,9 +55,6 @@ export default function TokenBlueprintDetailPage() {
 
             <dt>担当者</dt>
             <dd>{tokenBlueprint.assigneeName || "-"}</dd>
-
-            <dt>ミント状態</dt>
-            <dd>{formatMinted(tokenBlueprint.minted)}</dd>
 
             <dt>モデレーション状態</dt>
             <dd>{tokenBlueprint.moderationStatus || "-"}</dd>
@@ -82,18 +72,6 @@ export default function TokenBlueprintDetailPage() {
 
         <section className="ui-detail-section">
           <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
-            <dt>トークン設計ID</dt>
-            <dd>{tokenBlueprint.id || "-"}</dd>
-
-            <dt>企業ID</dt>
-            <dd>{tokenBlueprint.companyId || "-"}</dd>
-
-            <dt>ブランドID</dt>
-            <dd>{tokenBlueprint.brandId || "-"}</dd>
-
-            <dt>担当者ID</dt>
-            <dd>{tokenBlueprint.assigneeId || "-"}</dd>
-
             <dt>Metadata URI</dt>
             <dd>{tokenBlueprint.metadataUri || "-"}</dd>
 
