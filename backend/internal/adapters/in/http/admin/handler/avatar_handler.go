@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	avatardom "narratives/internal/domain/avatar"
+	productblueprintdom "narratives/internal/domain/productBlueprint"
 	resaledom "narratives/internal/domain/resale"
+	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 	userdom "narratives/internal/domain/user"
 )
 
@@ -30,11 +32,21 @@ type AvatarResaleReader interface {
 	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
 }
 
+type AvatarProductBlueprintReader interface {
+	GetByID(ctx context.Context, id string) (productblueprintdom.ProductBlueprint, error)
+}
+
+type AvatarTokenBlueprintReader interface {
+	GetByID(ctx context.Context, id string) (*tokenblueprintdom.TokenBlueprint, error)
+}
+
 type AvatarHandler struct {
-	avatarRepo AvatarListReader
-	userRepo   AvatarUserReader
-	reportRepo AvatarReportCountReader
-	resaleRepo AvatarResaleReader
+	avatarRepo           AvatarListReader
+	userRepo             AvatarUserReader
+	reportRepo           AvatarReportCountReader
+	resaleRepo           AvatarResaleReader
+	productBlueprintRepo AvatarProductBlueprintReader
+	tokenBlueprintRepo   AvatarTokenBlueprintReader
 }
 
 type avatarResponse struct {
@@ -55,12 +67,13 @@ type avatarListResponse struct {
 }
 
 type avatarResaleResponse struct {
-	ID        string  `json:"id"`
-	Status    string  `json:"status"`
-	Price     int     `json:"price"`
-	Condition string  `json:"condition"`
-	CreatedAt string  `json:"createdAt"`
-	UpdatedAt *string `json:"updatedAt,omitempty"`
+	ID          string  `json:"id"`
+	ProductName string  `json:"productName"`
+	TokenName   string  `json:"tokenName"`
+	Status      string  `json:"status"`
+	Price       int     `json:"price"`
+	CreatedAt   string  `json:"createdAt"`
+	UpdatedAt   *string `json:"updatedAt,omitempty"`
 }
 
 type avatarResaleListResponse struct {
@@ -72,12 +85,16 @@ func NewAvatarHandler(
 	userRepo AvatarUserReader,
 	reportRepo AvatarReportCountReader,
 	resaleRepo AvatarResaleReader,
+	productBlueprintRepo AvatarProductBlueprintReader,
+	tokenBlueprintRepo AvatarTokenBlueprintReader,
 ) http.Handler {
 	return http.HandlerFunc((&AvatarHandler{
-		avatarRepo: avatarRepo,
-		userRepo:   userRepo,
-		reportRepo: reportRepo,
-		resaleRepo: resaleRepo,
+		avatarRepo:           avatarRepo,
+		userRepo:             userRepo,
+		reportRepo:           reportRepo,
+		resaleRepo:           resaleRepo,
+		productBlueprintRepo: productBlueprintRepo,
+		tokenBlueprintRepo:   tokenBlueprintRepo,
 	}).handle)
 }
 
@@ -162,8 +179,8 @@ func (h *AvatarHandler) handleResales(
 		return
 	}
 
-	if h.resaleRepo == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "avatar_resale_repository_not_initialized")
+	if h.resaleRepo == nil || h.productBlueprintRepo == nil || h.tokenBlueprintRepo == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "avatar_resale_dependencies_not_initialized")
 		return
 	}
 
@@ -175,19 +192,43 @@ func (h *AvatarHandler) handleResales(
 
 	items := make([]avatarResaleResponse, 0, len(resales))
 	for _, resale := range resales {
+		productBlueprint, err := h.productBlueprintRepo.GetByID(
+			r.Context(),
+			resale.ProductBlueprintID,
+		)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "avatar_resale_product_resolve_failed")
+			return
+		}
+
+		tokenBlueprint, err := h.tokenBlueprintRepo.GetByID(
+			r.Context(),
+			resale.TokenBlueprintID,
+		)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "avatar_resale_token_resolve_failed")
+			return
+		}
+
 		var updatedAt *string
 		if resale.UpdatedAt != nil {
 			value := resale.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00")
 			updatedAt = &value
 		}
 
+		tokenName := ""
+		if tokenBlueprint != nil {
+			tokenName = tokenBlueprint.Name
+		}
+
 		items = append(items, avatarResaleResponse{
-			ID:        resale.ID,
-			Status:    string(resale.Status),
-			Price:     resale.Price,
-			Condition: string(resale.Condition),
-			CreatedAt: resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt: updatedAt,
+			ID:          resale.ID,
+			ProductName: productBlueprint.ProductName,
+			TokenName:   tokenName,
+			Status:      string(resale.Status),
+			Price:       resale.Price,
+			CreatedAt:   resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:   updatedAt,
 		})
 	}
 

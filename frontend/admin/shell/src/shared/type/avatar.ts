@@ -19,9 +19,10 @@ export type AvatarListResponse = {
 
 export type AvatarResale = {
   id: string;
+  productName: string;
+  tokenName: string;
   status: string;
   price: number;
-  condition: string;
   createdAt: string;
   updatedAt?: string | null;
 };

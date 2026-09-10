@@ -22,6 +22,20 @@ export default function AvatarResaleTable({
   const columns = useMemo<TableColumn<AvatarResale>[]>(
     () => [
       {
+        key: "productName",
+        header: "商品名",
+        render: (resale) => resale.productName || "-",
+        sortValue: (resale) => resale.productName,
+        nowrap: true,
+      },
+      {
+        key: "tokenName",
+        header: "トークン名",
+        render: (resale) => resale.tokenName || "-",
+        sortValue: (resale) => resale.tokenName,
+        nowrap: true,
+      },
+      {
         key: "status",
         header: "ステータス",
         render: (resale) => STATUS_LABELS[resale.status] ?? resale.status,
@@ -33,13 +47,6 @@ export default function AvatarResaleTable({
         header: "価格",
         render: (resale) => `${resale.price.toLocaleString("ja-JP")}円`,
         sortValue: (resale) => resale.price,
-        nowrap: true,
-      },
-      {
-        key: "condition",
-        header: "商品の状態",
-        render: (resale) => resale.condition || "-",
-        sortValue: (resale) => resale.condition,
         nowrap: true,
       },
       {
