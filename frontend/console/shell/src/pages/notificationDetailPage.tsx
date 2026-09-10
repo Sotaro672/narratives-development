@@ -59,7 +59,6 @@ export default function NotificationDetailPage({
   const [detail, setDetail] = useState<NotificationDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const processedKeyRef = useRef<string | null>(null);
 
   const normalizedNotificationId = useMemo(
@@ -122,8 +121,7 @@ export default function NotificationDetailPage({
 
       setDetail({
         kind: "reportDecision",
-        notification:
-          toReportDecisionNotificationViewModel(notification),
+        notification: toReportDecisionNotificationViewModel(notification),
       });
     } catch (loadError) {
       processedKeyRef.current = null;
@@ -146,9 +144,7 @@ export default function NotificationDetailPage({
     return (
       <PageStyle layout="single" title="通知詳細" onBack={handleBack}>
         <div className="notification-detail">
-          <p className="notification-detail__message">
-            読み込み中です。
-          </p>
+          <p className="notification-detail__message">読み込み中です。</p>
         </div>
       </PageStyle>
     );
@@ -187,6 +183,8 @@ export default function NotificationDetailPage({
     return (
       <PageStyle layout="single" title={news.title} onBack={handleBack}>
         <article className="notification-detail">
+          <div className="notification-detail__body">{news.body}</div>
+
           {news.image ? (
             <div className="notification-detail__image-wrap">
               <img
@@ -196,10 +194,6 @@ export default function NotificationDetailPage({
               />
             </div>
           ) : null}
-
-          <div className="notification-detail__body">
-            {news.body}
-          </div>
         </article>
       </PageStyle>
     );

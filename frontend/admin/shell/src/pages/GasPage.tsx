@@ -1,10 +1,12 @@
 // frontend/admin/shell/src/pages/GasPage.tsx
 
 import { useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { useGasBalance } from "../features/gas/hooks/useGasBalance";
 import { useMints } from "../features/mint/hooks/useMints";
 import MintTable from "../features/mint/presentation/components/MintTable";
+import type { Mint } from "../shared/type/mint";
 import Button from "../shared/ui/Button/Button";
 import CopyButton from "../shared/ui/CopyButton/CopyButton";
 import ExternalLinkButton from "../shared/ui/ExternalLinkButton/ExternalLinkButton";
@@ -14,12 +16,20 @@ import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 import "./GasPage.css";
 
 export default function GasPage() {
+  const navigate = useNavigate();
   const { balance, loading: gasLoading, error: gasError, reload: reloadGas } = useGasBalance();
   const { mints, loading: mintsLoading, error: mintsError, reload: reloadMints } = useMints();
 
   const reload = useCallback(async () => {
     await Promise.all([reloadGas(), reloadMints()]);
   }, [reloadGas, reloadMints]);
+
+  const handleMintClick = useCallback(
+    (mint: Mint) => {
+      navigate(`/gas/mints/${encodeURIComponent(mint.id)}`);
+    },
+    [navigate],
+  );
 
   const loading = gasLoading || mintsLoading;
 
@@ -102,7 +112,7 @@ export default function GasPage() {
         ) : null}
 
         {!mintsError && (mints.length > 0 || !mintsLoading) ? (
-          <MintTable mints={mints} />
+          <MintTable mints={mints} onMintClick={handleMintClick} />
         ) : null}
       </section>
     </Page>

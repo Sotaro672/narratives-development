@@ -8,6 +8,7 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type MintTableProps = {
   mints: Mint[];
+  onMintClick?: (mint: Mint) => void;
 };
 
 const MINT_STATUSES: MintStatus[] = [
@@ -25,7 +26,7 @@ const STATUS_OPTIONS: TableFilterOption[] = MINT_STATUSES.map((status) => ({
   label: status,
 }));
 
-export default function MintTable({ mints }: MintTableProps) {
+export default function MintTable({ mints, onMintClick }: MintTableProps) {
   const columns = useMemo<TableColumn<Mint>[]>(
     () => [
       {
@@ -102,17 +103,8 @@ export default function MintTable({ mints }: MintTableProps) {
     <Table
       columns={columns}
       rows={mints}
-      getRowKey={(mint) =>
-        [
-          mint.status,
-          mint.brandName,
-          mint.tokenBlueprintName,
-          mint.productCount,
-          mint.requestedByName ?? "",
-          mint.mintedAt ?? "",
-          mint.scheduledBurnDate ?? "",
-        ].join(":")
-      }
+      getRowKey={(mint) => mint.id}
+      onRowClick={onMintClick}
       emptyMessage="Mintはありません。"
       filteredEmptyMessage="条件に一致するMintはありません。"
     />

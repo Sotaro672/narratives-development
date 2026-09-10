@@ -27,6 +27,7 @@ type MintMemberReader interface {
 }
 
 type MintListItem struct {
+	ID                 string             `json:"id"`
 	BrandName          string             `json:"brandName"`
 	TokenBlueprintName string             `json:"tokenBlueprintName"`
 	ProductCount       int                `json:"productCount"`
@@ -98,6 +99,7 @@ func (q *MintListQuery) ListMints(ctx context.Context) (*MintListResult, error) 
 		}
 
 		items = append(items, MintListItem{
+			ID:                 mint.ID,
 			BrandName:          brandName,
 			TokenBlueprintName: tokenName,
 			ProductCount:       len(mint.Products),

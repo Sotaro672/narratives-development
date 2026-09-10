@@ -10,6 +10,7 @@ export type MintStatus =
   | "FAILED_FATAL";
 
 export type Mint = {
+  id: string;
   brandName: string;
   tokenBlueprintName: string;
   productCount: number;
