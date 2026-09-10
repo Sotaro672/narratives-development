@@ -72,13 +72,16 @@ type MintDetailModel struct {
 type MintDetailResult struct {
 	ID string `json:"id"`
 
+	CompanyID   string `json:"companyId"`
 	CompanyName string `json:"companyName"`
 
-	TokenBrandName string `json:"tokenBrandName"`
-	TokenName      string `json:"tokenName"`
+	TokenBlueprintID string `json:"tokenBlueprintId"`
+	TokenBrandName   string `json:"tokenBrandName"`
+	TokenName        string `json:"tokenName"`
 
-	ProductBrandName string `json:"productBrandName"`
-	ProductName      string `json:"productName"`
+	ProductBlueprintID string `json:"productBlueprintId"`
+	ProductBrandName   string `json:"productBrandName"`
+	ProductName        string `json:"productName"`
 
 	Models []MintDetailModel `json:"models"`
 }
@@ -238,13 +241,16 @@ func (q *MintDetailQuery) Get(
 	}
 
 	return MintDetailResult{
-		ID:               mint.ID,
-		CompanyName:      company.Name,
-		TokenBrandName:   tokenBrand.Name,
-		TokenName:        tokenBlueprint.Name,
-		ProductBrandName: productBrand.Name,
-		ProductName:      productBlueprint.ProductName,
-		Models:           models,
+		ID:                 mint.ID,
+		CompanyID:          productBlueprint.CompanyID,
+		CompanyName:        company.Name,
+		TokenBlueprintID:   tokenBlueprint.ID,
+		TokenBrandName:     tokenBrand.Name,
+		TokenName:          tokenBlueprint.Name,
+		ProductBlueprintID: productBlueprint.ID,
+		ProductBrandName:   productBrand.Name,
+		ProductName:        productBlueprint.ProductName,
+		Models:             models,
 	}, nil
 }
 
@@ -261,7 +267,6 @@ func countMintProductsByModel(
 	}
 
 	counts := make(map[string]int)
-
 	for _, product := range products {
 		if _, ok := targetProductIDs[product.ID]; !ok {
 			continue
@@ -296,7 +301,6 @@ func orderMintModelIDs(
 	}
 
 	remaining := make([]string, 0)
-
 	for modelID, count := range counts {
 		if count <= 0 {
 			continue

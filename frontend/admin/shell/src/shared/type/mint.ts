@@ -40,9 +40,12 @@ export type MintDetailModel = {
 
 export type MintDetail = {
   id: string;
+  companyId: string;
   companyName: string;
+  tokenBlueprintId: string;
   tokenBrandName: string;
   tokenName: string;
+  productBlueprintId: string;
   productBrandName: string;
   productName: string;
   models: MintDetailModel[];

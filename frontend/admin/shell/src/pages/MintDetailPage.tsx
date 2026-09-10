@@ -104,8 +104,6 @@ export default function MintDetailPage() {
 
     return (
       <section className="ui-detail-section">
-        <h2 className="ui-detail-section__title">モデル</h2>
-
         <div className="mint-detail-page__models">
           {detail.models.map((model) => (
             <article className="mint-detail-page__model" key={model.modelId}>
@@ -172,13 +170,37 @@ export default function MintDetailPage() {
                 <dd>{detail.tokenBrandName || "-"}</dd>
 
                 <dt>トークン名</dt>
-                <dd>{detail.tokenName || "-"}</dd>
+                <dd>
+                  <button
+                    type="button"
+                    className="mint-detail-page__detail-link"
+                    onClick={() =>
+                      navigate(
+                        `/contracts/${encodeURIComponent(detail.companyId)}/token-blueprints/${encodeURIComponent(detail.tokenBlueprintId)}`,
+                      )
+                    }
+                  >
+                    {detail.tokenName || "-"}
+                  </button>
+                </dd>
 
                 <dt>商品ブランド名</dt>
                 <dd>{detail.productBrandName || "-"}</dd>
 
                 <dt>商品名</dt>
-                <dd>{detail.productName || "-"}</dd>
+                <dd>
+                  <button
+                    type="button"
+                    className="mint-detail-page__detail-link"
+                    onClick={() =>
+                      navigate(
+                        `/contracts/${encodeURIComponent(detail.companyId)}/product-blueprints/${encodeURIComponent(detail.productBlueprintId)}`,
+                      )
+                    }
+                  >
+                    {detail.productName || "-"}
+                  </button>
+                </dd>
               </dl>
             </section>
           }
