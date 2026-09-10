@@ -56,11 +56,6 @@ export default function ContractListTable({
     [lists],
   );
 
-  const assigneeOptions = useMemo(
-    () => createOptions(lists.map((list) => list.assigneeName)),
-    [lists],
-  );
-
   const columns = useMemo<TableColumn<ContractListRow>[]>(
     () => [
       {
@@ -100,13 +95,10 @@ export default function ContractListTable({
         nowrap: true,
       },
       {
-        key: "assigneeName",
-        header: "担当者",
-        render: (list) => list.assigneeName || "-",
-        filter: {
-          getValue: (list) => list.assigneeName,
-          options: assigneeOptions,
-        },
+        key: "reportCount",
+        header: "通報数",
+        render: (list) => list.reportCount,
+        sortValue: (list) => list.reportCount,
         nowrap: true,
       },
       {
@@ -130,7 +122,7 @@ export default function ContractListTable({
         nowrap: true,
       },
     ],
-    [assigneeOptions, brandOptions, productOptions, tokenOptions],
+    [brandOptions, productOptions, tokenOptions],
   );
 
   return (

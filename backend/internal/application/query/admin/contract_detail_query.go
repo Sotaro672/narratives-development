@@ -1,4 +1,5 @@
 // backend/internal/application/query/admin/contract_detail_query.go
+// backend/internal/application/query/admin/contract_detail_query.go
 package query
 
 import (
@@ -173,6 +174,7 @@ type ContractListRow struct {
 	BrandName    string `json:"brandName"`
 	AssigneeName string `json:"assigneeName"`
 	Status       string `json:"status"`
+	ReportCount  int    `json:"reportCount"`
 	CreatedAt    string `json:"createdAt"`
 	UpdatedAt    string `json:"updatedAt"`
 }
@@ -691,6 +693,14 @@ func (q *ContractDetailQuery) buildListRows(
 					)
 				}
 
+				reportCount, err := q.resolveListReportCount(
+					ctx,
+					item.ID,
+				)
+				if err != nil {
+					return nil, err
+				}
+
 				rows = append(
 					rows,
 					ContractListRow{
@@ -710,7 +720,8 @@ func (q *ContractDetailQuery) buildListRows(
 							item.AssigneeID,
 							memberNameCache,
 						),
-						Status: string(item.Status),
+						Status:      string(item.Status),
+						ReportCount: reportCount,
 						CreatedAt: formatContractDetailTime(
 							item.CreatedAt,
 						),
@@ -722,6 +733,36 @@ func (q *ContractDetailQuery) buildListRows(
 	}
 
 	return rows, nil
+}
+
+func (q *ContractDetailQuery) resolveListReportCount(
+	ctx context.Context,
+	listID string,
+) (int, error) {
+	caseID, err := reportdom.BuildCaseID(
+		reportdom.TargetTypeList,
+		listID,
+	)
+	if err != nil {
+		return 0, err
+	}
+
+	reportCase, err := q.reportCaseRepo.GetCase(ctx, caseID)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	if reportCase.TargetType != reportdom.TargetTypeList {
+		return 0, reportdom.ErrInvalidTargetType
+	}
+	if reportCase.TargetID != listID {
+		return 0, reportdom.ErrInvalidTargetID
+	}
+
+	return reportCase.ReportCount, nil
 }
 
 // ============================================================

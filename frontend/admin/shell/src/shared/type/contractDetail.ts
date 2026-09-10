@@ -12,6 +12,7 @@ export type ContractListRow = {
   brandName: string;
   assigneeName: string;
   status: string;
+  reportCount: number;
   createdAt: string;
   updatedAt: string;
 };
