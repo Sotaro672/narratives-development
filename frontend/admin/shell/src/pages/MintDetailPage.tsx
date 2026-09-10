@@ -8,62 +8,67 @@ import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 
 import "./MintDetailPage.css";
 
-function formatRgb(rgb: number | undefined): string {
-  if (rgb === undefined) return "-";
-  return `#${rgb.toString(16).padStart(6, "0").toUpperCase()}`;
+function rgbToCssColor(rgb: number): string {
+  return `#${rgb.toString(16).padStart(6, "0").slice(-6)}`;
 }
 
 function renderModelMetadata(model: MintDetailModel) {
   const measurements = Object.entries(model.measurements ?? {});
 
   return (
-    <dl className="ui-detail-definition-list mint-detail-page__model-definition-list">
-      <dt>Model ID</dt>
-      <dd>{model.modelId || "-"}</dd>
+    <dl className="mint-detail-page__model-definition-list">
 
-      <dt>種別</dt>
-      <dd>{model.kind || "-"}</dd>
-
-      <dt>モデル番号</dt>
-      <dd>{model.modelNumber || "-"}</dd>
+      <div className="mint-detail-page__definition-row">
+        <dt>モデル番号</dt>
+        <dd>{model.modelNumber || "-"}</dd>
+      </div>
 
       {model.size ? (
-        <>
+        <div className="mint-detail-page__definition-row">
           <dt>サイズ</dt>
           <dd>{model.size}</dd>
-        </>
+        </div>
       ) : null}
 
       {model.colorName ? (
-        <>
+        <div className="mint-detail-page__definition-row">
           <dt>カラー</dt>
-          <dd>{model.colorName}</dd>
-        </>
-      ) : null}
-
-      {model.rgb !== undefined ? (
-        <>
-          <dt>RGB</dt>
-          <dd>{formatRgb(model.rgb)}</dd>
-        </>
+          <dd className="mint-detail-page__color-value">
+            <span>{model.colorName}</span>
+            {model.rgb !== undefined ? (
+              <span
+                className="mint-detail-page__color-chip"
+                style={{ backgroundColor: rgbToCssColor(model.rgb) }}
+                aria-label={`${model.colorName}の色`}
+                title={rgbToCssColor(model.rgb)}
+              />
+            ) : null}
+          </dd>
+        </div>
       ) : null}
 
       {model.volume !== undefined ? (
-        <>
+        <div className="mint-detail-page__definition-row">
           <dt>容量</dt>
           <dd>
             {model.volume.toLocaleString()}
             {model.volumeUnit || ""}
           </dd>
-        </>
+        </div>
       ) : null}
 
-      {measurements.map(([key, value]) => (
-        <div className="mint-detail-page__measurement" key={key}>
-          <dt>{key}</dt>
-          <dd>{value.toLocaleString()}</dd>
+      {measurements.length > 0 ? (
+        <div className="mint-detail-page__definition-row">
+          <dt>Measurements</dt>
+          <dd className="mint-detail-page__measurements">
+            {measurements.map(([key, value]) => (
+              <span key={key}>
+                {key}: {value.toLocaleString()}
+              </span>
+            ))}
+          </dd>
         </div>
-      ))}
+      ) : null}
     </dl>
   );
 }
@@ -106,18 +111,15 @@ export default function MintDetailPage() {
     return (
       <section className="ui-detail-section">
         <h2 className="ui-detail-section__title">モデル</h2>
+
         <div className="mint-detail-page__models">
           {detail.models.map((model) => (
             <article className="mint-detail-page__model" key={model.modelId}>
               <div className="mint-detail-page__model-header">
-                <div>
-                  <h3 className="mint-detail-page__model-title">
-                    {model.modelNumber || model.modelId}
-                  </h3>
-                  {model.kind ? (
-                    <p className="mint-detail-page__model-kind">{model.kind}</p>
-                  ) : null}
-                </div>
+                <h3 className="mint-detail-page__model-title">
+                  {model.modelNumber || model.modelId}
+                </h3>
+
                 <div className="mint-detail-page__product-count">
                   <span className="mint-detail-page__product-count-value">
                     {model.productCount.toLocaleString()}
@@ -138,7 +140,6 @@ export default function MintDetailPage() {
     <Page>
       <PageHeader
         title={detail?.tokenName || "Mint詳細"}
-        meta={mintId || undefined}
         leading={
           <button
             type="button"
