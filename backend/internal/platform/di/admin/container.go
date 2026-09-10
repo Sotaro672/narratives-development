@@ -108,6 +108,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	mintListQuery := adminquery.NewMintListQuery(
 		mintRepo,
 		mintNameResolver,
+		memberRepo,
 	)
 
 	newsRepo := fsrepo.NewNewsRepositoryFS(infra.Firestore)

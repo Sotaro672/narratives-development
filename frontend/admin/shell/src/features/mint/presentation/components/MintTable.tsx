@@ -29,13 +29,6 @@ export default function MintTable({ mints }: MintTableProps) {
   const columns = useMemo<TableColumn<Mint>[]>(
     () => [
       {
-        key: "createdAt",
-        header: "作成日時",
-        render: (mint) => formatDateTime(mint.createdAt),
-        sortValue: (mint) => new Date(mint.createdAt).getTime(),
-        nowrap: true,
-      },
-      {
         key: "status",
         header: "ステータス",
         render: (mint) => mint.status,
@@ -77,11 +70,12 @@ export default function MintTable({ mints }: MintTableProps) {
         nowrap: true,
       },
       {
-        key: "requestedBy",
+        key: "requestedByName",
         header: "申請者",
-        render: (mint) => mint.requestedBy || "-",
+        render: (mint) => mint.requestedByName || "-",
+        sortValue: (mint) => mint.requestedByName || "",
         filter: {
-          getValue: (mint) => mint.requestedBy || "",
+          getValue: (mint) => mint.requestedByName || "",
           placeholder: "申請者で絞り込み",
         },
         minWidth: "180px",
@@ -110,12 +104,11 @@ export default function MintTable({ mints }: MintTableProps) {
       rows={mints}
       getRowKey={(mint) =>
         [
-          mint.createdAt,
           mint.status,
           mint.brandName,
           mint.tokenBlueprintName,
           mint.productCount,
-          mint.requestedBy ?? "",
+          mint.requestedByName ?? "",
           mint.mintedAt ?? "",
           mint.scheduledBurnDate ?? "",
         ].join(":")

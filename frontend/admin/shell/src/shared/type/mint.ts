@@ -14,8 +14,7 @@ export type Mint = {
   tokenBlueprintName: string;
   productCount: number;
   status: MintStatus;
-  createdAt: string;
-  requestedBy?: string;
+  requestedByName?: string;
   mintedAt?: string;
   scheduledBurnDate?: string;
 };
