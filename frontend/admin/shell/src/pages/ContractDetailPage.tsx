@@ -7,7 +7,7 @@ import ContractListTable from "../features/company/presentation/components/Contr
 import ContractProductBlueprintTable from "../features/company/presentation/components/ContractProductBlueprintTable";
 import ContractTokenBlueprintTable from "../features/company/presentation/components/ContractTokenBlueprintTable";
 import { useContractDetail } from "../features/company/presentation/hooks/useContractDetail";
-import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+import Page, { PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./ContractDetailPage.css";
@@ -206,25 +206,25 @@ export default function ContractDetailPage() {
       />
 
       {company ? (
-        <DetailPageBody
-          main={renderMain()}
-          aside={
-            <section className="ui-detail-section">
-              <h2 className="ui-detail-section__title">企業情報</h2>
-              <dl className="ui-detail-definition-list">
-                <dt>代表者</dt>
-                <dd>{company.representativeName || "-"}</dd>
-                <dt>登録日時</dt>
-                <dd>{formatDateTime(company.createdAt)}</dd>
-                <dt>最終更新日</dt>
-                <dd>{formatDateTime(company.updatedAt)}</dd>
-              </dl>
-            </section>
-          }
-        />
-      ) : (
-        renderMain()
-      )}
+        <section className="contract-detail__company-info">
+          <dl className="contract-detail__company-details">
+            <div>
+              <dt>代表者</dt>
+              <dd>{company.representativeName || "-"}</dd>
+            </div>
+            <div>
+              <dt>登録日時</dt>
+              <dd>{formatDateTime(company.createdAt)}</dd>
+            </div>
+            <div>
+              <dt>最終更新日</dt>
+              <dd>{formatDateTime(company.updatedAt)}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
+
+      {renderMain()}
     </Page>
   );
 }
