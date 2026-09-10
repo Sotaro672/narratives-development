@@ -3,7 +3,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAvatars } from "../features/avatar/presentation/hooks/useAvatars";
-import Page, { PageHeader } from "../shared/ui/Page/Page";
+import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./AvatarDetailPage.css";
@@ -15,7 +15,7 @@ export default function AvatarDetailPage() {
 
   const avatar = avatars.find((item) => item.id === avatarId) ?? null;
 
-  const renderMain = () => {
+  const renderAside = () => {
     if (loading) {
       return <p>アバター詳細を取得しています...</p>;
     }
@@ -97,7 +97,7 @@ export default function AvatarDetailPage() {
         }
       />
 
-      {renderMain()}
+      <DetailPageBody main={null} aside={renderAside()} />
     </Page>
   );
 }
