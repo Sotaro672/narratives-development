@@ -3,8 +3,8 @@
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAvatarResales } from "../features/avatar/presentation/hooks/useAvatarResales";
-import type { AvatarResale } from "../shared/type/avatar";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
 import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./ResalePage.css";
@@ -15,20 +15,17 @@ const STATUS_LABELS: Record<string, string> = {
   sold: "売却済み",
 };
 
-function getResaleTitle(resale: AvatarResale | null): string {
-  if (!resale) {
-    return "Resale詳細";
+function getStatusTone(status: string): TabTone {
+  switch (status) {
+    case "listing":
+      return "success";
+    case "suspended":
+      return "danger";
+    case "sold":
+      return "neutral";
+    default:
+      return "neutral";
   }
-
-  if (resale.productName) {
-    return `${resale.productName}/再出品`;
-  }
-
-  if (resale.tokenName) {
-    return `${resale.tokenName}/再出品`;
-  }
-
-  return "再出品";
 }
 
 export default function ResalePage() {
@@ -40,7 +37,6 @@ export default function ResalePage() {
 
   const { resales, loading, error, reload } = useAvatarResales(avatarId);
   const resale = resales.find((item) => item.id === resaleId) ?? null;
-  const resaleTitle = getResaleTitle(resale);
 
   const renderAside = () => {
     if (loading) {
@@ -75,12 +71,12 @@ export default function ResalePage() {
             <dd>{resale.tokenName || "-"}</dd>
           </div>
           <div>
-            <dt>ステータス</dt>
-            <dd>{STATUS_LABELS[resale.status] ?? resale.status}</dd>
-          </div>
-          <div>
             <dt>価格</dt>
             <dd>{resale.price.toLocaleString("ja-JP")}円</dd>
+          </div>
+          <div>
+            <dt>商品の状態</dt>
+            <dd>{resale.condition || "-"}</dd>
           </div>
           <div>
             <dt>通報数</dt>
@@ -102,7 +98,19 @@ export default function ResalePage() {
   return (
     <Page>
       <PageHeader
-        title={resaleTitle}
+        title={resale?.productName || "Resale詳細"}
+        meta={
+          resale?.status ? (
+            <Tab
+              tone={getStatusTone(resale.status)}
+              aria-label={`Resale状態 ${
+                STATUS_LABELS[resale.status] ?? resale.status
+              }`}
+            >
+              {STATUS_LABELS[resale.status] ?? resale.status}
+            </Tab>
+          ) : undefined
+        }
         leading={
           <button
             type="button"

@@ -7,6 +7,7 @@ import { useNews } from "../features/news/presentation/hooks/useNews";
 import type { News } from "../shared/type/news";
 import Button from "../shared/ui/Button/Button";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
+import Pagination from "../shared/ui/Pagination/Pagination";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 import Table, { type TableColumn } from "../shared/ui/Table/Table";
 import { formatDateTime } from "../shared/util/dateFormat";
@@ -31,8 +32,6 @@ export default function NewsPage() {
     page,
     totalCount,
     totalPages,
-    hasPreviousPage,
-    hasNextPage,
     setPage,
     reload,
   } = useNews();
@@ -126,31 +125,13 @@ export default function NewsPage() {
               filteredEmptyMessage="条件に一致する通知はありません。"
             />
 
-            {totalPages > 1 ? (
-              <nav className="news-page__pagination" aria-label="配信済み通知のページ送り">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!hasPreviousPage || loading}
-                  onClick={() => setPage(page - 1)}
-                >
-                  前へ
-                </Button>
-
-                <span className="news-page__page-label">
-                  {page} / {totalPages}
-                </span>
-
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  disabled={!hasNextPage || loading}
-                  onClick={() => setPage(page + 1)}
-                >
-                  次へ
-                </Button>
-              </nav>
-            ) : null}
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+              disabled={loading}
+              ariaLabel="配信済み通知のページ送り"
+            />
           </>
         ) : null}
       </section>

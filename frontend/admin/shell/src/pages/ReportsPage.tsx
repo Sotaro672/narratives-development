@@ -15,6 +15,7 @@ import type {
   ReportTargetType,
 } from "../shared/type/report";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
+import Pagination from "../shared/ui/Pagination/Pagination";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 import Table, { type TableColumn } from "../shared/ui/Table/Table";
 import { formatDateTime } from "../shared/util/dateFormat";
@@ -43,8 +44,6 @@ export default function ReportsPage() {
     page,
     totalCount,
     totalPages,
-    hasPreviousPage,
-    hasNextPage,
     setStatus,
     setTargetType,
     setPage,
@@ -144,7 +143,6 @@ export default function ReportsPage() {
       case "status":
         setStatus(value ? (value as ReportCaseStatus) : undefined);
         break;
-
       case "targetType":
         setTargetType(value ? (value as ReportTargetType) : undefined);
         break;
@@ -182,10 +180,7 @@ export default function ReportsPage() {
       {!error && (items.length > 0 || !loading) ? (
         <>
           {loading ? (
-            <span
-              className="reports-page__updating"
-              aria-live="polite"
-            >
+            <span className="reports-page__updating" aria-live="polite">
               更新中...
             </span>
           ) : null}
@@ -208,34 +203,13 @@ export default function ReportsPage() {
             onRowClick={handleRowClick}
           />
 
-          {totalPages > 1 ? (
-            <nav
-              className="reports-page__pagination"
-              aria-label="通報一覧のページ送り"
-            >
-              <button
-                type="button"
-                className="reports-page__pagination-button"
-                disabled={!hasPreviousPage || loading}
-                onClick={() => setPage(page - 1)}
-              >
-                前へ
-              </button>
-
-              <span className="reports-page__pagination-label">
-                {page} / {totalPages}
-              </span>
-
-              <button
-                type="button"
-                className="reports-page__pagination-button"
-                disabled={!hasNextPage || loading}
-                onClick={() => setPage(page + 1)}
-              >
-                次へ
-              </button>
-            </nav>
-          ) : null}
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            disabled={loading}
+            ariaLabel="通報一覧のページ送り"
+          />
         </>
       ) : null}
     </Page>

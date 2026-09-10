@@ -39,6 +39,7 @@ type resaleResponse struct {
 	TokenName   string  `json:"tokenName"`
 	Status      string  `json:"status"`
 	Price       int     `json:"price"`
+	Condition   string  `json:"condition"`
 	ReportCount int     `json:"reportCount"`
 	CreatedAt   string  `json:"createdAt"`
 	UpdatedAt   *string `json:"updatedAt,omitempty"`
@@ -132,6 +133,7 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 			TokenName:   tokenName,
 			Status:      string(resale.Status),
 			Price:       resale.Price,
+			Condition:   string(resale.Condition),
 			ReportCount: reportCount,
 			CreatedAt:   resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:   updatedAt,

@@ -1,0 +1,18 @@
+/* frontend/admin/shell/src/shared/ui/Pagination/Pagination.css */
+
+.ui-pagination {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.ui-pagination__label {
+  min-width: 72px;
+  color: #525252;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
