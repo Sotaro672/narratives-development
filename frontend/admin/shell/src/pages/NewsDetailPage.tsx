@@ -3,9 +3,9 @@
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import type { News } from "../shared/type/news";
+import MediaGallery from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
-import { formatFileSize } from "../shared/util/fileSizeFormat";
 
 import "./NewsDetailPage.css";
 
@@ -25,7 +25,7 @@ export default function NewsDetailPage() {
   return (
     <Page>
       <PageHeader
-        title="通知詳細"
+        title={news?.title || "通知詳細"}
         meta={news ? formatDateTime(news.publishedAt) : undefined}
         leading={
           <button type="button" className="ui-page-header__back" aria-label="戻る" onClick={() => navigate("/news")}>
@@ -45,37 +45,22 @@ export default function NewsDetailPage() {
             <div className="news-detail-page__main">
               <section className="news-detail-page__section">
                 <h2 className="news-detail-page__section-title">通知内容</h2>
-
-                <dl className="news-detail-page__fields">
-                  <div className="news-detail-page__field">
-                    <dt className="news-detail-page__field-label">タイトル</dt>
-                    <dd className="news-detail-page__field-value news-detail-page__title">{news.title}</dd>
-                  </div>
-
-                  <div className="news-detail-page__field">
-                    <dt className="news-detail-page__field-label">本文</dt>
-                    <dd className="news-detail-page__field-value news-detail-page__body-text">{news.body}</dd>
-                  </div>
-                </dl>
+                <div className="news-detail-page__body-text">{news.body}</div>
               </section>
 
               {news.image ? (
                 <section className="news-detail-page__section">
                   <h2 className="news-detail-page__section-title">添付画像</h2>
-
-                  <a
-                    className="news-detail-page__image-link"
-                    href={news.image.fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label={`${news.image.fileName || "添付画像"}を開く`}
-                  >
-                    <img
-                      className="news-detail-page__image"
-                      src={news.image.fileUrl}
-                      alt={news.image.alt || news.title}
-                    />
-                  </a>
+                  <MediaGallery
+                    items={[
+                      {
+                        id: news.image.objectPath || news.id,
+                        url: news.image.fileUrl,
+                        fileName: news.image.fileName,
+                      },
+                    ]}
+                    altFallback={news.image.alt || news.title}
+                  />
                 </section>
               ) : null}
             </div>
@@ -84,7 +69,6 @@ export default function NewsDetailPage() {
             <div className="news-detail-page__aside">
               <section className="news-detail-page__section">
                 <h2 className="news-detail-page__section-title">通知情報</h2>
-
                 <dl className="news-detail-page__fields news-detail-page__fields--compact">
                   <div className="news-detail-page__field">
                     <dt className="news-detail-page__field-label">配信日時</dt>
@@ -102,24 +86,6 @@ export default function NewsDetailPage() {
                   </div>
                 </dl>
               </section>
-
-              {news.image ? (
-                <section className="news-detail-page__section">
-                  <h2 className="news-detail-page__section-title">画像情報</h2>
-
-                  <dl className="news-detail-page__fields news-detail-page__fields--compact">
-                    <div className="news-detail-page__field">
-                      <dt className="news-detail-page__field-label">ファイル名</dt>
-                      <dd className="news-detail-page__field-value">{news.image.fileName || "-"}</dd>
-                    </div>
-
-                    <div className="news-detail-page__field">
-                      <dt className="news-detail-page__field-label">ファイルサイズ</dt>
-                      <dd className="news-detail-page__field-value">{formatFileSize(news.image.fileSize)}</dd>
-                    </div>
-                  </dl>
-                </section>
-              ) : null}
             </div>
           }
         />
