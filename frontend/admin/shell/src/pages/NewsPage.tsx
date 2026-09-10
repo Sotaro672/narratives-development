@@ -91,6 +91,7 @@ export default function NewsPage() {
     <Page>
       <PageHeader
         title="通知"
+        meta={!error ? `${totalCount}件` : undefined}
         actions={
           <>
             <Button type="button" variant="primary" onClick={() => navigate("/news/create")}>
@@ -108,10 +109,6 @@ export default function NewsPage() {
       />
 
       <section className="news-page__history-section">
-        <div className="news-page__section-header news-page__section-header--history">
-          {!error && !loading ? <span className="news-page__count">{totalCount}件</span> : null}
-        </div>
-
         {loading && items.length === 0 ? (
           <p className="news-page__state">配信済み通知を読み込んでいます。</p>
         ) : null}

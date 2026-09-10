@@ -158,6 +158,7 @@ export default function ReportsPage() {
     <Page>
       <PageHeader
         title="通報"
+        meta={!error ? `${totalCount}件` : undefined}
         actions={
           <RefreshButton
             onClick={reload}
@@ -180,18 +181,14 @@ export default function ReportsPage() {
 
       {!error && (items.length > 0 || !loading) ? (
         <>
-          <div className="reports-page__summary">
-            <p className="reports-page__count">{totalCount}件</p>
-
-            {loading ? (
-              <span
-                className="reports-page__updating"
-                aria-live="polite"
-              >
-                更新中...
-              </span>
-            ) : null}
-          </div>
+          {loading ? (
+            <span
+              className="reports-page__updating"
+              aria-live="polite"
+            >
+              更新中...
+            </span>
+          ) : null}
 
           <Table
             columns={columns}
