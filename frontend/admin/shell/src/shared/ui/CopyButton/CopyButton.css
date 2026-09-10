@@ -1,0 +1,42 @@
+/* frontend/admin/shell/src/shared/ui/CopyButton/CopyButton.css */
+
+.ui-copy-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.ui-copy-control__feedback {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  z-index: 50;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #171717;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, 4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.ui-copy-control__feedback::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  border: 5px solid transparent;
+  border-top-color: #171717;
+  transform: translateX(-50%);
+}
+
+.ui-copy-control__feedback--visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
