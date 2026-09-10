@@ -24,3 +24,26 @@ export type MintListResponse = {
   items: Mint[];
   totalCount: number;
 };
+
+export type MintDetailModel = {
+  modelId: string;
+  kind: string;
+  modelNumber: string;
+  size?: string;
+  colorName?: string;
+  rgb?: number;
+  measurements?: Record<string, number>;
+  volume?: number;
+  volumeUnit?: string;
+  productCount: number;
+};
+
+export type MintDetail = {
+  id: string;
+  companyName: string;
+  tokenBrandName: string;
+  tokenName: string;
+  productBrandName: string;
+  productName: string;
+  models: MintDetailModel[];
+};

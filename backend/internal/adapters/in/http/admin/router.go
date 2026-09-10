@@ -57,7 +57,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	if deps.Mints != nil {
-		mux.Handle("/admin/mints", withAuth(deps.Mints))
+		mintsHandler := withAuth(deps.Mints)
+		mux.Handle("/admin/mints", mintsHandler)
+		mux.Handle("/admin/mints/", mintsHandler)
 	}
 
 	if deps.News != nil {

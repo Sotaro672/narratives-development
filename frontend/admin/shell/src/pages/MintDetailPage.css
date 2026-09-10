@@ -1,0 +1,81 @@
+/* frontend/admin/shell/src/pages/MintDetailPage.css */
+
+.mint-detail-page__models {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.mint-detail-page__model {
+  padding: 16px;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.mint-detail-page__model-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #eeeeee;
+}
+
+.mint-detail-page__model-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: #171717;
+}
+
+.mint-detail-page__model-kind {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #737373;
+}
+
+.mint-detail-page__product-count {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.mint-detail-page__product-count-value {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+  color: #171717;
+}
+
+.mint-detail-page__product-count-unit {
+  font-size: 13px;
+  color: #737373;
+}
+
+.mint-detail-page__model-definition-list {
+  margin: 0;
+}
+
+.mint-detail-page__measurement {
+  display: contents;
+}
+
+@media (max-width: 720px) {
+  .mint-detail-page__model {
+    padding: 14px;
+  }
+
+  .mint-detail-page__model-header {
+    gap: 12px;
+  }
+
+  .mint-detail-page__product-count-value {
+    font-size: 18px;
+  }
+}

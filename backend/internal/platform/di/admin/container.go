@@ -48,6 +48,7 @@ type Container struct {
 	contractProductBlueprintReviewQuery *adminquery.ContractProductBlueprintReviewQuery
 	gasBalanceQuery                     *adminquery.GasBalanceQuery
 	mintListQuery                       *adminquery.MintListQuery
+	mintDetailQuery                     *adminquery.MintDetailQuery
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {

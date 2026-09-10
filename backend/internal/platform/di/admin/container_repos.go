@@ -17,6 +17,8 @@ type repos struct {
 	productBlueprintReviewRepo     *fsrepo.ProductBlueprintReviewRepositoryFS
 	tokenBlueprintRepo             *fsrepo.TokenBlueprintRepositoryFS
 	tokenBlueprintReviewRepo       *fsrepo.TokenBlueprintReviewRepositoryFS
+	productionRepo                 *fsrepo.ProductionRepositoryFS
+	productRepo                    *fsrepo.ProductRepositoryFS
 	listRepo                       *fsrepo.ListRepositoryFS
 	listImageRepo                  *fsrepo.ListImageRepositoryFS
 	inventoryRepo                  *fsrepo.InventoryRepositoryFS
@@ -46,6 +48,8 @@ func buildRepos(fsClient *firestore.Client) *repos {
 		productBlueprintReviewRepo:     fsrepo.NewProductBlueprintReviewRepositoryFS(fsClient),
 		tokenBlueprintRepo:             fsrepo.NewTokenBlueprintRepositoryFS(fsClient),
 		tokenBlueprintReviewRepo:       fsrepo.NewTokenBlueprintReviewRepositoryFS(fsClient),
+		productionRepo:                 fsrepo.NewProductionRepositoryFS(fsClient),
+		productRepo:                    fsrepo.NewProductRepositoryFS(fsClient),
 		listRepo:                       fsrepo.NewListRepositoryFS(fsClient),
 		listImageRepo:                  fsrepo.NewListImageRepositoryFS(fsClient),
 		inventoryRepo:                  fsrepo.NewInventoryRepositoryFS(fsClient),

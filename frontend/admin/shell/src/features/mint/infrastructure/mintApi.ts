@@ -1,7 +1,8 @@
 // frontend/admin/shell/src/features/mint/infrastructure/mintApi.ts
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
-import type { Mint, MintListResponse } from "../../../shared/type/mint";
+
+import type { Mint, MintDetail, MintListResponse } from "../../../shared/type/mint";
 
 const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
 
@@ -25,7 +26,7 @@ async function requireOk(response: Response): Promise<void> {
     // Response body may not be JSON.
   }
 
-  throw new Error(`Failed to load mints. status=${response.status}${detail}`);
+  throw new Error(`Failed to load mint data. status=${response.status}${detail}`);
 }
 
 export async function listMints(): Promise<Mint[]> {
@@ -44,4 +45,24 @@ export async function listMints(): Promise<Mint[]> {
 
   const body = (await response.json()) as MintListResponse;
   return Array.isArray(body.items) ? body.items : [];
+}
+
+export async function getMintDetail(mintId: string): Promise<MintDetail> {
+  const backendBaseUrl = requireBackendBaseUrl();
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${backendBaseUrl}/admin/mints/${encodeURIComponent(mintId)}`,
+    {
+      method: "GET",
+      headers: {
+        ...authHeaders,
+        Accept: "application/json",
+      },
+    },
+  );
+
+  await requireOk(response);
+
+  return (await response.json()) as MintDetail;
 }

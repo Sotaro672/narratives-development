@@ -22,6 +22,7 @@ type queries struct {
 	contractProductBlueprintReviewQuery *adminquery.ContractProductBlueprintReviewQuery
 	gasBalanceQuery                     *adminquery.GasBalanceQuery
 	mintListQuery                       *adminquery.MintListQuery
+	mintDetailQuery                     *adminquery.MintDetailQuery
 }
 
 func buildQueries(
@@ -155,6 +156,20 @@ func buildQueries(
 		return nil, errors.New("di.admin: mint list query is nil")
 	}
 
+	mintDetailQuery := adminquery.NewMintDetailQuery(
+		r.mintRepo,
+		r.productionRepo,
+		r.productRepo,
+		r.productBlueprintRepo,
+		r.tokenBlueprintRepo,
+		r.companyRepo,
+		r.brandRepo,
+		res.nameResolver,
+	)
+	if mintDetailQuery == nil {
+		return nil, errors.New("di.admin: mint detail query is nil")
+	}
+
 	solanaClient, err := solanainfra.NewMintClient(ctx)
 	if err != nil {
 		return nil, err
@@ -193,6 +208,7 @@ func buildQueries(
 		contractProductBlueprintReviewQuery: contractProductBlueprintReviewQuery,
 		gasBalanceQuery:                     gasBalanceQuery,
 		mintListQuery:                       mintListQuery,
+		mintDetailQuery:                     mintDetailQuery,
 	}, nil
 }
 
@@ -211,4 +227,5 @@ func (q *queries) applyToContainer(c *Container) {
 	c.contractProductBlueprintReviewQuery = q.contractProductBlueprintReviewQuery
 	c.gasBalanceQuery = q.gasBalanceQuery
 	c.mintListQuery = q.mintListQuery
+	c.mintDetailQuery = q.mintDetailQuery
 }
