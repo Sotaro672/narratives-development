@@ -10,10 +10,12 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type AvatarTableProps = {
   avatars: Avatar[];
+  onAvatarClick?: (avatar: Avatar) => void;
 };
 
 export default function AvatarTable({
   avatars,
+  onAvatarClick,
 }: AvatarTableProps) {
   const columns = useMemo<TableColumn<Avatar>[]>(
     () => [
@@ -62,6 +64,7 @@ export default function AvatarTable({
       getRowKey={(avatar) => avatar.id}
       emptyMessage="アバターはありません。"
       filteredEmptyMessage="条件に一致するアバターはありません。"
+      onRowClick={onAvatarClick}
     />
   );
 }

@@ -1,17 +1,15 @@
 // frontend/admin/shell/src/pages/AvatarPage.tsx
 
+import { useNavigate } from "react-router-dom";
+
 import AvatarTable from "../features/avatar/presentation/components/AvatarTable";
 import { useAvatars } from "../features/avatar/presentation/hooks/useAvatars";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
 import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 
 export default function AvatarPage() {
-  const {
-    avatars,
-    loading,
-    error,
-    reload,
-  } = useAvatars();
+  const navigate = useNavigate();
+  const { avatars, loading, error, reload } = useAvatars();
 
   return (
     <Page>
@@ -27,9 +25,7 @@ export default function AvatarPage() {
         }
       />
 
-      {loading && (
-        <p>アバター一覧を読み込んでいます。</p>
-      )}
+      {loading && <p>アバター一覧を読み込んでいます。</p>}
 
       {!loading && error && (
         <p role="alert">
@@ -38,7 +34,12 @@ export default function AvatarPage() {
       )}
 
       {!loading && !error && (
-        <AvatarTable avatars={avatars} />
+        <AvatarTable
+          avatars={avatars}
+          onAvatarClick={(avatar) =>
+            navigate(`/avatars/${encodeURIComponent(avatar.id)}`)
+          }
+        />
       )}
     </Page>
   );
