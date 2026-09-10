@@ -23,6 +23,7 @@ export type AvatarResale = {
   tokenName: string;
   status: string;
   price: number;
+  reportCount: number;
   createdAt: string;
   updatedAt?: string | null;
 };

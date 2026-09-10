@@ -55,32 +55,26 @@ export default function AvatarResaleTable({
         nowrap: true,
       },
       {
-        key: "price",
-        header: "価格",
-        render: (resale) =>
-          `${resale.price.toLocaleString("ja-JP")}円`,
-        sortValue: (resale) => resale.price,
+        key: "reportCount",
+        header: "通報数",
+        render: (resale) => resale.reportCount,
+        sortValue: (resale) => resale.reportCount,
         nowrap: true,
       },
       {
         key: "createdAt",
         header: "登録日時",
         render: (resale) => formatDateTime(resale.createdAt),
-        sortValue: (resale) =>
-          new Date(resale.createdAt).getTime(),
+        sortValue: (resale) => new Date(resale.createdAt).getTime(),
         nowrap: true,
       },
       {
         key: "updatedAt",
         header: "最終更新日時",
         render: (resale) =>
-          resale.updatedAt
-            ? formatDateTime(resale.updatedAt)
-            : "-",
+          resale.updatedAt ? formatDateTime(resale.updatedAt) : "-",
         sortValue: (resale) =>
-          resale.updatedAt
-            ? new Date(resale.updatedAt).getTime()
-            : 0,
+          resale.updatedAt ? new Date(resale.updatedAt).getTime() : 0,
         nowrap: true,
       },
     ],
