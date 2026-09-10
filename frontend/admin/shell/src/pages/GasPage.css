@@ -28,3 +28,27 @@
   line-height: 24px;
   overflow-wrap: anywhere;
 }
+
+.gas-page__mints {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.gas-page__mints-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gas-page__mints-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 24px;
+}
+
+.gas-page__mints-header span {
+  color: #737373;
+  font-size: 12px;
+}

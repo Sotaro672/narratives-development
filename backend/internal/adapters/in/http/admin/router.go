@@ -15,6 +15,7 @@ type RouterDeps struct {
 	Contacts  http.Handler
 	Companies http.Handler
 	Gas       http.Handler
+	Mints     http.Handler
 	News      http.Handler
 	Reports   http.Handler
 }
@@ -53,6 +54,10 @@ func NewRouter(deps RouterDeps) http.Handler {
 
 	if deps.Gas != nil {
 		mux.Handle("/admin/gas", withAuth(deps.Gas))
+	}
+
+	if deps.Mints != nil {
+		mux.Handle("/admin/mints", withAuth(deps.Mints))
 	}
 
 	if deps.News != nil {

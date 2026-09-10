@@ -587,6 +587,36 @@ func (r *MintRepositoryFS) GetByID(ctx context.Context, id string) (mintdom.Mint
 	return decodeMintFromDoc(doc)
 }
 
+// ListAll returns all parent Mint documents ordered by createdAt descending.
+func (r *MintRepositoryFS) ListAll(ctx context.Context) ([]mintdom.Mint, error) {
+	if r == nil || r.Client == nil {
+		return nil, errors.New("firestore client is nil")
+	}
+
+	iter := r.col().OrderBy("createdAt", firestore.Desc).Documents(ctx)
+	defer iter.Stop()
+
+	items := make([]mintdom.Mint, 0)
+	for {
+		doc, err := iter.Next()
+		if errors.Is(err, iterator.Done) {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("list mints: %w", err)
+		}
+
+		item, err := decodeMintFromDoc(doc)
+		if err != nil {
+			return nil, fmt.Errorf("decode mint id=%s: %w", doc.Ref.ID, err)
+		}
+
+		items = append(items, item)
+	}
+
+	return items, nil
+}
+
 // ============================================================
 // MintProductTaskRepository implementation
 // ============================================================

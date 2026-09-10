@@ -47,6 +47,7 @@ type Container struct {
 	contractTokenBlueprintReviewQuery   *adminquery.ContractTokenBlueprintReviewQuery
 	contractProductBlueprintReviewQuery *adminquery.ContractProductBlueprintReviewQuery
 	gasBalanceQuery                     *adminquery.GasBalanceQuery
+	mintListQuery                       *adminquery.MintListQuery
 }
 
 func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) {
@@ -92,6 +93,8 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	inventoryRepo := fsrepo.NewInventoryRepositoryFS(infra.Firestore)
 	modelRepo := fsrepo.NewModelRepositoryFS(infra.Firestore)
 	orderConsoleLister := fsrepo.NewOrderConsoleListerFS(infra.Firestore)
+	mintRepo := fsrepo.NewMintRepositoryFS(infra.Firestore)
+	mintListQuery := adminquery.NewMintListQuery(mintRepo)
 
 	newsRepo := fsrepo.NewNewsRepositoryFS(infra.Firestore)
 	if newsRepo == nil {
@@ -391,5 +394,6 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 		contractTokenBlueprintReviewQuery:   contractTokenBlueprintReviewQuery,
 		contractProductBlueprintReviewQuery: contractProductBlueprintReviewQuery,
 		gasBalanceQuery:                     gasBalanceQuery,
+		mintListQuery:                       mintListQuery,
 	}, nil
 }

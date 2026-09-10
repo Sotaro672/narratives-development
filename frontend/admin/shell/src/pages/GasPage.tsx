@@ -1,6 +1,10 @@
 // frontend/admin/shell/src/pages/GasPage.tsx
 
+import { useCallback } from "react";
+
 import { useGasBalance } from "../features/gas/hooks/useGasBalance";
+import { useMints } from "../features/mint/hooks/useMints";
+import MintTable from "../features/mint/presentation/components/MintTable";
 import Button from "../shared/ui/Button/Button";
 import CopyButton from "../shared/ui/CopyButton/CopyButton";
 import ExternalLinkButton from "../shared/ui/ExternalLinkButton/ExternalLinkButton";
@@ -10,7 +14,14 @@ import RefreshButton from "../shared/ui/RefreshButton/RefreshButton";
 import "./GasPage.css";
 
 export default function GasPage() {
-  const { balance, loading, error, reload } = useGasBalance();
+  const { balance, loading: gasLoading, error: gasError, reload: reloadGas } = useGasBalance();
+  const { mints, loading: mintsLoading, error: mintsError, reload: reloadMints } = useMints();
+
+  const reload = useCallback(async () => {
+    await Promise.all([reloadGas(), reloadMints()]);
+  }, [reloadGas, reloadMints]);
+
+  const loading = gasLoading || mintsLoading;
 
   return (
     <Page>
@@ -23,18 +34,18 @@ export default function GasPage() {
                 {balance.cluster}
               </Button>
             ) : null}
-            <RefreshButton onClick={reload} loading={loading} title="リフレッシュ" ariaLabel="リフレッシュ" />
+            <RefreshButton onClick={reload} loading={loading} title="リフレッシュ" ariaLabel="ガスとMint一覧をリフレッシュ" />
           </>
         }
       />
 
       <section>
-        {loading && !balance ? <p>ガス残高を取得しています...</p> : null}
+        {gasLoading && !balance ? <p>ガス残高を取得しています...</p> : null}
 
-        {error ? (
+        {gasError ? (
           <div>
             <p>ガス残高を取得できませんでした。</p>
-            <p>{error}</p>
+            <p>{gasError}</p>
           </div>
         ) : null}
 
@@ -62,6 +73,23 @@ export default function GasPage() {
             </div>
           </dl>
         ) : null}
+      </section>
+
+      <section className="gas-page__mints">
+        <div className="gas-page__mints-header">
+          <h2>Mint</h2>
+          {!mintsLoading && !mintsError ? <span>{mints.length}件</span> : null}
+        </div>
+
+        {mintsLoading && mints.length === 0 ? <p>Mint一覧を取得しています...</p> : null}
+
+        {!mintsLoading && mintsError ? (
+          <p role="alert">
+            Mint一覧を取得できませんでした。{mintsError}
+          </p>
+        ) : null}
+
+        {!mintsError && (mints.length > 0 || !mintsLoading) ? <MintTable mints={mints} /> : null}
       </section>
     </Page>
   );
