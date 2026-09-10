@@ -27,12 +27,14 @@ export default function AvatarTable({
         key: "userName",
         header: "ユーザー氏名",
         render: (avatar) => avatar.userName || "-",
+        sortValue: (avatar) => avatar.userName,
         nowrap: true,
       },
       {
         key: "reportCount",
         header: "通報数",
         render: (avatar) => avatar.reportCount,
+        sortValue: (avatar) => avatar.reportCount,
         nowrap: true,
       },
       {
