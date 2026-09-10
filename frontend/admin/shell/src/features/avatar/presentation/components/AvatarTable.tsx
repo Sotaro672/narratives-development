@@ -18,50 +18,35 @@ export default function AvatarTable({
   const columns = useMemo<TableColumn<Avatar>[]>(
     () => [
       {
-        key: "createdAt",
-        header: "登録日時",
-        render: (avatar) => formatDateTime(avatar.createdAt),
-        sortValue: (avatar) =>
-          new Date(avatar.createdAt).getTime(),
-        nowrap: true,
-      },
-      {
         key: "avatarName",
         header: "アバター名",
         render: (avatar) => avatar.avatarName || "-",
-        sortValue: (avatar) => avatar.avatarName,
-        filter: {
-          getValue: (avatar) => avatar.avatarName,
-          placeholder: "アバター名",
-        },
         nowrap: true,
       },
       {
-        key: "userId",
-        header: "ユーザーID",
-        render: (avatar) => avatar.userId || "-",
-        filter: {
-          getValue: (avatar) => avatar.userId,
-          placeholder: "ユーザーID",
-        },
+        key: "userName",
+        header: "ユーザー氏名",
+        render: (avatar) => avatar.userName || "-",
         nowrap: true,
       },
       {
-        key: "walletAddress",
-        header: "ウォレットアドレス",
-        render: (avatar) => avatar.walletAddress || "-",
-        filter: {
-          getValue: (avatar) => avatar.walletAddress ?? "",
-          placeholder: "ウォレットアドレス",
-        },
+        key: "reportCount",
+        header: "通報数",
+        render: (avatar) => avatar.reportCount,
+        nowrap: true,
+      },
+      {
+        key: "createdAt",
+        header: "登録日時",
+        render: (avatar) => formatDateTime(avatar.createdAt),
+        sortValue: (avatar) => new Date(avatar.createdAt).getTime(),
         nowrap: true,
       },
       {
         key: "updatedAt",
         header: "最終更新日時",
         render: (avatar) => formatDateTime(avatar.updatedAt),
-        sortValue: (avatar) =>
-          new Date(avatar.updatedAt).getTime(),
+        sortValue: (avatar) => new Date(avatar.updatedAt).getTime(),
         nowrap: true,
       },
     ],

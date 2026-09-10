@@ -36,7 +36,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.contractTokenBlueprintReviewQuery,
 		cont.contractProductBlueprintReviewQuery,
 	)
-	avatarHandler := adminhandler.NewAvatarHandler(cont.avatarRepo)
+	avatarHandler := adminhandler.NewAvatarHandler(
+		cont.avatarRepo,
+		cont.userRepo,
+		cont.reportRepo,
+	)
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	mintHandler := adminhandler.NewMintHandler(
 		cont.mintListQuery,

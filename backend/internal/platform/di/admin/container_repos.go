@@ -11,6 +11,7 @@ type repos struct {
 	contactRepo                    *fsrepo.ContactRepositoryFS
 	companyRepo                    *fsrepo.CompanyRepositoryFS
 	memberRepo                     *fsrepo.MemberRepositoryFS
+	userRepo                       *fsrepo.UserRepositoryFS
 	avatarRepo                     *fsrepo.AvatarRepositoryFS
 	brandRepo                      *fsrepo.BrandRepositoryFS
 	productBlueprintRepo           *fsrepo.ProductBlueprintRepositoryFS
@@ -42,6 +43,7 @@ func buildRepos(fsClient *firestore.Client) *repos {
 		contactRepo:                    fsrepo.NewContactRepositoryFS(fsClient),
 		companyRepo:                    fsrepo.NewCompanyRepositoryFS(fsClient),
 		memberRepo:                     fsrepo.NewMemberRepositoryFS(fsClient),
+		userRepo:                       fsrepo.NewUserRepositoryFS(fsClient),
 		avatarRepo:                     fsrepo.NewAvatarRepositoryFS(fsClient),
 		brandRepo:                      fsrepo.NewBrandRepositoryFS(fsClient),
 		productBlueprintRepo:           fsrepo.NewProductBlueprintRepositoryFS(fsClient),
@@ -72,11 +74,13 @@ func (r *repos) applyToContainer(c *Container) {
 
 	c.companyRepo = r.companyRepo
 	c.memberRepo = r.memberRepo
+	c.userRepo = r.userRepo
 	c.avatarRepo = r.avatarRepo
 	c.brandRepo = r.brandRepo
 	c.productBlueprintRepo = r.productBlueprintRepo
 	c.tokenBlueprintRepo = r.tokenBlueprintRepo
 	c.newsRepo = r.newsRepo
 	c.newsReadRepo = r.newsReadRepo
+	c.reportRepo = r.reportRepo
 	c.reportDecisionNotificationRepo = r.reportDecisionNotificationRepo
 }

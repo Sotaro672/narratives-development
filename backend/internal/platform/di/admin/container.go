@@ -30,12 +30,14 @@ type Container struct {
 
 	companyRepo                    *fsrepo.CompanyRepositoryFS
 	memberRepo                     *fsrepo.MemberRepositoryFS
+	userRepo                       *fsrepo.UserRepositoryFS
 	avatarRepo                     *fsrepo.AvatarRepositoryFS
 	brandRepo                      *fsrepo.BrandRepositoryFS
 	productBlueprintRepo           *fsrepo.ProductBlueprintRepositoryFS
 	tokenBlueprintRepo             *fsrepo.TokenBlueprintRepositoryFS
 	newsRepo                       *fsrepo.NewsRepositoryFS
 	newsReadRepo                   *fsrepo.NewsReadRepositoryFS
+	reportRepo                     *fsrepo.ReportRepositoryFS
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 
 	newsQuery                           *adminquery.NewsQuery
