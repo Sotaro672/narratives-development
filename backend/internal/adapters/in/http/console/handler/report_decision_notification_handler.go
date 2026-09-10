@@ -37,6 +37,7 @@ func NewReportDecisionNotificationHandler(
 // Supported:
 // - GET  /report-decision-notifications
 // - GET  /report-decision-notifications?isRead=false&page=1&perPage=20
+// - GET  /report-decision-notifications/{notificationId}
 // - POST /report-decision-notifications/{notificationId}/read
 func (h *ReportDecisionNotificationHandler) ServeHTTP(
 	w http.ResponseWriter,
@@ -51,32 +52,57 @@ func (h *ReportDecisionNotificationHandler) ServeHTTP(
 		return
 	}
 
-	notificationID, isReadPath, matched := parseReportDecisionNotificationPath(
-		r.URL.Path,
-	)
+	notificationID, route, matched :=
+		parseReportDecisionNotificationPath(r.URL.Path)
+
 	if !matched {
 		writeError(w, http.StatusNotFound, "NotFound")
 		return
 	}
 
-	if isReadPath {
+	switch route {
+	case reportDecisionNotificationRouteList:
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeError(
+				w,
+				http.StatusMethodNotAllowed,
+				"MethodNotAllowed",
+			)
+			return
+		}
+
+		h.list(w, r)
+
+	case reportDecisionNotificationRouteDetail:
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeError(
+				w,
+				http.StatusMethodNotAllowed,
+				"MethodNotAllowed",
+			)
+			return
+		}
+
+		h.detail(w, r, notificationID)
+
+	case reportDecisionNotificationRouteRead:
 		if r.Method != http.MethodPost {
 			w.Header().Set("Allow", http.MethodPost)
-			writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed")
+			writeError(
+				w,
+				http.StatusMethodNotAllowed,
+				"MethodNotAllowed",
+			)
 			return
 		}
 
 		h.markRead(w, r, notificationID)
-		return
-	}
 
-	if r.Method != http.MethodGet {
-		w.Header().Set("Allow", http.MethodGet)
-		writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed")
-		return
+	default:
+		writeError(w, http.StatusNotFound, "NotFound")
 	}
-
-	h.list(w, r)
 }
 
 // ============================================================
@@ -145,12 +171,13 @@ func (h *ReportDecisionNotificationHandler) list(
 		return
 	}
 
-	result, err := h.ReportUC.ListDecisionNotificationsForCompany(
-		r.Context(),
-		companyID,
-		isRead,
-		page,
-	)
+	result, err :=
+		h.ReportUC.ListDecisionNotificationsForCompany(
+			r.Context(),
+			companyID,
+			isRead,
+			page,
+		)
 	if err != nil {
 		writeReportDecisionNotificationError(w, err)
 		return
@@ -161,6 +188,7 @@ func (h *ReportDecisionNotificationHandler) list(
 		0,
 		len(result.Items),
 	)
+
 	for _, notification := range result.Items {
 		items = append(
 			items,
@@ -178,6 +206,52 @@ func (h *ReportDecisionNotificationHandler) list(
 			Page:       result.Page,
 			PerPage:    result.PerPage,
 		},
+	)
+}
+
+// ============================================================
+// Detail
+// ============================================================
+
+func (h *ReportDecisionNotificationHandler) detail(
+	w http.ResponseWriter,
+	r *http.Request,
+	notificationID string,
+) {
+	if notificationID == "" {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			"NotificationIDRequired",
+		)
+		return
+	}
+
+	companyID := uc.CompanyIDFromContext(r.Context())
+	if companyID == "" {
+		writeError(
+			w,
+			http.StatusForbidden,
+			"CompanyIDNotResolved",
+		)
+		return
+	}
+
+	notification, err :=
+		h.ReportUC.GetDecisionNotificationForCompany(
+			r.Context(),
+			reportdom.DecisionNotificationID(notificationID),
+			companyID,
+		)
+	if err != nil {
+		writeReportDecisionNotificationError(w, err)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		toReportDecisionNotificationResponse(notification),
 	)
 }
 
@@ -209,11 +283,12 @@ func (h *ReportDecisionNotificationHandler) markRead(
 		return
 	}
 
-	notification, err := h.ReportUC.MarkDecisionNotificationReadForCompany(
-		r.Context(),
-		reportdom.DecisionNotificationID(notificationID),
-		companyID,
-	)
+	notification, err :=
+		h.ReportUC.MarkDecisionNotificationReadForCompany(
+			r.Context(),
+			reportdom.DecisionNotificationID(notificationID),
+			companyID,
+		)
 	if err != nil {
 		writeReportDecisionNotificationError(w, err)
 		return
@@ -230,33 +305,47 @@ func (h *ReportDecisionNotificationHandler) markRead(
 // Path
 // ============================================================
 
+type reportDecisionNotificationRouteKind int
+
+const (
+	reportDecisionNotificationRouteList reportDecisionNotificationRouteKind = iota
+	reportDecisionNotificationRouteDetail
+	reportDecisionNotificationRouteRead
+)
+
 func parseReportDecisionNotificationPath(
 	path string,
 ) (
 	notificationID string,
-	isReadPath bool,
+	route reportDecisionNotificationRouteKind,
 	matched bool,
 ) {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
-		return "", false, false
+		return "", reportDecisionNotificationRouteList, false
 	}
 
 	parts := strings.Split(trimmed, "/")
 
 	if len(parts) == 1 &&
 		parts[0] == "report-decision-notifications" {
-		return "", false, true
+		return "", reportDecisionNotificationRouteList, true
+	}
+
+	if len(parts) == 2 &&
+		parts[0] == "report-decision-notifications" &&
+		parts[1] != "" {
+		return parts[1], reportDecisionNotificationRouteDetail, true
 	}
 
 	if len(parts) == 3 &&
 		parts[0] == "report-decision-notifications" &&
 		parts[1] != "" &&
 		parts[2] == "read" {
-		return parts[1], true, true
+		return parts[1], reportDecisionNotificationRouteRead, true
 	}
 
-	return "", false, false
+	return "", reportDecisionNotificationRouteList, false
 }
 
 // ============================================================

@@ -32,11 +32,10 @@ func NewNewsHandler(newsUC *uc.NewsUsecase) *NewsHandler {
 //	GET  /news
 //	GET  /news?page=1&perPage=20
 //	GET  /news/unread-count
+//	GET  /news/{newsId}
 //	POST /news/{newsId}/read
 //
 // News read state is scoped to the authenticated Console member.
-// memberId is always resolved from request context and is never accepted from
-// query parameters or request body.
 func (h *NewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h == nil || h.NewsUC == nil {
 		writeError(w, http.StatusServiceUnavailable, "NewsHandlerNotInitialized")
@@ -65,6 +64,14 @@ func (h *NewsHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.unreadCount(w, r)
+
+	case newsRouteDetail:
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", http.MethodGet)
+			writeError(w, http.StatusMethodNotAllowed, "MethodNotAllowed")
+			return
+		}
+		h.detail(w, r, newsID)
 
 	case newsRouteRead:
 		if r.Method != http.MethodPost {
@@ -149,6 +156,43 @@ func (h *NewsHandler) list(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================================
+// Detail
+// ============================================================
+
+func (h *NewsHandler) detail(
+	w http.ResponseWriter,
+	r *http.Request,
+	newsID string,
+) {
+	if newsID == "" {
+		writeError(w, http.StatusBadRequest, "NewsIDRequired")
+		return
+	}
+
+	memberID := uc.MemberIDFromContext(r.Context())
+	if memberID == "" {
+		writeError(w, http.StatusForbidden, "MemberIDNotResolved")
+		return
+	}
+
+	item, err := h.NewsUC.GetNewsForMember(
+		r.Context(),
+		newsdom.NewsID(newsID),
+		memberID,
+	)
+	if err != nil {
+		writeNewsError(w, err)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		toNewsResponse(item),
+	)
+}
+
+// ============================================================
 // Unread count
 // ============================================================
 
@@ -159,7 +203,10 @@ func (h *NewsHandler) unreadCount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := h.NewsUC.CountUnreadNewsForMember(r.Context(), memberID)
+	count, err := h.NewsUC.CountUnreadNewsForMember(
+		r.Context(),
+		memberID,
+	)
 	if err != nil {
 		writeNewsError(w, err)
 		return
@@ -176,7 +223,11 @@ func (h *NewsHandler) unreadCount(w http.ResponseWriter, r *http.Request) {
 // Mark read
 // ============================================================
 
-func (h *NewsHandler) markRead(w http.ResponseWriter, r *http.Request, newsID string) {
+func (h *NewsHandler) markRead(
+	w http.ResponseWriter,
+	r *http.Request,
+	newsID string,
+) {
 	if newsID == "" {
 		writeError(w, http.StatusBadRequest, "NewsIDRequired")
 		return
@@ -224,10 +275,13 @@ type newsRouteKind int
 const (
 	newsRouteList newsRouteKind = iota
 	newsRouteUnreadCount
+	newsRouteDetail
 	newsRouteRead
 )
 
-func parseNewsPath(path string) (newsID string, route newsRouteKind, matched bool) {
+func parseNewsPath(
+	path string,
+) (newsID string, route newsRouteKind, matched bool) {
 	trimmed := strings.Trim(path, "/")
 	if trimmed == "" {
 		return "", newsRouteList, false
@@ -239,11 +293,22 @@ func parseNewsPath(path string) (newsID string, route newsRouteKind, matched boo
 		return "", newsRouteList, true
 	}
 
-	if len(parts) == 2 && parts[0] == "news" && parts[1] == "unread-count" {
+	if len(parts) == 2 &&
+		parts[0] == "news" &&
+		parts[1] == "unread-count" {
 		return "", newsRouteUnreadCount, true
 	}
 
-	if len(parts) == 3 && parts[0] == "news" && parts[1] != "" && parts[2] == "read" {
+	if len(parts) == 2 &&
+		parts[0] == "news" &&
+		parts[1] != "" {
+		return parts[1], newsRouteDetail, true
+	}
+
+	if len(parts) == 3 &&
+		parts[0] == "news" &&
+		parts[1] != "" &&
+		parts[2] == "read" {
 		return parts[1], newsRouteRead, true
 	}
 
@@ -320,7 +385,11 @@ func writeNewsError(w http.ResponseWriter, err error) {
 	case errors.Is(err, uc.ErrNewsRepositoryNotConfigured),
 		errors.Is(err, uc.ErrNewsReadRepositoryNotConfigured),
 		errors.Is(err, uc.ErrNewsImageStorageNotConfigured):
-		writeError(w, http.StatusServiceUnavailable, "NewsServiceUnavailable")
+		writeError(
+			w,
+			http.StatusServiceUnavailable,
+			"NewsServiceUnavailable",
+		)
 
 	case errors.Is(err, newsdom.ErrNotFound),
 		errors.Is(err, newsdom.ErrReadNotFound):
@@ -349,6 +418,10 @@ func writeNewsError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "InvalidNews")
 
 	default:
-		writeError(w, http.StatusInternalServerError, "NewsInternalError")
+		writeError(
+			w,
+			http.StatusInternalServerError,
+			"NewsInternalError",
+		)
 	}
 }
