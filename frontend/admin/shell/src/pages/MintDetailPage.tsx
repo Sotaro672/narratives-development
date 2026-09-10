@@ -17,12 +17,6 @@ function renderModelMetadata(model: MintDetailModel) {
 
   return (
     <dl className="mint-detail-page__model-definition-list">
-
-      <div className="mint-detail-page__definition-row">
-        <dt>モデル番号</dt>
-        <dd>{model.modelNumber || "-"}</dd>
-      </div>
-
       {model.size ? (
         <div className="mint-detail-page__definition-row">
           <dt>サイズ</dt>
