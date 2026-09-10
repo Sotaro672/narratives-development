@@ -67,7 +67,6 @@ export default function NewsDetailPage() {
           }
           aside={
             <div className="news-detail-page__aside">
-              <h2 className="news-detail-page__heading">通知情報</h2>
               <dl className="news-detail-page__info">
                 <div className="news-detail-page__info-row">
                   <dt>配信日時</dt>
