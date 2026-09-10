@@ -11,6 +11,7 @@ const menuItems = [
   { label: "ミント", path: "/gas" },
   { label: "通知", path: "/news" },
   { label: "契約", path: "/contracts" },
+  { label: "アバター", path: "/avatars" },
   { label: "通報", path: "/reports", countType: "report" as const },
   { label: "請求", path: "/billing" },
 ];
@@ -46,12 +47,8 @@ export default function Sidebar() {
               }
             >
               <span className="sidebar-item__label">{item.label}</span>
-
               {count > 0 ? (
-                <span
-                  className="sidebar-item__badge"
-                  aria-label={countLabel}
-                >
+                <span className="sidebar-item__badge" aria-label={countLabel}>
                   {count > 99 ? "99+" : count}
                 </span>
               ) : null}

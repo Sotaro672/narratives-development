@@ -1,5 +1,4 @@
 // backend/internal/platform/di/admin/container_router.go
-
 package admin
 
 import (
@@ -37,6 +36,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.contractTokenBlueprintReviewQuery,
 		cont.contractProductBlueprintReviewQuery,
 	)
+	avatarHandler := adminhandler.NewAvatarHandler(cont.avatarRepo)
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	mintHandler := adminhandler.NewMintHandler(
 		cont.mintListQuery,
@@ -50,6 +50,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Me:        meHandler,
 		Contacts:  contactHandler,
 		Companies: companyHandler,
+		Avatars:   avatarHandler,
 		Gas:       gasHandler,
 		Mints:     mintHandler,
 		News:      newsHandler,
