@@ -42,7 +42,6 @@ export default function AvatarDetailPage() {
 
     return (
       <section className="ui-detail-section">
-        <h2 className="ui-detail-section__title">Resale</h2>
         <AvatarResaleTable resales={resales} />
       </section>
     );

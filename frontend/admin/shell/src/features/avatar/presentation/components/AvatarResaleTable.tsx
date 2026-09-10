@@ -22,12 +22,6 @@ export default function AvatarResaleTable({
   const columns = useMemo<TableColumn<AvatarResale>[]>(
     () => [
       {
-        key: "id",
-        header: "Resale ID",
-        render: (resale) => resale.id,
-        nowrap: true,
-      },
-      {
         key: "status",
         header: "ステータス",
         render: (resale) => STATUS_LABELS[resale.status] ?? resale.status,

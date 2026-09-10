@@ -3,9 +3,7 @@
 import { useMemo } from "react";
 
 import type { Avatar } from "../../../../shared/type/avatar";
-import Table, {
-  type TableColumn,
-} from "../../../../shared/ui/Table/Table";
+import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type AvatarTableProps = {
@@ -30,6 +28,13 @@ export default function AvatarTable({
         header: "ユーザー氏名",
         render: (avatar) => avatar.userName || "-",
         sortValue: (avatar) => avatar.userName,
+        nowrap: true,
+      },
+      {
+        key: "resaleCount",
+        header: "出品数",
+        render: (avatar) => avatar.resaleCount,
+        sortValue: (avatar) => avatar.resaleCount,
         nowrap: true,
       },
       {
