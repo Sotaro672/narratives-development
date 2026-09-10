@@ -3,9 +3,8 @@
 import { useMemo } from "react";
 
 import type { ReportItem } from "../../../../shared/type/report";
-import Table, {
-  type TableColumn,
-} from "../../../../shared/ui/Table/Table";
+import Pagination from "../../../../shared/ui/Pagination/Pagination";
+import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 import { getReasonLabel } from "../model/reportLabels";
 
@@ -14,8 +13,6 @@ type ReportItemsSectionProps = {
   loading: boolean;
   page: number;
   totalPages: number;
-  hasPreviousPage: boolean;
-  hasNextPage: boolean;
   onPageChange: (page: number) => void;
 };
 
@@ -24,8 +21,6 @@ export default function ReportItemsSection({
   loading,
   page,
   totalPages,
-  hasPreviousPage,
-  hasNextPage,
   onPageChange,
 }: ReportItemsSectionProps) {
   const columns = useMemo<TableColumn<ReportItem>[]>(
@@ -84,15 +79,10 @@ export default function ReportItemsSection({
   return (
     <section className="report-detail-page__section">
       <div className="report-detail-page__reports-header">
-        <h2 className="report-detail-page__section-title">
-          通報内容
-        </h2>
+        <h2 className="report-detail-page__section-title">通報内容</h2>
 
         {loading ? (
-          <span
-            className="report-detail-page__updating"
-            aria-live="polite"
-          >
+          <span className="report-detail-page__updating" aria-live="polite">
             更新中...
           </span>
         ) : null}
@@ -106,34 +96,13 @@ export default function ReportItemsSection({
         filteredEmptyMessage="条件に一致する通報はありません。"
       />
 
-      {totalPages > 1 ? (
-        <nav
-          className="report-detail-page__pagination"
-          aria-label="通報内容のページ送り"
-        >
-          <button
-            type="button"
-            className="report-detail-page__pagination-button"
-            disabled={!hasPreviousPage || loading}
-            onClick={() => onPageChange(page - 1)}
-          >
-            前へ
-          </button>
-
-          <span className="report-detail-page__pagination-label">
-            {page} / {totalPages}
-          </span>
-
-          <button
-            type="button"
-            className="report-detail-page__pagination-button"
-            disabled={!hasNextPage || loading}
-            onClick={() => onPageChange(page + 1)}
-          >
-            次へ
-          </button>
-        </nav>
-      ) : null}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        onPageChange={onPageChange}
+        disabled={loading}
+        ariaLabel="通報内容のページ送り"
+      />
     </section>
   );
 }

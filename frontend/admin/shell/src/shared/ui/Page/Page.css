@@ -152,6 +152,29 @@
   font-weight: 400;
 }
 
+.ui-detail-definition-list--meta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 16px;
+  row-gap: 8px;
+  margin: 0;
+}
+
+.ui-detail-definition-list--meta dt,
+.ui-detail-definition-list--meta dd {
+  margin: 0;
+}
+
+.ui-detail-definition-list--meta dt {
+  white-space: nowrap;
+}
+
+.ui-detail-definition-list--meta dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .ui-detail-definition-list__nowrap {
   white-space: nowrap;
 }

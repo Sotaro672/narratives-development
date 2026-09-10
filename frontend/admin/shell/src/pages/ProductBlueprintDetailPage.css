@@ -4,26 +4,3 @@
   width: 100%;
   min-width: 0;
 }
-
-.product-blueprint-detail-page__definition-list {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 16px;
-  row-gap: 8px;
-  margin: 0;
-}
-
-.product-blueprint-detail-page__definition-list dt,
-.product-blueprint-detail-page__definition-list dd {
-  margin: 0;
-}
-
-.product-blueprint-detail-page__definition-list dt {
-  white-space: nowrap;
-}
-
-.product-blueprint-detail-page__definition-list dd {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}

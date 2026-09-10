@@ -18,7 +18,7 @@ export default function ProductBlueprintDetailAside({
   return (
     <div className="product-blueprint-detail-page__aside">
       <section className="ui-detail-section">
-        <dl className="ui-detail-definition-list product-blueprint-detail-page__definition-list">
+        <dl className="ui-detail-definition-list ui-detail-definition-list--meta">
           <dt>企業名</dt>
           <dd>{company.name || "-"}</dd>
 

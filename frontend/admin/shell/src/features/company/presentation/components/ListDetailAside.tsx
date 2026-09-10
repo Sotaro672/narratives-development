@@ -22,14 +22,14 @@ export default function ListDetailAside({
   return (
     <>
       <section className="ui-detail-section">
-        <dl className="ui-detail-definition-list ui-list-detail-meta-list">
+        <dl className="ui-detail-definition-list ui-detail-definition-list--meta ui-list-detail-meta-list">
           <dt>企業名</dt>
           <dd>{company.name || "-"}</dd>
         </dl>
       </section>
 
       <section className="ui-detail-section">
-        <dl className="ui-detail-definition-list ui-list-detail-meta-list">
+        <dl className="ui-detail-definition-list ui-detail-definition-list--meta ui-list-detail-meta-list">
           <dt>商品名</dt>
           <dd>
             <button type="button" className="ui-list-detail-meta-link" onClick={onOpenProductBlueprint}>
@@ -43,7 +43,7 @@ export default function ListDetailAside({
       </section>
 
       <section className="ui-detail-section">
-        <dl className="ui-detail-definition-list ui-list-detail-meta-list">
+        <dl className="ui-detail-definition-list ui-detail-definition-list--meta ui-list-detail-meta-list">
           <dt>トークン名</dt>
           <dd>
             <button type="button" className="ui-list-detail-meta-link" onClick={onOpenTokenBlueprint}>
@@ -57,7 +57,7 @@ export default function ListDetailAside({
       </section>
 
       <section className="ui-detail-section">
-        <dl className="ui-detail-definition-list ui-list-detail-meta-list">
+        <dl className="ui-detail-definition-list ui-detail-definition-list--meta ui-list-detail-meta-list">
           <dt>出品ID</dt>
           <dd>{list.readableId || list.id || "-"}</dd>
 
@@ -79,14 +79,10 @@ export default function ListDetailAside({
           <dd>{list.assigneeName || "-"}</dd>
 
           <dt>作成日時</dt>
-          <dd className="ui-detail-definition-list__nowrap">
-            {formatDateTime(list.createdAt)}
-          </dd>
+          <dd className="ui-detail-definition-list__nowrap">{formatDateTime(list.createdAt)}</dd>
 
           <dt>最終更新日時</dt>
-          <dd className="ui-detail-definition-list__nowrap">
-            {formatDateTime(list.updatedAt)}
-          </dd>
+          <dd className="ui-detail-definition-list__nowrap">{formatDateTime(list.updatedAt)}</dd>
         </dl>
       </section>
     </>

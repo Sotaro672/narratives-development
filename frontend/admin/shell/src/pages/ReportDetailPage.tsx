@@ -31,8 +31,6 @@ export default function ReportDetailPage() {
     error,
     page,
     totalPages,
-    hasPreviousPage,
-    hasNextPage,
     deciding,
     decisionError,
     canDecide,
@@ -131,9 +129,7 @@ export default function ReportDetailPage() {
         ) : null}
 
         {!loading && error ? (
-          <p role="alert">
-            通報情報を取得できませんでした。{error}
-          </p>
+          <p role="alert">通報情報を取得できませんでした。{error}</p>
         ) : null}
 
         {!loading && !error && !reportCase ? (
@@ -151,8 +147,6 @@ export default function ReportDetailPage() {
                   loading={loading}
                   page={page}
                   totalPages={totalPages}
-                  hasPreviousPage={hasPreviousPage}
-                  hasNextPage={hasNextPage}
                   onPageChange={setPage}
                 />
               </div>

@@ -34,26 +34,7 @@
   text-align: right;
 }
 
-.ui-list-detail-meta-list {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 16px;
-  row-gap: 8px;
-  margin: 0;
-}
-
-.ui-list-detail-meta-list dt,
 .ui-list-detail-meta-list dd {
-  margin: 0;
-}
-
-.ui-list-detail-meta-list dt {
-  white-space: nowrap;
-}
-
-.ui-list-detail-meta-list dd {
-  min-width: 0;
   white-space: nowrap;
 }
 

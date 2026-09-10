@@ -27,27 +27,3 @@
   font-size: 14px;
   text-align: center;
 }
-
-.news-page__pagination {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.news-page__page-label {
-  min-width: 72px;
-  color: #4b5563;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: center;
-  white-space: nowrap;
-}
-
-@media (max-width: 720px) {
-  .news-page__pagination {
-    justify-content: center;
-  }
-}
