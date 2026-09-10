@@ -42,7 +42,14 @@ export default function AvatarDetailPage() {
 
     return (
       <section className="ui-detail-section">
-        <AvatarResaleTable resales={resales} />
+        <AvatarResaleTable
+          resales={resales}
+          onResaleClick={(resale) =>
+            navigate(
+              `/avatars/${encodeURIComponent(avatarId)}/resales/${encodeURIComponent(resale.id)}`,
+            )
+          }
+        />
       </section>
     );
   };

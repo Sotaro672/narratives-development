@@ -11,6 +11,7 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type AvatarResaleTableProps = {
   resales: AvatarResale[];
+  onResaleClick?: (resale: AvatarResale) => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -28,6 +29,7 @@ const STATUS_OPTIONS: TableFilterOption[] = Object.entries(
 
 export default function AvatarResaleTable({
   resales,
+  onResaleClick,
 }: AvatarResaleTableProps) {
   const columns = useMemo<TableColumn<AvatarResale>[]>(
     () => [
@@ -86,6 +88,7 @@ export default function AvatarResaleTable({
       columns={columns}
       rows={resales}
       getRowKey={(resale) => resale.id}
+      onRowClick={onResaleClick}
       emptyMessage="Resaleはありません。"
       filteredEmptyMessage="条件に一致するResaleはありません。"
     />
