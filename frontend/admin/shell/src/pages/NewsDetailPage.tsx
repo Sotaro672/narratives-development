@@ -43,14 +43,14 @@ export default function NewsDetailPage() {
         <DetailPageBody
           main={
             <div className="news-detail-page__main">
-              <section className="news-detail-page__section">
-                <h2 className="news-detail-page__section-title">通知内容</h2>
+              <div className="news-detail-page__content">
+                <h2 className="news-detail-page__heading">通知内容</h2>
                 <div className="news-detail-page__body-text">{news.body}</div>
-              </section>
+              </div>
 
               {news.image ? (
-                <section className="news-detail-page__section">
-                  <h2 className="news-detail-page__section-title">添付画像</h2>
+                <div className="news-detail-page__gallery">
+                  <h2 className="news-detail-page__heading">添付画像</h2>
                   <MediaGallery
                     items={[
                       {
@@ -61,31 +61,29 @@ export default function NewsDetailPage() {
                     ]}
                     altFallback={news.image.alt || news.title}
                   />
-                </section>
+                </div>
               ) : null}
             </div>
           }
           aside={
             <div className="news-detail-page__aside">
-              <section className="news-detail-page__section">
-                <h2 className="news-detail-page__section-title">通知情報</h2>
-                <dl className="news-detail-page__fields news-detail-page__fields--compact">
-                  <div className="news-detail-page__field">
-                    <dt className="news-detail-page__field-label">配信日時</dt>
-                    <dd className="news-detail-page__field-value">{formatDateTime(news.publishedAt)}</dd>
-                  </div>
+              <h2 className="news-detail-page__heading">通知情報</h2>
+              <dl className="news-detail-page__info">
+                <div className="news-detail-page__info-row">
+                  <dt>配信日時</dt>
+                  <dd>{formatDateTime(news.publishedAt)}</dd>
+                </div>
 
-                  <div className="news-detail-page__field">
-                    <dt className="news-detail-page__field-label">作成日時</dt>
-                    <dd className="news-detail-page__field-value">{formatDateTime(news.createdAt)}</dd>
-                  </div>
+                <div className="news-detail-page__info-row">
+                  <dt>作成日時</dt>
+                  <dd>{formatDateTime(news.createdAt)}</dd>
+                </div>
 
-                  <div className="news-detail-page__field">
-                    <dt className="news-detail-page__field-label">作成者</dt>
-                    <dd className="news-detail-page__field-value">{news.createdByName || "-"}</dd>
-                  </div>
-                </dl>
-              </section>
+                <div className="news-detail-page__info-row">
+                  <dt>作成者</dt>
+                  <dd>{news.createdByName || "-"}</dd>
+                </div>
+              </dl>
             </div>
           }
         />
