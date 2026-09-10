@@ -50,20 +50,12 @@ export default function NewsPage() {
         key: "title",
         header: "タイトル",
         render: (news) => news.title,
-        filter: {
-          getValue: (news) => news.title,
-          placeholder: "タイトルで絞り込み",
-        },
         minWidth: "220px",
       },
       {
         key: "body",
         header: "本文",
         render: (news) => getBodySummary(news.body),
-        filter: {
-          getValue: (news) => news.body,
-          placeholder: "本文で絞り込み",
-        },
         minWidth: "360px",
       },
       {
