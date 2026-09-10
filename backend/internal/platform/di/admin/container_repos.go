@@ -1,0 +1,78 @@
+// backend/internal/platform/di/admin/container_repos.go
+package admin
+
+import (
+	"cloud.google.com/go/firestore"
+
+	fsrepo "narratives/internal/adapters/out/firestore"
+)
+
+type repos struct {
+	contactRepo                    *fsrepo.ContactRepositoryFS
+	companyRepo                    *fsrepo.CompanyRepositoryFS
+	memberRepo                     *fsrepo.MemberRepositoryFS
+	avatarRepo                     *fsrepo.AvatarRepositoryFS
+	brandRepo                      *fsrepo.BrandRepositoryFS
+	productBlueprintRepo           *fsrepo.ProductBlueprintRepositoryFS
+	productBlueprintReviewRepo     *fsrepo.ProductBlueprintReviewRepositoryFS
+	tokenBlueprintRepo             *fsrepo.TokenBlueprintRepositoryFS
+	tokenBlueprintReviewRepo       *fsrepo.TokenBlueprintReviewRepositoryFS
+	listRepo                       *fsrepo.ListRepositoryFS
+	listImageRepo                  *fsrepo.ListImageRepositoryFS
+	inventoryRepo                  *fsrepo.InventoryRepositoryFS
+	modelRepo                      *fsrepo.ModelRepositoryFS
+	orderConsoleLister             *fsrepo.OrderConsoleListerFS
+	mintRepo                       *fsrepo.MintRepositoryFS
+	newsRepo                       *fsrepo.NewsRepositoryFS
+	newsReadRepo                   *fsrepo.NewsReadRepositoryFS
+	reportRepo                     *fsrepo.ReportRepositoryFS
+	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
+	resaleRepo                     *fsrepo.ResaleRepositoryFS
+	cartRepo                       *fsrepo.CartRepositoryFS
+}
+
+func buildRepos(fsClient *firestore.Client) *repos {
+	if fsClient == nil {
+		return nil
+	}
+
+	return &repos{
+		contactRepo:                    fsrepo.NewContactRepositoryFS(fsClient),
+		companyRepo:                    fsrepo.NewCompanyRepositoryFS(fsClient),
+		memberRepo:                     fsrepo.NewMemberRepositoryFS(fsClient),
+		avatarRepo:                     fsrepo.NewAvatarRepositoryFS(fsClient),
+		brandRepo:                      fsrepo.NewBrandRepositoryFS(fsClient),
+		productBlueprintRepo:           fsrepo.NewProductBlueprintRepositoryFS(fsClient),
+		productBlueprintReviewRepo:     fsrepo.NewProductBlueprintReviewRepositoryFS(fsClient),
+		tokenBlueprintRepo:             fsrepo.NewTokenBlueprintRepositoryFS(fsClient),
+		tokenBlueprintReviewRepo:       fsrepo.NewTokenBlueprintReviewRepositoryFS(fsClient),
+		listRepo:                       fsrepo.NewListRepositoryFS(fsClient),
+		listImageRepo:                  fsrepo.NewListImageRepositoryFS(fsClient),
+		inventoryRepo:                  fsrepo.NewInventoryRepositoryFS(fsClient),
+		modelRepo:                      fsrepo.NewModelRepositoryFS(fsClient),
+		orderConsoleLister:             fsrepo.NewOrderConsoleListerFS(fsClient),
+		mintRepo:                       fsrepo.NewMintRepositoryFS(fsClient),
+		newsRepo:                       fsrepo.NewNewsRepositoryFS(fsClient),
+		newsReadRepo:                   fsrepo.NewNewsReadRepositoryFS(fsClient),
+		reportRepo:                     fsrepo.NewReportRepositoryFS(fsClient),
+		reportDecisionNotificationRepo: fsrepo.NewReportDecisionNotificationRepositoryFS(fsClient),
+		resaleRepo:                     fsrepo.NewResaleRepositoryFS(fsClient),
+		cartRepo:                       fsrepo.NewCartRepositoryFS(fsClient),
+	}
+}
+
+func (r *repos) applyToContainer(c *Container) {
+	if r == nil || c == nil {
+		return
+	}
+
+	c.companyRepo = r.companyRepo
+	c.memberRepo = r.memberRepo
+	c.avatarRepo = r.avatarRepo
+	c.brandRepo = r.brandRepo
+	c.productBlueprintRepo = r.productBlueprintRepo
+	c.tokenBlueprintRepo = r.tokenBlueprintRepo
+	c.newsRepo = r.newsRepo
+	c.newsReadRepo = r.newsReadRepo
+	c.reportDecisionNotificationRepo = r.reportDecisionNotificationRepo
+}

@@ -1,0 +1,191 @@
+// backend/internal/platform/di/admin/container_usecase.go
+package admin
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	firebaseadp "narratives/internal/adapters/out/firebase"
+	usecase "narratives/internal/application/usecase"
+)
+
+type usecases struct {
+	contactUsecase *usecase.ContactUsecase
+	newsUsecase    *usecase.NewsUsecase
+	reportUsecase  *usecase.ReportUsecase
+
+	productBlueprintReviewUsecase *usecase.ProductBlueprintReviewUsecase
+	tokenBlueprintReviewUsecase   *usecase.TokenBlueprintReviewUsecase
+
+	newsImageStorage *firebaseadp.NewsImageStorage
+}
+
+func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
+	if r == nil {
+		return nil, errors.New("di.admin: repositories are nil")
+	}
+
+	if r.newsRepo == nil {
+		return nil, errors.New("di.admin: news repository is nil")
+	}
+	if r.newsReadRepo == nil {
+		return nil, errors.New("di.admin: news read repository is nil")
+	}
+	if r.reportRepo == nil {
+		return nil, errors.New("di.admin: report repository is nil")
+	}
+	if r.productBlueprintReviewRepo == nil {
+		return nil, errors.New("di.admin: product blueprint review repository is nil")
+	}
+	if r.reportDecisionNotificationRepo == nil {
+		return nil, errors.New("di.admin: report decision notification repository is nil")
+	}
+	if r.tokenBlueprintReviewRepo == nil {
+		return nil, errors.New("di.admin: token blueprint review repository is nil")
+	}
+	if r.resaleRepo == nil {
+		return nil, errors.New("di.admin: resale repository is nil")
+	}
+	if r.cartRepo == nil {
+		return nil, errors.New("di.admin: cart repository is nil")
+	}
+
+	contactUsecase := usecase.NewContactUsecase(
+		r.contactRepo,
+		nil,
+		nil,
+	)
+
+	newsImageStorage, err := firebaseadp.NewNewsImageStorageFromEnv(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if newsImageStorage == nil {
+		return nil, errors.New("di.admin: news image storage is nil")
+	}
+
+	closeNewsStorage := func(err error) (*usecases, error) {
+		_ = newsImageStorage.Close()
+		return nil, err
+	}
+
+	newsUsecase := usecase.NewNewsUsecase(
+		r.newsRepo,
+		r.newsReadRepo,
+	).WithImageStorage(newsImageStorage)
+	if newsUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: news usecase is nil"))
+	}
+
+	productBlueprintReviewUsecase := usecase.NewProductBlueprintReviewUsecase(
+		r.productBlueprintReviewRepo,
+		r.productBlueprintRepo,
+		r.brandRepo,
+		r.memberRepo,
+		nil,
+		r.avatarRepo,
+		nil,
+	)
+	if productBlueprintReviewUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: product blueprint review usecase is nil"))
+	}
+
+	tokenBlueprintReviewUsecase := usecase.NewTokenBlueprintReviewUsecase(
+		r.tokenBlueprintReviewRepo,
+		r.avatarRepo,
+		r.tokenBlueprintRepo,
+		r.brandRepo,
+	)
+	if tokenBlueprintReviewUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: token blueprint review usecase is nil"))
+	}
+
+	// Admin側のTokenBlueprintUsecaseは通報裁定によるAMOL上の非表示専用。
+	// TokenBlueprint本体、Firebase Storage、metadataUri、
+	// オンチェーン上のトークン・メタデータは削除しない。
+	tokenBlueprintUsecase := usecase.NewTokenBlueprintUsecase(
+		r.tokenBlueprintRepo,
+		nil,
+		nil,
+		nil,
+	)
+	if tokenBlueprintUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: token blueprint usecase is nil"))
+	}
+
+	// Admin側のListUsecaseは通報裁定によるMall上の出品停止専用。
+	// List本体、ListImage、Firebase Storage上の画像は削除せず、
+	// statusをsuspendedへ変更し、既存カートから対象Listを除去する。
+	listUsecase := usecase.NewListUsecase(
+		r.listRepo,
+		nil,
+		nil,
+	).WithCartItemCleanup(r.cartRepo)
+	if listUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: list usecase is nil"))
+	}
+
+	// Admin側のResaleUsecaseはアバター通報および個別Resale通報の裁定専用。
+	// 出品作成・画像操作は行わないため、imageRepo / imageStorage /
+	// product identity repositories は不要。
+	// 個別ResaleのREMOVEでは対象Resaleをsuspendedへ変更し、既存カートから除去する。
+	resaleUsecase := usecase.NewResaleUsecase(
+		r.resaleRepo,
+		nil,
+		nil,
+		time.Now,
+	).WithCartItemCleanup(r.cartRepo)
+	if resaleUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: resale usecase is nil"))
+	}
+
+	reportUsecase := usecase.NewReportUsecase(
+		usecase.ReportUsecaseDeps{
+			ReportRepo:               r.reportRepo,
+			DecisionNotificationRepo: r.reportDecisionNotificationRepo,
+			ProductBlueprintRepo:     r.productBlueprintRepo,
+			ProductReviewModerator:   productBlueprintReviewUsecase,
+			ListRepo:                 r.listRepo,
+			InventoryRepo:            r.inventoryRepo,
+			ListModerator:            listUsecase,
+			TokenBlueprintRepo:       r.tokenBlueprintRepo,
+			TokenBlueprintModerator:  tokenBlueprintUsecase,
+			TokenCommentModerator:    tokenBlueprintReviewUsecase,
+			AvatarRepo:               r.avatarRepo,
+			AvatarResaleModerator:    resaleUsecase,
+			ResaleRepo:               r.resaleRepo,
+			ResaleModerator:          resaleUsecase,
+		},
+	)
+	if reportUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: report usecase is nil"))
+	}
+
+	return &usecases{
+		contactUsecase:                contactUsecase,
+		newsUsecase:                   newsUsecase,
+		reportUsecase:                 reportUsecase,
+		productBlueprintReviewUsecase: productBlueprintReviewUsecase,
+		tokenBlueprintReviewUsecase:   tokenBlueprintReviewUsecase,
+		newsImageStorage:              newsImageStorage,
+	}, nil
+}
+
+func (u *usecases) applyToContainer(c *Container) {
+	if u == nil || c == nil {
+		return
+	}
+
+	c.contactUsecase = u.contactUsecase
+	c.newsUsecase = u.newsUsecase
+	c.reportUsecase = u.reportUsecase
+}
+
+func (u *usecases) closeOnBuildError() {
+	if u == nil || u.newsImageStorage == nil {
+		return
+	}
+
+	_ = u.newsImageStorage.Close()
+}
