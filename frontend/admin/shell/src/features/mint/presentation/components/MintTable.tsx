@@ -36,16 +36,6 @@ export default function MintTable({ mints }: MintTableProps) {
         nowrap: true,
       },
       {
-        key: "id",
-        header: "Mint ID",
-        render: (mint) => mint.id,
-        filter: {
-          getValue: (mint) => mint.id,
-          placeholder: "Mint IDで絞り込み",
-        },
-        minWidth: "180px",
-      },
-      {
         key: "status",
         header: "ステータス",
         render: (mint) => mint.status,
@@ -57,45 +47,34 @@ export default function MintTable({ mints }: MintTableProps) {
         nowrap: true,
       },
       {
-        key: "brandId",
-        header: "Brand ID",
-        render: (mint) => mint.brandId,
+        key: "brandName",
+        header: "ブランド名",
+        render: (mint) => mint.brandName || "-",
+        sortValue: (mint) => mint.brandName,
         filter: {
-          getValue: (mint) => mint.brandId,
-          placeholder: "Brand IDで絞り込み",
+          getValue: (mint) => mint.brandName,
+          placeholder: "ブランド名で絞り込み",
         },
         minWidth: "180px",
       },
       {
-        key: "tokenBlueprintId",
-        header: "Token Blueprint ID",
-        render: (mint) => mint.tokenBlueprintId,
+        key: "tokenBlueprintName",
+        header: "トークン名",
+        render: (mint) => mint.tokenBlueprintName || "-",
+        sortValue: (mint) => mint.tokenBlueprintName,
         filter: {
-          getValue: (mint) => mint.tokenBlueprintId,
-          placeholder: "Token Blueprint IDで絞り込み",
+          getValue: (mint) => mint.tokenBlueprintName,
+          placeholder: "トークン名で絞り込み",
         },
         minWidth: "200px",
       },
       {
-        key: "products",
+        key: "productCount",
         header: "Products",
-        render: (mint) => mint.products.length > 0 ? mint.products.join(", ") : "-",
-        sortValue: (mint) => mint.products.length,
-        filter: {
-          getValue: (mint) => mint.products.join(" "),
-          placeholder: "Product IDで絞り込み",
-        },
-        minWidth: "280px",
-      },
-      {
-        key: "createdBy",
-        header: "作成者",
-        render: (mint) => mint.createdBy,
-        filter: {
-          getValue: (mint) => mint.createdBy,
-          placeholder: "作成者で絞り込み",
-        },
-        minWidth: "180px",
+        render: (mint) => mint.productCount,
+        sortValue: (mint) => mint.productCount,
+        width: "100px",
+        nowrap: true,
       },
       {
         key: "requestedBy",
@@ -121,16 +100,6 @@ export default function MintTable({ mints }: MintTableProps) {
         sortValue: (mint) => mint.scheduledBurnDate ? new Date(mint.scheduledBurnDate).getTime() : null,
         nowrap: true,
       },
-      {
-        key: "onChainTxSignature",
-        header: "Tx Signature",
-        render: (mint) => mint.onChainTxSignature || "-",
-        filter: {
-          getValue: (mint) => mint.onChainTxSignature || "",
-          placeholder: "Signatureで絞り込み",
-        },
-        minWidth: "280px",
-      },
     ],
     [],
   );
@@ -139,7 +108,18 @@ export default function MintTable({ mints }: MintTableProps) {
     <Table
       columns={columns}
       rows={mints}
-      getRowKey={(mint) => mint.id}
+      getRowKey={(mint) =>
+        [
+          mint.createdAt,
+          mint.status,
+          mint.brandName,
+          mint.tokenBlueprintName,
+          mint.productCount,
+          mint.requestedBy ?? "",
+          mint.mintedAt ?? "",
+          mint.scheduledBurnDate ?? "",
+        ].join(":")
+      }
       emptyMessage="Mintはありません。"
       filteredEmptyMessage="条件に一致するMintはありません。"
     />

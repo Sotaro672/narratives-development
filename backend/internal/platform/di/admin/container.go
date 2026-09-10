@@ -11,6 +11,7 @@ import (
 	firebaseadp "narratives/internal/adapters/out/firebase"
 	fsrepo "narratives/internal/adapters/out/firestore"
 	adminquery "narratives/internal/application/query/admin"
+	appresolver "narratives/internal/application/resolver"
 	usecase "narratives/internal/application/usecase"
 	solanainfra "narratives/internal/infra/solana"
 	shared "narratives/internal/platform/di/shared"
@@ -94,7 +95,20 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	modelRepo := fsrepo.NewModelRepositoryFS(infra.Firestore)
 	orderConsoleLister := fsrepo.NewOrderConsoleListerFS(infra.Firestore)
 	mintRepo := fsrepo.NewMintRepositoryFS(infra.Firestore)
-	mintListQuery := adminquery.NewMintListQuery(mintRepo)
+
+	mintNameResolver := appresolver.NewNameResolver(
+		brandRepo,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		tokenBlueprintRepo,
+	)
+	mintListQuery := adminquery.NewMintListQuery(
+		mintRepo,
+		mintNameResolver,
+	)
 
 	newsRepo := fsrepo.NewNewsRepositoryFS(infra.Firestore)
 	if newsRepo == nil {

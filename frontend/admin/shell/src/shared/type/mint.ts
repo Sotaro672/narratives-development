@@ -10,17 +10,14 @@ export type MintStatus =
   | "FAILED_FATAL";
 
 export type Mint = {
-  id: string;
-  brandId: string;
-  tokenBlueprintId: string;
-  products: string[];
+  brandName: string;
+  tokenBlueprintName: string;
+  productCount: number;
   status: MintStatus;
   createdAt: string;
-  createdBy: string;
   requestedBy?: string;
   mintedAt?: string;
   scheduledBurnDate?: string;
-  onChainTxSignature?: string;
 };
 
 export type MintListResponse = {
