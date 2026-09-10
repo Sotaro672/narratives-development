@@ -3,6 +3,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAvatarResales } from "../features/avatar/presentation/hooks/useAvatarResales";
+import type { AvatarResale } from "../shared/type/avatar";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
@@ -14,6 +15,22 @@ const STATUS_LABELS: Record<string, string> = {
   sold: "売却済み",
 };
 
+function getResaleTitle(resale: AvatarResale | null): string {
+  if (!resale) {
+    return "Resale詳細";
+  }
+
+  if (resale.productName) {
+    return `${resale.productName}/再出品`;
+  }
+
+  if (resale.tokenName) {
+    return `${resale.tokenName}/再出品`;
+  }
+
+  return "再出品";
+}
+
 export default function ResalePage() {
   const navigate = useNavigate();
   const { avatarId = "", resaleId = "" } = useParams<{
@@ -23,6 +40,7 @@ export default function ResalePage() {
 
   const { resales, loading, error, reload } = useAvatarResales(avatarId);
   const resale = resales.find((item) => item.id === resaleId) ?? null;
+  const resaleTitle = getResaleTitle(resale);
 
   const renderAside = () => {
     if (loading) {
@@ -84,7 +102,7 @@ export default function ResalePage() {
   return (
     <Page>
       <PageHeader
-        title={resale?.productName || "Resale詳細"}
+        title={resaleTitle}
         leading={
           <button
             type="button"
