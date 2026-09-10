@@ -7,6 +7,7 @@ export type Avatar = {
   profile?: string | null;
   externalLink?: string | null;
   userName: string;
+  resaleCount: number;
   reportCount: number;
   createdAt: string;
   updatedAt: string;
@@ -14,4 +15,17 @@ export type Avatar = {
 
 export type AvatarListResponse = {
   items: Avatar[];
+};
+
+export type AvatarResale = {
+  id: string;
+  status: string;
+  price: number;
+  condition: string;
+  createdAt: string;
+  updatedAt?: string | null;
+};
+
+export type AvatarResaleListResponse = {
+  items: AvatarResale[];
 };

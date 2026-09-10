@@ -2,6 +2,8 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import AvatarResaleTable from "../features/avatar/presentation/components/AvatarResaleTable";
+import { useAvatarResales } from "../features/avatar/presentation/hooks/useAvatarResales";
 import { useAvatars } from "../features/avatar/presentation/hooks/useAvatars";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
@@ -12,8 +14,39 @@ export default function AvatarDetailPage() {
   const navigate = useNavigate();
   const { avatarId = "" } = useParams<{ avatarId?: string }>();
   const { avatars, loading, error, reload } = useAvatars();
+  const {
+    resales,
+    loading: resalesLoading,
+    error: resalesError,
+    reload: reloadResales,
+  } = useAvatarResales(avatarId);
 
   const avatar = avatars.find((item) => item.id === avatarId) ?? null;
+
+  const renderMain = () => {
+    if (resalesLoading) {
+      return <p>Resale一覧を取得しています...</p>;
+    }
+
+    if (resalesError) {
+      return (
+        <div role="alert">
+          <p>Resale一覧を取得できませんでした。</p>
+          <p>{resalesError}</p>
+          <button type="button" onClick={() => void reloadResales()}>
+            再読み込み
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <section className="ui-detail-section">
+        <h2 className="ui-detail-section__title">Resale</h2>
+        <AvatarResaleTable resales={resales} />
+      </section>
+    );
+  };
 
   const renderAside = () => {
     if (loading) {
@@ -97,7 +130,7 @@ export default function AvatarDetailPage() {
         }
       />
 
-      <DetailPageBody main={null} aside={renderAside()} />
+      <DetailPageBody main={renderMain()} aside={renderAside()} />
     </Page>
   );
 }

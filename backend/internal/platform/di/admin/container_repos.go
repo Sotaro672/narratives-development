@@ -82,5 +82,6 @@ func (r *repos) applyToContainer(c *Container) {
 	c.newsRepo = r.newsRepo
 	c.newsReadRepo = r.newsReadRepo
 	c.reportRepo = r.reportRepo
+	c.resaleRepo = r.resaleRepo
 	c.reportDecisionNotificationRepo = r.reportDecisionNotificationRepo
 }

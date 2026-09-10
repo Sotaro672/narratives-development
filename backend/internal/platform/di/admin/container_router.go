@@ -40,6 +40,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.avatarRepo,
 		cont.userRepo,
 		cont.reportRepo,
+		cont.resaleRepo,
 	)
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	mintHandler := adminhandler.NewMintHandler(

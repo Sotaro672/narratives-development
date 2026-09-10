@@ -38,6 +38,7 @@ type Container struct {
 	newsRepo                       *fsrepo.NewsRepositoryFS
 	newsReadRepo                   *fsrepo.NewsReadRepositoryFS
 	reportRepo                     *fsrepo.ReportRepositoryFS
+	resaleRepo                     *fsrepo.ResaleRepositoryFS
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 
 	newsQuery                           *adminquery.NewsQuery
@@ -108,13 +109,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 	u.applyToContainer(c)
 
-	q, err := buildQueries(
-		ctx,
-		infra,
-		repos,
-		res,
-		u,
-	)
+	q, err := buildQueries(ctx, infra, repos, res, u)
 	if err != nil {
 		u.closeOnBuildError()
 		return nil, err
