@@ -4,6 +4,7 @@ import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
 import type { PageParams } from "../../../shared/types/common/common";
 import type {
+  News,
   NewsPage,
   NewsReadResponse,
   NewsUnreadCountResponse,
@@ -105,9 +106,6 @@ function buildListQuery(params?: ListNewsParams): string {
 
 /**
  * GET /news
- *
- * ログイン中のConsoleメンバー向けシステム通知を取得する。
- * 既読状態はBackendで認証済みmemberIdを基に解決する。
  */
 export async function listNewsApi(
   params?: ListNewsParams,
@@ -121,9 +119,25 @@ export async function listNewsApi(
 }
 
 /**
+ * GET /news/{newsId}
+ */
+export async function getNewsApi(newsId: string): Promise<News> {
+  const normalizedNewsId = newsId.trim();
+
+  if (!normalizedNewsId) {
+    throw new Error("newsId is required");
+  }
+
+  const encodedNewsId = encodeURIComponent(normalizedNewsId);
+  const url = `${API_BASE}/news/${encodedNewsId}`;
+
+  return requestJson<News>(url, {
+    method: "GET",
+  });
+}
+
+/**
  * GET /news/unread-count
- *
- * ログイン中のConsoleメンバーの未読システム通知件数を取得する。
  */
 export async function getNewsUnreadCountApi(): Promise<NewsUnreadCountResponse> {
   const url = `${API_BASE}/news/unread-count`;
@@ -135,8 +149,6 @@ export async function getNewsUnreadCountApi(): Promise<NewsUnreadCountResponse> 
 
 /**
  * POST /news/{newsId}/read
- *
- * 指定したシステム通知をログイン中のConsoleメンバーについて既読にする。
  */
 export async function markNewsReadApi(
   newsId: string,
@@ -157,6 +169,7 @@ export async function markNewsReadApi(
 
 export const newsApi = {
   list: listNewsApi,
+  get: getNewsApi,
   unreadCount: getNewsUnreadCountApi,
   markRead: markNewsReadApi,
 };

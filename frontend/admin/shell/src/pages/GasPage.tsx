@@ -26,15 +26,27 @@ export default function GasPage() {
   return (
     <Page>
       <PageHeader
-        title="ガス"
+        title="ミント"
+        meta={!mintsError ? `${mints.length}件` : undefined}
         actions={
           <>
             {balance ? (
-              <Button variant="secondary" size="sm" title={`ネットワーク: ${balance.cluster}`} aria-label={`ネットワーク: ${balance.cluster}`}>
+              <Button
+                variant="secondary"
+                size="sm"
+                title={`ネットワーク: ${balance.cluster}`}
+                aria-label={`ネットワーク: ${balance.cluster}`}
+              >
                 {balance.cluster}
               </Button>
             ) : null}
-            <RefreshButton onClick={reload} loading={loading} title="リフレッシュ" ariaLabel="ガスとMint一覧をリフレッシュ" />
+
+            <RefreshButton
+              onClick={reload}
+              loading={loading}
+              title="リフレッシュ"
+              ariaLabel="ガスとMint一覧をリフレッシュ"
+            />
           </>
         }
       />
@@ -53,7 +65,12 @@ export default function GasPage() {
           <dl className="gas-page__details">
             <div>
               <dt>残高</dt>
-              <dd>{balance.balanceSol.toLocaleString(undefined, { maximumFractionDigits: 9 })} SOL</dd>
+              <dd>
+                {balance.balanceSol.toLocaleString(undefined, {
+                  maximumFractionDigits: 9,
+                })}{" "}
+                SOL
+              </dd>
             </div>
 
             <div>
@@ -76,11 +93,6 @@ export default function GasPage() {
       </section>
 
       <section className="gas-page__mints">
-        <div className="gas-page__mints-header">
-          <h2>Mint</h2>
-          {!mintsLoading && !mintsError ? <span>{mints.length}件</span> : null}
-        </div>
-
         {mintsLoading && mints.length === 0 ? <p>Mint一覧を取得しています...</p> : null}
 
         {!mintsLoading && mintsError ? (
@@ -89,7 +101,9 @@ export default function GasPage() {
           </p>
         ) : null}
 
-        {!mintsError && (mints.length > 0 || !mintsLoading) ? <MintTable mints={mints} /> : null}
+        {!mintsError && (mints.length > 0 || !mintsLoading) ? (
+          <MintTable mints={mints} />
+        ) : null}
       </section>
     </Page>
   );

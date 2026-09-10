@@ -2,7 +2,10 @@
 
 import { API_BASE } from "../../../shared/http/apiBase";
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
-import type { PageParams, PageResult } from "../../../shared/types/common/common";
+import type {
+  PageParams,
+  PageResult,
+} from "../../../shared/types/common/common";
 import type {
   ReportCaseStatus,
   ReportReason,
@@ -15,7 +18,10 @@ export type ReportDecisionNotificationKind =
   | "REPORTER_DECISION"
   | "TARGET_ENFORCEMENT";
 
-export type ReportDecisionStatus = Exclude<ReportCaseStatus, "PENDING">;
+export type ReportDecisionStatus = Exclude<
+  ReportCaseStatus,
+  "PENDING"
+>;
 
 export type ReportDecisionNotification = {
   id: string;
@@ -144,10 +150,6 @@ function buildListQuery(
 
 /**
  * GET /report-decision-notifications
- *
- * ログイン中メンバーのCompanyに属するBRAND宛て裁定結果通知を取得する。
- * REPORTER_DECISION / TARGET_ENFORCEMENT の両方を取得する。
- * companyIdはFrontendから送らず、Backendの認証コンテキストから解決する。
  */
 export async function listReportDecisionNotificationsApi(
   params?: ListReportDecisionNotificationsParams,
@@ -161,19 +163,44 @@ export async function listReportDecisionNotificationsApi(
 }
 
 /**
+ * GET /report-decision-notifications/{notificationId}
+ */
+export async function getReportDecisionNotificationApi(
+  notificationId: string,
+): Promise<ReportDecisionNotification> {
+  const normalizedNotificationId = notificationId.trim();
+
+  if (!normalizedNotificationId) {
+    throw new Error("notificationId is required");
+  }
+
+  const encodedNotificationId = encodeURIComponent(
+    normalizedNotificationId,
+  );
+  const url =
+    `${API_BASE}/report-decision-notifications/` +
+    encodedNotificationId;
+
+  return requestJson<ReportDecisionNotification>(url, {
+    method: "GET",
+  });
+}
+
+/**
  * POST /report-decision-notifications/{notificationId}/read
- *
- * 指定した裁定結果通知を既読にする。
- * Backend側でCompany所有権を再検証する。
  */
 export async function markReportDecisionNotificationReadApi(
   notificationId: string,
 ): Promise<ReportDecisionNotification> {
-  if (!notificationId) {
+  const normalizedNotificationId = notificationId.trim();
+
+  if (!normalizedNotificationId) {
     throw new Error("notificationId is required");
   }
 
-  const encodedNotificationId = encodeURIComponent(notificationId);
+  const encodedNotificationId = encodeURIComponent(
+    normalizedNotificationId,
+  );
   const url =
     `${API_BASE}/report-decision-notifications/` +
     `${encodedNotificationId}/read`;
@@ -185,5 +212,6 @@ export async function markReportDecisionNotificationReadApi(
 
 export const reportDecisionNotificationApi = {
   list: listReportDecisionNotificationsApi,
+  get: getReportDecisionNotificationApi,
   markRead: markReportDecisionNotificationReadApi,
 };

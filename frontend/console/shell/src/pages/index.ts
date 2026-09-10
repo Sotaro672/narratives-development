@@ -51,3 +51,4 @@ export { default as AnnouncementCreatePage } from "./announcementCreatePage";
 export { default as AnnouncementTokenListPage } from "./announcementTokenListPage";
 export { default as AnnouncementDetailPage } from "./announcementDetailPage";
 export { default as NotificationPage } from "./notificationPage";
+export { default as NotificationDetailPage } from "./notificationDetailPage";

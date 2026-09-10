@@ -1,0 +1,55 @@
+/* frontend/console/shell/src/styles/notificationDetail.css */
+
+.notification-detail {
+  width: 100%;
+  min-width: 0;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.notification-detail__image-wrap {
+  width: 100%;
+  max-width: 720px;
+  margin-bottom: 24px;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.notification-detail__image {
+  display: block;
+  width: 100%;
+  max-height: 560px;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.notification-detail__body {
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.notification-detail__message {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.notification-detail__message--error {
+  color: #b91c1c;
+}
+
+@media (max-width: 768px) {
+  .notification-detail {
+    padding: 16px;
+  }
+
+  .notification-detail__image {
+    max-height: 420px;
+  }
+}

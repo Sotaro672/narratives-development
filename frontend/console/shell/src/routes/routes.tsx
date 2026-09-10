@@ -54,13 +54,27 @@ import {
   AnnouncementTokenListPage,
   AnnouncementDetailPage,
   NotificationPage,
+  NotificationDetailPage,
 } from "../pages";
 
 export const routes: RouteObject[] = [
   { path: "/auth", element: <AuthPage /> },
   { path: "/invitation", element: <InvitationPage /> },
   { path: "/company", element: <CompanyDetail /> },
-  { path: "/notifications", element: <NotificationPage /> },
+  {
+    path: "/notifications",
+    children: [
+      { path: "", element: <NotificationPage /> },
+      {
+        path: "news/:notificationId",
+        element: <NotificationDetailPage kind="news" />,
+      },
+      {
+        path: "report-decision/:notificationId",
+        element: <NotificationDetailPage kind="reportDecision" />,
+      },
+    ],
+  },
   {
     path: "/stockLocation",
     children: [
@@ -106,7 +120,10 @@ export const routes: RouteObject[] = [
     children: [
       { path: "", element: <InventoryManagementPage /> },
       { path: "detail/:inventoryId", element: <InventoryDetailPage /> },
-      { path: "list/create/:inventoryId", element: <InventoryListCreatePage /> },
+      {
+        path: "list/create/:inventoryId",
+        element: <InventoryListCreatePage />,
+      },
     ],
   },
   {
@@ -128,14 +145,20 @@ export const routes: RouteObject[] = [
     path: "/productBlueprintReview",
     children: [
       { path: "", element: <ProductBlueprintReviewManagement /> },
-      { path: ":productBlueprintReviewId", element: <ProductBlueprintReviewDetail /> },
+      {
+        path: ":productBlueprintReviewId",
+        element: <ProductBlueprintReviewDetail />,
+      },
     ],
   },
   {
     path: "/tokenBlueprintReview",
     children: [
       { path: "", element: <TokenBlueprintReviewManagement /> },
-      { path: ":tokenBlueprintReviewId", element: <TokenBlueprintReviewDetail /> },
+      {
+        path: ":tokenBlueprintReviewId",
+        element: <TokenBlueprintReviewDetail />,
+      },
     ],
   },
   {
@@ -194,8 +217,14 @@ export const routes: RouteObject[] = [
     children: [
       { path: "", element: <AnnouncementManagementPage /> },
       { path: "create", element: <AnnouncementTokenListPage /> },
-      { path: ":tokenBlueprintId/create", element: <AnnouncementCreatePage /> },
-      { path: "announcements/:announcementId", element: <AnnouncementDetailPage /> },
+      {
+        path: ":tokenBlueprintId/create",
+        element: <AnnouncementCreatePage />,
+      },
+      {
+        path: "announcements/:announcementId",
+        element: <AnnouncementDetailPage />,
+      },
     ],
   },
 ];
