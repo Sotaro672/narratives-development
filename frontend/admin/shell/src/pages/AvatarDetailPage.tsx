@@ -6,6 +6,8 @@ import { useAvatars } from "../features/avatar/presentation/hooks/useAvatars";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
+import "./AvatarDetailPage.css";
+
 export default function AvatarDetailPage() {
   const navigate = useNavigate();
   const { avatarId = "" } = useParams<{ avatarId?: string }>();
@@ -35,28 +37,32 @@ export default function AvatarDetailPage() {
     }
 
     return (
-      <section className="ui-detail-section">
+      <section className="ui-detail-section avatar-detail-page">
         <dl className="ui-detail-definition-list">
-          <dt>アバター名</dt>
-          <dd>{avatar.avatarName || "-"}</dd>
-
-          <dt>ユーザー氏名</dt>
-          <dd>{avatar.userName || "-"}</dd>
-
-          <dt>プロフィール</dt>
-          <dd>{avatar.profile || "-"}</dd>
-
-          <dt>外部リンク</dt>
-          <dd>{avatar.externalLink || "-"}</dd>
-
-          <dt>通報数</dt>
-          <dd>{avatar.reportCount}</dd>
-
-          <dt>登録日時</dt>
-          <dd>{formatDateTime(avatar.createdAt)}</dd>
-
-          <dt>最終更新日時</dt>
-          <dd>{formatDateTime(avatar.updatedAt)}</dd>
+          <div>
+            <dt>ユーザー氏名</dt>
+            <dd>{avatar.userName || "-"}</dd>
+          </div>
+          <div>
+            <dt>プロフィール</dt>
+            <dd>{avatar.profile || "-"}</dd>
+          </div>
+          <div>
+            <dt>外部リンク</dt>
+            <dd>{avatar.externalLink || "-"}</dd>
+          </div>
+          <div>
+            <dt>通報数</dt>
+            <dd>{avatar.reportCount}</dd>
+          </div>
+          <div>
+            <dt>登録日時</dt>
+            <dd>{formatDateTime(avatar.createdAt)}</dd>
+          </div>
+          <div>
+            <dt>最終更新日時</dt>
+            <dd>{formatDateTime(avatar.updatedAt)}</dd>
+          </div>
         </dl>
       </section>
     );

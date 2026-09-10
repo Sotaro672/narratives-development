@@ -1,0 +1,32 @@
+/* frontend/admin/shell/src/pages/AvatarDetailPage.css */
+
+.avatar-detail-page .ui-detail-definition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.avatar-detail-page .ui-detail-definition-list > div {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.avatar-detail-page .ui-detail-definition-list dt,
+.avatar-detail-page .ui-detail-definition-list dd {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.avatar-detail-page .ui-detail-definition-list dt {
+  font-weight: 600;
+  color: #525252;
+}
+
+.avatar-detail-page .ui-detail-definition-list dd {
+  min-width: 0;
+  color: #171717;
+  overflow-wrap: anywhere;
+}
