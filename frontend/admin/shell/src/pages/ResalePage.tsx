@@ -3,8 +3,10 @@
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAvatarResales } from "../features/avatar/presentation/hooks/useAvatarResales";
-import Page, { PageHeader } from "../shared/ui/Page/Page";
+import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
+
+import "./ResalePage.css";
 
 const STATUS_LABELS: Record<string, string> = {
   listing: "出品中",
@@ -22,7 +24,7 @@ export default function ResalePage() {
   const { resales, loading, error, reload } = useAvatarResales(avatarId);
   const resale = resales.find((item) => item.id === resaleId) ?? null;
 
-  const renderContent = () => {
+  const renderAside = () => {
     if (loading) {
       return <p>Resaleを取得しています...</p>;
     }
@@ -44,7 +46,7 @@ export default function ResalePage() {
     }
 
     return (
-      <section className="ui-detail-section">
+      <section className="ui-detail-section resale-page">
         <dl className="ui-detail-definition-list">
           <div>
             <dt>商品名</dt>
@@ -72,9 +74,7 @@ export default function ResalePage() {
           </div>
           <div>
             <dt>最終更新日時</dt>
-            <dd>
-              {resale.updatedAt ? formatDateTime(resale.updatedAt) : "-"}
-            </dd>
+            <dd>{resale.updatedAt ? formatDateTime(resale.updatedAt) : "-"}</dd>
           </div>
         </dl>
       </section>
@@ -112,7 +112,7 @@ export default function ResalePage() {
         }
       />
 
-      {renderContent()}
+      <DetailPageBody main={null} aside={renderAside()} />
     </Page>
   );
 }
