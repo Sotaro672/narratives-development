@@ -53,7 +53,7 @@ function renderModelMetadata(model: MintDetailModel) {
 
       {measurements.length > 0 ? (
         <div className="mint-detail-page__definition-row">
-          <dt>Measurements</dt>
+          <dt>採寸</dt>
           <dd className="mint-detail-page__measurements">
             {measurements.map(([key, value]) => (
               <span key={key}>
