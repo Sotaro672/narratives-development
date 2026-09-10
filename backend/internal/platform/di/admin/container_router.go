@@ -36,14 +36,21 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.contractTokenBlueprintReviewQuery,
 		cont.contractProductBlueprintReviewQuery,
 	)
+
 	avatarHandler := adminhandler.NewAvatarHandler(
 		cont.avatarRepo,
 		cont.userRepo,
 		cont.reportRepo,
 		cont.resaleRepo,
+	)
+
+	resaleHandler := adminhandler.NewResaleHandler(
+		cont.resaleRepo,
+		cont.reportRepo,
 		cont.productBlueprintRepo,
 		cont.tokenBlueprintRepo,
 	)
+
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	mintHandler := adminhandler.NewMintHandler(
 		cont.mintListQuery,
@@ -58,6 +65,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Contacts:  contactHandler,
 		Companies: companyHandler,
 		Avatars:   avatarHandler,
+		Resales:   resaleHandler,
 		Gas:       gasHandler,
 		Mints:     mintHandler,
 		News:      newsHandler,

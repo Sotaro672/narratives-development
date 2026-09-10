@@ -15,6 +15,7 @@ type RouterDeps struct {
 	Contacts  http.Handler
 	Companies http.Handler
 	Avatars   http.Handler
+	Resales   http.Handler
 	Gas       http.Handler
 	Mints     http.Handler
 	News      http.Handler
@@ -56,7 +57,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 	if deps.Avatars != nil {
 		avatarsHandler := withAuth(deps.Avatars)
 		mux.Handle("/admin/avatars", avatarsHandler)
-		mux.Handle("/admin/avatars/", avatarsHandler)
+		mux.Handle("/admin/avatars/{$}", avatarsHandler)
+	}
+
+	if deps.Resales != nil {
+		mux.Handle(
+			"/admin/avatars/{avatarID}/resales",
+			withAuth(deps.Resales),
+		)
 	}
 
 	if deps.Gas != nil {
