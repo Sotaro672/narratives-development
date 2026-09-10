@@ -149,7 +149,7 @@ export default function NotificationPage() {
               key={feedItem.key}
               role="button"
               tabIndex={0}
-              aria-label={`${title}を開く`}
+              aria-label={`${isUnread ? "未読、" : ""}${title}を開く`}
               className={[
                 "notification-page__row",
                 isUnread ? "notification-page__row--unread" : "",
@@ -164,16 +164,26 @@ export default function NotificationPage() {
               }
             >
               <td className="notification-page__title-cell">
-                <span
-                  className={[
-                    "notification-page__title",
-                    isUnread ? "notification-page__title--unread" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  {title}
-                </span>
+                <div className="notification-page__title-row">
+                  {isUnread ? (
+                    <span
+                      className="notification-page__unread-dot"
+                      aria-label="未読"
+                      title="未読"
+                    />
+                  ) : null}
+
+                  <span
+                    className={[
+                      "notification-page__title",
+                      isUnread ? "notification-page__title--unread" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {title}
+                  </span>
+                </div>
               </td>
             </tr>
           );
