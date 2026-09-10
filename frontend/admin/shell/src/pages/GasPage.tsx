@@ -72,7 +72,7 @@ export default function GasPage() {
         ) : null}
 
         {balance ? (
-          <dl className="gas-page__details">
+          <dl className="ui-detail-definition-list ui-detail-definition-list--rows gas-page__details">
             <div>
               <dt>残高</dt>
               <dd>
@@ -106,9 +106,7 @@ export default function GasPage() {
         {mintsLoading && mints.length === 0 ? <p>Mint一覧を取得しています...</p> : null}
 
         {!mintsLoading && mintsError ? (
-          <p role="alert">
-            Mint一覧を取得できませんでした。{mintsError}
-          </p>
+          <p role="alert">Mint一覧を取得できませんでした。{mintsError}</p>
         ) : null}
 
         {!mintsError && (mints.length > 0 || !mintsLoading) ? (

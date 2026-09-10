@@ -1,28 +1,5 @@
 /* frontend/admin/shell/src/pages/TokenBlueprintDetailPage.css */
 
-.token-blueprint-detail-page__definition-list {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 16px;
-  row-gap: 8px;
-  margin: 0;
-}
-
-.token-blueprint-detail-page__definition-list dt,
-.token-blueprint-detail-page__definition-list dd {
-  margin: 0;
-}
-
-.token-blueprint-detail-page__definition-list dt {
-  white-space: nowrap;
-}
-
-.token-blueprint-detail-page__definition-list dd {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
 .token-blueprint-detail-page__report-link {
   margin: 0;
   padding: 0;

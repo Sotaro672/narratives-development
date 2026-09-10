@@ -23,36 +23,22 @@ export default function ContractDetailPage() {
   const company = detail?.company ?? null;
 
   const handleListClick = (listId: string) => {
-    if (!companyId || !listId) {
-      return;
-    }
-    navigate(
-      `/contracts/${encodeURIComponent(companyId)}/lists/${encodeURIComponent(listId)}`,
-    );
+    if (!companyId || !listId) return;
+    navigate(`/contracts/${encodeURIComponent(companyId)}/lists/${encodeURIComponent(listId)}`);
   };
 
   const handleTokenBlueprintClick = (tokenBlueprintId: string) => {
-    if (!companyId || !tokenBlueprintId) {
-      return;
-    }
-    navigate(
-      `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(tokenBlueprintId)}`,
-    );
+    if (!companyId || !tokenBlueprintId) return;
+    navigate(`/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(tokenBlueprintId)}`);
   };
 
   const handleProductBlueprintClick = (productBlueprintId: string) => {
-    if (!companyId || !productBlueprintId) {
-      return;
-    }
-    navigate(
-      `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(productBlueprintId)}`,
-    );
+    if (!companyId || !productBlueprintId) return;
+    navigate(`/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(productBlueprintId)}`);
   };
 
   const renderMain = () => {
-    if (loading && !detail) {
-      return <p>契約詳細を取得しています...</p>;
-    }
+    if (loading && !detail) return <p>契約詳細を取得しています...</p>;
 
     if (error && !detail) {
       return (
@@ -66,17 +52,11 @@ export default function ContractDetailPage() {
       );
     }
 
-    if (!detail) {
-      return <p role="alert">企業情報を取得できませんでした。</p>;
-    }
+    if (!detail) return <p role="alert">企業情報を取得できませんでした。</p>;
 
     return (
       <div className="contract-detail">
-        <div
-          className="contract-detail__tabs"
-          role="tablist"
-          aria-label="契約関連情報"
-        >
+        <div className="contract-detail__tabs" role="tablist" aria-label="契約関連情報">
           <button
             id="contract-detail-tab-lists"
             type="button"
@@ -98,9 +78,7 @@ export default function ContractDetailPage() {
             role="tab"
             className={[
               "contract-detail__tab",
-              activeTab === "tokenBlueprints"
-                ? "contract-detail__tab--active"
-                : "",
+              activeTab === "tokenBlueprints" ? "contract-detail__tab--active" : "",
             ].filter(Boolean).join(" ")}
             aria-selected={activeTab === "tokenBlueprints"}
             aria-controls="contract-detail-panel-token-blueprints"
@@ -115,9 +93,7 @@ export default function ContractDetailPage() {
             role="tab"
             className={[
               "contract-detail__tab",
-              activeTab === "productBlueprints"
-                ? "contract-detail__tab--active"
-                : "",
+              activeTab === "productBlueprints" ? "contract-detail__tab--active" : "",
             ].filter(Boolean).join(" ")}
             aria-selected={activeTab === "productBlueprints"}
             aria-controls="contract-detail-panel-product-blueprints"
@@ -207,7 +183,7 @@ export default function ContractDetailPage() {
 
       {company ? (
         <section className="contract-detail__company-info">
-          <dl className="contract-detail__company-details">
+          <dl className="ui-detail-definition-list ui-detail-definition-list--rows contract-detail__company-details">
             <div>
               <dt>代表者</dt>
               <dd>{company.representativeName || "-"}</dd>

@@ -175,6 +175,31 @@
   overflow-wrap: anywhere;
 }
 
+.ui-detail-definition-list--rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.ui-detail-definition-list--rows > div {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  min-height: 32px;
+}
+
+.ui-detail-definition-list--rows dt {
+  line-height: 24px;
+}
+
+.ui-detail-definition-list--rows dd {
+  min-width: 0;
+  margin: 0;
+  line-height: 24px;
+  overflow-wrap: anywhere;
+}
+
 .ui-detail-definition-list__nowrap {
   white-space: nowrap;
 }

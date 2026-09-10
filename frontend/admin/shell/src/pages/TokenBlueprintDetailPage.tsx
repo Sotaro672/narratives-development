@@ -14,8 +14,14 @@ import "./TokenBlueprintDetailPage.css";
 
 export default function TokenBlueprintDetailPage() {
   const navigate = useNavigate();
-  const { companyId = "", tokenBlueprintId = "" } = useParams<{ companyId?: string; tokenBlueprintId?: string }>();
-  const { detail, loading, error, reload } = useContractTokenBlueprintDetail(companyId, tokenBlueprintId);
+  const { companyId = "", tokenBlueprintId = "" } = useParams<{
+    companyId?: string;
+    tokenBlueprintId?: string;
+  }>();
+  const { detail, loading, error, reload } = useContractTokenBlueprintDetail(
+    companyId,
+    tokenBlueprintId,
+  );
 
   const company = detail?.company ?? null;
   const tokenBlueprint = detail?.tokenBlueprint ?? null;
@@ -23,9 +29,14 @@ export default function TokenBlueprintDetailPage() {
 
   const galleryItems = useMemo<MediaGalleryItem[]>(() => {
     if (!tokenBlueprint) return [];
+
     return tokenBlueprint.contentFiles
       .filter((file) => file.type === "image" && Boolean(file.id) && Boolean(file.url))
-      .map((file) => ({ id: file.id, url: file.url, fileName: file.name || undefined }));
+      .map((file) => ({
+        id: file.id,
+        url: file.url,
+        fileName: file.name || undefined,
+      }));
   }, [tokenBlueprint]);
 
   const moderationTone =
@@ -36,19 +47,25 @@ export default function TokenBlueprintDetailPage() {
         : "neutral";
 
   const renderMain = () => {
-    if (loading && !detail) return <p>トークン設計詳細を取得しています...</p>;
+    if (loading && !detail) {
+      return <p>トークン設計詳細を取得しています...</p>;
+    }
 
     if (error && !detail) {
       return (
         <div role="alert">
           <p>トークン設計詳細を取得できませんでした。</p>
           <p>{error}</p>
-          <button type="button" onClick={() => void reload()}>再読み込み</button>
+          <button type="button" onClick={() => void reload()}>
+            再読み込み
+          </button>
         </div>
       );
     }
 
-    if (!tokenBlueprint) return <p role="alert">トークン設計情報を取得できませんでした。</p>;
+    if (!tokenBlueprint) {
+      return <p role="alert">トークン設計情報を取得できませんでした。</p>;
+    }
 
     return (
       <>
@@ -62,19 +79,25 @@ export default function TokenBlueprintDetailPage() {
                   className="token-blueprint-detail-page__icon"
                 />
               ) : (
-                <div className="token-blueprint-detail-page__icon-placeholder">アイコン未設定</div>
+                <div className="token-blueprint-detail-page__icon-placeholder">
+                  アイコン未設定
+                </div>
               )}
             </div>
 
             <div className="token-blueprint-detail-page__summary-fields">
               <div className="token-blueprint-detail-page__field">
                 <div className="token-blueprint-detail-page__field-label">シンボル</div>
-                <div className="token-blueprint-detail-page__field-value">{tokenBlueprint.symbol || "-"}</div>
+                <div className="token-blueprint-detail-page__field-value">
+                  {tokenBlueprint.symbol || "-"}
+                </div>
               </div>
 
               <div className="token-blueprint-detail-page__field">
                 <div className="token-blueprint-detail-page__field-label">説明</div>
-                <div className="token-blueprint-detail-page__description">{tokenBlueprint.description || "-"}</div>
+                <div className="token-blueprint-detail-page__description">
+                  {tokenBlueprint.description || "-"}
+                </div>
               </div>
             </div>
           </div>
@@ -90,7 +113,11 @@ export default function TokenBlueprintDetailPage() {
 
         <section className="ui-detail-section">
           <h2 className="ui-detail-section__title">レビュー</h2>
-          <TokenBlueprintReviewTable companyId={companyId} tokenBlueprintId={tokenBlueprintId} perPage={20} />
+          <TokenBlueprintReviewTable
+            companyId={companyId}
+            tokenBlueprintId={tokenBlueprintId}
+            perPage={20}
+          />
         </section>
       </>
     );
@@ -102,13 +129,21 @@ export default function TokenBlueprintDetailPage() {
         title={tokenBlueprint?.name || "トークン設計詳細"}
         meta={
           tokenBlueprint?.moderationStatus ? (
-            <Tab tone={moderationTone} aria-label={`モデレーション状態 ${tokenBlueprint.moderationStatus}`}>
+            <Tab
+              tone={moderationTone}
+              aria-label={`モデレーション状態 ${tokenBlueprint.moderationStatus}`}
+            >
               {tokenBlueprint.moderationStatus}
             </Tab>
           ) : undefined
         }
         leading={
-          <button type="button" className="ui-page-header__back" aria-label="戻る" onClick={() => navigate(-1)}>
+          <button
+            type="button"
+            className="ui-page-header__back"
+            aria-label="戻る"
+            onClick={() => navigate(-1)}
+          >
             <svg
               width="18"
               height="18"
@@ -132,7 +167,7 @@ export default function TokenBlueprintDetailPage() {
           main={renderMain()}
           aside={
             <section className="ui-detail-section">
-              <dl className="ui-detail-definition-list token-blueprint-detail-page__definition-list">
+              <dl className="ui-detail-definition-list ui-detail-definition-list--meta">
                 <dt>企業名</dt>
                 <dd>{company.name || "-"}</dd>
 
@@ -157,7 +192,9 @@ export default function TokenBlueprintDetailPage() {
                     <button
                       type="button"
                       className="token-blueprint-detail-page__report-link"
-                      onClick={() => navigate(`/reports/${encodeURIComponent(reportCaseId)}`)}
+                      onClick={() =>
+                        navigate(`/reports/${encodeURIComponent(reportCaseId)}`)
+                      }
                     >
                       {tokenBlueprint.reportCount.toLocaleString()}
                     </button>
