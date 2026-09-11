@@ -1,22 +1,5 @@
 /* frontend/admin/shell/src/pages/ReportDetailPage.css */
 
-.report-detail-page__target-link {
-  color: inherit;
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.report-detail-page__target-link:hover {
-  text-decoration-thickness: 2px;
-}
-
-.report-detail-page__target-link:focus-visible {
-  border-radius: 2px;
-  outline: 2px solid #171717;
-  outline-offset: 2px;
-}
-
 .report-detail-page__body-text {
   white-space: pre-wrap;
   overflow-wrap: anywhere;

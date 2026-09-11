@@ -23,7 +23,7 @@ export default function ReportTargetSnapshotSection({
           </div>
         ) : null}
 
-        {reportCase.snapshotTitle ? (
+        {reportCase.snapshotTitle && reportCase.targetType !== "RESALE" ? (
           <div>
             <dt>{getSnapshotTitleLabel(reportCase.targetType)}</dt>
             <dd>{reportCase.snapshotTitle}</dd>
