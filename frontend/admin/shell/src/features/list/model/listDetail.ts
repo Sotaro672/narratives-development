@@ -1,6 +1,6 @@
-// frontend/admin/shell/src/shared/type/contractListDetail.ts
+// frontend\admin\shell\src\features\list\presentation\model\listDetail.ts
 
-import type { Company } from "./company";
+import type { Company } from "../../../shared/type/company";
 
 export type ContractListPriceRow = {
   modelId: string;

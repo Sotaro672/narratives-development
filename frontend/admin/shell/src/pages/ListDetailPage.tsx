@@ -2,10 +2,10 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
-import ListDetailAside from "../features/company/presentation/components/ListDetailAside";
-import ListDetailPriceList from "../features/company/presentation/components/ListDetailPriceList";
-import ListDetailSummary from "../features/company/presentation/components/ListDetailSummary";
-import { useContractListDetail } from "../features/company/presentation/hooks/useContractListDetail";
+import ListDetailAside from "../features/list/presentation/components/ListDetailAside";
+import ListDetailPriceList from "../features/list/presentation/components/ListDetailPriceList";
+import ListDetailSummary from "../features/list/presentation/components/ListDetailSummary";
+import { useListDetail } from "../features/list/presentation/hooks/useListDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
 
@@ -40,8 +40,7 @@ export default function ListDetailPage() {
     listId?: string;
   }>();
 
-  const { detail, loading, error, reload } =
-    useContractListDetail(companyId, listId);
+  const { detail, loading, error, reload } = useListDetail(companyId, listId);
 
   const company = detail?.company ?? null;
   const list = detail?.list ?? null;
@@ -132,9 +131,7 @@ export default function ListDetailPage() {
                 )
               }
               onOpenReport={() =>
-                navigate(
-                  `/reports/${encodeURIComponent(`list_${list.id}`)}`,
-                )
+                navigate(`/reports/${encodeURIComponent(`list_${list.id}`)}`)
               }
             />
           }

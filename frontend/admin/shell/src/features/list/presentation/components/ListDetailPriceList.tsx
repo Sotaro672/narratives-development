@@ -1,6 +1,6 @@
 // frontend/admin/shell/src/features/company/presentation/components/ListDetailPriceList.tsx
 
-import type { ContractListPriceRow } from "../../../../shared/type/contractListDetail";
+import type { ContractListPriceRow } from "../../model/listDetail";
 import { formatModelMeta } from "../../../../shared/util/modelMetaFormat";
 
 type ListDetailPriceListProps = {

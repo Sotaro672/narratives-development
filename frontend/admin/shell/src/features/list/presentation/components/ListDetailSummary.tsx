@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import type { ContractListDetail } from "../../../../shared/type/contractListDetail";
+import type { ContractListDetail } from "../../model/listDetail";
 import MediaGallery, {
   type MediaGalleryItem,
 } from "../../../../shared/ui/MediaGallery/MediaGallery";

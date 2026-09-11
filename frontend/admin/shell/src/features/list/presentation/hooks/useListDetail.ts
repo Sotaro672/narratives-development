@@ -1,11 +1,11 @@
-// frontend/admin/shell/src/features/company/presentation/hooks/useContractListDetail.ts
+// frontend/admin/shell/src/features/list/presentation/hooks/useListDetail.ts
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ContractListDetailResponse } from "../../../../shared/type/contractListDetail";
-import { getContractListDetail } from "../../infrastructure/companyApi";
+import { getContractListDetail } from "../../infrastructure/listApi";
+import type { ContractListDetailResponse } from "../../model/listDetail";
 
-export function useContractListDetail(
+export function useListDetail(
   companyId: string | undefined,
   listId: string | undefined,
 ) {

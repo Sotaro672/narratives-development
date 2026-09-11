@@ -4,7 +4,6 @@ import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
 import type { Company, CompanyListResponse } from "../../../shared/type/company";
 import type { ContractDetailResponse } from "../../../shared/type/contractDetail";
-import type { ContractListDetailResponse } from "../../../shared/type/contractListDetail";
 import type { ContractProductBlueprintDetailResponse } from "../../../shared/type/contractProductBlueprintDetail";
 import type {
   ContractProductBlueprintReviewResponse,
@@ -35,9 +34,7 @@ async function requireOk(
   response: Response,
   message: string,
 ): Promise<void> {
-  if (response.ok) {
-    return;
-  }
+  if (response.ok) return;
 
   let detail = "";
   try {
@@ -86,19 +83,6 @@ export async function getContractDetail(
   return getAdminJSON<ContractDetailResponse>(
     `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/contract-detail`,
     "Failed to load contract detail.",
-  );
-}
-
-export async function getContractListDetail(
-  companyId: string,
-  listId: string,
-): Promise<ContractListDetailResponse> {
-  const normalizedCompanyId = requireID(companyId, "companyId");
-  const normalizedListId = requireID(listId, "listId");
-
-  return getAdminJSON<ContractListDetailResponse>(
-    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/lists/${encodeURIComponent(normalizedListId)}`,
-    "Failed to load contract list detail.",
   );
 }
 

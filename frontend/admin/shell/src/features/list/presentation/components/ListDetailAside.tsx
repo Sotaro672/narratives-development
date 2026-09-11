@@ -1,7 +1,7 @@
 // frontend/admin/shell/src/features/company/presentation/components/ListDetailAside.tsx
 
 import type { Company } from "../../../../shared/type/company";
-import type { ContractListDetail } from "../../../../shared/type/contractListDetail";
+import type { ContractListDetail } from "../../model/listDetail";
 import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
