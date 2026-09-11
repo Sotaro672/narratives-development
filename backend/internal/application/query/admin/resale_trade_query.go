@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	applicationport "narratives/internal/application/port"
+	avatardom "narratives/internal/domain/avatar"
 	tradedom "narratives/internal/domain/trade"
 )
 
@@ -14,20 +15,32 @@ var ErrResaleTradeQueryNotConfigured = errors.New(
 	"resale trade query is not configured",
 )
 
+type resaleTradeAvatarReader interface {
+	GetByID(ctx context.Context, id string) (avatardom.Avatar, error)
+}
+
+type ResaleTradeListItem struct {
+	tradedom.Trade
+	BuyerAvatarName string `json:"buyerAvatarName"`
+}
+
 type ResaleTradeListResult struct {
-	Items      []tradedom.Trade `json:"items"`
-	TotalCount int              `json:"totalCount"`
+	Items      []ResaleTradeListItem `json:"items"`
+	TotalCount int                   `json:"totalCount"`
 }
 
 type ResaleTradeQuery struct {
-	reader applicationport.AdminResaleTradeReader
+	reader       applicationport.AdminResaleTradeReader
+	avatarReader resaleTradeAvatarReader
 }
 
 func NewResaleTradeQuery(
 	reader applicationport.AdminResaleTradeReader,
+	avatarReader resaleTradeAvatarReader,
 ) *ResaleTradeQuery {
 	return &ResaleTradeQuery{
-		reader: reader,
+		reader:       reader,
+		avatarReader: avatarReader,
 	}
 }
 
@@ -35,7 +48,7 @@ func (q *ResaleTradeQuery) ListByResaleID(
 	ctx context.Context,
 	resaleID string,
 ) (*ResaleTradeListResult, error) {
-	if q == nil || q.reader == nil {
+	if q == nil || q.reader == nil || q.avatarReader == nil {
 		return nil, ErrResaleTradeQueryNotConfigured
 	}
 	if resaleID == "" {
@@ -51,12 +64,40 @@ func (q *ResaleTradeQuery) ListByResaleID(
 		)
 	}
 
-	if trades == nil {
-		trades = []tradedom.Trade{}
+	items := make([]ResaleTradeListItem, 0, len(trades))
+	avatarNames := make(map[string]string)
+
+	for _, trade := range trades {
+		buyerAvatarName, ok := avatarNames[trade.BuyerAvatarID]
+		if !ok {
+			buyerAvatarName = q.resolveAvatarName(ctx, trade.BuyerAvatarID)
+			avatarNames[trade.BuyerAvatarID] = buyerAvatarName
+		}
+
+		items = append(items, ResaleTradeListItem{
+			Trade:           trade,
+			BuyerAvatarName: buyerAvatarName,
+		})
 	}
 
 	return &ResaleTradeListResult{
-		Items:      trades,
-		TotalCount: len(trades),
+		Items:      items,
+		TotalCount: len(items),
 	}, nil
+}
+
+func (q *ResaleTradeQuery) resolveAvatarName(
+	ctx context.Context,
+	avatarID string,
+) string {
+	if q == nil || q.avatarReader == nil || avatarID == "" {
+		return ""
+	}
+
+	avatar, err := q.avatarReader.GetByID(ctx, avatarID)
+	if err != nil {
+		return ""
+	}
+
+	return avatar.AvatarName
 }

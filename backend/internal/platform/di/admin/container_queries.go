@@ -60,6 +60,9 @@ func buildQueries(
 	if r.resaleTradeReader == nil {
 		return nil, errors.New("di.admin: resale trade reader is nil")
 	}
+	if r.avatarRepo == nil {
+		return nil, errors.New("di.admin: avatar repository is nil")
+	}
 
 	authUserReader := firebaseadp.NewAuthUserReader(infra.FirebaseAuth)
 	if authUserReader == nil {
@@ -87,6 +90,7 @@ func buildQueries(
 
 	resaleTradeQuery := adminquery.NewResaleTradeQuery(
 		r.resaleTradeReader,
+		r.avatarRepo,
 	)
 	if resaleTradeQuery == nil {
 		return nil, errors.New("di.admin: resale trade query is nil")

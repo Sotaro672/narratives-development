@@ -9,6 +9,7 @@ export type Trade = {
   orderId: string;
   orderItemIndex: number;
   buyerAvatarId: string;
+  buyerAvatarName: string;
   sellerType: TradeSellerType;
   sellerCompanyId?: string;
   sellerBrandId?: string;

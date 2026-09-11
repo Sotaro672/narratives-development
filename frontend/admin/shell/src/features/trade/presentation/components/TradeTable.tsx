@@ -40,34 +40,12 @@ export default function TradeTable({
         nowrap: true,
       },
       {
-        key: "orderId",
-        header: "注文ID",
-        render: (trade) => trade.orderId,
-        nowrap: true,
-      },
-      {
-        key: "orderItemIndex",
-        header: "明細",
-        render: (trade) => trade.orderItemIndex,
-        sortValue: (trade) => trade.orderItemIndex,
-        nowrap: true,
-      },
-      {
-        key: "buyerAvatarId",
+        key: "buyerAvatarName",
         header: "購入者",
-        render: (trade) => trade.buyerAvatarId || "-",
-        nowrap: true,
-      },
-      {
-        key: "seller",
-        header: "出品者",
-        render: (trade) => {
-          if (trade.sellerType === "avatar") {
-            return trade.sellerAvatarId || "-";
-          }
-
-          return trade.sellerBrandId || trade.sellerCompanyId || "-";
-        },
+        render: (trade) =>
+          trade.buyerAvatarName || trade.buyerAvatarId || "-",
+        sortValue: (trade) =>
+          trade.buyerAvatarName || trade.buyerAvatarId,
         nowrap: true,
       },
       {
