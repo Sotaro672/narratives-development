@@ -9,8 +9,6 @@ import type {
   ContractProductBlueprintReviewResponse,
   ContractProductBlueprintReviewStatus,
 } from "../../../shared/type/contractProductBlueprintReview";
-import type { ContractTokenBlueprintDetailResponse } from "../../../shared/type/contractTokenBlueprintDetail";
-import type { ContractTokenBlueprintReviewResponse } from "../../../shared/type/contractTokenBlueprintReview";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -24,9 +22,11 @@ function requireBackendBaseUrl(): string {
 
 function requireID(value: string, name: string): string {
   const normalized = value.trim();
+
   if (!normalized) {
     throw new Error(`${name} is required.`);
   }
+
   return normalized;
 }
 
@@ -37,6 +37,7 @@ async function requireOk(
   if (response.ok) return;
 
   let detail = "";
+
   try {
     const body = (await response.json()) as { error?: string };
     detail = body.error ? ` error=${body.error}` : "";
@@ -86,22 +87,6 @@ export async function getContractDetail(
   );
 }
 
-export async function getContractTokenBlueprintDetail(
-  companyId: string,
-  tokenBlueprintId: string,
-): Promise<ContractTokenBlueprintDetailResponse> {
-  const normalizedCompanyId = requireID(companyId, "companyId");
-  const normalizedTokenBlueprintId = requireID(
-    tokenBlueprintId,
-    "tokenBlueprintId",
-  );
-
-  return getAdminJSON<ContractTokenBlueprintDetailResponse>(
-    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/token-blueprints/${encodeURIComponent(normalizedTokenBlueprintId)}`,
-    "Failed to load contract token blueprint detail.",
-  );
-}
-
 export async function getContractProductBlueprintDetail(
   companyId: string,
   productBlueprintId: string,
@@ -115,29 +100,6 @@ export async function getContractProductBlueprintDetail(
   return getAdminJSON<ContractProductBlueprintDetailResponse>(
     `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/product-blueprints/${encodeURIComponent(normalizedProductBlueprintId)}`,
     "Failed to load contract product blueprint detail.",
-  );
-}
-
-export async function getContractTokenBlueprintReviews(
-  companyId: string,
-  tokenBlueprintId: string,
-  page = 1,
-  perPage = 20,
-): Promise<ContractTokenBlueprintReviewResponse> {
-  const normalizedCompanyId = requireID(companyId, "companyId");
-  const normalizedTokenBlueprintId = requireID(
-    tokenBlueprintId,
-    "tokenBlueprintId",
-  );
-
-  const query = new URLSearchParams({
-    page: String(page),
-    perPage: String(perPage),
-  });
-
-  return getAdminJSON<ContractTokenBlueprintReviewResponse>(
-    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/token-blueprints/${encodeURIComponent(normalizedTokenBlueprintId)}/reviews?${query.toString()}`,
-    "Failed to load contract token blueprint reviews.",
   );
 }
 

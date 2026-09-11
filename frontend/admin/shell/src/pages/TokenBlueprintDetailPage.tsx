@@ -3,8 +3,8 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import TokenBlueprintReviewTable from "../features/company/presentation/components/TokenBlueprintReviewTable";
-import { useContractTokenBlueprintDetail } from "../features/company/presentation/hooks/useContractTokenBlueprintDetail";
+import TokenBlueprintReviewTable from "../features/tokenBlueprint/presentation/components/TokenBlueprintReviewTable";
+import { useTokenBlueprintDetail } from "../features/tokenBlueprint/presentation/hooks/useTokenBlueprintDetail";
 import MediaGallery, { type MediaGalleryItem } from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import Tab from "../shared/ui/Tab/Tab";
@@ -19,20 +19,28 @@ export default function TokenBlueprintDetailPage() {
     companyId?: string;
     tokenBlueprintId?: string;
   }>();
-  const { detail, loading, error, reload } = useContractTokenBlueprintDetail(
+
+  const { detail, loading, error, reload } = useTokenBlueprintDetail(
     companyId,
     tokenBlueprintId,
   );
 
   const company = detail?.company ?? null;
   const tokenBlueprint = detail?.tokenBlueprint ?? null;
-  const reportCaseId = tokenBlueprint ? `tokenBlueprint_${tokenBlueprint.id}` : "";
+  const reportCaseId = tokenBlueprint
+    ? `tokenBlueprint_${tokenBlueprint.id}`
+    : "";
 
   const galleryItems = useMemo<MediaGalleryItem[]>(() => {
     if (!tokenBlueprint) return [];
 
     return tokenBlueprint.contentFiles
-      .filter((file) => file.type === "image" && Boolean(file.id) && Boolean(file.url))
+      .filter(
+        (file) =>
+          file.type === "image" &&
+          Boolean(file.id) &&
+          Boolean(file.url),
+      )
       .map((file) => ({
         id: file.id,
         url: file.url,
@@ -48,7 +56,9 @@ export default function TokenBlueprintDetailPage() {
         : "neutral";
 
   const renderMain = () => {
-    if (loading && !detail) return <p>トークン設計詳細を取得しています...</p>;
+    if (loading && !detail) {
+      return <p>トークン設計詳細を取得しています...</p>;
+    }
 
     if (error && !detail) {
       return (
@@ -62,7 +72,13 @@ export default function TokenBlueprintDetailPage() {
       );
     }
 
-    if (!tokenBlueprint) return <p role="alert">トークン設計情報を取得できませんでした。</p>;
+    if (!tokenBlueprint) {
+      return (
+        <p role="alert">
+          トークン設計情報を取得できませんでした。
+        </p>
+      );
+    }
 
     return (
       <>
@@ -76,19 +92,29 @@ export default function TokenBlueprintDetailPage() {
                   className="token-blueprint-detail-page__icon"
                 />
               ) : (
-                <div className="token-blueprint-detail-page__icon-placeholder">アイコン未設定</div>
+                <div className="token-blueprint-detail-page__icon-placeholder">
+                  アイコン未設定
+                </div>
               )}
             </div>
 
             <div className="token-blueprint-detail-page__summary-fields">
               <div className="token-blueprint-detail-page__field">
-                <div className="token-blueprint-detail-page__field-label">シンボル</div>
-                <div className="token-blueprint-detail-page__field-value">{tokenBlueprint.symbol || "-"}</div>
+                <div className="token-blueprint-detail-page__field-label">
+                  シンボル
+                </div>
+                <div className="token-blueprint-detail-page__field-value">
+                  {tokenBlueprint.symbol || "-"}
+                </div>
               </div>
 
               <div className="token-blueprint-detail-page__field">
-                <div className="token-blueprint-detail-page__field-label">説明</div>
-                <div className="token-blueprint-detail-page__description">{tokenBlueprint.description || "-"}</div>
+                <div className="token-blueprint-detail-page__field-label">
+                  説明
+                </div>
+                <div className="token-blueprint-detail-page__description">
+                  {tokenBlueprint.description || "-"}
+                </div>
               </div>
             </div>
           </div>
@@ -182,7 +208,11 @@ export default function TokenBlueprintDetailPage() {
                   {tokenBlueprint.reportCount > 0 ? (
                     <TextLink
                       tone="accent"
-                      onClick={() => navigate(`/reports/${encodeURIComponent(reportCaseId)}`)}
+                      onClick={() =>
+                        navigate(
+                          `/reports/${encodeURIComponent(reportCaseId)}`,
+                        )
+                      }
                     >
                       {tokenBlueprint.reportCount.toLocaleString()}
                     </TextLink>

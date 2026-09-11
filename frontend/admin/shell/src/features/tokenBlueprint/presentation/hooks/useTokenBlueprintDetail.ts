@@ -1,11 +1,11 @@
-// frontend/admin/shell/src/features/company/presentation/hooks/useContractTokenBlueprintDetail.ts
+// frontend/admin/shell/src/features/tokenBlueprint/presentation/hooks/useTokenBlueprintDetail.ts
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ContractTokenBlueprintDetailResponse } from "../../../../shared/type/contractTokenBlueprintDetail";
-import { getContractTokenBlueprintDetail } from "../../infrastructure/companyApi";
+import { getContractTokenBlueprintDetail } from "../../infrastructure/tokenBlueprintApi";
+import type { ContractTokenBlueprintDetailResponse } from "../../model/tokenBlueprintDetail";
 
-export function useContractTokenBlueprintDetail(
+export function useTokenBlueprintDetail(
   companyId: string | undefined,
   tokenBlueprintId: string | undefined,
 ) {

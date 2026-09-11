@@ -7,7 +7,7 @@ import BrandTable from "../features/brand/presentation/components/BrandTable";
 import ContractAnnouncementTable from "../features/company/presentation/components/ContractAnnouncementTable";
 import ContractListTable from "../features/list/presentation/components/ContractListTable";
 import ContractProductBlueprintTable from "../features/company/presentation/components/ContractProductBlueprintTable";
-import ContractTokenBlueprintTable from "../features/company/presentation/components/ContractTokenBlueprintTable";
+import ContractTokenBlueprintTable from "../features/tokenBlueprint/presentation/components/TokenBlueprintTable";
 import { useContractDetail } from "../features/company/presentation/hooks/useContractDetail";
 import Page, { PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";

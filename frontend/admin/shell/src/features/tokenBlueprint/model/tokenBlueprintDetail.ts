@@ -1,6 +1,6 @@
-// frontend/admin/shell/src/shared/type/contractTokenBlueprintDetail.ts
+// frontend\admin\shell\src\features\tokenBlueprint\model\tokenBlueprintDetail.ts
 
-import type { Company } from "./company";
+import type { Company } from "../../../shared/type/company";
 
 export type ContractTokenBlueprintContentFile = {
   id: string;

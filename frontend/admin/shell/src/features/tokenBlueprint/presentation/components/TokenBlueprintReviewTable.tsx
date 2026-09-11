@@ -1,11 +1,11 @@
-// frontend/admin/shell/src/features/company/presentation/components/TokenBlueprintReviewTable.tsx
+// frontend/admin/shell/src/features/tokenBlueprint/presentation/components/TokenBlueprintReviewTable.tsx
 
 import { useMemo } from "react";
 
-import type { ContractTokenBlueprintReview } from "../../../../shared/type/contractTokenBlueprintReview";
+import type { ContractTokenBlueprintReview } from "../../model/tokenBlueprintReview";
 import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
-import { useContractTokenBlueprintReviews } from "../hooks/useContractTokenBlueprintReviews";
+import { useTokenBlueprintReviews } from "../hooks/useTokenBlueprintReviews";
 
 type TokenBlueprintReviewTableProps = {
   companyId: string;
@@ -25,13 +25,12 @@ export default function TokenBlueprintReviewTable({
   page = 1,
   perPage = 20,
 }: TokenBlueprintReviewTableProps) {
-  const { reviews, loading, error, reload } =
-    useContractTokenBlueprintReviews(
-      companyId,
-      tokenBlueprintId,
-      page,
-      perPage,
-    );
+  const { reviews, loading, error, reload } = useTokenBlueprintReviews(
+    companyId,
+    tokenBlueprintId,
+    page,
+    perPage,
+  );
 
   const columns = useMemo<TableColumn<ContractTokenBlueprintReview>[]>(
     () => [
@@ -88,7 +87,7 @@ export default function TokenBlueprintReviewTable({
         header: "状態",
         render: (review) => (review.deleted ? "削除済み" : "表示中"),
         filter: {
-          getValue: (review) => review.deleted ? "deleted" : "visible",
+          getValue: (review) => (review.deleted ? "deleted" : "visible"),
           options: [
             { value: "visible", label: "表示中" },
             { value: "deleted", label: "削除済み" },
