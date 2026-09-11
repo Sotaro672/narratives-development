@@ -73,7 +73,6 @@ export default function ReportItemsSection({
   return (
     <section className="ui-detail-section">
       <div className="report-detail-page__reports-header">
-        <h2 className="ui-detail-section__title">通報内容</h2>
 
         {loading ? (
           <span className="report-detail-page__updating" aria-live="polite">
