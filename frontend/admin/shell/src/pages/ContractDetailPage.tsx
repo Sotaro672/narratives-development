@@ -5,7 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import BrandTable from "../features/brand/presentation/components/BrandTable";
 import ContractAnnouncementTable from "../features/company/presentation/components/ContractAnnouncementTable";
-import ContractListTable from "../features/list/presentation/components/ContractListTable";
+import ContractListTable from "../features/list/presentation/components/ListTable";
 import ContractProductBlueprintTable from "../features/company/presentation/components/ContractProductBlueprintTable";
 import ContractTokenBlueprintTable from "../features/tokenBlueprint/presentation/components/TokenBlueprintTable";
 import { useContractDetail } from "../features/company/presentation/hooks/useContractDetail";
