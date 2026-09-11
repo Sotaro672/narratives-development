@@ -1,14 +1,12 @@
-// frontend/admin/shell/src/features/company/infrastructure/companyApi.ts
+// frontend/admin/shell/src/features/productBlueprint/infrastructure/productBlueprintApi.ts
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
-import type { Company, CompanyListResponse } from "../../../shared/type/company";
-import type { ContractDetailResponse } from "../../../shared/type/contractDetail";
-import type { ContractProductBlueprintDetailResponse } from "../../productBlueprint/model/ProductBlueprintDetail";
+import type { ContractProductBlueprintDetailResponse } from "../model/productBlueprintDetail";
 import type {
   ContractProductBlueprintReviewResponse,
   ContractProductBlueprintReviewStatus,
-} from "../../productBlueprint/model/ProductBlueprintReview";
+} from "../model/productBlueprintReview";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -65,26 +63,6 @@ async function getAdminJSON<T>(
 
   await requireOk(response, errorMessage);
   return (await response.json()) as T;
-}
-
-export async function listCompanies(): Promise<Company[]> {
-  const body = await getAdminJSON<CompanyListResponse>(
-    "/admin/companies",
-    "Failed to load companies.",
-  );
-
-  return Array.isArray(body.items) ? body.items : [];
-}
-
-export async function getContractDetail(
-  companyId: string,
-): Promise<ContractDetailResponse> {
-  const normalizedCompanyId = requireID(companyId, "companyId");
-
-  return getAdminJSON<ContractDetailResponse>(
-    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/contract-detail`,
-    "Failed to load contract detail.",
-  );
 }
 
 export async function getContractProductBlueprintDetail(

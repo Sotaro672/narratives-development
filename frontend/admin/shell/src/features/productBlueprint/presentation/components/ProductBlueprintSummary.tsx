@@ -1,6 +1,6 @@
 // frontend/admin/shell/src/features/company/presentation/components/ProductBlueprintSummary.tsx
 
-import type { ContractProductBlueprintDetail } from "../../../../shared/type/contractProductBlueprintDetail";
+import type { ContractProductBlueprintDetail } from "../../model/ProductBlueprintDetail";
 
 const CATEGORY_FIELD_LABELS: Record<string, string> = {
   weight: "重量",

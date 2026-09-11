@@ -2,11 +2,11 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
-import ProductBlueprintDetailAside from "../features/company/presentation/components/ProductBlueprintDetailAside";
-import ProductBlueprintModelList from "../features/company/presentation/components/ProductBlueprintModelList";
-import ProductBlueprintReviewTable from "../features/company/presentation/components/ProductBlueprintReviewTable";
-import ProductBlueprintSummary from "../features/company/presentation/components/ProductBlueprintSummary";
-import { useContractProductBlueprintDetail } from "../features/company/presentation/hooks/useContractProductBlueprintDetail";
+import ProductBlueprintDetailAside from "../features/productBlueprint/presentation/components/ProductBlueprintDetailAside";
+import ProductBlueprintModelList from "../features/productBlueprint/presentation/components/ProductBlueprintModelList";
+import ProductBlueprintReviewTable from "../features/productBlueprint/presentation/components/ProductBlueprintReviewTable";
+import ProductBlueprintSummary from "../features/productBlueprint/presentation/components/ProductBlueprintSummary";
+import { useContractProductBlueprintDetail } from "../features/productBlueprint/presentation/hooks/useProductBlueprintDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 
 import "./ProductBlueprintDetailPage.css";

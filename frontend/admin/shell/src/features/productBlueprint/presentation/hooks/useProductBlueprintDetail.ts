@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ContractProductBlueprintDetailResponse } from "../../../../shared/type/contractProductBlueprintDetail";
-import { getContractProductBlueprintDetail } from "../../infrastructure/companyApi";
+import type { ContractProductBlueprintDetailResponse } from "../../model/ProductBlueprintDetail";
+import { getContractProductBlueprintDetail } from "../../../company/infrastructure/companyApi";
 
 export function useContractProductBlueprintDetail(
   companyId: string | undefined,

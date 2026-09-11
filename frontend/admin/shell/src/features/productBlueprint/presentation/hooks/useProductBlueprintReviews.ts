@@ -5,8 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   ContractProductBlueprintReviewResponse,
   ContractProductBlueprintReviewStatus,
-} from "../../../../shared/type/contractProductBlueprintReview";
-import { getContractProductBlueprintReviews } from "../../infrastructure/companyApi";
+} from "../../model/ProductBlueprintReview";
+import { getContractProductBlueprintReviews } from "../../../company/infrastructure/companyApi";
 
 export function useContractProductBlueprintReviews(
   companyId: string | undefined,

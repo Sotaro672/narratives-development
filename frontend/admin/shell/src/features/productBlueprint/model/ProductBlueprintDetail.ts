@@ -1,6 +1,5 @@
-// frontend/admin/shell/src/shared/type/contractProductBlueprintDetail.ts
-
-import type { Company } from "./company";
+// frontend\admin\shell\src\features\productBlueprint\model\ProductBlueprintDetail.ts
+import type { Company } from "../../../shared/type/company";
 
 export type ContractProductBlueprintModelRef = {
   modelId: string;

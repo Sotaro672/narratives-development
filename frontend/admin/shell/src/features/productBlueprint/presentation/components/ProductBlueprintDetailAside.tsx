@@ -1,7 +1,7 @@
 // frontend/admin/shell/src/features/company/presentation/components/ProductBlueprintDetailAside.tsx
 
 import type { Company } from "../../../../shared/type/company";
-import type { ContractProductBlueprintDetail } from "../../../../shared/type/contractProductBlueprintDetail";
+import type { ContractProductBlueprintDetail } from "../../model/ProductBlueprintDetail";
 import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 

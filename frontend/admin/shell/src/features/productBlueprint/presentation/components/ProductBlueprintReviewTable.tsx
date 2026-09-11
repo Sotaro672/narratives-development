@@ -5,10 +5,10 @@ import { useMemo } from "react";
 import type {
   ContractProductBlueprintReview,
   ContractProductBlueprintReviewStatus,
-} from "../../../../shared/type/contractProductBlueprintReview";
+} from "../../model/ProductBlueprintReview";
 import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
-import { useContractProductBlueprintReviews } from "../hooks/useContractProductBlueprintReviews";
+import { useContractProductBlueprintReviews } from "../hooks/useProductBlueprintReviews";
 
 type ProductBlueprintReviewTableProps = {
   companyId: string;
