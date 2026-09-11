@@ -58,6 +58,7 @@ type resaleResponse struct {
 	Status             string                `json:"status"`
 	Price              int                   `json:"price"`
 	Condition          string                `json:"condition"`
+	Description        string                `json:"description"`
 	Images             []resaleImageResponse `json:"images"`
 	ReportCount        int                   `json:"reportCount"`
 	CreatedAt          string                `json:"createdAt"`
@@ -231,6 +232,7 @@ func (h *ResaleHandler) buildResaleResponse(
 		Status:             string(resale.Status),
 		Price:              resale.Price,
 		Condition:          string(resale.Condition),
+		Description:        resale.Description,
 		Images:             images,
 		ReportCount:        reportCount,
 		CreatedAt:          resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),

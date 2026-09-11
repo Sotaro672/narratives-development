@@ -2,12 +2,12 @@
 
 import { useNavigate } from "react-router-dom";
 
-import type { AvatarResale } from "../../../../shared/type/avatar";
+import type { Resale } from "../../../../shared/type/resale";
 import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ResaleDetailAsideProps = {
-  resale: AvatarResale | null;
+  resale: Resale | null;
   loading: boolean;
   error: string | null;
   onReload: () => void | Promise<void>;

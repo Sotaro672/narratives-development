@@ -16,30 +16,3 @@ export type Avatar = {
 export type AvatarListResponse = {
   items: Avatar[];
 };
-
-export type AvatarResaleImage = {
-  id: string;
-  url: string;
-  displayOrder: number;
-};
-
-export type AvatarResale = {
-  id: string;
-  companyId: string;
-  productBlueprintId: string;
-  productName: string;
-  tokenBlueprintId: string;
-  tokenName: string;
-  reportCaseId: string;
-  status: string;
-  price: number;
-  condition: string;
-  images: AvatarResaleImage[];
-  reportCount: number;
-  createdAt: string;
-  updatedAt?: string | null;
-};
-
-export type AvatarResaleListResponse = {
-  items: AvatarResale[];
-};

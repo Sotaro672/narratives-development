@@ -1,6 +1,6 @@
 // frontend/admin/shell/src/features/resale/presentation/model/resalePresentation.ts
 
-import type { AvatarResaleImage } from "../../../../shared/type/avatar";
+import type { ResaleImage } from "../../../../shared/type/resale";
 import type { MediaGalleryItem } from "../../../../shared/ui/MediaGallery/MediaGallery";
 import type { TabTone } from "../../../../shared/ui/Tab/Tab";
 
@@ -28,7 +28,7 @@ export function getResaleStatusTone(status: string): TabTone {
 }
 
 export function createResaleGalleryItems(
-  images: AvatarResaleImage[],
+  images: ResaleImage[],
 ): MediaGalleryItem[] {
   return [...images]
     .sort((a, b) => a.displayOrder - b.displayOrder)

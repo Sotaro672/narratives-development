@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { AvatarResale } from "../../../../shared/type/avatar";
+import type { Resale } from "../../../../shared/type/resale";
 import { getResaleDetail } from "../../infrastructure/resaleApi";
 
 export function useResaleDetail(avatarId: string, resaleId: string) {
-  const [resale, setResale] = useState<AvatarResale | null>(null);
+  const [resale, setResale] = useState<Resale | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

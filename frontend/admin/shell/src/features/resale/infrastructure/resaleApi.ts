@@ -1,7 +1,7 @@
 // frontend/admin/shell/src/features/resale/infrastructure/resaleApi.ts
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
-import type { AvatarResale } from "../../../shared/type/avatar";
+import type { Resale } from "../../../shared/type/resale";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -36,7 +36,7 @@ async function requireOk(response: Response): Promise<void> {
 export async function getResaleDetail(
   avatarId: string,
   resaleId: string,
-): Promise<AvatarResale> {
+): Promise<Resale> {
   const backendBaseUrl = requireBackendBaseUrl();
   const authHeaders = await getAuthHeaders();
 
@@ -53,5 +53,5 @@ export async function getResaleDetail(
 
   await requireOk(response);
 
-  return (await response.json()) as AvatarResale;
+  return (await response.json()) as Resale;
 }

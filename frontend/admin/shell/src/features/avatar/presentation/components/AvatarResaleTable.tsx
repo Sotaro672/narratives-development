@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import type { AvatarResale } from "../../../../shared/type/avatar";
+import type { Resale } from "../../../../shared/type/resale";
 import Table, {
   type TableColumn,
   type TableFilterOption,
@@ -10,8 +10,8 @@ import Table, {
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type AvatarResaleTableProps = {
-  resales: AvatarResale[];
-  onResaleClick?: (resale: AvatarResale) => void;
+  resales: Resale[];
+  onResaleClick?: (resale: Resale) => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -31,7 +31,7 @@ export default function AvatarResaleTable({
   resales,
   onResaleClick,
 }: AvatarResaleTableProps) {
-  const columns = useMemo<TableColumn<AvatarResale>[]>(
+  const columns = useMemo<TableColumn<Resale>[]>(
     () => [
       {
         key: "productName",

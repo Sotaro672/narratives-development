@@ -1,13 +1,8 @@
 // frontend/admin/shell/src/features/avatar/infrastructure/avatarApi.ts
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
-
-import type {
-  Avatar,
-  AvatarListResponse,
-  AvatarResale,
-  AvatarResaleListResponse,
-} from "../../../shared/type/avatar";
+import type { Avatar, AvatarListResponse } from "../../../shared/type/avatar";
+import type { Resale, ResaleListResponse } from "../../../shared/type/resale";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -16,7 +11,6 @@ function requireBackendBaseUrl(): string {
   if (!BACKEND_BASE_URL) {
     throw new Error("VITE_BACKEND_BASE_URL is not configured.");
   }
-
   return BACKEND_BASE_URL;
 }
 
@@ -59,7 +53,7 @@ export async function listAvatars(): Promise<Avatar[]> {
 
 export async function listAvatarResales(
   avatarId: string,
-): Promise<AvatarResale[]> {
+): Promise<Resale[]> {
   const backendBaseUrl = requireBackendBaseUrl();
   const authHeaders = await getAuthHeaders();
 
@@ -76,6 +70,6 @@ export async function listAvatarResales(
 
   await requireOk(response);
 
-  const body = (await response.json()) as AvatarResaleListResponse;
+  const body = (await response.json()) as ResaleListResponse;
   return Array.isArray(body.items) ? body.items : [];
 }

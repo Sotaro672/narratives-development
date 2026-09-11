@@ -1,11 +1,11 @@
 // frontend/admin/shell/src/features/resale/presentation/components/ResaleMediaSection.tsx
 
-import type { AvatarResale } from "../../../../shared/type/avatar";
+import type { Resale } from "../../../../shared/type/resale";
 import MediaGallery from "../../../../shared/ui/MediaGallery/MediaGallery";
 import { createResaleGalleryItems } from "../model/resalePresentation";
 
 type ResaleMediaSectionProps = {
-  resale: AvatarResale | null;
+  resale: Resale | null;
 };
 
 export default function ResaleMediaSection({
