@@ -1,4 +1,5 @@
 // backend/internal/application/query/admin/mint_detail_query.go
+
 package query
 
 import (
@@ -70,7 +71,8 @@ type MintDetailModel struct {
 }
 
 type MintDetailResult struct {
-	ID string `json:"id"`
+	ID     string             `json:"id"`
+	Status mintdom.MintStatus `json:"status"`
 
 	CompanyID   string `json:"companyId"`
 	CompanyName string `json:"companyName"`
@@ -242,6 +244,7 @@ func (q *MintDetailQuery) Get(
 
 	return MintDetailResult{
 		ID:                 mint.ID,
+		Status:             mint.Status,
 		CompanyID:          productBlueprint.CompanyID,
 		CompanyName:        company.Name,
 		TokenBlueprintID:   tokenBlueprint.ID,

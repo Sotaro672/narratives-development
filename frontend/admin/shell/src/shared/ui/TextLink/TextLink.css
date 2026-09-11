@@ -1,0 +1,40 @@
+/* frontend/admin/shell/src/shared/ui/TextLink/TextLink.css */
+
+.ui-text-link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.ui-text-link--inherit {
+  color: inherit;
+}
+
+.ui-text-link--inherit:hover {
+  opacity: 0.7;
+}
+
+.ui-text-link--accent {
+  color: #2563eb;
+}
+
+.ui-text-link--accent:hover {
+  color: #1d4ed8;
+}
+
+.ui-text-link:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.ui-text-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

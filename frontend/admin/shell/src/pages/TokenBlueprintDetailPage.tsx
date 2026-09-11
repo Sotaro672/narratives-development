@@ -8,6 +8,7 @@ import { useContractTokenBlueprintDetail } from "../features/company/presentatio
 import MediaGallery, { type MediaGalleryItem } from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import Tab from "../shared/ui/Tab/Tab";
+import TextLink from "../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./TokenBlueprintDetailPage.css";
@@ -47,9 +48,7 @@ export default function TokenBlueprintDetailPage() {
         : "neutral";
 
   const renderMain = () => {
-    if (loading && !detail) {
-      return <p>トークン設計詳細を取得しています...</p>;
-    }
+    if (loading && !detail) return <p>トークン設計詳細を取得しています...</p>;
 
     if (error && !detail) {
       return (
@@ -63,9 +62,7 @@ export default function TokenBlueprintDetailPage() {
       );
     }
 
-    if (!tokenBlueprint) {
-      return <p role="alert">トークン設計情報を取得できませんでした。</p>;
-    }
+    if (!tokenBlueprint) return <p role="alert">トークン設計情報を取得できませんでした。</p>;
 
     return (
       <>
@@ -79,25 +76,19 @@ export default function TokenBlueprintDetailPage() {
                   className="token-blueprint-detail-page__icon"
                 />
               ) : (
-                <div className="token-blueprint-detail-page__icon-placeholder">
-                  アイコン未設定
-                </div>
+                <div className="token-blueprint-detail-page__icon-placeholder">アイコン未設定</div>
               )}
             </div>
 
             <div className="token-blueprint-detail-page__summary-fields">
               <div className="token-blueprint-detail-page__field">
                 <div className="token-blueprint-detail-page__field-label">シンボル</div>
-                <div className="token-blueprint-detail-page__field-value">
-                  {tokenBlueprint.symbol || "-"}
-                </div>
+                <div className="token-blueprint-detail-page__field-value">{tokenBlueprint.symbol || "-"}</div>
               </div>
 
               <div className="token-blueprint-detail-page__field">
                 <div className="token-blueprint-detail-page__field-label">説明</div>
-                <div className="token-blueprint-detail-page__description">
-                  {tokenBlueprint.description || "-"}
-                </div>
+                <div className="token-blueprint-detail-page__description">{tokenBlueprint.description || "-"}</div>
               </div>
             </div>
           </div>
@@ -189,15 +180,12 @@ export default function TokenBlueprintDetailPage() {
                 <dt>通報数</dt>
                 <dd>
                   {tokenBlueprint.reportCount > 0 ? (
-                    <button
-                      type="button"
-                      className="token-blueprint-detail-page__report-link"
-                      onClick={() =>
-                        navigate(`/reports/${encodeURIComponent(reportCaseId)}`)
-                      }
+                    <TextLink
+                      tone="accent"
+                      onClick={() => navigate(`/reports/${encodeURIComponent(reportCaseId)}`)}
                     >
                       {tokenBlueprint.reportCount.toLocaleString()}
-                    </button>
+                    </TextLink>
                   ) : (
                     tokenBlueprint.reportCount.toLocaleString()
                   )}

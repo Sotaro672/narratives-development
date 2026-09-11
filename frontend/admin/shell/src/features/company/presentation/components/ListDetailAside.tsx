@@ -2,6 +2,7 @@
 
 import type { Company } from "../../../../shared/type/company";
 import type { ContractListDetail } from "../../../../shared/type/contractListDetail";
+import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ListDetailAsideProps = {
@@ -32,9 +33,9 @@ export default function ListDetailAside({
         <dl className="ui-detail-definition-list ui-detail-definition-list--meta ui-list-detail-meta-list">
           <dt>商品名</dt>
           <dd>
-            <button type="button" className="ui-list-detail-meta-link" onClick={onOpenProductBlueprint}>
+            <TextLink tone="inherit" onClick={onOpenProductBlueprint}>
               {list.productName || "-"}
-            </button>
+            </TextLink>
           </dd>
 
           <dt>商品ブランド名</dt>
@@ -46,9 +47,9 @@ export default function ListDetailAside({
         <dl className="ui-detail-definition-list ui-detail-definition-list--meta ui-list-detail-meta-list">
           <dt>トークン名</dt>
           <dd>
-            <button type="button" className="ui-list-detail-meta-link" onClick={onOpenTokenBlueprint}>
+            <TextLink tone="inherit" onClick={onOpenTokenBlueprint}>
               {list.tokenName || "-"}
-            </button>
+            </TextLink>
           </dd>
 
           <dt>トークンブランド名</dt>
@@ -67,9 +68,9 @@ export default function ListDetailAside({
           <dt>通報数</dt>
           <dd>
             {list.reportCount > 0 ? (
-              <button type="button" className="ui-list-detail-meta-link" onClick={onOpenReport}>
+              <TextLink tone="inherit" onClick={onOpenReport}>
                 {list.reportCount.toLocaleString("ja-JP")}
-              </button>
+              </TextLink>
             ) : (
               "0"
             )}

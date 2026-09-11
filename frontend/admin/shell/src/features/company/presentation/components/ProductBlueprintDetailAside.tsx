@@ -2,6 +2,7 @@
 
 import type { Company } from "../../../../shared/type/company";
 import type { ContractProductBlueprintDetail } from "../../../../shared/type/contractProductBlueprintDetail";
+import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ProductBlueprintDetailAsideProps = {
@@ -44,13 +45,12 @@ export default function ProductBlueprintDetailAside({
           <dt>通報数</dt>
           <dd>
             {productBlueprint.reportCount > 0 && productBlueprint.latestReportCaseId ? (
-              <button
-                type="button"
-                className="product-blueprint-detail-page__report-link"
+              <TextLink
+                tone="accent"
                 onClick={() => onOpenReport(productBlueprint.latestReportCaseId)}
               >
                 {productBlueprint.reportCount.toLocaleString()}
-              </button>
+              </TextLink>
             ) : (
               productBlueprint.reportCount.toLocaleString()
             )}

@@ -107,28 +107,6 @@
   white-space: nowrap;
 }
 
-.mint-detail-page__detail-link {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.mint-detail-page__detail-link:hover {
-  opacity: 0.65;
-}
-
-.mint-detail-page__detail-link:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 3px;
-  border-radius: 2px;
-}
-
 @media (max-width: 720px) {
   .mint-detail-page__model {
     padding: 14px;

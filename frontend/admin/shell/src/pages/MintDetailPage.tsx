@@ -3,10 +3,38 @@
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useMintDetail } from "../features/mint/hooks/useMintDetail";
-import type { MintDetailModel } from "../shared/type/mint";
+import type { MintDetailModel, MintStatus } from "../shared/type/mint";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
+import TextLink from "../shared/ui/TextLink/TextLink";
 
 import "./MintDetailPage.css";
+
+const STATUS_LABELS: Record<MintStatus, string> = {
+  CREATED: "作成済み",
+  QUEUED: "待機中",
+  MINTING: "ミント中",
+  PARTIALLY_MINTED: "一部ミント済み",
+  MINTED: "ミント完了",
+  FAILED_RETRYABLE: "再試行可能",
+  FAILED_FATAL: "ミント失敗",
+};
+
+function getStatusTone(status: MintStatus): TabTone {
+  switch (status) {
+    case "MINTED":
+      return "success";
+    case "QUEUED":
+    case "MINTING":
+    case "PARTIALLY_MINTED":
+      return "warning";
+    case "FAILED_RETRYABLE":
+    case "FAILED_FATAL":
+      return "danger";
+    default:
+      return "neutral";
+  }
+}
 
 function rgbToCssColor(rgb: number): string {
   return `#${rgb.toString(16).padStart(6, "0").slice(-6)}`;
@@ -73,25 +101,19 @@ export default function MintDetailPage() {
   const { detail, loading, error, reload } = useMintDetail(mintId);
 
   const renderMain = () => {
-    if (loading && !detail) {
-      return <p>Mint詳細を取得しています...</p>;
-    }
+    if (loading && !detail) return <p>Mint詳細を取得しています...</p>;
 
     if (error && !detail) {
       return (
         <div role="alert">
           <p>Mint詳細を取得できませんでした。</p>
           <p>{error}</p>
-          <button type="button" onClick={() => void reload()}>
-            再読み込み
-          </button>
+          <button type="button" onClick={() => void reload()}>再読み込み</button>
         </div>
       );
     }
 
-    if (!detail) {
-      return <p role="alert">Mint情報を取得できませんでした。</p>;
-    }
+    if (!detail) return <p role="alert">Mint情報を取得できませんでした。</p>;
 
     if (detail.models.length === 0) {
       return (
@@ -108,14 +130,10 @@ export default function MintDetailPage() {
           {detail.models.map((model) => (
             <article className="mint-detail-page__model" key={model.modelId}>
               <div className="mint-detail-page__model-header">
-                <h3 className="mint-detail-page__model-title">
-                  {model.modelNumber || model.modelId}
-                </h3>
+                <h3 className="mint-detail-page__model-title">{model.modelNumber || model.modelId}</h3>
 
                 <div className="mint-detail-page__product-count">
-                  <span className="mint-detail-page__product-count-value">
-                    {model.productCount.toLocaleString()}
-                  </span>
+                  <span className="mint-detail-page__product-count-value">{model.productCount.toLocaleString()}</span>
                   <span className="mint-detail-page__product-count-unit">点</span>
                 </div>
               </div>
@@ -132,13 +150,15 @@ export default function MintDetailPage() {
     <Page>
       <PageHeader
         title={detail?.tokenName || "Mint詳細"}
+        meta={
+          detail?.status ? (
+            <Tab tone={getStatusTone(detail.status)} aria-label={`Mintステータス ${STATUS_LABELS[detail.status]}`}>
+              {STATUS_LABELS[detail.status]}
+            </Tab>
+          ) : undefined
+        }
         leading={
-          <button
-            type="button"
-            className="ui-page-header__back"
-            aria-label="戻る"
-            onClick={() => navigate("/gas")}
-          >
+          <button type="button" className="ui-page-header__back" aria-label="戻る" onClick={() => navigate("/gas")}>
             <svg
               width="18"
               height="18"
@@ -162,7 +182,7 @@ export default function MintDetailPage() {
           main={renderMain()}
           aside={
             <section className="ui-detail-section">
-              <dl className="ui-detail-definition-list">
+              <dl className="ui-detail-definition-list ui-detail-definition-list--meta">
                 <dt>企業名</dt>
                 <dd>{detail.companyName || "-"}</dd>
 
@@ -171,17 +191,14 @@ export default function MintDetailPage() {
 
                 <dt>トークン名</dt>
                 <dd>
-                  <button
-                    type="button"
-                    className="mint-detail-page__detail-link"
+                  <TextLink
+                    tone="inherit"
                     onClick={() =>
-                      navigate(
-                        `/contracts/${encodeURIComponent(detail.companyId)}/token-blueprints/${encodeURIComponent(detail.tokenBlueprintId)}`,
-                      )
+                      navigate(`/contracts/${encodeURIComponent(detail.companyId)}/token-blueprints/${encodeURIComponent(detail.tokenBlueprintId)}`)
                     }
                   >
                     {detail.tokenName || "-"}
-                  </button>
+                  </TextLink>
                 </dd>
 
                 <dt>商品ブランド名</dt>
@@ -189,17 +206,14 @@ export default function MintDetailPage() {
 
                 <dt>商品名</dt>
                 <dd>
-                  <button
-                    type="button"
-                    className="mint-detail-page__detail-link"
+                  <TextLink
+                    tone="inherit"
                     onClick={() =>
-                      navigate(
-                        `/contracts/${encodeURIComponent(detail.companyId)}/product-blueprints/${encodeURIComponent(detail.productBlueprintId)}`,
-                      )
+                      navigate(`/contracts/${encodeURIComponent(detail.companyId)}/product-blueprints/${encodeURIComponent(detail.productBlueprintId)}`)
                     }
                   >
                     {detail.productName || "-"}
-                  </button>
+                  </TextLink>
                 </dd>
               </dl>
             </section>

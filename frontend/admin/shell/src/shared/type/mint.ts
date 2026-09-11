@@ -40,6 +40,7 @@ export type MintDetailModel = {
 
 export type MintDetail = {
   id: string;
+  status: MintStatus;
   companyId: string;
   companyName: string;
   tokenBlueprintId: string;
