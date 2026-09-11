@@ -37,25 +37,27 @@ func NewReportHandler(
 }
 
 type reportCaseResponse struct {
-	ID               string               `json:"id"`
-	TargetType       reportdom.TargetType `json:"targetType"`
-	TargetID         string               `json:"targetId"`
-	TargetParentID   string               `json:"targetParentId"`
-	TargetParentName string               `json:"targetParentName,omitempty"`
-	TargetCompanyID  string               `json:"targetCompanyId,omitempty"`
-	TargetAuthorID   string               `json:"targetAuthorId"`
-	TargetAuthorName string               `json:"targetAuthorName,omitempty"`
-	TargetAuthorType reportdom.ActorType  `json:"targetAuthorType"`
-	SnapshotTitle    string               `json:"snapshotTitle"`
-	SnapshotBody     string               `json:"snapshotBody"`
-	SnapshotRating   *int                 `json:"snapshotRating"`
-	ReportCount      int                  `json:"reportCount"`
-	Status           reportdom.CaseStatus `json:"status"`
-	CreatedAt        string               `json:"createdAt"`
-	UpdatedAt        string               `json:"updatedAt"`
-	DecidedAt        *string              `json:"decidedAt"`
-	DecidedBy        string               `json:"decidedBy"`
-	DecisionReason   string               `json:"decisionReason"`
+	ID                     string               `json:"id"`
+	TargetType             reportdom.TargetType `json:"targetType"`
+	TargetID               string               `json:"targetId"`
+	TargetParentID         string               `json:"targetParentId"`
+	TargetParentName       string               `json:"targetParentName,omitempty"`
+	TargetCompanyID        string               `json:"targetCompanyId,omitempty"`
+	TargetTokenBlueprintID string               `json:"targetTokenBlueprintId,omitempty"`
+	TargetTokenName        string               `json:"targetTokenName,omitempty"`
+	TargetAuthorID         string               `json:"targetAuthorId"`
+	TargetAuthorName       string               `json:"targetAuthorName,omitempty"`
+	TargetAuthorType       reportdom.ActorType  `json:"targetAuthorType"`
+	SnapshotTitle          string               `json:"snapshotTitle"`
+	SnapshotBody           string               `json:"snapshotBody"`
+	SnapshotRating         *int                 `json:"snapshotRating"`
+	ReportCount            int                  `json:"reportCount"`
+	Status                 reportdom.CaseStatus `json:"status"`
+	CreatedAt              string               `json:"createdAt"`
+	UpdatedAt              string               `json:"updatedAt"`
+	DecidedAt              *string              `json:"decidedAt"`
+	DecidedBy              string               `json:"decidedBy"`
+	DecisionReason         string               `json:"decisionReason"`
 }
 
 type reportCaseListResponse struct {
@@ -147,12 +149,12 @@ func (h *ReportHandler) handle(w http.ResponseWriter, r *http.Request) {
 func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	filter := reportdom.CaseFilter{
-		TargetID:       strings.TrimSpace(query.Get("targetId")),
-		TargetParentID: strings.TrimSpace(query.Get("targetParentId")),
-		TargetAuthorID: strings.TrimSpace(query.Get("targetAuthorId")),
+		TargetID:       query.Get("targetId"),
+		TargetParentID: query.Get("targetParentId"),
+		TargetAuthorID: query.Get("targetAuthorId"),
 	}
 
-	if value := strings.TrimSpace(query.Get("status")); value != "" {
+	if value := query.Get("status"); value != "" {
 		statusValue := reportdom.CaseStatus(strings.ToUpper(value))
 		if err := statusValue.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_status")
@@ -161,7 +163,7 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		filter.Status = &statusValue
 	}
 
-	if value := strings.TrimSpace(query.Get("targetType")); value != "" {
+	if value := query.Get("targetType"); value != "" {
 		targetType := reportdom.TargetType(strings.ToUpper(value))
 		if err := targetType.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_target_type")
@@ -170,7 +172,7 @@ func (h *ReportHandler) handleList(w http.ResponseWriter, r *http.Request) {
 		filter.TargetType = &targetType
 	}
 
-	if value := strings.TrimSpace(query.Get("targetAuthorType")); value != "" {
+	if value := query.Get("targetAuthorType"); value != "" {
 		actorType := reportdom.ActorType(strings.ToUpper(value))
 		if err := actorType.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_target_author_type")
@@ -224,11 +226,11 @@ func (h *ReportHandler) handleDetail(
 	query := r.URL.Query()
 	filter := reportdom.ReportFilter{
 		CaseID:     caseID,
-		ReporterID: strings.TrimSpace(query.Get("reporterId")),
-		CompanyID:  strings.TrimSpace(query.Get("companyId")),
+		ReporterID: query.Get("reporterId"),
+		CompanyID:  query.Get("companyId"),
 	}
 
-	if value := strings.TrimSpace(query.Get("reporterType")); value != "" {
+	if value := query.Get("reporterType"); value != "" {
 		actorType := reportdom.ActorType(strings.ToUpper(value))
 		if err := actorType.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_reporter_type")
@@ -237,7 +239,7 @@ func (h *ReportHandler) handleDetail(
 		filter.ReporterType = &actorType
 	}
 
-	if value := strings.TrimSpace(query.Get("reason")); value != "" {
+	if value := query.Get("reason"); value != "" {
 		reason := reportdom.ReportReason(strings.ToUpper(value))
 		if err := reason.Validate(); err != nil {
 			writeJSONError(w, http.StatusBadRequest, "invalid_reason")
@@ -299,14 +301,14 @@ func (h *ReportHandler) handleDecision(
 		return
 	}
 
-	reason := strings.TrimSpace(request.Reason)
+	reason := request.Reason
 	if reason == "" {
 		writeJSONError(w, http.StatusBadRequest, "decision_reason_required")
 		return
 	}
 
 	var decision usecase.ReportDecision
-	switch strings.ToUpper(strings.TrimSpace(request.Decision)) {
+	switch strings.ToUpper(request.Decision) {
 	case string(usecase.ReportDecisionKeep):
 		decision = usecase.ReportDecisionKeep
 	case string(usecase.ReportDecisionRemove):
@@ -350,7 +352,7 @@ func resolveReportPath(
 
 	parts := strings.Split(remaining, "/")
 	if len(parts) == 1 {
-		caseID := strings.TrimSpace(parts[0])
+		caseID := parts[0]
 		if caseID == "" {
 			return "", reportRouteList, false
 		}
@@ -358,8 +360,8 @@ func resolveReportPath(
 	}
 
 	if len(parts) == 2 {
-		caseID := strings.TrimSpace(parts[0])
-		action := strings.TrimSpace(parts[1])
+		caseID := parts[0]
+		action := parts[1]
 		if caseID == "" || action != "decision" {
 			return "", reportRouteList, false
 		}
@@ -373,7 +375,7 @@ func parseReportCaseSort(
 	columnValue string,
 	orderValue string,
 ) (common.Sort, bool) {
-	column := strings.TrimSpace(columnValue)
+	column := columnValue
 	if column == "" {
 		column = "updatedAt"
 	}
@@ -397,7 +399,7 @@ func parseReportItemSort(
 	columnValue string,
 	orderValue string,
 ) (common.Sort, bool) {
-	column := strings.TrimSpace(columnValue)
+	column := columnValue
 	if column == "" {
 		column = "createdAt"
 	}
@@ -418,7 +420,7 @@ func parseReportItemSort(
 }
 
 func parseReportSortOrder(value string) (common.SortOrder, bool) {
-	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ToLower(value)
 	if value == "" {
 		return common.SortDesc, true
 	}
@@ -496,6 +498,11 @@ func (h *ReportHandler) toReportDetailCaseResponse(
 		reportCase.TargetAuthorType,
 		reportCase.TargetAuthorID,
 	)
+
+	if reportCase.TargetType == reportdom.TargetTypeResale {
+		response.TargetTokenBlueprintID, response.TargetTokenName =
+			h.nameQuery.ResolveResaleToken(ctx, reportCase.TargetID)
+	}
 
 	return response
 }

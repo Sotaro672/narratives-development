@@ -78,6 +78,7 @@ func buildQueries(
 		r.memberRepo,
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
+		r.resaleRepo,
 	)
 
 	contractDetailQuery := adminquery.NewContractDetailQuery(
