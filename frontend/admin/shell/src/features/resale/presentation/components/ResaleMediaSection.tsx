@@ -18,12 +18,21 @@ export default function ResaleMediaSection({
   const galleryItems = createResaleGalleryItems(resale.images);
 
   return (
-    <section className="ui-detail-section">
-      <MediaGallery
-        items={galleryItems}
-        altFallback={resale.productName || "再販商品画像"}
-        placeholderText="再販画像はありません。"
-      />
-    </section>
+    <>
+      <section className="ui-detail-section">
+        <MediaGallery
+          items={galleryItems}
+          altFallback={resale.productName || "再販商品画像"}
+          placeholderText="再販画像はありません。"
+        />
+      </section>
+
+      <section className="ui-detail-section">
+        <h2 className="ui-detail-section__title">商品説明</h2>
+        <p className="ui-detail-section__text">
+          {resale.description || "-"}
+        </p>
+      </section>
+    </>
   );
 }
