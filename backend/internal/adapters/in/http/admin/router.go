@@ -61,10 +61,9 @@ func NewRouter(deps RouterDeps) http.Handler {
 	}
 
 	if deps.Resales != nil {
-		mux.Handle(
-			"/admin/avatars/{avatarID}/resales",
-			withAuth(deps.Resales),
-		)
+		resalesHandler := withAuth(deps.Resales)
+		mux.Handle("/admin/avatars/{avatarID}/resales", resalesHandler)
+		mux.Handle("/admin/avatars/{avatarID}/resales/{resaleID}", resalesHandler)
 	}
 
 	if deps.Gas != nil {

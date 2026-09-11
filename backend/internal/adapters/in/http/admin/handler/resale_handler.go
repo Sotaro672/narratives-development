@@ -3,6 +3,7 @@ package handler
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	productblueprintdom "narratives/internal/domain/productBlueprint"
@@ -11,7 +12,8 @@ import (
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
-type ResaleListReader interface {
+type ResaleReader interface {
+	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
 	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
 }
 
@@ -32,7 +34,7 @@ type ResaleTokenBlueprintReader interface {
 }
 
 type ResaleHandler struct {
-	resaleRepo           ResaleListReader
+	resaleRepo           ResaleReader
 	resaleImageRepo      ResaleImageReader
 	reportRepo           ResaleReportCountReader
 	productBlueprintRepo ResaleProductBlueprintReader
@@ -67,7 +69,7 @@ type resaleListResponse struct {
 }
 
 func NewResaleHandler(
-	resaleRepo ResaleListReader,
+	resaleRepo ResaleReader,
 	resaleImageRepo ResaleImageReader,
 	reportRepo ResaleReportCountReader,
 	productBlueprintRepo ResaleProductBlueprintReader,
@@ -80,10 +82,10 @@ func NewResaleHandler(
 		productBlueprintRepo: productBlueprintRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 	}
-	return http.HandlerFunc(h.handleListByAvatar)
+	return http.HandlerFunc(h.handle)
 }
 
-func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Request) {
+func (h *ResaleHandler) handle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
 		return
@@ -94,6 +96,15 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if r.PathValue("resaleID") != "" {
+		h.handleDetailByAvatar(w, r)
+		return
+	}
+
+	h.handleListByAvatar(w, r)
+}
+
+func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Request) {
 	avatarID := r.PathValue("avatarID")
 	if avatarID == "" {
 		writeJSONError(w, http.StatusBadRequest, "avatar_id_required")
@@ -108,77 +119,121 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 
 	items := make([]resaleResponse, 0, len(resales))
 	for _, resale := range resales {
-		productBlueprint, err := h.productBlueprintRepo.GetByID(r.Context(), resale.ProductBlueprintID)
+		response, err := h.buildResaleResponse(r.Context(), resale)
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "resale_product_resolve_failed")
+			writeJSONError(w, http.StatusInternalServerError, "resale_response_build_failed")
 			return
 		}
-
-		tokenBlueprint, err := h.tokenBlueprintRepo.GetByID(r.Context(), resale.TokenBlueprintID)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "resale_token_resolve_failed")
-			return
-		}
-
-		resaleImages, err := h.resaleImageRepo.ListByResaleID(r.Context(), resale.ID)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "resale_images_list_failed")
-			return
-		}
-
-		images := make([]resaleImageResponse, 0, len(resaleImages))
-		for _, image := range resaleImages {
-			images = append(images, resaleImageResponse{
-				ID:           image.ID,
-				URL:          image.URL,
-				DisplayOrder: image.DisplayOrder,
-			})
-		}
-
-		reportCount, err := h.reportRepo.GetResaleReportCount(r.Context(), resale.ID)
-		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "resale_report_count_failed")
-			return
-		}
-
-		reportCaseID := ""
-		if reportCount > 0 {
-			caseID, err := reportdom.BuildCaseID(reportdom.TargetTypeResale, resale.ID)
-			if err != nil {
-				writeJSONError(w, http.StatusInternalServerError, "resale_report_case_id_failed")
-				return
-			}
-			reportCaseID = string(caseID)
-		}
-
-		tokenName := ""
-		if tokenBlueprint != nil {
-			tokenName = tokenBlueprint.Name
-		}
-
-		var updatedAt *string
-		if resale.UpdatedAt != nil {
-			value := resale.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00")
-			updatedAt = &value
-		}
-
-		items = append(items, resaleResponse{
-			ID:                 resale.ID,
-			CompanyID:          productBlueprint.CompanyID,
-			ProductBlueprintID: resale.ProductBlueprintID,
-			ProductName:        productBlueprint.ProductName,
-			TokenBlueprintID:   resale.TokenBlueprintID,
-			TokenName:          tokenName,
-			ReportCaseID:       reportCaseID,
-			Status:             string(resale.Status),
-			Price:              resale.Price,
-			Condition:          string(resale.Condition),
-			Images:             images,
-			ReportCount:        reportCount,
-			CreatedAt:          resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:          updatedAt,
-		})
+		items = append(items, response)
 	}
 
 	writeJSON(w, http.StatusOK, resaleListResponse{Items: items})
+}
+
+func (h *ResaleHandler) handleDetailByAvatar(w http.ResponseWriter, r *http.Request) {
+	avatarID := r.PathValue("avatarID")
+	if avatarID == "" {
+		writeJSONError(w, http.StatusBadRequest, "avatar_id_required")
+		return
+	}
+
+	resaleID := r.PathValue("resaleID")
+	if resaleID == "" {
+		writeJSONError(w, http.StatusBadRequest, "resale_id_required")
+		return
+	}
+
+	resale, err := h.resaleRepo.GetByID(r.Context(), resaleID)
+	if err != nil {
+		if errors.Is(err, resaledom.ErrNotFound) {
+			writeJSONError(w, http.StatusNotFound, "resale_not_found")
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "resale_get_failed")
+		return
+	}
+
+	if resale.AvatarID != avatarID {
+		writeJSONError(w, http.StatusNotFound, "resale_not_found")
+		return
+	}
+
+	response, err := h.buildResaleResponse(r.Context(), resale)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "resale_response_build_failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (h *ResaleHandler) buildResaleResponse(
+	ctx context.Context,
+	resale resaledom.Resale,
+) (resaleResponse, error) {
+	productBlueprint, err := h.productBlueprintRepo.GetByID(ctx, resale.ProductBlueprintID)
+	if err != nil {
+		return resaleResponse{}, err
+	}
+
+	tokenBlueprint, err := h.tokenBlueprintRepo.GetByID(ctx, resale.TokenBlueprintID)
+	if err != nil {
+		return resaleResponse{}, err
+	}
+
+	resaleImages, err := h.resaleImageRepo.ListByResaleID(ctx, resale.ID)
+	if err != nil {
+		return resaleResponse{}, err
+	}
+
+	images := make([]resaleImageResponse, 0, len(resaleImages))
+	for _, image := range resaleImages {
+		images = append(images, resaleImageResponse{
+			ID:           image.ID,
+			URL:          image.URL,
+			DisplayOrder: image.DisplayOrder,
+		})
+	}
+
+	reportCount, err := h.reportRepo.GetResaleReportCount(ctx, resale.ID)
+	if err != nil {
+		return resaleResponse{}, err
+	}
+
+	reportCaseID := ""
+	if reportCount > 0 {
+		caseID, err := reportdom.BuildCaseID(reportdom.TargetTypeResale, resale.ID)
+		if err != nil {
+			return resaleResponse{}, err
+		}
+		reportCaseID = string(caseID)
+	}
+
+	tokenName := ""
+	if tokenBlueprint != nil {
+		tokenName = tokenBlueprint.Name
+	}
+
+	var updatedAt *string
+	if resale.UpdatedAt != nil {
+		value := resale.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z07:00")
+		updatedAt = &value
+	}
+
+	return resaleResponse{
+		ID:                 resale.ID,
+		CompanyID:          productBlueprint.CompanyID,
+		ProductBlueprintID: resale.ProductBlueprintID,
+		ProductName:        productBlueprint.ProductName,
+		TokenBlueprintID:   resale.TokenBlueprintID,
+		TokenName:          tokenName,
+		ReportCaseID:       reportCaseID,
+		Status:             string(resale.Status),
+		Price:              resale.Price,
+		Condition:          string(resale.Condition),
+		Images:             images,
+		ReportCount:        reportCount,
+		CreatedAt:          resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		UpdatedAt:          updatedAt,
+	}, nil
 }
