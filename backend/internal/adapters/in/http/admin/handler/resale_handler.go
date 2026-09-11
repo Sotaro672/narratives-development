@@ -15,6 +15,10 @@ type ResaleListReader interface {
 	ListByAvatarID(ctx context.Context, avatarID string) ([]resaledom.Resale, error)
 }
 
+type ResaleImageReader interface {
+	ListByResaleID(ctx context.Context, resaleID string) ([]resaledom.ResaleImage, error)
+}
+
 type ResaleReportCountReader interface {
 	GetResaleReportCount(ctx context.Context, resaleID string) (int, error)
 }
@@ -29,25 +33,33 @@ type ResaleTokenBlueprintReader interface {
 
 type ResaleHandler struct {
 	resaleRepo           ResaleListReader
+	resaleImageRepo      ResaleImageReader
 	reportRepo           ResaleReportCountReader
 	productBlueprintRepo ResaleProductBlueprintReader
 	tokenBlueprintRepo   ResaleTokenBlueprintReader
 }
 
+type resaleImageResponse struct {
+	ID           string `json:"id"`
+	URL          string `json:"url"`
+	DisplayOrder int    `json:"displayOrder"`
+}
+
 type resaleResponse struct {
-	ID                 string  `json:"id"`
-	CompanyID          string  `json:"companyId"`
-	ProductBlueprintID string  `json:"productBlueprintId"`
-	ProductName        string  `json:"productName"`
-	TokenBlueprintID   string  `json:"tokenBlueprintId"`
-	TokenName          string  `json:"tokenName"`
-	ReportCaseID       string  `json:"reportCaseId"`
-	Status             string  `json:"status"`
-	Price              int     `json:"price"`
-	Condition          string  `json:"condition"`
-	ReportCount        int     `json:"reportCount"`
-	CreatedAt          string  `json:"createdAt"`
-	UpdatedAt          *string `json:"updatedAt,omitempty"`
+	ID                 string                `json:"id"`
+	CompanyID          string                `json:"companyId"`
+	ProductBlueprintID string                `json:"productBlueprintId"`
+	ProductName        string                `json:"productName"`
+	TokenBlueprintID   string                `json:"tokenBlueprintId"`
+	TokenName          string                `json:"tokenName"`
+	ReportCaseID       string                `json:"reportCaseId"`
+	Status             string                `json:"status"`
+	Price              int                   `json:"price"`
+	Condition          string                `json:"condition"`
+	Images             []resaleImageResponse `json:"images"`
+	ReportCount        int                   `json:"reportCount"`
+	CreatedAt          string                `json:"createdAt"`
+	UpdatedAt          *string               `json:"updatedAt,omitempty"`
 }
 
 type resaleListResponse struct {
@@ -56,12 +68,14 @@ type resaleListResponse struct {
 
 func NewResaleHandler(
 	resaleRepo ResaleListReader,
+	resaleImageRepo ResaleImageReader,
 	reportRepo ResaleReportCountReader,
 	productBlueprintRepo ResaleProductBlueprintReader,
 	tokenBlueprintRepo ResaleTokenBlueprintReader,
 ) http.Handler {
 	h := &ResaleHandler{
 		resaleRepo:           resaleRepo,
+		resaleImageRepo:      resaleImageRepo,
 		reportRepo:           reportRepo,
 		productBlueprintRepo: productBlueprintRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
@@ -75,7 +89,7 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if h.resaleRepo == nil || h.reportRepo == nil || h.productBlueprintRepo == nil || h.tokenBlueprintRepo == nil {
+	if h.resaleRepo == nil || h.resaleImageRepo == nil || h.reportRepo == nil || h.productBlueprintRepo == nil || h.tokenBlueprintRepo == nil {
 		writeJSONError(w, http.StatusServiceUnavailable, "resale_dependencies_not_initialized")
 		return
 	}
@@ -94,28 +108,34 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 
 	items := make([]resaleResponse, 0, len(resales))
 	for _, resale := range resales {
-		productBlueprint, err := h.productBlueprintRepo.GetByID(
-			r.Context(),
-			resale.ProductBlueprintID,
-		)
+		productBlueprint, err := h.productBlueprintRepo.GetByID(r.Context(), resale.ProductBlueprintID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "resale_product_resolve_failed")
 			return
 		}
 
-		tokenBlueprint, err := h.tokenBlueprintRepo.GetByID(
-			r.Context(),
-			resale.TokenBlueprintID,
-		)
+		tokenBlueprint, err := h.tokenBlueprintRepo.GetByID(r.Context(), resale.TokenBlueprintID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "resale_token_resolve_failed")
 			return
 		}
 
-		reportCount, err := h.reportRepo.GetResaleReportCount(
-			r.Context(),
-			resale.ID,
-		)
+		resaleImages, err := h.resaleImageRepo.ListByResaleID(r.Context(), resale.ID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "resale_images_list_failed")
+			return
+		}
+
+		images := make([]resaleImageResponse, 0, len(resaleImages))
+		for _, image := range resaleImages {
+			images = append(images, resaleImageResponse{
+				ID:           image.ID,
+				URL:          image.URL,
+				DisplayOrder: image.DisplayOrder,
+			})
+		}
+
+		reportCount, err := h.reportRepo.GetResaleReportCount(r.Context(), resale.ID)
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, "resale_report_count_failed")
 			return
@@ -123,10 +143,7 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 
 		reportCaseID := ""
 		if reportCount > 0 {
-			caseID, err := reportdom.BuildCaseID(
-				reportdom.TargetTypeResale,
-				resale.ID,
-			)
+			caseID, err := reportdom.BuildCaseID(reportdom.TargetTypeResale, resale.ID)
 			if err != nil {
 				writeJSONError(w, http.StatusInternalServerError, "resale_report_case_id_failed")
 				return
@@ -156,6 +173,7 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 			Status:             string(resale.Status),
 			Price:              resale.Price,
 			Condition:          string(resale.Condition),
+			Images:             images,
 			ReportCount:        reportCount,
 			CreatedAt:          resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
 			UpdatedAt:          updatedAt,

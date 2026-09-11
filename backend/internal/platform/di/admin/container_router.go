@@ -46,6 +46,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	resaleHandler := adminhandler.NewResaleHandler(
 		cont.resaleRepo,
+		cont.resaleImageRepo,
 		cont.reportRepo,
 		cont.productBlueprintRepo,
 		cont.tokenBlueprintRepo,

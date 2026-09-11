@@ -39,6 +39,7 @@ type Container struct {
 	newsReadRepo                   *fsrepo.NewsReadRepositoryFS
 	reportRepo                     *fsrepo.ReportRepositoryFS
 	resaleRepo                     *fsrepo.ResaleRepositoryFS
+	resaleImageRepo                *fsrepo.ResaleImageRepositoryFS
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 
 	newsQuery                           *adminquery.NewsQuery

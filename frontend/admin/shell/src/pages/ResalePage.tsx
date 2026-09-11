@@ -3,6 +3,7 @@
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAvatarResales } from "../features/avatar/presentation/hooks/useAvatarResales";
+import MediaGallery, { type MediaGalleryItem } from "../shared/ui/MediaGallery/MediaGallery";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import Tab, { type TabTone } from "../shared/ui/Tab/Tab";
 import TextLink from "../shared/ui/TextLink/TextLink";
@@ -36,6 +37,30 @@ export default function ResalePage() {
 
   const { resales, loading, error, reload } = useAvatarResales(avatarId);
   const resale = resales.find((item) => item.id === resaleId) ?? null;
+
+  const galleryItems: MediaGalleryItem[] = resale
+    ? [...resale.images]
+        .sort((a, b) => a.displayOrder - b.displayOrder)
+        .filter((image) => Boolean(image.id) && Boolean(image.url))
+        .map((image) => ({
+          id: image.id,
+          url: image.url,
+        }))
+    : [];
+
+  const renderMain = () => {
+    if (!resale) return null;
+
+    return (
+      <section className="ui-detail-section">
+        <MediaGallery
+          items={galleryItems}
+          altFallback={resale.productName || "再販商品画像"}
+          placeholderText="再販画像はありません。"
+        />
+      </section>
+    );
+  };
 
   const renderAside = () => {
     if (loading) return <p>Resaleを取得しています...</p>;
@@ -162,7 +187,7 @@ export default function ResalePage() {
         }
       />
 
-      <DetailPageBody main={null} aside={renderAside()} />
+      <DetailPageBody main={renderMain()} aside={renderAside()} />
     </Page>
   );
 }
