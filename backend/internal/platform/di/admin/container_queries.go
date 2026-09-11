@@ -14,6 +14,7 @@ import (
 type queries struct {
 	newsQuery                           *adminquery.NewsQuery
 	reportNameQuery                     *adminquery.ReportNameQuery
+	resaleTradeQuery                    *adminquery.ResaleTradeQuery
 	contractDetailQuery                 *adminquery.ContractDetailQuery
 	contractListQuery                   *adminquery.ContractListQuery
 	contractTokenBlueprintQuery         *adminquery.ContractTokenBlueprintQuery
@@ -56,6 +57,9 @@ func buildQueries(
 	if u.tokenBlueprintReviewUsecase == nil {
 		return nil, errors.New("di.admin: token blueprint review usecase is nil")
 	}
+	if r.resaleTradeReader == nil {
+		return nil, errors.New("di.admin: resale trade reader is nil")
+	}
 
 	authUserReader := firebaseadp.NewAuthUserReader(infra.FirebaseAuth)
 	if authUserReader == nil {
@@ -80,6 +84,13 @@ func buildQueries(
 		r.tokenBlueprintRepo,
 		r.resaleRepo,
 	)
+
+	resaleTradeQuery := adminquery.NewResaleTradeQuery(
+		r.resaleTradeReader,
+	)
+	if resaleTradeQuery == nil {
+		return nil, errors.New("di.admin: resale trade query is nil")
+	}
 
 	contractDetailQuery := adminquery.NewContractDetailQuery(
 		r.companyRepo,
@@ -201,6 +212,7 @@ func buildQueries(
 	return &queries{
 		newsQuery:                           newsQuery,
 		reportNameQuery:                     reportNameQuery,
+		resaleTradeQuery:                    resaleTradeQuery,
 		contractDetailQuery:                 contractDetailQuery,
 		contractListQuery:                   contractListQuery,
 		contractTokenBlueprintQuery:         contractTokenBlueprintQuery,
@@ -220,6 +232,7 @@ func (q *queries) applyToContainer(c *Container) {
 
 	c.newsQuery = q.newsQuery
 	c.reportNameQuery = q.reportNameQuery
+	c.resaleTradeQuery = q.resaleTradeQuery
 	c.contractDetailQuery = q.contractDetailQuery
 	c.contractListQuery = q.contractListQuery
 	c.contractTokenBlueprintQuery = q.contractTokenBlueprintQuery

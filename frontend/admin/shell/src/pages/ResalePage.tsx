@@ -1,5 +1,6 @@
 // frontend/admin/shell/src/pages/ResalePage.tsx
 
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import ResaleDetailAside from "../features/resale/presentation/components/ResaleDetailAside";
@@ -7,7 +8,12 @@ import ResaleMediaSection from "../features/resale/presentation/components/Resal
 import ResaleReviewTable from "../features/resale/presentation/components/ResaleReviewTable";
 import ResaleStatusTab from "../features/resale/presentation/components/ResaleStatusTab";
 import { useResaleDetail } from "../features/resale/presentation/hooks/useResaleDetail";
+import TradeTable from "../features/trade/presentation/components/TradeTable";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+
+import "./ResalePage.css";
+
+type ResalePageTab = "reviews" | "trades";
 
 export default function ResalePage() {
   const navigate = useNavigate();
@@ -17,6 +23,7 @@ export default function ResalePage() {
   }>();
 
   const { resale, loading, error, reload } = useResaleDetail(avatarId, resaleId);
+  const [activeTab, setActiveTab] = useState<ResalePageTab>("reviews");
 
   return (
     <Page>
@@ -57,14 +64,73 @@ export default function ResalePage() {
           <>
             <ResaleMediaSection resale={resale} />
 
-            <section className="ui-detail-section">
-              <h2 className="ui-detail-section__title">レビュー</h2>
-              <ResaleReviewTable
-                avatarId={avatarId}
-                resaleId={resaleId}
-                perPage={20}
-              />
-            </section>
+            <div className="resale-page__related">
+              <div
+                className="resale-page__tabs"
+                role="tablist"
+                aria-label="再販関連情報"
+              >
+                <button
+                  id="resale-page-tab-reviews"
+                  type="button"
+                  role="tab"
+                  className={[
+                    "resale-page__tab",
+                    activeTab === "reviews"
+                      ? "resale-page__tab--active"
+                      : "",
+                  ].filter(Boolean).join(" ")}
+                  aria-selected={activeTab === "reviews"}
+                  aria-controls="resale-page-panel-reviews"
+                  onClick={() => setActiveTab("reviews")}
+                >
+                  レビュー
+                </button>
+
+                <button
+                  id="resale-page-tab-trades"
+                  type="button"
+                  role="tab"
+                  className={[
+                    "resale-page__tab",
+                    activeTab === "trades"
+                      ? "resale-page__tab--active"
+                      : "",
+                  ].filter(Boolean).join(" ")}
+                  aria-selected={activeTab === "trades"}
+                  aria-controls="resale-page-panel-trades"
+                  onClick={() => setActiveTab("trades")}
+                >
+                  取引
+                </button>
+              </div>
+
+              {activeTab === "reviews" && (
+                <div
+                  id="resale-page-panel-reviews"
+                  className="resale-page__panel"
+                  role="tabpanel"
+                  aria-labelledby="resale-page-tab-reviews"
+                >
+                  <ResaleReviewTable
+                    avatarId={avatarId}
+                    resaleId={resaleId}
+                    perPage={20}
+                  />
+                </div>
+              )}
+
+              {activeTab === "trades" && (
+                <div
+                  id="resale-page-panel-trades"
+                  className="resale-page__panel"
+                  role="tabpanel"
+                  aria-labelledby="resale-page-tab-trades"
+                >
+                  <TradeTable resaleId={resaleId} />
+                </div>
+              )}
+            </div>
           </>
         }
         aside={

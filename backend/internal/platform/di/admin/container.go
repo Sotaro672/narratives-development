@@ -47,6 +47,7 @@ type Container struct {
 
 	newsQuery                           *adminquery.NewsQuery
 	reportNameQuery                     *adminquery.ReportNameQuery
+	resaleTradeQuery                    *adminquery.ResaleTradeQuery
 	contractDetailQuery                 *adminquery.ContractDetailQuery
 	contractListQuery                   *adminquery.ContractListQuery
 	contractTokenBlueprintQuery         *adminquery.ContractTokenBlueprintQuery
