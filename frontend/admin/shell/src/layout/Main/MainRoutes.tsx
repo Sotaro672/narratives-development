@@ -5,6 +5,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import AvatarDetailPage from "../../pages/AvatarDetailPage";
 import AvatarPage from "../../pages/AvatarPage";
 import BillingPage from "../../pages/BillingPage";
+import BrandPage from "../../pages/BrandPage";
 import ContractDetailPage from "../../pages/ContractDetailPage";
 import ContractsPage from "../../pages/ContractsPage";
 import GasPage from "../../pages/GasPage";
@@ -35,6 +36,7 @@ export default function MainRoutes() {
       <Route path="/news/:newsId" element={<NewsDetailPage />} />
       <Route path="/contracts" element={<ContractsPage />} />
       <Route path="/contracts/:companyId" element={<ContractDetailPage />} />
+      <Route path="/contracts/:companyId/brands/:brandId" element={<BrandPage />} />
       <Route path="/contracts/:companyId/lists/:listId" element={<ListDetailPage />} />
       <Route path="/contracts/:companyId/token-blueprints/:tokenBlueprintId" element={<TokenBlueprintDetailPage />} />
       <Route path="/contracts/:companyId/product-blueprints/:productBlueprintId" element={<ProductBlueprintDetailPage />} />

@@ -184,12 +184,14 @@ type ContractCompanyRow struct {
 }
 
 type ContractBrandRow struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	ManagerName string `json:"managerName"`
-	IsActive    bool   `json:"isActive"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
+	ID                   string `json:"id"`
+	Name                 string `json:"name"`
+	ManagerName          string `json:"managerName"`
+	BrandIcon            string `json:"brandIcon"`
+	BrandBackgroundImage string `json:"brandBackgroundImage"`
+	IsActive             bool   `json:"isActive"`
+	CreatedAt            string `json:"createdAt"`
+	UpdatedAt            string `json:"updatedAt"`
 }
 
 type ContractAnnouncementRow struct {
@@ -477,10 +479,12 @@ func (q *ContractDetailQuery) buildBrandRows(
 		rows = append(
 			rows,
 			ContractBrandRow{
-				ID:          brand.ID,
-				Name:        brand.Name,
-				ManagerName: managerName,
-				IsActive:    brand.IsActive,
+				ID:                   brand.ID,
+				Name:                 brand.Name,
+				ManagerName:          managerName,
+				BrandIcon:            brand.BrandIcon,
+				BrandBackgroundImage: brand.BrandBackgroundImage,
+				IsActive:             brand.IsActive,
 				CreatedAt: formatContractDetailTime(
 					brand.CreatedAt,
 				),

@@ -11,6 +11,7 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ContractBrandTableProps = {
   brands: ContractBrandRow[];
+  onBrandClick?: (brand: ContractBrandRow) => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -27,6 +28,7 @@ const STATUS_OPTIONS: TableFilterOption[] = Object.entries(
 
 export default function ContractBrandTable({
   brands,
+  onBrandClick,
 }: ContractBrandTableProps) {
   const columns = useMemo<TableColumn<ContractBrandRow>[]>(
     () => [
@@ -82,6 +84,7 @@ export default function ContractBrandTable({
       columns={columns}
       rows={brands}
       getRowKey={(brand) => brand.id}
+      onRowClick={onBrandClick}
       emptyMessage="ブランドはありません。"
       filteredEmptyMessage="条件に一致するブランドはありません。"
     />
