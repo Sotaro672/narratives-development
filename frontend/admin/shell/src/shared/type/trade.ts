@@ -15,6 +15,8 @@ export type Trade = {
   sellerBrandId?: string;
   sellerAvatarId?: string;
   status: TradeStatus;
+  commentCount: number;
+  reportCount: number;
   createdAt: string;
   updatedAt: string;
   lastMessageAt?: string | null;

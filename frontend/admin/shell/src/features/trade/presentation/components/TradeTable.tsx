@@ -3,28 +3,13 @@
 import { useMemo } from "react";
 
 import type { Trade } from "../../../../shared/type/trade";
-import Table, {
-  type TableColumn,
-  type TableFilterOption,
-} from "../../../../shared/ui/Table/Table";
+import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
 import { useResaleTrades } from "../hooks/useResaleTrades";
 
 type TradeTableProps = {
   resaleId: string;
 };
-
-const STATUS_LABELS: Record<Trade["status"], string> = {
-  active: "進行中",
-  closed: "終了",
-};
-
-const STATUS_OPTIONS: TableFilterOption[] = Object.entries(
-  STATUS_LABELS,
-).map(([value, label]) => ({
-  value,
-  label,
-}));
 
 export default function TradeTable({
   resaleId,
@@ -33,12 +18,6 @@ export default function TradeTable({
 
   const columns = useMemo<TableColumn<Trade>[]>(
     () => [
-      {
-        key: "id",
-        header: "取引ID",
-        render: (trade) => trade.id,
-        nowrap: true,
-      },
       {
         key: "buyerAvatarName",
         header: "購入者",
@@ -49,14 +28,17 @@ export default function TradeTable({
         nowrap: true,
       },
       {
-        key: "status",
-        header: "状態",
-        render: (trade) => STATUS_LABELS[trade.status] ?? trade.status,
-        sortValue: (trade) => STATUS_LABELS[trade.status] ?? trade.status,
-        filter: {
-          getValue: (trade) => trade.status,
-          options: STATUS_OPTIONS,
-        },
+        key: "commentCount",
+        header: "コメント数",
+        render: (trade) => trade.commentCount,
+        sortValue: (trade) => trade.commentCount,
+        nowrap: true,
+      },
+      {
+        key: "reportCount",
+        header: "通報",
+        render: (trade) => trade.reportCount,
+        sortValue: (trade) => trade.reportCount,
         nowrap: true,
       },
       {
