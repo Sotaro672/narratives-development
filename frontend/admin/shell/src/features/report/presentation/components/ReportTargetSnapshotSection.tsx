@@ -5,7 +5,6 @@ import {
   getSnapshotBodyLabel,
   getSnapshotTitleLabel,
 } from "../model/reportLabels";
-import ReportDetailField from "./ReportDetailField";
 
 type ReportTargetSnapshotSectionProps = {
   reportCase: ReportCase;
@@ -15,30 +14,28 @@ export default function ReportTargetSnapshotSection({
   reportCase,
 }: ReportTargetSnapshotSectionProps) {
   return (
-    <section className="report-detail-page__section">
-      <dl className="report-detail-page__fields">
+    <section className="ui-detail-section">
+      <dl className="ui-detail-definition-list ui-detail-definition-list--rows">
         {reportCase.snapshotRating !== null ? (
-          <ReportDetailField
-            label="評価"
-            value={`${reportCase.snapshotRating} / 5`}
-          />
+          <div>
+            <dt>評価</dt>
+            <dd>{reportCase.snapshotRating} / 5</dd>
+          </div>
         ) : null}
 
         {reportCase.snapshotTitle ? (
-          <ReportDetailField
-            label={getSnapshotTitleLabel(reportCase.targetType)}
-            value={reportCase.snapshotTitle}
-          />
+          <div>
+            <dt>{getSnapshotTitleLabel(reportCase.targetType)}</dt>
+            <dd>{reportCase.snapshotTitle}</dd>
+          </div>
         ) : null}
 
-        <ReportDetailField
-          label={getSnapshotBodyLabel(reportCase.targetType)}
-          value={
-            <div className="report-detail-page__body-text">
-              {reportCase.snapshotBody || "-"}
-            </div>
-          }
-        />
+        <div>
+          <dt>{getSnapshotBodyLabel(reportCase.targetType)}</dt>
+          <dd className="report-detail-page__body-text">
+            {reportCase.snapshotBody || "-"}
+          </dd>
+        </div>
       </dl>
     </section>
   );

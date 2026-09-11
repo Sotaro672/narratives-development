@@ -10,7 +10,6 @@ import {
   getTargetAuthorTypeLabel,
   getTargetParentLabel,
 } from "../model/reportLabels";
-import ReportDetailField from "./ReportDetailField";
 
 type ReportCaseInfoSectionProps = {
   reportCase: ReportCase;
@@ -20,9 +19,7 @@ function buildTargetDetailPath(reportCase: ReportCase): string | null {
   const companyId = reportCase.targetCompanyId?.trim() || "";
   const targetParentId = reportCase.targetParentId?.trim() || "";
 
-  if (!companyId || !targetParentId) {
-    return null;
-  }
+  if (!companyId || !targetParentId) return null;
 
   const encodedCompanyId = encodeURIComponent(companyId);
   const encodedTargetParentId = encodeURIComponent(targetParentId);
@@ -30,14 +27,11 @@ function buildTargetDetailPath(reportCase: ReportCase): string | null {
   switch (reportCase.targetType) {
     case "LIST":
       return `/contracts/${encodedCompanyId}/lists/${encodedTargetParentId}`;
-
     case "TOKEN_BLUEPRINT":
     case "TOKEN_BLUEPRINT_COMMENT":
       return `/contracts/${encodedCompanyId}/token-blueprints/${encodedTargetParentId}`;
-
     case "PRODUCT_BLUEPRINT_REVIEW":
       return `/contracts/${encodedCompanyId}/product-blueprints/${encodedTargetParentId}`;
-
     default:
       return null;
   }
@@ -54,51 +48,38 @@ export default function ReportCaseInfoSection({
   const targetDetailPath = buildTargetDetailPath(reportCase);
 
   return (
-    <section className="report-detail-page__section">
-      <h2 className="report-detail-page__section-title">
-        ケース情報
-      </h2>
+    <section className="ui-detail-section">
+      <dl className="ui-detail-definition-list ui-detail-definition-list--meta">
+        <dt>{getTargetParentLabel(reportCase.targetType)}</dt>
+        <dd>
+          {targetDetailPath ? (
+            <Link to={targetDetailPath} className="report-detail-page__target-link">
+              {targetParentLabel}
+            </Link>
+          ) : (
+            targetParentLabel
+          )}
+        </dd>
 
-      <dl className="report-detail-page__fields report-detail-page__fields--compact">
-        <ReportDetailField
-          label={getTargetParentLabel(reportCase.targetType)}
-          value={
-            targetDetailPath ? (
-              <Link
-                to={targetDetailPath}
-                className="report-detail-page__target-link"
-              >
-                {targetParentLabel}
-              </Link>
-            ) : (
-              targetParentLabel
-            )
-          }
-        />
+        <dt>{getTargetAuthorTypeLabel(reportCase.targetType)}</dt>
+        <dd>{getActorTypeLabel(reportCase.targetAuthorType)}</dd>
 
-        <ReportDetailField
-          label={getTargetAuthorTypeLabel(reportCase.targetType)}
-          value={getActorTypeLabel(reportCase.targetAuthorType)}
-        />
-
-        <ReportDetailField
-          label={getTargetAuthorLabel(reportCase.targetType)}
-          value={
-            reportCase.targetAuthorName ||
+        <dt>{getTargetAuthorLabel(reportCase.targetType)}</dt>
+        <dd>
+          {reportCase.targetAuthorName ||
             reportCase.targetAuthorId ||
-            "-"
-          }
-        />
+            "-"}
+        </dd>
 
-        <ReportDetailField
-          label="初回通報"
-          value={formatDateTime(reportCase.createdAt)}
-        />
+        <dt>初回通報</dt>
+        <dd className="ui-detail-definition-list__nowrap">
+          {formatDateTime(reportCase.createdAt)}
+        </dd>
 
-        <ReportDetailField
-          label="最終更新"
-          value={formatDateTime(reportCase.updatedAt)}
-        />
+        <dt>最終更新</dt>
+        <dd className="ui-detail-definition-list__nowrap">
+          {formatDateTime(reportCase.updatedAt)}
+        </dd>
       </dl>
     </section>
   );

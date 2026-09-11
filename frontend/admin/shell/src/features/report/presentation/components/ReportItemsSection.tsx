@@ -35,10 +35,7 @@ export default function ReportItemsSection({
       {
         key: "reporterId",
         header: "通報者",
-        render: (report) =>
-          report.reporterName ||
-          report.reporterId ||
-          "-",
+        render: (report) => report.reporterName || report.reporterId || "-",
         minWidth: "180px",
       },
       {
@@ -66,10 +63,7 @@ export default function ReportItemsSection({
       {
         key: "companyId",
         header: "会社",
-        render: (report) =>
-          report.companyName ||
-          report.companyId ||
-          "-",
+        render: (report) => report.companyName || report.companyId || "-",
         minWidth: "160px",
       },
     ],
@@ -77,9 +71,9 @@ export default function ReportItemsSection({
   );
 
   return (
-    <section className="report-detail-page__section">
+    <section className="ui-detail-section">
       <div className="report-detail-page__reports-header">
-        <h2 className="report-detail-page__section-title">通報内容</h2>
+        <h2 className="ui-detail-section__title">通報内容</h2>
 
         {loading ? (
           <span className="report-detail-page__updating" aria-live="polite">

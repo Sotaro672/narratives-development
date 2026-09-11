@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	productblueprintdom "narratives/internal/domain/productBlueprint"
+	reportdom "narratives/internal/domain/report"
 	resaledom "narratives/internal/domain/resale"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
@@ -34,15 +35,19 @@ type ResaleHandler struct {
 }
 
 type resaleResponse struct {
-	ID          string  `json:"id"`
-	ProductName string  `json:"productName"`
-	TokenName   string  `json:"tokenName"`
-	Status      string  `json:"status"`
-	Price       int     `json:"price"`
-	Condition   string  `json:"condition"`
-	ReportCount int     `json:"reportCount"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   *string `json:"updatedAt,omitempty"`
+	ID                 string  `json:"id"`
+	CompanyID          string  `json:"companyId"`
+	ProductBlueprintID string  `json:"productBlueprintId"`
+	ProductName        string  `json:"productName"`
+	TokenBlueprintID   string  `json:"tokenBlueprintId"`
+	TokenName          string  `json:"tokenName"`
+	ReportCaseID       string  `json:"reportCaseId"`
+	Status             string  `json:"status"`
+	Price              int     `json:"price"`
+	Condition          string  `json:"condition"`
+	ReportCount        int     `json:"reportCount"`
+	CreatedAt          string  `json:"createdAt"`
+	UpdatedAt          *string `json:"updatedAt,omitempty"`
 }
 
 type resaleListResponse struct {
@@ -116,6 +121,19 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 			return
 		}
 
+		reportCaseID := ""
+		if reportCount > 0 {
+			caseID, err := reportdom.BuildCaseID(
+				reportdom.TargetTypeResale,
+				resale.ID,
+			)
+			if err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "resale_report_case_id_failed")
+				return
+			}
+			reportCaseID = string(caseID)
+		}
+
 		tokenName := ""
 		if tokenBlueprint != nil {
 			tokenName = tokenBlueprint.Name
@@ -128,15 +146,19 @@ func (h *ResaleHandler) handleListByAvatar(w http.ResponseWriter, r *http.Reques
 		}
 
 		items = append(items, resaleResponse{
-			ID:          resale.ID,
-			ProductName: productBlueprint.ProductName,
-			TokenName:   tokenName,
-			Status:      string(resale.Status),
-			Price:       resale.Price,
-			Condition:   string(resale.Condition),
-			ReportCount: reportCount,
-			CreatedAt:   resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-			UpdatedAt:   updatedAt,
+			ID:                 resale.ID,
+			CompanyID:          productBlueprint.CompanyID,
+			ProductBlueprintID: resale.ProductBlueprintID,
+			ProductName:        productBlueprint.ProductName,
+			TokenBlueprintID:   resale.TokenBlueprintID,
+			TokenName:          tokenName,
+			ReportCaseID:       reportCaseID,
+			Status:             string(resale.Status),
+			Price:              resale.Price,
+			Condition:          string(resale.Condition),
+			ReportCount:        reportCount,
+			CreatedAt:          resale.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:          updatedAt,
 		})
 	}
 

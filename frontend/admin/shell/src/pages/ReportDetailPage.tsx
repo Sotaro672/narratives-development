@@ -113,7 +113,6 @@ export default function ReportDetailPage() {
               >
                 裁定
               </Button>
-
               <RefreshButton
                 onClick={reload}
                 loading={loading}
@@ -124,9 +123,7 @@ export default function ReportDetailPage() {
           }
         />
 
-        {loading && !reportCase ? (
-          <p>通報情報を読み込んでいます。</p>
-        ) : null}
+        {loading && !reportCase ? <p>通報情報を読み込んでいます。</p> : null}
 
         {!loading && error ? (
           <p role="alert">通報情報を取得できませんでした。{error}</p>
@@ -139,9 +136,8 @@ export default function ReportDetailPage() {
         {reportCase ? (
           <DetailPageBody
             main={
-              <div className="report-detail-page__main">
+              <>
                 <ReportTargetSnapshotSection reportCase={reportCase} />
-
                 <ReportItemsSection
                   reports={reports}
                   loading={loading}
@@ -149,13 +145,9 @@ export default function ReportDetailPage() {
                   totalPages={totalPages}
                   onPageChange={setPage}
                 />
-              </div>
+              </>
             }
-            aside={
-              <div className="report-detail-page__aside">
-                <ReportCaseInfoSection reportCase={reportCase} />
-              </div>
-            }
+            aside={<ReportCaseInfoSection reportCase={reportCase} />}
           />
         ) : null}
       </Page>
