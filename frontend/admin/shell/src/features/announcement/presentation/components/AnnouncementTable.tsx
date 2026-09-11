@@ -1,5 +1,4 @@
-// frontend/admin/shell/src/features/company/presentation/components/ContractAnnouncementTable.tsx
-
+// frontend\admin\shell\src\features\announcement\presentation\components\AnnouncementTable.tsx
 import { useMemo } from "react";
 
 import type { ContractAnnouncementRow } from "../../../../shared/type/contractDetail";
