@@ -1,5 +1,4 @@
 // backend/internal/application/query/admin/contract_detail_query.go
-// backend/internal/application/query/admin/contract_detail_query.go
 package query
 
 import (
@@ -11,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	announcementdom "narratives/internal/domain/announcement"
 	branddom "narratives/internal/domain/brand"
 	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
@@ -41,10 +41,24 @@ type contractDetailCompanyReader interface {
 }
 
 type contractDetailBrandReader interface {
+	ListByCompanyID(
+		ctx context.Context,
+		companyID string,
+		page branddom.Page,
+	) (branddom.PageResult[branddom.Brand], error)
+
 	GetByID(
 		ctx context.Context,
 		id string,
 	) (branddom.Brand, error)
+}
+
+type contractDetailAnnouncementReader interface {
+	ListByTargetToken(
+		ctx context.Context,
+		tokenBlueprintID string,
+		page announcementdom.Page,
+	) (announcementdom.PageResult[announcementdom.Announcement], error)
 }
 
 type contractDetailMemberReader interface {
@@ -111,6 +125,7 @@ type contractDetailReportCaseReader interface {
 type ContractDetailQuery struct {
 	companyRepo                contractDetailCompanyReader
 	brandRepo                  contractDetailBrandReader
+	announcementRepo           contractDetailAnnouncementReader
 	memberRepo                 contractDetailMemberReader
 	productBlueprintRepo       contractDetailProductBlueprintReader
 	productBlueprintReviewRepo contractDetailProductBlueprintReviewReader
@@ -123,6 +138,7 @@ type ContractDetailQuery struct {
 func NewContractDetailQuery(
 	companyRepo contractDetailCompanyReader,
 	brandRepo contractDetailBrandReader,
+	announcementRepo contractDetailAnnouncementReader,
 	memberRepo contractDetailMemberReader,
 	productBlueprintRepo contractDetailProductBlueprintReader,
 	productBlueprintReviewRepo contractDetailProductBlueprintReviewReader,
@@ -134,6 +150,7 @@ func NewContractDetailQuery(
 	return &ContractDetailQuery{
 		companyRepo:                companyRepo,
 		brandRepo:                  brandRepo,
+		announcementRepo:           announcementRepo,
 		memberRepo:                 memberRepo,
 		productBlueprintRepo:       productBlueprintRepo,
 		productBlueprintReviewRepo: productBlueprintReviewRepo,
@@ -150,6 +167,8 @@ func NewContractDetailQuery(
 
 type ContractDetailResult struct {
 	Company           ContractCompanyRow            `json:"company"`
+	Brands            []ContractBrandRow            `json:"brands"`
+	Announcements     []ContractAnnouncementRow     `json:"announcements"`
 	Lists             []ContractListRow             `json:"lists"`
 	TokenBlueprints   []ContractTokenBlueprintRow   `json:"tokenBlueprints"`
 	ProductBlueprints []ContractProductBlueprintRow `json:"productBlueprints"`
@@ -162,6 +181,26 @@ type ContractCompanyRow struct {
 	IsActive           bool   `json:"isActive"`
 	CreatedAt          string `json:"createdAt"`
 	UpdatedAt          string `json:"updatedAt"`
+}
+
+type ContractBrandRow struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	ManagerName string `json:"managerName"`
+	IsActive    bool   `json:"isActive"`
+	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt"`
+}
+
+type ContractAnnouncementRow struct {
+	ID                string `json:"id"`
+	Title             string `json:"title"`
+	TokenBlueprintID  string `json:"tokenBlueprintId"`
+	TokenName         string `json:"tokenName"`
+	Published         bool   `json:"published"`
+	TargetAvatarCount int    `json:"targetAvatarCount"`
+	CreatedAt         string `json:"createdAt"`
+	UpdatedAt         string `json:"updatedAt"`
 }
 
 type ContractListRow struct {
@@ -213,6 +252,7 @@ func (q *ContractDetailQuery) Get(
 	if q == nil ||
 		q.companyRepo == nil ||
 		q.brandRepo == nil ||
+		q.announcementRepo == nil ||
 		q.memberRepo == nil ||
 		q.productBlueprintRepo == nil ||
 		q.productBlueprintReviewRepo == nil ||
@@ -251,8 +291,24 @@ func (q *ContractDetailQuery) Get(
 		return ContractDetailResult{}, err
 	}
 
+	brands, err := q.listBrandsByCompanyID(
+		ctx,
+		companyID,
+	)
+	if err != nil {
+		return ContractDetailResult{}, err
+	}
+
 	brandNameCache := make(map[string]string)
 	memberNameCache := make(map[string]string)
+
+	brandRows := q.buildBrandRows(
+		ctx,
+		companyID,
+		brands,
+		brandNameCache,
+		memberNameCache,
+	)
 
 	productRows, err := q.buildProductBlueprintRows(
 		ctx,
@@ -276,6 +332,15 @@ func (q *ContractDetailQuery) Get(
 		return ContractDetailResult{}, err
 	}
 
+	announcementRows, err := q.buildAnnouncementRows(
+		ctx,
+		companyID,
+		tokenBlueprints,
+	)
+	if err != nil {
+		return ContractDetailResult{}, err
+	}
+
 	listRows, err := q.buildListRows(
 		ctx,
 		companyID,
@@ -288,6 +353,18 @@ func (q *ContractDetailQuery) Get(
 		return ContractDetailResult{}, err
 	}
 
+	sort.SliceStable(
+		brandRows,
+		func(i, j int) bool {
+			return brandRows[i].CreatedAt > brandRows[j].CreatedAt
+		},
+	)
+	sort.SliceStable(
+		announcementRows,
+		func(i, j int) bool {
+			return announcementRows[i].CreatedAt > announcementRows[j].CreatedAt
+		},
+	)
 	sort.SliceStable(
 		productRows,
 		func(i, j int) bool {
@@ -325,10 +402,174 @@ func (q *ContractDetailQuery) Get(
 			CreatedAt:          formatContractDetailTime(company.CreatedAt),
 			UpdatedAt:          formatContractDetailTime(company.UpdatedAt),
 		},
+		Brands:            brandRows,
+		Announcements:     announcementRows,
 		Lists:             listRows,
 		TokenBlueprints:   tokenRows,
 		ProductBlueprints: productRows,
 	}, nil
+}
+
+// ============================================================
+// Brand
+// ============================================================
+
+func (q *ContractDetailQuery) listBrandsByCompanyID(
+	ctx context.Context,
+	companyID string,
+) ([]branddom.Brand, error) {
+	items := make([]branddom.Brand, 0)
+
+	for pageNumber := 1; ; pageNumber++ {
+		result, err := q.brandRepo.ListByCompanyID(
+			ctx,
+			companyID,
+			branddom.Page{
+				Number:  pageNumber,
+				PerPage: contractDetailPageSize,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		items = append(items, result.Items...)
+
+		if len(result.Items) == 0 ||
+			result.TotalPages <= pageNumber {
+			break
+		}
+	}
+
+	return items, nil
+}
+
+func (q *ContractDetailQuery) buildBrandRows(
+	ctx context.Context,
+	companyID string,
+	brands []branddom.Brand,
+	brandNameCache map[string]string,
+	memberNameCache map[string]string,
+) []ContractBrandRow {
+	rows := make(
+		[]ContractBrandRow,
+		0,
+		len(brands),
+	)
+
+	for _, brand := range brands {
+		if brand.ID == "" ||
+			brand.CompanyID != companyID {
+			continue
+		}
+
+		brandNameCache[brand.ID] = brand.Name
+
+		managerName := ""
+		if brand.ManagerID != nil {
+			managerName = q.resolveMemberName(
+				ctx,
+				*brand.ManagerID,
+				memberNameCache,
+			)
+		}
+
+		rows = append(
+			rows,
+			ContractBrandRow{
+				ID:          brand.ID,
+				Name:        brand.Name,
+				ManagerName: managerName,
+				IsActive:    brand.IsActive,
+				CreatedAt: formatContractDetailTime(
+					brand.CreatedAt,
+				),
+				UpdatedAt: formatOptionalContractDetailTime(
+					brand.UpdatedAt,
+				),
+			},
+		)
+	}
+
+	return rows
+}
+
+// ============================================================
+// Announcement
+// ============================================================
+
+func (q *ContractDetailQuery) buildAnnouncementRows(
+	ctx context.Context,
+	companyID string,
+	tokenBlueprints []tokenblueprintdom.TokenBlueprint,
+) ([]ContractAnnouncementRow, error) {
+	rows := make(
+		[]ContractAnnouncementRow,
+		0,
+	)
+	seenAnnouncementIDs := make(
+		map[string]struct{},
+	)
+
+	for _, tokenBlueprint := range tokenBlueprints {
+		if tokenBlueprint.ID == "" ||
+			tokenBlueprint.CompanyID != companyID {
+			continue
+		}
+
+		for pageNumber := 1; ; pageNumber++ {
+			result, err := q.announcementRepo.ListByTargetToken(
+				ctx,
+				tokenBlueprint.ID,
+				announcementdom.Page{
+					Number:  pageNumber,
+					PerPage: contractDetailPageSize,
+				},
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, announcement := range result.Items {
+				if announcement.ID == "" {
+					continue
+				}
+				if announcement.TargetToken == nil ||
+					*announcement.TargetToken != tokenBlueprint.ID {
+					continue
+				}
+				if _, exists := seenAnnouncementIDs[announcement.ID]; exists {
+					continue
+				}
+				seenAnnouncementIDs[announcement.ID] = struct{}{}
+
+				rows = append(
+					rows,
+					ContractAnnouncementRow{
+						ID:                announcement.ID,
+						Title:             announcement.Title,
+						TokenBlueprintID:  tokenBlueprint.ID,
+						TokenName:         tokenBlueprint.Name,
+						Published:         announcement.Published,
+						TargetAvatarCount: len(announcement.TargetAvatars),
+						CreatedAt: formatContractDetailTime(
+							announcement.CreatedAt,
+						),
+						UpdatedAt: formatOptionalContractDetailTime(
+							announcement.UpdatedAt,
+						),
+					},
+				)
+			}
+
+			if len(result.Items) == 0 ||
+				result.TotalPages <= pageNumber {
+				break
+			}
+		}
+	}
+
+	return rows, nil
 }
 
 // ============================================================
@@ -851,4 +1092,14 @@ func formatContractDetailTime(
 	return value.UTC().Format(
 		time.RFC3339Nano,
 	)
+}
+
+func formatOptionalContractDetailTime(
+	value *time.Time,
+) string {
+	if value == nil {
+		return ""
+	}
+
+	return formatContractDetailTime(*value)
 }

@@ -34,6 +34,7 @@ type Container struct {
 	userRepo                       *fsrepo.UserRepositoryFS
 	avatarRepo                     *fsrepo.AvatarRepositoryFS
 	brandRepo                      *fsrepo.BrandRepositoryFS
+	announcementRepo               *fsrepo.AnnouncementRepositoryFS
 	productBlueprintRepo           *fsrepo.ProductBlueprintRepositoryFS
 	tokenBlueprintRepo             *fsrepo.TokenBlueprintRepositoryFS
 	newsRepo                       *fsrepo.NewsRepositoryFS

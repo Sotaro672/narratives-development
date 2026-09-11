@@ -2,6 +2,26 @@
 
 import type { Company } from "./company";
 
+export type ContractBrandRow = {
+  id: string;
+  name: string;
+  managerName: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ContractAnnouncementRow = {
+  id: string;
+  title: string;
+  tokenBlueprintId: string;
+  tokenName: string;
+  published: boolean;
+  targetAvatarCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ContractListRow = {
   id: string;
   readableId: string;
@@ -42,6 +62,8 @@ export type ContractProductBlueprintRow = {
 
 export type ContractDetailResponse = {
   company: Company;
+  brands: ContractBrandRow[];
+  announcements: ContractAnnouncementRow[];
   lists: ContractListRow[];
   tokenBlueprints: ContractTokenBlueprintRow[];
   productBlueprints: ContractProductBlueprintRow[];

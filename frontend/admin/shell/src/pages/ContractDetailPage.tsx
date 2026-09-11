@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import ContractAnnouncementTable from "../features/company/presentation/components/ContractAnnouncementTable";
+import ContractBrandTable from "../features/company/presentation/components/ContractBrandTable";
 import ContractListTable from "../features/company/presentation/components/ContractListTable";
 import ContractProductBlueprintTable from "../features/company/presentation/components/ContractProductBlueprintTable";
 import ContractTokenBlueprintTable from "../features/company/presentation/components/ContractTokenBlueprintTable";
@@ -12,13 +14,18 @@ import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./ContractDetailPage.css";
 
-type ContractDetailTab = "lists" | "tokenBlueprints" | "productBlueprints";
+type ContractDetailTab =
+  | "brands"
+  | "announcements"
+  | "lists"
+  | "tokenBlueprints"
+  | "productBlueprints";
 
 export default function ContractDetailPage() {
   const navigate = useNavigate();
   const { companyId = "" } = useParams<{ companyId?: string }>();
   const { detail, loading, error, reload } = useContractDetail(companyId);
-  const [activeTab, setActiveTab] = useState<ContractDetailTab>("lists");
+  const [activeTab, setActiveTab] = useState<ContractDetailTab>("brands");
 
   const company = detail?.company ?? null;
 
@@ -57,6 +64,36 @@ export default function ContractDetailPage() {
     return (
       <div className="contract-detail">
         <div className="contract-detail__tabs" role="tablist" aria-label="契約関連情報">
+          <button
+            id="contract-detail-tab-brands"
+            type="button"
+            role="tab"
+            className={[
+              "contract-detail__tab",
+              activeTab === "brands" ? "contract-detail__tab--active" : "",
+            ].filter(Boolean).join(" ")}
+            aria-selected={activeTab === "brands"}
+            aria-controls="contract-detail-panel-brands"
+            onClick={() => setActiveTab("brands")}
+          >
+            ブランド
+          </button>
+
+          <button
+            id="contract-detail-tab-announcements"
+            type="button"
+            role="tab"
+            className={[
+              "contract-detail__tab",
+              activeTab === "announcements" ? "contract-detail__tab--active" : "",
+            ].filter(Boolean).join(" ")}
+            aria-selected={activeTab === "announcements"}
+            aria-controls="contract-detail-panel-announcements"
+            onClick={() => setActiveTab("announcements")}
+          >
+            告知
+          </button>
+
           <button
             id="contract-detail-tab-lists"
             type="button"
@@ -102,6 +139,28 @@ export default function ContractDetailPage() {
             商品設計
           </button>
         </div>
+
+        {activeTab === "brands" && (
+          <div
+            id="contract-detail-panel-brands"
+            className="contract-detail__panel"
+            role="tabpanel"
+            aria-labelledby="contract-detail-tab-brands"
+          >
+            <ContractBrandTable brands={detail.brands} />
+          </div>
+        )}
+
+        {activeTab === "announcements" && (
+          <div
+            id="contract-detail-panel-announcements"
+            className="contract-detail__panel"
+            role="tabpanel"
+            aria-labelledby="contract-detail-tab-announcements"
+          >
+            <ContractAnnouncementTable announcements={detail.announcements} />
+          </div>
+        )}
 
         {activeTab === "lists" && (
           <div

@@ -119,6 +119,7 @@ func buildQueries(
 	contractDetailQuery := adminquery.NewContractDetailQuery(
 		r.companyRepo,
 		r.brandRepo,
+		r.announcementRepo,
 		r.memberRepo,
 		r.productBlueprintRepo,
 		r.productBlueprintReviewRepo,
