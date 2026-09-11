@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import ResaleDetailAside from "../features/resale/presentation/components/ResaleDetailAside";
 import ResaleMediaSection from "../features/resale/presentation/components/ResaleMediaSection";
+import ResaleReviewTable from "../features/resale/presentation/components/ResaleReviewTable";
 import ResaleStatusTab from "../features/resale/presentation/components/ResaleStatusTab";
 import { useResaleDetail } from "../features/resale/presentation/hooks/useResaleDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
@@ -52,7 +53,20 @@ export default function ResalePage() {
       />
 
       <DetailPageBody
-        main={<ResaleMediaSection resale={resale} />}
+        main={
+          <>
+            <ResaleMediaSection resale={resale} />
+
+            <section className="ui-detail-section">
+              <h2 className="ui-detail-section__title">レビュー</h2>
+              <ResaleReviewTable
+                avatarId={avatarId}
+                resaleId={resaleId}
+                perPage={20}
+              />
+            </section>
+          </>
+        }
         aside={
           <ResaleDetailAside
             resale={resale}

@@ -17,6 +17,7 @@ type usecases struct {
 
 	productBlueprintReviewUsecase *usecase.ProductBlueprintReviewUsecase
 	tokenBlueprintReviewUsecase   *usecase.TokenBlueprintReviewUsecase
+	resaleReviewUsecase           *usecase.ResaleReviewUsecase
 
 	newsImageStorage *firebaseadp.NewsImageStorage
 }
@@ -46,6 +47,9 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 	}
 	if r.resaleRepo == nil {
 		return nil, errors.New("di.admin: resale repository is nil")
+	}
+	if r.resaleReviewRepo == nil {
+		return nil, errors.New("di.admin: resale review repository is nil")
 	}
 	if r.cartRepo == nil {
 		return nil, errors.New("di.admin: cart repository is nil")
@@ -99,6 +103,16 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 	)
 	if tokenBlueprintReviewUsecase == nil {
 		return closeNewsStorage(errors.New("di.admin: token blueprint review usecase is nil"))
+	}
+
+	resaleReviewUsecase := usecase.NewResaleReviewUsecase(
+		r.resaleRepo,
+		r.resaleReviewRepo,
+		r.avatarRepo,
+		time.Now,
+	)
+	if resaleReviewUsecase == nil {
+		return closeNewsStorage(errors.New("di.admin: resale review usecase is nil"))
 	}
 
 	// Admin側のTokenBlueprintUsecaseは通報裁定によるAMOL上の非表示専用。
@@ -168,6 +182,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		reportUsecase:                 reportUsecase,
 		productBlueprintReviewUsecase: productBlueprintReviewUsecase,
 		tokenBlueprintReviewUsecase:   tokenBlueprintReviewUsecase,
+		resaleReviewUsecase:           resaleReviewUsecase,
 		newsImageStorage:              newsImageStorage,
 	}, nil
 }
@@ -180,6 +195,7 @@ func (u *usecases) applyToContainer(c *Container) {
 	c.contactUsecase = u.contactUsecase
 	c.newsUsecase = u.newsUsecase
 	c.reportUsecase = u.reportUsecase
+	c.resaleReviewUsecase = u.resaleReviewUsecase
 }
 
 func (u *usecases) closeOnBuildError() {

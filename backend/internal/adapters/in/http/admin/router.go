@@ -10,16 +10,17 @@ import (
 
 // RouterDeps contains only the handlers and middleware required by the Admin HTTP router.
 type RouterDeps struct {
-	AuthMw    *middleware.AdminAuthMiddleware
-	Me        http.Handler
-	Contacts  http.Handler
-	Companies http.Handler
-	Avatars   http.Handler
-	Resales   http.Handler
-	Gas       http.Handler
-	Mints     http.Handler
-	News      http.Handler
-	Reports   http.Handler
+	AuthMw        *middleware.AdminAuthMiddleware
+	Me            http.Handler
+	Contacts      http.Handler
+	Companies     http.Handler
+	Avatars       http.Handler
+	Resales       http.Handler
+	ResaleReviews http.Handler
+	Gas           http.Handler
+	Mints         http.Handler
+	News          http.Handler
+	Reports       http.Handler
 }
 
 // NewRouter creates the Admin router.
@@ -64,6 +65,11 @@ func NewRouter(deps RouterDeps) http.Handler {
 		resalesHandler := withAuth(deps.Resales)
 		mux.Handle("/admin/avatars/{avatarID}/resales", resalesHandler)
 		mux.Handle("/admin/avatars/{avatarID}/resales/{resaleID}", resalesHandler)
+	}
+
+	if deps.ResaleReviews != nil {
+		resaleReviewsHandler := withAuth(deps.ResaleReviews)
+		mux.Handle("/admin/avatars/{avatarID}/resales/{resaleID}/reviews", resaleReviewsHandler)
 	}
 
 	if deps.Gas != nil {

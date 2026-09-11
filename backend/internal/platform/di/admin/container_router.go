@@ -52,6 +52,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.tokenBlueprintRepo,
 	)
 
+	resaleReviewHandler := adminhandler.NewResaleReviewHandler(
+		cont.resaleRepo,
+		cont.resaleReviewUsecase,
+	)
+
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	mintHandler := adminhandler.NewMintHandler(
 		cont.mintListQuery,
@@ -61,16 +66,17 @@ func Register(mux *http.ServeMux, cont *Container) {
 	reportHandler := adminhandler.NewReportHandler(cont.reportUsecase, cont.reportNameQuery)
 
 	router := adminhttp.NewRouter(adminhttp.RouterDeps{
-		AuthMw:    authMw,
-		Me:        meHandler,
-		Contacts:  contactHandler,
-		Companies: companyHandler,
-		Avatars:   avatarHandler,
-		Resales:   resaleHandler,
-		Gas:       gasHandler,
-		Mints:     mintHandler,
-		News:      newsHandler,
-		Reports:   reportHandler,
+		AuthMw:        authMw,
+		Me:            meHandler,
+		Contacts:      contactHandler,
+		Companies:     companyHandler,
+		Avatars:       avatarHandler,
+		Resales:       resaleHandler,
+		ResaleReviews: resaleReviewHandler,
+		Gas:           gasHandler,
+		Mints:         mintHandler,
+		News:          newsHandler,
+		Reports:       reportHandler,
 	})
 
 	mux.Handle("/admin/", router)

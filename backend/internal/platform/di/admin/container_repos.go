@@ -32,6 +32,7 @@ type repos struct {
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 	resaleRepo                     *fsrepo.ResaleRepositoryFS
 	resaleImageRepo                *fsrepo.ResaleImageRepositoryFS
+	resaleReviewRepo               *fsrepo.ResaleReviewRepositoryFS
 	cartRepo                       *fsrepo.CartRepositoryFS
 }
 
@@ -65,6 +66,7 @@ func buildRepos(fsClient *firestore.Client) *repos {
 		reportDecisionNotificationRepo: fsrepo.NewReportDecisionNotificationRepositoryFS(fsClient),
 		resaleRepo:                     fsrepo.NewResaleRepositoryFS(fsClient),
 		resaleImageRepo:                fsrepo.NewResaleImageRepositoryFS(fsClient),
+		resaleReviewRepo:               fsrepo.NewResaleReviewRepositoryFS(fsClient),
 		cartRepo:                       fsrepo.NewCartRepositoryFS(fsClient),
 	}
 }
@@ -86,5 +88,6 @@ func (r *repos) applyToContainer(c *Container) {
 	c.reportRepo = r.reportRepo
 	c.resaleRepo = r.resaleRepo
 	c.resaleImageRepo = r.resaleImageRepo
+	c.resaleReviewRepo = r.resaleReviewRepo
 	c.reportDecisionNotificationRepo = r.reportDecisionNotificationRepo
 }

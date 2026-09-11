@@ -24,9 +24,10 @@ type Container struct {
 	adminFirebaseUID string
 	adminEmail       string
 
-	contactUsecase *usecase.ContactUsecase
-	newsUsecase    *usecase.NewsUsecase
-	reportUsecase  *usecase.ReportUsecase
+	contactUsecase      *usecase.ContactUsecase
+	newsUsecase         *usecase.NewsUsecase
+	reportUsecase       *usecase.ReportUsecase
+	resaleReviewUsecase *usecase.ResaleReviewUsecase
 
 	companyRepo                    *fsrepo.CompanyRepositoryFS
 	memberRepo                     *fsrepo.MemberRepositoryFS
@@ -40,6 +41,7 @@ type Container struct {
 	reportRepo                     *fsrepo.ReportRepositoryFS
 	resaleRepo                     *fsrepo.ResaleRepositoryFS
 	resaleImageRepo                *fsrepo.ResaleImageRepositoryFS
+	resaleReviewRepo               *fsrepo.ResaleReviewRepositoryFS
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 
 	newsQuery                           *adminquery.NewsQuery
