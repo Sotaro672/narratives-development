@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
+import BrandTable from "../features/brand/presentation/components/BrandTable";
 import ContractAnnouncementTable from "../features/company/presentation/components/ContractAnnouncementTable";
-import ContractBrandTable from "../features/company/presentation/components/ContractBrandTable";
 import ContractListTable from "../features/company/presentation/components/ContractListTable";
 import ContractProductBlueprintTable from "../features/company/presentation/components/ContractProductBlueprintTable";
 import ContractTokenBlueprintTable from "../features/company/presentation/components/ContractTokenBlueprintTable";
@@ -28,6 +28,11 @@ export default function ContractDetailPage() {
   const [activeTab, setActiveTab] = useState<ContractDetailTab>("brands");
 
   const company = detail?.company ?? null;
+
+  const handleBrandClick = (brandId: string) => {
+    if (!companyId || !brandId) return;
+    navigate(`/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(brandId)}`);
+  };
 
   const handleListClick = (listId: string) => {
     if (!companyId || !listId) return;
@@ -147,7 +152,10 @@ export default function ContractDetailPage() {
             role="tabpanel"
             aria-labelledby="contract-detail-tab-brands"
           >
-            <ContractBrandTable brands={detail.brands} />
+            <BrandTable
+              brands={detail.brands}
+              onBrandClick={(brand) => handleBrandClick(brand.id)}
+            />
           </div>
         )}
 

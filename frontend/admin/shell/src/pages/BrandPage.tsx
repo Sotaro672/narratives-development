@@ -2,7 +2,7 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
-import { useContractDetail } from "../features/company/presentation/hooks/useContractDetail";
+import { useBrandDetail } from "../features/brand/presentation/hooks/useBrandDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 import { formatDateTime } from "../shared/util/dateFormat";
 
@@ -15,18 +15,22 @@ export default function BrandPage() {
     brandId?: string;
   }>();
 
-  const { detail, loading, error, reload } = useContractDetail(companyId);
-
-  const company = detail?.company ?? null;
-  const brand =
-    detail?.brands.find((item) => item.id === brandId) ?? null;
+  const {
+    company,
+    brand,
+    brandIconUrl,
+    brandBackgroundImageUrl,
+    loading,
+    error,
+    reload,
+  } = useBrandDetail(companyId, brandId);
 
   const renderMain = () => {
-    if (loading && !detail) {
+    if (loading && !brand) {
       return <p>ブランド詳細を取得しています...</p>;
     }
 
-    if (error && !detail) {
+    if (error && !brand) {
       return (
         <div role="alert">
           <p>ブランド詳細を取得できませんでした。</p>
@@ -45,9 +49,9 @@ export default function BrandPage() {
     return (
       <section className="ui-detail-section">
         <div className="brand-page__background-area">
-          {brand.brandBackgroundImage ? (
+          {brandBackgroundImageUrl ? (
             <img
-              src={brand.brandBackgroundImage}
+              src={brandBackgroundImageUrl}
               alt={`${brand.name || "ブランド"}の背景画像`}
               className="brand-page__background"
             />
@@ -60,9 +64,9 @@ export default function BrandPage() {
 
         <div className="brand-page__summary">
           <div className="brand-page__icon-area">
-            {brand.brandIcon ? (
+            {brandIconUrl ? (
               <img
-                src={brand.brandIcon}
+                src={brandIconUrl}
                 alt={`${brand.name || "ブランド"}のアイコン`}
                 className="brand-page__icon"
               />
@@ -138,7 +142,11 @@ export default function BrandPage() {
                 <dd>{brand.isActive ? "有効" : "無効"}</dd>
 
                 <dt>登録日時</dt>
-                <dd>{formatDateTime(brand.createdAt)}</dd>
+                <dd>
+                  {brand.createdAt
+                    ? formatDateTime(brand.createdAt)
+                    : "-"}
+                </dd>
 
                 <dt>最終更新日時</dt>
                 <dd>

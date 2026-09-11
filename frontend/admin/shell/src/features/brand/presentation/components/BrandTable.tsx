@@ -1,5 +1,4 @@
-// frontend/admin/shell/src/features/company/presentation/components/ContractBrandTable.tsx
-
+// frontend\admin\shell\src\features\brand\presentation\components\BrandTable.tsx
 import { useMemo } from "react";
 
 import type { ContractBrandRow } from "../../../../shared/type/contractDetail";
