@@ -1,14 +1,14 @@
-// frontend/admin/shell/src/features/company/presentation/components/ProductBlueprintReviewTable.tsx
+// frontend/admin/shell/src/features/productBlueprint/presentation/components/ProductBlueprintReviewTable.tsx
 
 import { useMemo } from "react";
 
 import type {
   ContractProductBlueprintReview,
   ContractProductBlueprintReviewStatus,
-} from "../../model/ProductBlueprintReview";
+} from "../../model/productBlueprintReview";
 import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
-import { useContractProductBlueprintReviews } from "../hooks/useProductBlueprintReviews";
+import { useProductBlueprintReviews } from "../hooks/useProductBlueprintReviews";
 
 type ProductBlueprintReviewTableProps = {
   companyId: string;
@@ -34,14 +34,13 @@ export default function ProductBlueprintReviewTable({
   page = 1,
   perPage = 20,
 }: ProductBlueprintReviewTableProps) {
-  const { reviews, loading, error, reload } =
-    useContractProductBlueprintReviews(
-      companyId,
-      productBlueprintId,
-      status,
-      page,
-      perPage,
-    );
+  const { reviews, loading, error, reload } = useProductBlueprintReviews(
+    companyId,
+    productBlueprintId,
+    status,
+    page,
+    perPage,
+  );
 
   const columns = useMemo<TableColumn<ContractProductBlueprintReview>[]>(
     () => [
@@ -77,7 +76,8 @@ export default function ProductBlueprintReviewTable({
       {
         key: "status",
         header: "状態",
-        render: (review) => REVIEW_STATUS_LABELS[review.status] ?? review.status,
+        render: (review) =>
+          REVIEW_STATUS_LABELS[review.status] ?? review.status,
         filter: {
           getValue: (review) => review.status,
           options: [

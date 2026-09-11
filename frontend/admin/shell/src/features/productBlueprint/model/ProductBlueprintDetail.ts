@@ -1,4 +1,4 @@
-// frontend\admin\shell\src\features\productBlueprint\model\ProductBlueprintDetail.ts
+// frontend\admin\shell\src\features\productBlueprint\model\productBlueprintDetail.ts
 import type { Company } from "../../../shared/type/company";
 
 export type ContractProductBlueprintModelRef = {

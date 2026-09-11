@@ -1,6 +1,6 @@
 // frontend/admin/shell/src/features/company/presentation/components/ProductBlueprintModelList.tsx
 
-import type { ContractProductBlueprintModelRef } from "../../model/ProductBlueprintDetail";
+import type { ContractProductBlueprintModelRef } from "../../model/productBlueprintDetail";
 import { formatModelMeta } from "../../../../shared/util/modelMetaFormat";
 
 type ProductBlueprintModelListProps = {

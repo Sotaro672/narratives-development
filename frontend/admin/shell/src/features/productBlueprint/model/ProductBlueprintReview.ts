@@ -1,4 +1,4 @@
-// frontend/admin/shell/src/shared/type/contractProductBlueprintReview.ts
+//frontend\admin\shell\src\features\productBlueprint\model\productBlueprintReview.ts
 
 export type ContractProductBlueprintReviewStatus =
   | "PUBLISHED"

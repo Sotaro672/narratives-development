@@ -4,11 +4,6 @@ import { getAuthHeaders } from "../../../shared/http/authHeaders";
 
 import type { Company, CompanyListResponse } from "../../../shared/type/company";
 import type { ContractDetailResponse } from "../../../shared/type/contractDetail";
-import type { ContractProductBlueprintDetailResponse } from "../../productBlueprint/model/ProductBlueprintDetail";
-import type {
-  ContractProductBlueprintReviewResponse,
-  ContractProductBlueprintReviewStatus,
-} from "../../productBlueprint/model/ProductBlueprintReview";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -84,46 +79,5 @@ export async function getContractDetail(
   return getAdminJSON<ContractDetailResponse>(
     `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/contract-detail`,
     "Failed to load contract detail.",
-  );
-}
-
-export async function getContractProductBlueprintDetail(
-  companyId: string,
-  productBlueprintId: string,
-): Promise<ContractProductBlueprintDetailResponse> {
-  const normalizedCompanyId = requireID(companyId, "companyId");
-  const normalizedProductBlueprintId = requireID(
-    productBlueprintId,
-    "productBlueprintId",
-  );
-
-  return getAdminJSON<ContractProductBlueprintDetailResponse>(
-    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/product-blueprints/${encodeURIComponent(normalizedProductBlueprintId)}`,
-    "Failed to load contract product blueprint detail.",
-  );
-}
-
-export async function getContractProductBlueprintReviews(
-  companyId: string,
-  productBlueprintId: string,
-  status: ContractProductBlueprintReviewStatus = "PUBLISHED",
-  page = 1,
-  perPage = 20,
-): Promise<ContractProductBlueprintReviewResponse> {
-  const normalizedCompanyId = requireID(companyId, "companyId");
-  const normalizedProductBlueprintId = requireID(
-    productBlueprintId,
-    "productBlueprintId",
-  );
-
-  const query = new URLSearchParams({
-    status,
-    page: String(page),
-    perPage: String(perPage),
-  });
-
-  return getAdminJSON<ContractProductBlueprintReviewResponse>(
-    `/admin/companies/${encodeURIComponent(normalizedCompanyId)}/product-blueprints/${encodeURIComponent(normalizedProductBlueprintId)}/reviews?${query.toString()}`,
-    "Failed to load contract product blueprint reviews.",
   );
 }

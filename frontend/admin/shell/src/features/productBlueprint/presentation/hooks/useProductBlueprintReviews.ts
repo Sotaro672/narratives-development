@@ -1,14 +1,14 @@
-// frontend/admin/shell/src/features/company/presentation/hooks/useContractProductBlueprintReviews.ts
+// frontend/admin/shell/src/features/productBlueprint/presentation/hooks/useProductBlueprintReviews.ts
 
 import { useCallback, useEffect, useState } from "react";
 
+import { getContractProductBlueprintReviews } from "../../infrastructure/productBlueprintApi";
 import type {
   ContractProductBlueprintReviewResponse,
   ContractProductBlueprintReviewStatus,
-} from "../../model/ProductBlueprintReview";
-import { getContractProductBlueprintReviews } from "../../../company/infrastructure/companyApi";
+} from "../../model/productBlueprintReview";
 
-export function useContractProductBlueprintReviews(
+export function useProductBlueprintReviews(
   companyId: string | undefined,
   productBlueprintId: string | undefined,
   status: ContractProductBlueprintReviewStatus = "PUBLISHED",

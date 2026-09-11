@@ -1,9 +1,9 @@
-// frontend/admin/shell/src/features/company/presentation/components/ProductBlueprintDetailAside.tsx
+// frontend/admin/shell/src/features/productBlueprint/presentation/components/ProductBlueprintDetailAside.tsx
 
 import type { Company } from "../../../../shared/type/company";
-import type { ContractProductBlueprintDetail } from "../../model/ProductBlueprintDetail";
 import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
+import type { ContractProductBlueprintDetail } from "../../model/productBlueprintDetail";
 
 type ProductBlueprintDetailAsideProps = {
   company: Company;
@@ -44,10 +44,13 @@ export default function ProductBlueprintDetailAside({
 
           <dt>通報数</dt>
           <dd>
-            {productBlueprint.reportCount > 0 && productBlueprint.latestReportCaseId ? (
+            {productBlueprint.reportCount > 0 &&
+            productBlueprint.latestReportCaseId ? (
               <TextLink
                 tone="accent"
-                onClick={() => onOpenReport(productBlueprint.latestReportCaseId)}
+                onClick={() =>
+                  onOpenReport(productBlueprint.latestReportCaseId)
+                }
               >
                 {productBlueprint.reportCount.toLocaleString()}
               </TextLink>

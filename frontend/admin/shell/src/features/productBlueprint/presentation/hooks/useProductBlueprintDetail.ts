@@ -1,11 +1,11 @@
-// frontend/admin/shell/src/features/company/presentation/hooks/useContractProductBlueprintDetail.ts
+// frontend/admin/shell/src/features/productBlueprint/presentation/hooks/useProductBlueprintDetail.ts
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ContractProductBlueprintDetailResponse } from "../../model/ProductBlueprintDetail";
-import { getContractProductBlueprintDetail } from "../../../company/infrastructure/companyApi";
+import { getContractProductBlueprintDetail } from "../../infrastructure/productBlueprintApi";
+import type { ContractProductBlueprintDetailResponse } from "../../model/productBlueprintDetail";
 
-export function useContractProductBlueprintDetail(
+export function useProductBlueprintDetail(
   companyId: string | undefined,
   productBlueprintId: string | undefined,
 ) {

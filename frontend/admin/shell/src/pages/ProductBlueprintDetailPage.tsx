@@ -6,7 +6,7 @@ import ProductBlueprintDetailAside from "../features/productBlueprint/presentati
 import ProductBlueprintModelList from "../features/productBlueprint/presentation/components/ProductBlueprintModelList";
 import ProductBlueprintReviewTable from "../features/productBlueprint/presentation/components/ProductBlueprintReviewTable";
 import ProductBlueprintSummary from "../features/productBlueprint/presentation/components/ProductBlueprintSummary";
-import { useContractProductBlueprintDetail } from "../features/productBlueprint/presentation/hooks/useProductBlueprintDetail";
+import { useProductBlueprintDetail } from "../features/productBlueprint/presentation/hooks/useProductBlueprintDetail";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 
 import "./ProductBlueprintDetailPage.css";
@@ -19,7 +19,7 @@ export default function ProductBlueprintDetailPage() {
   }>();
 
   const { detail, loading, error, reload } =
-    useContractProductBlueprintDetail(companyId, productBlueprintId);
+    useProductBlueprintDetail(companyId, productBlueprintId);
 
   const company = detail?.company ?? null;
   const productBlueprint = detail?.productBlueprint ?? null;
@@ -48,7 +48,6 @@ export default function ProductBlueprintDetailPage() {
     return (
       <>
         <ProductBlueprintSummary productBlueprint={productBlueprint} />
-
         <ProductBlueprintModelList modelRefs={productBlueprint.modelRefs} />
 
         <section className="ui-detail-section">
