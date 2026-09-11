@@ -44,6 +44,8 @@ function getTargetLabel(targetType?: ReportTargetType): string {
       return "アバター";
     case "RESALE":
       return "再販出品";
+    case "TRADE_MESSAGE":
+      return "取引コメント";
     default:
       return "投稿";
   }
@@ -62,6 +64,9 @@ function getDescription(targetType?: ReportTargetType): string {
 
     case "AVATAR":
       return "このアバターが不適切だと思う理由を選択してください。通報しただけでは再販サービスの利用が自動的に停止されることはありません。";
+
+    case "TRADE_MESSAGE":
+      return "この取引コメントが不適切だと思う理由を選択してください。通報しただけでは取引コメントは自動的に非表示になりません。";
 
     case "PRODUCT_BLUEPRINT_REVIEW":
     case "TOKEN_BLUEPRINT_COMMENT":

@@ -1,7 +1,5 @@
 // frontend/mall/src/features/report/api/reportApi.ts
-
 import { getFirebaseIdToken } from "../../../lib/authToken";
-
 import type {
   ReportAvatarInput,
   ReportListInput,
@@ -11,6 +9,7 @@ import type {
   ReportResponse,
   ReportTokenBlueprintCommentInput,
   ReportTokenBlueprintInput,
+  ReportTradeMessageInput,
 } from "../../shared/types/report";
 
 type ReportErrorResponse = {
@@ -20,7 +19,6 @@ type ReportErrorResponse = {
 
 function getApiBaseUrl(): string {
   const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
-
   if (!apiBaseUrl) {
     throw new Error("VITE_API_BASE_URLが設定されていません。");
   }
@@ -30,7 +28,6 @@ function getApiBaseUrl(): string {
 
 function requireId(value: string, fieldName: string): string {
   const normalized = value.trim();
-
   if (!normalized) {
     throw new Error(`${fieldName}が指定されていません。`);
   }
@@ -56,13 +53,11 @@ function createRequest(
 
 async function readResponseBody(response: Response): Promise<unknown> {
   const text = await response.text();
-
   if (!text.trim()) {
     return null;
   }
 
   const contentType = response.headers.get("content-type") ?? "";
-
   if (!contentType.includes("application/json")) {
     return text;
   }
@@ -137,7 +132,6 @@ async function postReport(
 
   if (!response.ok) {
     const message = getErrorMessage(body);
-
     throw new Error(
       message || `通報の送信に失敗しました。status=${response.status}`,
     );
@@ -229,6 +223,19 @@ export async function reportResale(
 
   return postReport(
     `/mall/me/resales/${encodeURIComponent(resaleId)}/reports`,
+    request,
+  );
+}
+
+export async function reportTradeMessage(
+  input: ReportTradeMessageInput,
+): Promise<ReportResponse> {
+  const tradeId = requireId(input.tradeId, "tradeId");
+  const messageId = requireId(input.messageId, "messageId");
+  const request = createRequest(input.reason, input.detail);
+
+  return postReport(
+    `/mall/me/trades/${encodeURIComponent(tradeId)}/messages/${encodeURIComponent(messageId)}/reports`,
     request,
   );
 }

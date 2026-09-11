@@ -13,6 +13,7 @@ import {
   reportResale,
   reportTokenBlueprint,
   reportTokenBlueprintComment,
+  reportTradeMessage,
 } from "../api/reportApi";
 
 export type ReportTarget =
@@ -41,6 +42,11 @@ export type ReportTarget =
   | {
       type: "RESALE";
       resaleId: string;
+    }
+  | {
+      type: "TRADE_MESSAGE";
+      tradeId: string;
+      messageId: string;
     };
 
 type OpenProductBlueprintReviewReportInput = {
@@ -67,6 +73,11 @@ type OpenAvatarReportInput = {
 
 type OpenResaleReportInput = {
   resaleId: string;
+};
+
+type OpenTradeMessageReportInput = {
+  tradeId: string;
+  messageId: string;
 };
 
 const DEFAULT_REASON: ReportReason = "SPAM";
@@ -192,6 +203,21 @@ export function useReport() {
     [resetForm],
   );
 
+  const openTradeMessageReport = useCallback(
+    (input: OpenTradeMessageReportInput) => {
+      const tradeId = normalizeId(input.tradeId, "tradeId");
+      const messageId = normalizeId(input.messageId, "messageId");
+
+      resetForm();
+      setTarget({
+        type: "TRADE_MESSAGE",
+        tradeId,
+        messageId,
+      });
+    },
+    [resetForm],
+  );
+
   const close = useCallback(() => {
     if (submittingRef.current) {
       return;
@@ -290,6 +316,15 @@ export function useReport() {
             detail: normalizedDetail || undefined,
           });
           break;
+
+        case "TRADE_MESSAGE":
+          response = await reportTradeMessage({
+            tradeId: target.tradeId,
+            messageId: target.messageId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
       }
 
       setResult(response);
@@ -334,6 +369,7 @@ export function useReport() {
     openTokenBlueprintCommentReport,
     openAvatarReport,
     openResaleReport,
+    openTradeMessageReport,
     close,
     setReason,
     setDetail,

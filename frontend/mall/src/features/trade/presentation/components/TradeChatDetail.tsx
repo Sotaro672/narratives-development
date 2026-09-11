@@ -1,4 +1,4 @@
-// frontend/amol/src/features/trade/presentation/components/TradeChatDetail.tsx
+// frontend/mall/src/features/trade/presentation/components/TradeChatDetail.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Copy } from "lucide-react";
@@ -11,6 +11,8 @@ import { getFirebaseIdToken } from "../../../../lib/authToken";
 
 import { returnOrderItem } from "../../../order/api/orderDetailApi";
 import ReturnRequestModal, { type ReturnPackageState } from "../../../order/components/ReturnRequestModal";
+import ReportModal from "../../../report/components/ReportModal";
+import { useReport } from "../../../report/hooks/useReport";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
@@ -114,6 +116,22 @@ export default function TradeChatDetail({
   const navigate = useNavigate();
   const normalizedTradeId = tradeId.trim();
 
+  const {
+    target: reportTarget,
+    isOpen: isReportOpen,
+    reason: reportReason,
+    detail: reportDetail,
+    submitting: reportSubmitting,
+    error: reportError,
+    result: reportResult,
+    canSubmit: canSubmitReport,
+    openTradeMessageReport,
+    close: closeReport,
+    setReason: setReportReason,
+    setDetail: setReportDetail,
+    submit: submitReport,
+  } = useReport();
+
   const [trade, setTrade] = useState<TradeDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -196,6 +214,25 @@ export default function TradeChatDetail({
   const canSubmitCancel = /\S/u.test(cancelMessage);
   const orderAction = getTradeOrderAction(trade);
   const shouldShowOrderAction = orderAction !== null;
+
+  const handleReportMessage = useCallback(
+    (message: TradeMessage): void => {
+      const messageId = message.id.trim();
+      if (!normalizedTradeId || !messageId || !trade) return;
+      if (
+        message.senderSide === "system" ||
+        message.senderSide === trade.viewerSide
+      ) {
+        return;
+      }
+
+      openTradeMessageReport({
+        tradeId: normalizedTradeId,
+        messageId,
+      });
+    },
+    [normalizedTradeId, openTradeMessageReport, trade],
+  );
 
   const replyActionDisabled =
     loading ||
@@ -535,7 +572,8 @@ export default function TradeChatDetail({
         showFooter={
           !isReplyModalOpen &&
           !isCancelModalOpen &&
-          !isReturnModalOpen
+          !isReturnModalOpen &&
+          !isReportOpen
         }
         mode="mypage"
         mainClassName="chat-detail-page-layout"
@@ -588,6 +626,7 @@ export default function TradeChatDetail({
                         key={message.id}
                         message={message}
                         trade={trade}
+                        onReport={handleReportMessage}
                       />
                     ))}
 
@@ -668,6 +707,21 @@ export default function TradeChatDetail({
         onSubmit={() => {
           void submitReturn();
         }}
+      />
+
+      <ReportModal
+        open={isReportOpen}
+        targetType={reportTarget?.type}
+        reason={reportReason}
+        detail={reportDetail}
+        submitting={reportSubmitting}
+        error={reportError}
+        result={reportResult}
+        canSubmit={canSubmitReport}
+        onReasonChange={setReportReason}
+        onDetailChange={setReportDetail}
+        onSubmit={submitReport}
+        onClose={closeReport}
       />
     </>
   );
@@ -848,19 +902,21 @@ function TradeThreadHeader({
         title="商品情報"
         items={productMetaItems}
       />
-        {trade.resale.description ? (
-          <details className="chat-detail-page__description-accordion">
-            <summary className="chat-detail-page__description-summary">
-              商品説明
-            </summary>
 
-            <div className="chat-detail-page__description-body">
-              <p className="chat-detail-page__content">
-                {trade.resale.description}
-              </p>
-            </div>
-          </details>
-        ) : null}
+      {trade.resale.description ? (
+        <details className="chat-detail-page__description-accordion">
+          <summary className="chat-detail-page__description-summary">
+            商品説明
+          </summary>
+
+          <div className="chat-detail-page__description-body">
+            <p className="chat-detail-page__content">
+              {trade.resale.description}
+            </p>
+          </div>
+        </details>
+      ) : null}
+
       <ChatImageGrid
         images={trade.resale.images.map((image) => ({
           key: image.id,
@@ -875,9 +931,11 @@ function TradeThreadHeader({
 function TradeMessageCard({
   message,
   trade,
+  onReport,
 }: {
   message: TradeMessage;
   trade: TradeDetail;
+  onReport: (message: TradeMessage) => void;
 }) {
   const isSystem = message.senderSide === "system";
   const isMine =
@@ -889,6 +947,11 @@ function TradeMessageCard({
     trade,
   );
 
+  const canReport =
+    !isSystem &&
+    !isMine &&
+    Boolean(message.id.trim());
+
   return (
     <ChatMessageBubble
       senderName={sender.name}
@@ -897,6 +960,18 @@ function TradeMessageCard({
       content={message.content}
       isMine={isMine}
       isSystem={isSystem}
+      action={
+        canReport ? (
+          <button
+            type="button"
+            className="trade-chat-detail__copy-button"
+            aria-label={`${sender.name}の取引コメントを通報`}
+            onClick={() => onReport(message)}
+          >
+            通報
+          </button>
+        ) : undefined
+      }
     />
   );
 }

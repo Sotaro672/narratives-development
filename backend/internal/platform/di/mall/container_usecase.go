@@ -282,6 +282,8 @@ func buildMallUsecases(
 			TokenCommentModerator:    tokenBlueprintReviewUC,
 			AvatarRepo:               r.avatarRepo,
 			ResaleRepo:               r.resaleRepo,
+			TradeRepo:                r.tradeRepo,
+			TradeMessageRepo:         r.tradeMessageRepo,
 		},
 	)
 	if reportUC == nil {

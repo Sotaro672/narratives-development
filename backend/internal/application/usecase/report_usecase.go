@@ -13,6 +13,7 @@ import (
 	resaledom "narratives/internal/domain/resale"
 	tokenblueprint "narratives/internal/domain/tokenBlueprint"
 	tokenreview "narratives/internal/domain/tokenBlueprint_review"
+	tradedom "narratives/internal/domain/trade"
 )
 
 var (
@@ -47,6 +48,9 @@ type ReportUsecase struct {
 	resaleRepo      resaledom.Repository
 	resaleModerator ReportResaleModerator
 
+	tradeRepo        tradedom.Repository
+	tradeMessageRepo tradedom.MessageRepository
+
 	now func() time.Time
 }
 
@@ -74,6 +78,9 @@ type ReportUsecaseDeps struct {
 
 	ResaleRepo      resaledom.Repository
 	ResaleModerator ReportResaleModerator
+
+	TradeRepo        tradedom.Repository
+	TradeMessageRepo tradedom.MessageRepository
 
 	Now func() time.Time
 }
@@ -103,6 +110,8 @@ func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 		avatarResaleModerator:    deps.AvatarResaleModerator,
 		resaleRepo:               deps.ResaleRepo,
 		resaleModerator:          deps.ResaleModerator,
+		tradeRepo:                deps.TradeRepo,
+		tradeMessageRepo:         deps.TradeMessageRepo,
 		now:                      now,
 	}
 }

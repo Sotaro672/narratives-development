@@ -87,11 +87,24 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 		prefix = "resale"
 	case TargetTypeResaleComment:
 		prefix = "resaleComment"
+	case TargetTypeTradeMessage:
+		prefix = "tradeMessage"
 	default:
 		return "", ErrInvalidTargetType
 	}
 
 	return CaseID(prefix + "_" + targetID), nil
+}
+
+func BuildTradeMessageCaseID(tradeID string, messageID string) (CaseID, error) {
+	if !isValidDocumentIDPart(tradeID) {
+		return "", ErrInvalidTargetParentID
+	}
+	if !isValidDocumentIDPart(messageID) {
+		return "", ErrInvalidTargetID
+	}
+
+	return CaseID(fmt.Sprintf("tradeMessage_%d_%s_%s", len(tradeID), tradeID, messageID)), nil
 }
 
 func BuildReporterKey(actorType ActorType, actorID string) (ReportID, error) {
@@ -129,6 +142,7 @@ const (
 	TargetTypeAvatar                 TargetType = "AVATAR"
 	TargetTypeResale                 TargetType = "RESALE"
 	TargetTypeResaleComment          TargetType = "RESALE_COMMENT"
+	TargetTypeTradeMessage           TargetType = "TRADE_MESSAGE"
 )
 
 func (t TargetType) Validate() error {
@@ -139,7 +153,8 @@ func (t TargetType) Validate() error {
 		TargetTypeList,
 		TargetTypeAvatar,
 		TargetTypeResale,
-		TargetTypeResaleComment:
+		TargetTypeResaleComment,
+		TargetTypeTradeMessage:
 		return nil
 	default:
 		return ErrInvalidTargetType
@@ -285,7 +300,13 @@ func NewReportCase(params NewReportCaseParams) (ReportCase, error) {
 		return ReportCase{}, ErrInvalidCreatedAt
 	}
 
-	caseID, err := BuildCaseID(params.TargetType, params.TargetID)
+	var caseID CaseID
+	var err error
+	if params.TargetType == TargetTypeTradeMessage {
+		caseID, err = BuildTradeMessageCaseID(params.TargetParentID, params.TargetID)
+	} else {
+		caseID, err = BuildCaseID(params.TargetType, params.TargetID)
+	}
 	if err != nil {
 		return ReportCase{}, err
 	}
@@ -595,7 +616,8 @@ func validateSnapshotContent(
 	switch targetType {
 	case TargetTypeProductBlueprintReview,
 		TargetTypeTokenBlueprintComment,
-		TargetTypeResaleComment:
+		TargetTypeResaleComment,
+		TargetTypeTradeMessage:
 		if body == "" {
 			return fmt.Errorf("%w: snapshot body is empty", ErrInvalidTargetID)
 		}
@@ -645,7 +667,8 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		TargetTypeList,
 		TargetTypeAvatar,
 		TargetTypeResale,
-		TargetTypeResaleComment:
+		TargetTypeResaleComment,
+		TargetTypeTradeMessage:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}

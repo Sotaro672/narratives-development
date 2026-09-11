@@ -14,6 +14,7 @@ import (
 	usecase "narratives/internal/application/usecase"
 	inquirydom "narratives/internal/domain/inquiry"
 	refunddom "narratives/internal/domain/refund"
+	reportdom "narratives/internal/domain/report"
 	tradedom "narratives/internal/domain/trade"
 	transportationdom "narratives/internal/domain/transportation"
 )
@@ -29,6 +30,7 @@ import (
 type TradeHandler struct {
 	query           *mallquery.TradeQuery
 	messageUC       *usecase.TradeMessageUsecase
+	reportUC        *usecase.ReportUsecase
 	dispatchUC      *usecase.ResaleTradeDispatchUsecase
 	returnReceiptUC *usecase.ResaleTradeReturnReceiptUsecase
 }
@@ -36,12 +38,14 @@ type TradeHandler struct {
 func NewTradeHandler(
 	query *mallquery.TradeQuery,
 	messageUC *usecase.TradeMessageUsecase,
+	reportUC *usecase.ReportUsecase,
 	dispatchUC *usecase.ResaleTradeDispatchUsecase,
 	returnReceiptUC *usecase.ResaleTradeReturnReceiptUsecase,
 ) http.Handler {
 	return &TradeHandler{
 		query:           query,
 		messageUC:       messageUC,
+		reportUC:        reportUC,
 		dispatchUC:      dispatchUC,
 		returnReceiptUC: returnReceiptUC,
 	}
@@ -55,6 +59,7 @@ func NewTradeHandler(
 //	GET  /mall/me/trades/order-items/{orderId}/{itemIndex}
 //	GET  /mall/me/trades/{tradeId}
 //	POST /mall/me/trades/{tradeId}/messages
+//	POST /mall/me/trades/{tradeId}/messages/{messageId}/reports
 //	POST /mall/me/trades/{tradeId}/read
 //	GET  /mall/me/trades/{tradeId}/unread-count
 //	POST /mall/me/trades/{tradeId}/dispatch
@@ -119,6 +124,19 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 4 &&
+		parts[1] == "messages" &&
+		parts[2] != "" &&
+		parts[3] == "reports" {
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.reportMessage(w, r, tradeID, parts[2])
+		return
+	}
+
 	if len(parts) != 2 || parts[1] == "" {
 		notFound(w)
 		return
@@ -172,6 +190,20 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 type createTradeMessageRequest struct {
 	Content string `json:"content"`
+}
+
+type reportTradeMessageRequest struct {
+	Reason string `json:"reason"`
+	Detail string `json:"detail"`
+}
+
+type reportTradeMessageResponse struct {
+	CaseID        string               `json:"caseId"`
+	ReportID      string               `json:"reportId"`
+	ReportCount   int                  `json:"reportCount"`
+	Status        reportdom.CaseStatus `json:"status"`
+	CaseCreated   bool                 `json:"caseCreated"`
+	ReportCreated bool                 `json:"reportCreated"`
 }
 
 type dispatchTradeRequest struct {
@@ -358,6 +390,96 @@ func (h *TradeHandler) createMessage(
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"data": created,
+	})
+}
+
+// POST /mall/me/trades/{tradeId}/messages/{messageId}/reports
+//
+// Reports one user-authored Trade message. The authenticated Avatar must be a
+// participant of the Trade and cannot report their own message or a system
+// message.
+func (h *TradeHandler) reportMessage(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+	messageID string,
+) {
+	if h == nil || h.reportUC == nil {
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"report service not configured",
+		)
+		return
+	}
+
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	tradeID = strings.TrimSpace(tradeID)
+	if tradeID == "" {
+		badRequest(w, "tradeId is required")
+		return
+	}
+
+	messageID = strings.TrimSpace(messageID)
+	if messageID == "" {
+		badRequest(w, "messageId is required")
+		return
+	}
+
+	var req reportTradeMessageRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&req); err != nil {
+		badRequest(w, "invalid json body")
+		return
+	}
+
+	reason := reportdom.ReportReason(
+		strings.ToUpper(strings.TrimSpace(req.Reason)),
+	)
+	if err := reason.Validate(); err != nil {
+		badRequest(w, "invalid report reason")
+		return
+	}
+
+	req.Detail = strings.TrimSpace(req.Detail)
+	if reason == reportdom.ReportReasonOther && req.Detail == "" {
+		badRequest(w, "report detail required")
+		return
+	}
+
+	result, err := h.reportUC.ReportTradeMessageByAvatar(
+		r.Context(),
+		usecase.ReportTradeMessageByAvatarInput{
+			TradeID:   tradeID,
+			MessageID: messageID,
+			AvatarID:  avatarID,
+			Reason:    reason,
+			Detail:    req.Detail,
+		},
+	)
+	if err != nil {
+		writeTradeMessageReportErr(w, err)
+		return
+	}
+
+	statusCode := http.StatusCreated
+	if !result.ReportCreated {
+		statusCode = http.StatusOK
+	}
+
+	writeJSON(w, statusCode, reportTradeMessageResponse{
+		CaseID:        string(result.Case.ID),
+		ReportID:      string(result.Report.ID),
+		ReportCount:   result.Case.ReportCount,
+		Status:        result.Case.Status,
+		CaseCreated:   result.CaseCreated,
+		ReportCreated: result.ReportCreated,
 	})
 }
 
@@ -729,6 +851,25 @@ func writeTradeDispatchErr(
 
 	default:
 		writeOrderErr(w, err)
+	}
+}
+
+func writeTradeMessageReportErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	if err == nil {
+		internalError(w, "unknown error")
+		return
+	}
+
+	switch {
+	case errors.Is(err, tradedom.ErrNotFound),
+		errors.Is(err, tradedom.ErrMessageNotFound):
+		notFound(w)
+
+	default:
+		writeReportError(w, err)
 	}
 }
 

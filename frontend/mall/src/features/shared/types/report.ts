@@ -18,7 +18,8 @@ export type ReportTargetType =
   | "TOKEN_BLUEPRINT_COMMENT"
   | "LIST"
   | "AVATAR"
-  | "RESALE";
+  | "RESALE"
+  | "TRADE_MESSAGE";
 
 export type ReportRequest = {
   reason: ReportReason;
@@ -72,6 +73,13 @@ export type ReportResaleInput = {
   detail?: string;
 };
 
+export type ReportTradeMessageInput = {
+  tradeId: string;
+  messageId: string;
+  reason: ReportReason;
+  detail?: string;
+};
+
 export const REPORT_REASONS: readonly ReportReason[] = [
   "SPAM",
   "HARASSMENT",
@@ -86,14 +94,19 @@ export function getReportReasonLabel(
   switch (reason) {
     case "SPAM":
       return "スパム";
+
     case "HARASSMENT":
       return "嫌がらせ";
+
     case "INAPPROPRIATE":
       return "不適切な内容";
+
     case "FALSE_INFORMATION":
       return "虚偽情報";
+
     case "OTHER":
       return "その他";
+
     default:
       return reason;
   }
