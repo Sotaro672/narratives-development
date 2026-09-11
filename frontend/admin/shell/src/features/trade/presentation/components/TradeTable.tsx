@@ -1,6 +1,7 @@
 // frontend/admin/shell/src/features/trade/presentation/components/TradeTable.tsx
 
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 
 import type { Trade } from "../../../../shared/type/trade";
 import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
@@ -8,12 +9,15 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 import { useResaleTrades } from "../hooks/useResaleTrades";
 
 type TradeTableProps = {
+  avatarId: string;
   resaleId: string;
 };
 
 export default function TradeTable({
+  avatarId,
   resaleId,
 }: TradeTableProps) {
+  const navigate = useNavigate();
   const { trades, loading, error, reload } = useResaleTrades(resaleId);
 
   const columns = useMemo<TableColumn<Trade>[]>(
@@ -80,6 +84,11 @@ export default function TradeTable({
       columns={columns}
       rows={trades?.items ?? []}
       getRowKey={(trade) => trade.id}
+      onRowClick={(trade) =>
+        navigate(
+          `/avatars/${encodeURIComponent(avatarId)}/resales/${encodeURIComponent(resaleId)}/trades/${encodeURIComponent(trade.id)}`,
+        )
+      }
       emptyMessage="取引はありません。"
       filteredEmptyMessage="条件に一致する取引はありません。"
     />

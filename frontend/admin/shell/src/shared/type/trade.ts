@@ -22,7 +22,38 @@ export type Trade = {
   lastMessageAt?: string | null;
 };
 
+export type TradeMessageSenderSide = "buyer" | "seller" | "system";
+
+export type TradeMessageSenderType = "avatar" | "system";
+
+export type TradeMessageImage = {
+  fileName: string;
+  fileUrl: string;
+  objectPath: string;
+  fileSize: number;
+  mimeType: string;
+};
+
+export type TradeMessage = {
+  id: string;
+  tradeId: string;
+  senderSide: TradeMessageSenderSide;
+  senderType: TradeMessageSenderType;
+  senderId: string;
+  senderName: string;
+  content: string;
+  images: TradeMessageImage[];
+  reportCount: number;
+  reportCaseId?: string;
+  createdAt: string;
+};
+
 export type ResaleTradeListResponse = {
   items: Trade[];
+  totalCount: number;
+};
+
+export type TradeMessageListResponse = {
+  items: TradeMessage[];
   totalCount: number;
 };

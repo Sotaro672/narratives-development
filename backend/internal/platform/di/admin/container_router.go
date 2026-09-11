@@ -62,6 +62,10 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.resaleTradeQuery,
 	)
 
+	tradeMessageHandler := adminhandler.NewTradeMessageHandler(
+		cont.tradeMessageQuery,
+	)
+
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)
 	mintHandler := adminhandler.NewMintHandler(
 		cont.mintListQuery,
@@ -79,6 +83,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Resales:       resaleHandler,
 		ResaleReviews: resaleReviewHandler,
 		ResaleTrades:  resaleTradeHandler,
+		TradeMessages: tradeMessageHandler,
 		Gas:           gasHandler,
 		Mints:         mintHandler,
 		News:          newsHandler,

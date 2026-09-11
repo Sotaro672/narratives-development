@@ -1,7 +1,10 @@
 // frontend/admin/shell/src/features/trade/infrastructure/tradeApi.ts
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
-import type { ResaleTradeListResponse } from "../../../shared/type/trade";
+import type {
+  ResaleTradeListResponse,
+  TradeMessageListResponse,
+} from "../../../shared/type/trade";
 
 const BACKEND_BASE_URL =
   import.meta.env.VITE_BACKEND_BASE_URL?.trim().replace(/\/+$/, "");
@@ -54,4 +57,26 @@ export async function getResaleTrades(
   await requireOk(response, "Failed to load resale trades.");
 
   return (await response.json()) as ResaleTradeListResponse;
+}
+
+export async function getTradeMessages(
+  tradeId: string,
+): Promise<TradeMessageListResponse> {
+  const backendBaseUrl = requireBackendBaseUrl();
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${backendBaseUrl}/admin/trades/${encodeURIComponent(tradeId)}/messages`,
+    {
+      method: "GET",
+      headers: {
+        ...authHeaders,
+        Accept: "application/json",
+      },
+    },
+  );
+
+  await requireOk(response, "Failed to load trade messages.");
+
+  return (await response.json()) as TradeMessageListResponse;
 }

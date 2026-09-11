@@ -15,6 +15,7 @@ type queries struct {
 	newsQuery                           *adminquery.NewsQuery
 	reportNameQuery                     *adminquery.ReportNameQuery
 	resaleTradeQuery                    *adminquery.ResaleTradeQuery
+	tradeMessageQuery                   *adminquery.TradeMessageQuery
 	contractDetailQuery                 *adminquery.ContractDetailQuery
 	contractListQuery                   *adminquery.ContractListQuery
 	contractTokenBlueprintQuery         *adminquery.ContractTokenBlueprintQuery
@@ -60,8 +61,14 @@ func buildQueries(
 	if r.resaleTradeReader == nil {
 		return nil, errors.New("di.admin: resale trade reader is nil")
 	}
+	if r.tradeMessageRepo == nil {
+		return nil, errors.New("di.admin: trade message repository is nil")
+	}
 	if r.tradeMessageStatsReader == nil {
 		return nil, errors.New("di.admin: trade message stats reader is nil")
+	}
+	if r.reportRepo == nil {
+		return nil, errors.New("di.admin: report repository is nil")
 	}
 	if r.avatarRepo == nil {
 		return nil, errors.New("di.admin: avatar repository is nil")
@@ -98,6 +105,15 @@ func buildQueries(
 	)
 	if resaleTradeQuery == nil {
 		return nil, errors.New("di.admin: resale trade query is nil")
+	}
+
+	tradeMessageQuery := adminquery.NewTradeMessageQuery(
+		r.tradeMessageRepo,
+		r.avatarRepo,
+		r.reportRepo,
+	)
+	if tradeMessageQuery == nil {
+		return nil, errors.New("di.admin: trade message query is nil")
 	}
 
 	contractDetailQuery := adminquery.NewContractDetailQuery(
@@ -221,6 +237,7 @@ func buildQueries(
 		newsQuery:                           newsQuery,
 		reportNameQuery:                     reportNameQuery,
 		resaleTradeQuery:                    resaleTradeQuery,
+		tradeMessageQuery:                   tradeMessageQuery,
 		contractDetailQuery:                 contractDetailQuery,
 		contractListQuery:                   contractListQuery,
 		contractTokenBlueprintQuery:         contractTokenBlueprintQuery,
@@ -241,6 +258,7 @@ func (q *queries) applyToContainer(c *Container) {
 	c.newsQuery = q.newsQuery
 	c.reportNameQuery = q.reportNameQuery
 	c.resaleTradeQuery = q.resaleTradeQuery
+	c.tradeMessageQuery = q.tradeMessageQuery
 	c.contractDetailQuery = q.contractDetailQuery
 	c.contractListQuery = q.contractListQuery
 	c.contractTokenBlueprintQuery = q.contractTokenBlueprintQuery

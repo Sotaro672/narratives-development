@@ -20,6 +20,7 @@ import ReportDetailPage from "../../pages/ReportDetailPage";
 import ReportsPage from "../../pages/ReportsPage";
 import ResalePage from "../../pages/ResalePage";
 import TokenBlueprintDetailPage from "../../pages/TokenBlueprintDetailPage";
+import TradePage from "../../pages/TradePage";
 
 export default function MainRoutes() {
   return (
@@ -40,6 +41,7 @@ export default function MainRoutes() {
       <Route path="/avatars" element={<AvatarPage />} />
       <Route path="/avatars/:avatarId" element={<AvatarDetailPage />} />
       <Route path="/avatars/:avatarId/resales/:resaleId" element={<ResalePage />} />
+      <Route path="/avatars/:avatarId/resales/:resaleId/trades/:tradeId" element={<TradePage />} />
       <Route path="/reports" element={<ReportsPage />} />
       <Route path="/reports/:reportId" element={<ReportDetailPage />} />
       <Route path="/billing" element={<BillingPage />} />

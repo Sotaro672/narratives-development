@@ -43,12 +43,14 @@ type Container struct {
 	resaleImageRepo                *fsrepo.ResaleImageRepositoryFS
 	resaleReviewRepo               *fsrepo.ResaleReviewRepositoryFS
 	resaleTradeReader              *fsrepo.ResaleTradeReaderFS
+	tradeMessageRepo               *fsrepo.TradeMessageRepositoryFS
 	tradeMessageStatsReader        *fsrepo.TradeMessageStatsReaderFS
 	reportDecisionNotificationRepo *fsrepo.ReportDecisionNotificationRepositoryFS
 
 	newsQuery                           *adminquery.NewsQuery
 	reportNameQuery                     *adminquery.ReportNameQuery
 	resaleTradeQuery                    *adminquery.ResaleTradeQuery
+	tradeMessageQuery                   *adminquery.TradeMessageQuery
 	contractDetailQuery                 *adminquery.ContractDetailQuery
 	contractListQuery                   *adminquery.ContractListQuery
 	contractTokenBlueprintQuery         *adminquery.ContractTokenBlueprintQuery
