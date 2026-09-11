@@ -127,7 +127,10 @@ export default function ResalePage() {
                   role="tabpanel"
                   aria-labelledby="resale-page-tab-trades"
                 >
-                  <TradeTable resaleId={resaleId} />
+                  <TradeTable
+                    avatarId={avatarId}
+                    resaleId={resaleId}
+                  />
                 </div>
               )}
             </div>
