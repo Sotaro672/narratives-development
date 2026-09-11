@@ -50,6 +50,8 @@ export type ReportCase = {
   targetParentId: string;
   targetParentName?: string;
   targetCompanyId?: string;
+  targetTokenBlueprintId?: string;
+  targetTokenName?: string;
   targetAuthorId: string;
   targetAuthorName?: string;
   targetAuthorType: ReportActorType;

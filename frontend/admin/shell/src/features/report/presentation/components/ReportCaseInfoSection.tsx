@@ -47,6 +47,28 @@ function buildTargetDetailPath(reportCase: ReportCase): string | null {
   }
 }
 
+function buildTargetTokenDetailPath(reportCase: ReportCase): string | null {
+  const companyId = reportCase.targetCompanyId?.trim() || "";
+  const tokenBlueprintId = reportCase.targetTokenBlueprintId?.trim() || "";
+
+  if (reportCase.targetType !== "RESALE" || !companyId || !tokenBlueprintId) {
+    return null;
+  }
+
+  return `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(tokenBlueprintId)}`;
+}
+
+function buildResaleDetailPath(reportCase: ReportCase): string | null {
+  const avatarId = reportCase.targetAuthorId?.trim() || "";
+  const resaleId = reportCase.targetId?.trim() || "";
+
+  if (reportCase.targetType !== "RESALE" || !avatarId || !resaleId) {
+    return null;
+  }
+
+  return `/avatars/${encodeURIComponent(avatarId)}/resales/${encodeURIComponent(resaleId)}`;
+}
+
 function buildTargetAuthorDetailPath(reportCase: ReportCase): string | null {
   const targetAuthorId = reportCase.targetAuthorId?.trim() || "";
   if (!targetAuthorId) return null;
@@ -68,12 +90,19 @@ export default function ReportCaseInfoSection({
     reportCase.targetParentId ||
     "-";
 
+  const targetTokenLabel =
+    reportCase.targetTokenName ||
+    reportCase.targetTokenBlueprintId ||
+    "-";
+
   const targetAuthorLabel =
     reportCase.targetAuthorName ||
     reportCase.targetAuthorId ||
     "-";
 
   const targetDetailPath = buildTargetDetailPath(reportCase);
+  const targetTokenDetailPath = buildTargetTokenDetailPath(reportCase);
+  const resaleDetailPath = buildResaleDetailPath(reportCase);
   const targetAuthorDetailPath = buildTargetAuthorDetailPath(reportCase);
 
   return (
@@ -89,6 +118,32 @@ export default function ReportCaseInfoSection({
             targetParentLabel
           )}
         </dd>
+
+        {reportCase.targetType === "RESALE" ? (
+          <>
+            <dt>対象トークン</dt>
+            <dd>
+              {targetTokenDetailPath ? (
+                <TextLink tone="inherit" onClick={() => navigate(targetTokenDetailPath)}>
+                  {targetTokenLabel}
+                </TextLink>
+              ) : (
+                targetTokenLabel
+              )}
+            </dd>
+
+            <dt>再販ID</dt>
+            <dd>
+              {resaleDetailPath ? (
+                <TextLink tone="inherit" onClick={() => navigate(resaleDetailPath)}>
+                  {reportCase.targetId}
+                </TextLink>
+              ) : (
+                reportCase.targetId || "-"
+              )}
+            </dd>
+          </>
+        ) : null}
 
         {reportCase.targetType !== "LIST" && reportCase.targetType !== "RESALE" ? (
           <>
