@@ -14,16 +14,6 @@ type ResaleReviewTableProps = {
   perPage?: number;
 };
 
-const COMMENT_KIND_LABELS: Record<string, string> = {
-  user: "コメント",
-  purchase: "購入",
-};
-
-const READ_STATUS_LABELS: Record<string, string> = {
-  read: "既読",
-  unread: "未読",
-};
-
 export default function ResaleReviewTable({
   avatarId,
   resaleId,
@@ -46,36 +36,16 @@ export default function ResaleReviewTable({
         nowrap: true,
       },
       {
-        key: "kind",
-        header: "種別",
-        render: (review) => COMMENT_KIND_LABELS[review.kind] ?? review.kind,
-        filter: {
-          getValue: (review) => review.kind,
-          options: [
-            { value: "user", label: "コメント" },
-            { value: "purchase", label: "購入" },
-          ],
-        },
-        nowrap: true,
-      },
-      {
         key: "body",
         header: "本文",
         render: (review) => review.body || "-",
         minWidth: "280px",
       },
       {
-        key: "isRead",
-        header: "確認状況",
-        render: (review) =>
-          READ_STATUS_LABELS[review.isRead ? "read" : "unread"],
-        filter: {
-          getValue: (review) => (review.isRead ? "read" : "unread"),
-          options: [
-            { value: "read", label: "既読" },
-            { value: "unread", label: "未読" },
-          ],
-        },
+        key: "reportCount",
+        header: "通報数",
+        render: (review) => review.reportCount,
+        sortValue: (review) => review.reportCount,
         nowrap: true,
       },
       {

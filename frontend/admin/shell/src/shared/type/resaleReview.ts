@@ -10,6 +10,7 @@ export type ResaleReviewComment = {
   body: string;
   deleted: boolean;
   isRead: boolean;
+  reportCount: number;
   createdAt: string;
   updatedAt: string;
   avatarName: string;

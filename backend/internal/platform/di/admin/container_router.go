@@ -55,6 +55,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	resaleReviewHandler := adminhandler.NewResaleReviewHandler(
 		cont.resaleRepo,
 		cont.resaleReviewUsecase,
+		cont.reportRepo,
 	)
 
 	gasHandler := adminhandler.NewGasHandler(cont.gasBalanceQuery)

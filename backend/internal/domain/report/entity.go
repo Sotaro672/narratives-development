@@ -67,7 +67,6 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 	if err := targetType.Validate(); err != nil {
 		return "", err
 	}
-
 	if !isValidDocumentIDPart(targetID) {
 		return "", ErrInvalidTargetID
 	}
@@ -86,6 +85,8 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 		prefix = "avatar"
 	case TargetTypeResale:
 		prefix = "resale"
+	case TargetTypeResaleComment:
+		prefix = "resaleComment"
 	default:
 		return "", ErrInvalidTargetType
 	}
@@ -97,7 +98,6 @@ func BuildReporterKey(actorType ActorType, actorID string) (ReportID, error) {
 	if err := actorType.Validate(); err != nil {
 		return "", err
 	}
-
 	if !isValidDocumentIDPart(actorID) {
 		return "", ErrInvalidReporterID
 	}
@@ -128,6 +128,7 @@ const (
 	TargetTypeList                   TargetType = "LIST"
 	TargetTypeAvatar                 TargetType = "AVATAR"
 	TargetTypeResale                 TargetType = "RESALE"
+	TargetTypeResaleComment          TargetType = "RESALE_COMMENT"
 )
 
 func (t TargetType) Validate() error {
@@ -137,7 +138,8 @@ func (t TargetType) Validate() error {
 		TargetTypeTokenBlueprintComment,
 		TargetTypeList,
 		TargetTypeAvatar,
-		TargetTypeResale:
+		TargetTypeResale,
+		TargetTypeResaleComment:
 		return nil
 	default:
 		return ErrInvalidTargetType
@@ -260,23 +262,18 @@ func NewReportCase(params NewReportCaseParams) (ReportCase, error) {
 	if err := params.TargetType.Validate(); err != nil {
 		return ReportCase{}, err
 	}
-
 	if !isValidDocumentIDPart(params.TargetID) {
 		return ReportCase{}, ErrInvalidTargetID
 	}
-
 	if params.TargetParentID == "" {
 		return ReportCase{}, ErrInvalidTargetParentID
 	}
-
 	if err := params.TargetAuthorType.Validate(); err != nil {
 		return ReportCase{}, err
 	}
-
 	if params.TargetAuthorID == "" {
 		return ReportCase{}, ErrInvalidTargetAuthorID
 	}
-
 	if err := validateSnapshotContent(
 		params.TargetType,
 		params.SnapshotTitle,
@@ -284,7 +281,6 @@ func NewReportCase(params NewReportCaseParams) (ReportCase, error) {
 	); err != nil {
 		return ReportCase{}, err
 	}
-
 	if params.CreatedAt.IsZero() {
 		return ReportCase{}, ErrInvalidCreatedAt
 	}
@@ -330,27 +326,21 @@ func (c ReportCase) Validate() error {
 	if c.ID == "" {
 		return ErrInvalidCaseID
 	}
-
 	if err := c.TargetType.Validate(); err != nil {
 		return err
 	}
-
 	if !isValidDocumentIDPart(c.TargetID) {
 		return ErrInvalidTargetID
 	}
-
 	if c.TargetParentID == "" {
 		return ErrInvalidTargetParentID
 	}
-
 	if err := c.TargetAuthorType.Validate(); err != nil {
 		return err
 	}
-
 	if c.TargetAuthorID == "" {
 		return ErrInvalidTargetAuthorID
 	}
-
 	if err := validateSnapshotContent(
 		c.TargetType,
 		c.SnapshotTitle,
@@ -358,23 +348,18 @@ func (c ReportCase) Validate() error {
 	); err != nil {
 		return err
 	}
-
 	if _, err := normalizeSnapshotRating(c.TargetType, c.SnapshotRating); err != nil {
 		return err
 	}
-
 	if c.ReportCount < 0 {
 		return ErrInvalidReportCount
 	}
-
 	if err := c.Status.Validate(); err != nil {
 		return err
 	}
-
 	if c.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
-
 	if c.UpdatedAt.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
@@ -384,16 +369,13 @@ func (c ReportCase) Validate() error {
 		if c.DecidedAt != nil || c.DecidedBy != "" || c.DecisionReason != "" {
 			return ErrInvalidStatus
 		}
-
 	case CaseStatusKept, CaseStatusRemoved:
 		if c.DecidedAt == nil || c.DecidedAt.IsZero() {
 			return ErrInvalidUpdatedAt
 		}
-
 		if c.DecidedBy == "" {
 			return ErrDecidedByRequired
 		}
-
 		if c.DecisionReason == "" {
 			return ErrDecisionReasonRequired
 		}
@@ -406,15 +388,12 @@ func (c *ReportCase) IncrementReportCount(now time.Time) error {
 	if c == nil {
 		return ErrInvalidCaseID
 	}
-
 	if c.Status == CaseStatusRemoved {
 		return ErrCannotReportRemovedTarget
 	}
-
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
-
 	if c.ReportCount < 0 {
 		return ErrInvalidReportCount
 	}
@@ -435,23 +414,18 @@ func (c *ReportCase) Keep(reason string, now time.Time, decidedBy string) error 
 	if c == nil {
 		return ErrInvalidCaseID
 	}
-
 	if reason == "" {
 		return ErrDecisionReasonRequired
 	}
-
 	if decidedBy == "" {
 		return ErrDecidedByRequired
 	}
-
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
-
 	if c.Status == CaseStatusRemoved {
 		return ErrCaseAlreadyRemoved
 	}
-
 	if c.Status == CaseStatusKept {
 		return nil
 	}
@@ -469,19 +443,15 @@ func (c *ReportCase) Remove(reason string, now time.Time, decidedBy string) erro
 	if c == nil {
 		return ErrInvalidCaseID
 	}
-
 	if reason == "" {
 		return ErrDecisionReasonRequired
 	}
-
 	if decidedBy == "" {
 		return ErrDecidedByRequired
 	}
-
 	if now.IsZero() {
 		return ErrInvalidUpdatedAt
 	}
-
 	if c.Status == CaseStatusRemoved {
 		return nil
 	}
@@ -542,27 +512,21 @@ func NewReport(params NewReportParams) (Report, error) {
 	if params.CaseID == "" {
 		return Report{}, ErrInvalidCaseID
 	}
-
 	if err := params.ReporterType.Validate(); err != nil {
 		return Report{}, err
 	}
-
 	if !isValidDocumentIDPart(params.ReporterID) {
 		return Report{}, ErrInvalidReporterID
 	}
-
 	if params.ReporterType == ActorTypeBrand && params.CompanyID == "" {
 		return Report{}, ErrInvalidCompanyID
 	}
-
 	if err := params.Reason.Validate(); err != nil {
 		return Report{}, err
 	}
-
 	if params.Reason == ReportReasonOther && params.Detail == "" {
 		return Report{}, ErrReportDetailRequired
 	}
-
 	if params.CreatedAt.IsZero() {
 		return Report{}, ErrInvalidCreatedAt
 	}
@@ -594,31 +558,24 @@ func (r Report) Validate() error {
 	if r.ID == "" {
 		return ErrInvalidReportID
 	}
-
 	if r.CaseID == "" {
 		return ErrInvalidCaseID
 	}
-
 	if err := r.ReporterType.Validate(); err != nil {
 		return err
 	}
-
 	if !isValidDocumentIDPart(r.ReporterID) {
 		return ErrInvalidReporterID
 	}
-
 	if r.ReporterType == ActorTypeBrand && r.CompanyID == "" {
 		return ErrInvalidCompanyID
 	}
-
 	if err := r.Reason.Validate(); err != nil {
 		return err
 	}
-
 	if r.Reason == ReportReasonOther && r.Detail == "" {
 		return ErrReportDetailRequired
 	}
-
 	if r.CreatedAt.IsZero() {
 		return ErrInvalidCreatedAt
 	}
@@ -637,7 +594,8 @@ func validateSnapshotContent(
 ) error {
 	switch targetType {
 	case TargetTypeProductBlueprintReview,
-		TargetTypeTokenBlueprintComment:
+		TargetTypeTokenBlueprintComment,
+		TargetTypeResaleComment:
 		if body == "" {
 			return fmt.Errorf("%w: snapshot body is empty", ErrInvalidTargetID)
 		}
@@ -686,7 +644,8 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		TargetTypeTokenBlueprintComment,
 		TargetTypeList,
 		TargetTypeAvatar,
-		TargetTypeResale:
+		TargetTypeResale,
+		TargetTypeResaleComment:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}
