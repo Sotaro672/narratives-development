@@ -68,6 +68,7 @@ type Deps struct {
 	// - GET  /mall/me/trades/order-items/{orderId}/{itemIndex}
 	// - GET  /mall/me/trades/{tradeId}
 	// - POST /mall/me/trades/{tradeId}/messages
+	// - POST /mall/me/trades/{tradeId}/messages/{messageId}/reports
 	// - POST /mall/me/trades/{tradeId}/read
 	// - GET  /mall/me/trades/{tradeId}/unread-count
 	Trade http.Handler

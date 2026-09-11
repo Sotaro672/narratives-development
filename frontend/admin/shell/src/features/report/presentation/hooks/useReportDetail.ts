@@ -223,6 +223,11 @@ export function useReportDetail(caseId: string | undefined) {
         return null;
       }
 
+      if (decision === "REMOVE" && reportCase?.targetType === "TRADE_MESSAGE") {
+        setDecisionError("取引コメントは削除できません。");
+        return null;
+      }
+
       if (deciding) {
         return null;
       }
@@ -263,7 +268,7 @@ export function useReportDetail(caseId: string | undefined) {
         }
       }
     },
-    [caseId, deciding, refreshPendingCount],
+    [caseId, deciding, refreshPendingCount, reportCase?.targetType],
   );
 
   const keep = useCallback(
@@ -284,6 +289,7 @@ export function useReportDetail(caseId: string | undefined) {
   const hasNextPage = totalPages > 0 && page < totalPages;
   const canKeep = reportCase?.status === "PENDING" && !deciding;
   const canRemove =
+    reportCase?.targetType !== "TRADE_MESSAGE" &&
     (reportCase?.status === "PENDING" || reportCase?.status === "KEPT") &&
     !deciding;
   const canDecide = canKeep || canRemove;

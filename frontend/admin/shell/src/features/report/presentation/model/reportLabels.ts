@@ -77,6 +77,9 @@ export function getTargetTypeLabel(
     case "RESALE":
       return "再販出品";
 
+    case "TRADE_MESSAGE":
+      return "取引コメント";
+
     default:
       return targetType;
   }
@@ -156,6 +159,9 @@ export function getSnapshotBodyLabel(
     case "RESALE":
       return "出品説明";
 
+    case "TRADE_MESSAGE":
+      return "メッセージ本文";
+
     default:
       return "本文";
   }
@@ -177,6 +183,9 @@ export function getTargetParentLabel(
     case "RESALE":
       return "対象商品";
 
+    case "TRADE_MESSAGE":
+      return "取引ID";
+
     default:
       return "親";
   }
@@ -195,6 +204,9 @@ export function getTargetAuthorTypeLabel(
 
     case "TOKEN_BLUEPRINT":
       return "作成者種別";
+
+    case "TRADE_MESSAGE":
+      return "送信者種別";
 
     default:
       return "投稿者種別";
@@ -216,6 +228,9 @@ export function getTargetAuthorLabel(
 
     case "RESALE":
       return "出品者";
+
+    case "TRADE_MESSAGE":
+      return "送信者";
 
     default:
       return "投稿者";

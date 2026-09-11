@@ -96,6 +96,7 @@ export default function ReportsPage() {
               label: "トークンコメント",
             },
             { value: "AVATAR", label: "アバター" },
+            { value: "TRADE_MESSAGE", label: "取引コメント" },
           ],
         },
         nowrap: true,
@@ -143,6 +144,7 @@ export default function ReportsPage() {
       case "status":
         setStatus(value ? (value as ReportCaseStatus) : undefined);
         break;
+
       case "targetType":
         setTargetType(value ? (value as ReportTargetType) : undefined);
         break;
