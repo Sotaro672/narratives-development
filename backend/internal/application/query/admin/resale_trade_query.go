@@ -22,6 +22,8 @@ type resaleTradeAvatarReader interface {
 type ResaleTradeListItem struct {
 	tradedom.Trade
 	BuyerAvatarName string `json:"buyerAvatarName"`
+	CommentCount    int    `json:"commentCount"`
+	ReportCount     int    `json:"reportCount"`
 }
 
 type ResaleTradeListResult struct {
@@ -30,17 +32,20 @@ type ResaleTradeListResult struct {
 }
 
 type ResaleTradeQuery struct {
-	reader       applicationport.AdminResaleTradeReader
-	avatarReader resaleTradeAvatarReader
+	reader             applicationport.AdminResaleTradeReader
+	avatarReader       resaleTradeAvatarReader
+	messageStatsReader applicationport.AdminTradeMessageStatsReader
 }
 
 func NewResaleTradeQuery(
 	reader applicationport.AdminResaleTradeReader,
 	avatarReader resaleTradeAvatarReader,
+	messageStatsReader applicationport.AdminTradeMessageStatsReader,
 ) *ResaleTradeQuery {
 	return &ResaleTradeQuery{
-		reader:       reader,
-		avatarReader: avatarReader,
+		reader:             reader,
+		avatarReader:       avatarReader,
+		messageStatsReader: messageStatsReader,
 	}
 }
 
@@ -48,7 +53,7 @@ func (q *ResaleTradeQuery) ListByResaleID(
 	ctx context.Context,
 	resaleID string,
 ) (*ResaleTradeListResult, error) {
-	if q == nil || q.reader == nil || q.avatarReader == nil {
+	if q == nil || q.reader == nil || q.avatarReader == nil || q.messageStatsReader == nil {
 		return nil, ErrResaleTradeQueryNotConfigured
 	}
 	if resaleID == "" {
@@ -74,9 +79,20 @@ func (q *ResaleTradeQuery) ListByResaleID(
 			avatarNames[trade.BuyerAvatarID] = buyerAvatarName
 		}
 
+		stats, err := q.messageStatsReader.GetByTradeID(ctx, trade.ID)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"resale trade query: get message stats by tradeId %s: %w",
+				trade.ID,
+				err,
+			)
+		}
+
 		items = append(items, ResaleTradeListItem{
 			Trade:           trade,
 			BuyerAvatarName: buyerAvatarName,
+			CommentCount:    stats.CommentCount,
+			ReportCount:     stats.ReportCount,
 		})
 	}
 

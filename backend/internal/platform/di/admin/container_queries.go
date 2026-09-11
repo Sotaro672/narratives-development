@@ -60,6 +60,9 @@ func buildQueries(
 	if r.resaleTradeReader == nil {
 		return nil, errors.New("di.admin: resale trade reader is nil")
 	}
+	if r.tradeMessageStatsReader == nil {
+		return nil, errors.New("di.admin: trade message stats reader is nil")
+	}
 	if r.avatarRepo == nil {
 		return nil, errors.New("di.admin: avatar repository is nil")
 	}
@@ -91,6 +94,7 @@ func buildQueries(
 	resaleTradeQuery := adminquery.NewResaleTradeQuery(
 		r.resaleTradeReader,
 		r.avatarRepo,
+		r.tradeMessageStatsReader,
 	)
 	if resaleTradeQuery == nil {
 		return nil, errors.New("di.admin: resale trade query is nil")
