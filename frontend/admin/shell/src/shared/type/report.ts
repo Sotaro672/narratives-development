@@ -6,6 +6,7 @@ export type ReportTargetType =
   | "TOKEN_BLUEPRINT_COMMENT"
   | "LIST"
   | "AVATAR"
+  | "BRAND"
   | "RESALE"
   | "TRADE_MESSAGE"
   | "ANNOUNCEMENT";

@@ -30,6 +30,9 @@ export function getStatusLabel(
       if (targetType === "TOKEN_BLUEPRINT") {
         return "非表示";
       }
+      if (targetType === "BRAND") {
+        return "無効";
+      }
       return "削除";
 
     default:
@@ -73,6 +76,9 @@ export function getTargetTypeLabel(
 
     case "AVATAR":
       return "アバター";
+
+    case "BRAND":
+      return "ブランド";
 
     case "RESALE":
       return "再販出品";
@@ -134,6 +140,9 @@ export function getSnapshotTitleLabel(
     case "AVATAR":
       return "アバター名";
 
+    case "BRAND":
+      return "ブランド名";
+
     case "LIST":
       return "出品名";
 
@@ -157,6 +166,9 @@ export function getSnapshotBodyLabel(
   switch (targetType) {
     case "AVATAR":
       return "プロフィール";
+
+    case "BRAND":
+      return "ブランド説明";
 
     case "LIST":
     case "TOKEN_BLUEPRINT":
@@ -182,6 +194,9 @@ export function getTargetParentLabel(
   switch (targetType) {
     case "AVATAR":
       return "対象アバター";
+
+    case "BRAND":
+      return "対象ブランド";
 
     case "LIST":
       return "対象出品";
@@ -232,6 +247,9 @@ export function getTargetAuthorLabel(
   switch (targetType) {
     case "AVATAR":
       return "対象アバター";
+
+    case "BRAND":
+      return "ブランド";
 
     case "LIST":
       return "出品ブランド";

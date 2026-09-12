@@ -5,48 +5,11 @@ import { useNavigate } from "react-router-dom";
 import type { ReportCase } from "../../../../shared/type/report";
 import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
-import {
-  getActorTypeLabel,
-  getTargetAuthorLabel,
-  getTargetAuthorTypeLabel,
-  getTargetParentLabel,
-} from "../model/reportLabels";
+import { getTargetAuthorLabel } from "../model/reportLabels";
 
 type ReportCaseInfoSectionProps = {
   reportCase: ReportCase;
 };
-
-function buildTargetDetailPath(reportCase: ReportCase): string | null {
-  const companyId = reportCase.targetCompanyId?.trim() || "";
-  const targetParentId = reportCase.targetParentId?.trim() || "";
-
-  if (!targetParentId) return null;
-
-  const encodedTargetParentId = encodeURIComponent(targetParentId);
-
-  switch (reportCase.targetType) {
-    case "AVATAR":
-      return `/avatars/${encodedTargetParentId}`;
-
-    case "LIST":
-      if (!companyId) return null;
-      return `/contracts/${encodeURIComponent(companyId)}/lists/${encodedTargetParentId}`;
-
-    case "TOKEN_BLUEPRINT":
-    case "TOKEN_BLUEPRINT_COMMENT":
-    case "ANNOUNCEMENT":
-      if (!companyId) return null;
-      return `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodedTargetParentId}`;
-
-    case "PRODUCT_BLUEPRINT_REVIEW":
-    case "RESALE":
-      if (!companyId) return null;
-      return `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodedTargetParentId}`;
-
-    default:
-      return null;
-  }
-}
 
 function buildTargetTokenDetailPath(reportCase: ReportCase): string | null {
   const companyId = reportCase.targetCompanyId?.trim() || "";
@@ -74,21 +37,19 @@ function buildTargetAuthorDetailPath(reportCase: ReportCase): string | null {
   const companyId = reportCase.targetCompanyId?.trim() || "";
   const targetAuthorId = reportCase.targetAuthorId?.trim() || "";
 
-  if (!targetAuthorId) return null;
+  if (!targetAuthorId) {
+    return null;
+  }
+
+  if (reportCase.targetAuthorType === "BRAND" && companyId) {
+    return `/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(targetAuthorId)}`;
+  }
 
   if (
     reportCase.targetType === "RESALE" &&
     reportCase.targetAuthorType === "AVATAR"
   ) {
     return `/avatars/${encodeURIComponent(targetAuthorId)}`;
-  }
-
-  if (
-    reportCase.targetType === "ANNOUNCEMENT" &&
-    reportCase.targetAuthorType === "BRAND" &&
-    companyId
-  ) {
-    return `/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(targetAuthorId)}`;
   }
 
   return null;
@@ -98,11 +59,6 @@ export default function ReportCaseInfoSection({
   reportCase,
 }: ReportCaseInfoSectionProps) {
   const navigate = useNavigate();
-
-  const targetParentLabel =
-    reportCase.targetParentName ||
-    reportCase.targetParentId ||
-    "-";
 
   const targetTokenLabel =
     reportCase.targetTokenName ||
@@ -114,7 +70,6 @@ export default function ReportCaseInfoSection({
     reportCase.targetAuthorId ||
     "-";
 
-  const targetDetailPath = buildTargetDetailPath(reportCase);
   const targetTokenDetailPath = buildTargetTokenDetailPath(reportCase);
   const resaleDetailPath = buildResaleDetailPath(reportCase);
   const targetAuthorDetailPath = buildTargetAuthorDetailPath(reportCase);
@@ -122,23 +77,15 @@ export default function ReportCaseInfoSection({
   return (
     <section className="ui-detail-section">
       <dl className="ui-detail-definition-list ui-detail-definition-list--meta">
-        <dt>{getTargetParentLabel(reportCase.targetType)}</dt>
-        <dd>
-          {targetDetailPath ? (
-            <TextLink tone="inherit" onClick={() => navigate(targetDetailPath)}>
-              {targetParentLabel}
-            </TextLink>
-          ) : (
-            targetParentLabel
-          )}
-        </dd>
-
         {reportCase.targetType === "RESALE" ? (
           <>
             <dt>対象トークン</dt>
             <dd>
               {targetTokenDetailPath ? (
-                <TextLink tone="inherit" onClick={() => navigate(targetTokenDetailPath)}>
+                <TextLink
+                  tone="inherit"
+                  onClick={() => navigate(targetTokenDetailPath)}
+                >
                   {targetTokenLabel}
                 </TextLink>
               ) : (
@@ -149,7 +96,10 @@ export default function ReportCaseInfoSection({
             <dt>再販ID</dt>
             <dd>
               {resaleDetailPath ? (
-                <TextLink tone="inherit" onClick={() => navigate(resaleDetailPath)}>
+                <TextLink
+                  tone="inherit"
+                  onClick={() => navigate(resaleDetailPath)}
+                >
                   {reportCase.targetId}
                 </TextLink>
               ) : (
@@ -159,19 +109,13 @@ export default function ReportCaseInfoSection({
           </>
         ) : null}
 
-        {reportCase.targetType !== "LIST" &&
-        reportCase.targetType !== "RESALE" &&
-        reportCase.targetType !== "ANNOUNCEMENT" ? (
-          <>
-            <dt>{getTargetAuthorTypeLabel(reportCase.targetType)}</dt>
-            <dd>{getActorTypeLabel(reportCase.targetAuthorType)}</dd>
-          </>
-        ) : null}
-
         <dt>{getTargetAuthorLabel(reportCase.targetType)}</dt>
         <dd>
           {targetAuthorDetailPath ? (
-            <TextLink tone="inherit" onClick={() => navigate(targetAuthorDetailPath)}>
+            <TextLink
+              tone="inherit"
+              onClick={() => navigate(targetAuthorDetailPath)}
+            >
               {targetAuthorLabel}
             </TextLink>
           ) : (
