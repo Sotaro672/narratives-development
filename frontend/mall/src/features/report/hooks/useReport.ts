@@ -9,6 +9,7 @@ import type {
 import {
   reportAnnouncement,
   reportAvatar,
+  reportBrand,
   reportList,
   reportProductBlueprintReview,
   reportResale,
@@ -39,6 +40,10 @@ export type ReportTarget =
   | {
       type: "AVATAR";
       avatarId: string;
+    }
+  | {
+      type: "BRAND";
+      brandId: string;
     }
   | {
       type: "RESALE";
@@ -74,6 +79,10 @@ type OpenTokenBlueprintCommentReportInput = {
 
 type OpenAvatarReportInput = {
   avatarId: string;
+};
+
+type OpenBrandReportInput = {
+  brandId: string;
 };
 
 type OpenResaleReportInput = {
@@ -194,6 +203,19 @@ export function useReport() {
       setTarget({
         type: "AVATAR",
         avatarId,
+      });
+    },
+    [resetForm],
+  );
+
+  const openBrandReport = useCallback(
+    (input: OpenBrandReportInput) => {
+      const brandId = normalizeId(input.brandId, "brandId");
+
+      resetForm();
+      setTarget({
+        type: "BRAND",
+        brandId,
       });
     },
     [resetForm],
@@ -334,6 +356,14 @@ export function useReport() {
           });
           break;
 
+        case "BRAND":
+          response = await reportBrand({
+            brandId: target.brandId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
+
         case "RESALE":
           response = await reportResale({
             resaleId: target.resaleId,
@@ -401,6 +431,7 @@ export function useReport() {
     openTokenBlueprintReport,
     openTokenBlueprintCommentReport,
     openAvatarReport,
+    openBrandReport,
     openResaleReport,
     openTradeMessageReport,
     openAnnouncementReport,

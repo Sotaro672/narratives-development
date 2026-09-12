@@ -18,6 +18,7 @@ export type ReportTargetType =
   | "TOKEN_BLUEPRINT_COMMENT"
   | "LIST"
   | "AVATAR"
+  | "BRAND"
   | "RESALE"
   | "TRADE_MESSAGE"
   | "ANNOUNCEMENT";
@@ -64,6 +65,12 @@ export type ReportTokenBlueprintCommentInput = {
 
 export type ReportAvatarInput = {
   avatarId: string;
+  reason: ReportReason;
+  detail?: string;
+};
+
+export type ReportBrandInput = {
+  brandId: string;
   reason: ReportReason;
   detail?: string;
 };

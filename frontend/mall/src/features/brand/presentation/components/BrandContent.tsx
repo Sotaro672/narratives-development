@@ -1,7 +1,8 @@
-// frontend/amol/src/features/brand/presentation/components/BrandContent.tsx
+// frontend\mall\src\features\brand\presentation\components\BrandContent.tsx
 
 import type { BrandDetail } from "../../../shared/types/brand";
 import type { MallListItem } from "../../../shared/types/list";
+import ReportFlagButton from "../../../shared/presentation/components/ReportFlagButton";
 
 import BrandBackground from "./BrandBackground";
 import BrandIcon from "./BrandIcon";
@@ -11,11 +12,15 @@ import BrandWebsiteLink from "./BrandWebsiteLink";
 type BrandContentProps = {
   brand: BrandDetail;
   listItems: MallListItem[];
+  canReport: boolean;
+  onReport: () => void;
 };
 
 export default function BrandContent({
   brand,
   listItems,
+  canReport,
+  onReport,
 }: BrandContentProps) {
   const brandName = brand.brandName.trim();
   const companyName = brand.companyName.trim();
@@ -46,7 +51,15 @@ export default function BrandContent({
 
       {description ? (
         <section className="brand-page-section">
-          <h2>説明</h2>
+          <div className="brand-page-section-header">
+            <h2>説明</h2>
+
+            <ReportFlagButton
+              label="ブランドを通報"
+              disabled={!canReport}
+              onClick={onReport}
+            />
+          </div>
 
           <p className="brand-page-description">
             {description}

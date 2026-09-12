@@ -5,6 +5,7 @@ import { getFirebaseIdToken } from "../../../lib/authToken";
 import type {
   ReportAnnouncementInput,
   ReportAvatarInput,
+  ReportBrandInput,
   ReportListInput,
   ReportProductBlueprintReviewInput,
   ReportRequest,
@@ -206,6 +207,18 @@ export async function reportAvatar(
 
   return postReport(
     `/mall/me/avatars/${encodeURIComponent(avatarId)}/reports`,
+    request,
+  );
+}
+
+export async function reportBrand(
+  input: ReportBrandInput,
+): Promise<ReportResponse> {
+  const brandId = requireId(input.brandId, "brandId");
+  const request = createRequest(input.reason, input.detail);
+
+  return postReport(
+    `/mall/me/brands/${encodeURIComponent(brandId)}/reports`,
     request,
   );
 }

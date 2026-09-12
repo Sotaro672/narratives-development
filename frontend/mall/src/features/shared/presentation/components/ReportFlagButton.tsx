@@ -6,15 +6,15 @@ import "../../styles/report-flag-button.css";
 
 type ReportFlagButtonProps = {
   disabled?: boolean;
+  label?: string;
   onClick: () => void | Promise<void>;
 };
 
 export default function ReportFlagButton({
   disabled = false,
+  label = "出品を通報",
   onClick,
 }: ReportFlagButtonProps) {
-  const label = "出品を通報";
-
   return (
     <button
       type="button"
