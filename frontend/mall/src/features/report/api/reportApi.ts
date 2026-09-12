@@ -1,6 +1,9 @@
 // frontend/mall/src/features/report/api/reportApi.ts
+
 import { getFirebaseIdToken } from "../../../lib/authToken";
+
 import type {
+  ReportAnnouncementInput,
   ReportAvatarInput,
   ReportListInput,
   ReportProductBlueprintReviewInput,
@@ -22,7 +25,6 @@ function getApiBaseUrl(): string {
   if (!apiBaseUrl) {
     throw new Error("VITE_API_BASE_URLが設定されていません。");
   }
-
   return apiBaseUrl.replace(/\/+$/, "");
 }
 
@@ -31,7 +33,6 @@ function requireId(value: string, fieldName: string): string {
   if (!normalized) {
     throw new Error(`${fieldName}が指定されていません。`);
   }
-
   return normalized;
 }
 
@@ -40,7 +41,6 @@ function createRequest(
   detail?: string,
 ): ReportRequest {
   const normalizedDetail = detail?.trim() ?? "";
-
   if (reason === "OTHER" && !normalizedDetail) {
     throw new Error("「その他」を選択した場合は詳細を入力してください。");
   }
@@ -73,17 +73,14 @@ function getErrorMessage(body: unknown): string {
   if (typeof body === "string" && body.trim()) {
     return body.trim();
   }
-
   if (!body || typeof body !== "object") {
     return "";
   }
 
   const errorBody = body as ReportErrorResponse;
-
   if (typeof errorBody.error === "string" && errorBody.error.trim()) {
     return errorBody.error.trim();
   }
-
   if (typeof errorBody.message === "string" && errorBody.message.trim()) {
     return errorBody.message.trim();
   }
@@ -97,7 +94,6 @@ function isReportResponse(value: unknown): value is ReportResponse {
   }
 
   const response = value as Partial<ReportResponse>;
-
   return (
     typeof response.caseId === "string" &&
     typeof response.reportId === "string" &&
@@ -129,7 +125,6 @@ async function postReport(
   });
 
   const body = await readResponseBody(response);
-
   if (!response.ok) {
     const message = getErrorMessage(body);
     throw new Error(
@@ -236,6 +231,21 @@ export async function reportTradeMessage(
 
   return postReport(
     `/mall/me/trades/${encodeURIComponent(tradeId)}/messages/${encodeURIComponent(messageId)}/reports`,
+    request,
+  );
+}
+
+export async function reportAnnouncement(
+  input: ReportAnnouncementInput,
+): Promise<ReportResponse> {
+  const announcementId = requireId(
+    input.announcementId,
+    "announcementId",
+  );
+  const request = createRequest(input.reason, input.detail);
+
+  return postReport(
+    `/mall/me/announcement/${encodeURIComponent(announcementId)}/reports`,
     request,
   );
 }

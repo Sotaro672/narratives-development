@@ -7,7 +7,8 @@ export type ReportTargetType =
   | "LIST"
   | "AVATAR"
   | "RESALE"
-  | "TRADE_MESSAGE";
+  | "TRADE_MESSAGE"
+  | "ANNOUNCEMENT";
 
 export type ReportActorType =
   | "AVATAR"

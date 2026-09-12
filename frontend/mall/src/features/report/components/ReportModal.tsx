@@ -46,6 +46,8 @@ function getTargetLabel(targetType?: ReportTargetType): string {
       return "再販出品";
     case "TRADE_MESSAGE":
       return "取引コメント";
+    case "ANNOUNCEMENT":
+      return "お知らせ";
     default:
       return "投稿";
   }
@@ -67,6 +69,9 @@ function getDescription(targetType?: ReportTargetType): string {
 
     case "TRADE_MESSAGE":
       return "この取引コメントが不適切だと思う理由を選択してください。通報しただけでは取引コメントは自動的に非表示になりません。";
+
+    case "ANNOUNCEMENT":
+      return "このお知らせが不適切だと思う理由を選択してください。通報しただけではお知らせは自動的に削除されません。";
 
     case "PRODUCT_BLUEPRINT_REVIEW":
     case "TOKEN_BLUEPRINT_COMMENT":

@@ -284,6 +284,7 @@ func buildMallUsecases(
 			ResaleRepo:               r.resaleRepo,
 			TradeRepo:                r.tradeRepo,
 			TradeMessageRepo:         r.tradeMessageRepo,
+			AnnouncementRepo:         r.announcementRepo,
 		},
 	)
 	if reportUC == nil {

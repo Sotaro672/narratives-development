@@ -19,7 +19,8 @@ type usecases struct {
 	tokenBlueprintReviewUsecase   *usecase.TokenBlueprintReviewUsecase
 	resaleReviewUsecase           *usecase.ResaleReviewUsecase
 
-	newsImageStorage *firebaseadp.NewsImageStorage
+	newsImageStorage              *firebaseadp.NewsImageStorage
+	announcementAttachmentStorage *firebaseadp.AnnouncementAttachmentStorage
 }
 
 func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
@@ -54,6 +55,12 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 	if r.cartRepo == nil {
 		return nil, errors.New("di.admin: cart repository is nil")
 	}
+	if r.announcementRepo == nil {
+		return nil, errors.New("di.admin: announcement repository is nil")
+	}
+	if r.announcementAttachmentRepo == nil {
+		return nil, errors.New("di.admin: announcement attachment repository is nil")
+	}
 
 	contactUsecase := usecase.NewContactUsecase(
 		r.contactRepo,
@@ -69,7 +76,18 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		return nil, errors.New("di.admin: news image storage is nil")
 	}
 
-	closeNewsStorage := func(err error) (*usecases, error) {
+	announcementAttachmentStorage, err := firebaseadp.NewAnnouncementAttachmentStorageFromEnv(ctx)
+	if err != nil {
+		_ = newsImageStorage.Close()
+		return nil, err
+	}
+	if announcementAttachmentStorage == nil {
+		_ = newsImageStorage.Close()
+		return nil, errors.New("di.admin: announcement attachment storage is nil")
+	}
+
+	closeStorages := func(err error) (*usecases, error) {
+		_ = announcementAttachmentStorage.Close()
 		_ = newsImageStorage.Close()
 		return nil, err
 	}
@@ -79,7 +97,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		r.newsReadRepo,
 	).WithImageStorage(newsImageStorage)
 	if newsUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: news usecase is nil"))
+		return closeStorages(errors.New("di.admin: news usecase is nil"))
 	}
 
 	productBlueprintReviewUsecase := usecase.NewProductBlueprintReviewUsecase(
@@ -92,7 +110,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		nil,
 	)
 	if productBlueprintReviewUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: product blueprint review usecase is nil"))
+		return closeStorages(errors.New("di.admin: product blueprint review usecase is nil"))
 	}
 
 	tokenBlueprintReviewUsecase := usecase.NewTokenBlueprintReviewUsecase(
@@ -102,7 +120,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		r.brandRepo,
 	)
 	if tokenBlueprintReviewUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: token blueprint review usecase is nil"))
+		return closeStorages(errors.New("di.admin: token blueprint review usecase is nil"))
 	}
 
 	resaleReviewUsecase := usecase.NewResaleReviewUsecase(
@@ -112,7 +130,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		time.Now,
 	)
 	if resaleReviewUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: resale review usecase is nil"))
+		return closeStorages(errors.New("di.admin: resale review usecase is nil"))
 	}
 
 	// Admin側のTokenBlueprintUsecaseは通報裁定によるAMOL上の非表示専用。
@@ -125,7 +143,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		nil,
 	)
 	if tokenBlueprintUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: token blueprint usecase is nil"))
+		return closeStorages(errors.New("di.admin: token blueprint usecase is nil"))
 	}
 
 	// Admin側のListUsecaseは通報裁定によるMall上の出品停止専用。
@@ -137,7 +155,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		nil,
 	).WithCartItemCleanup(r.cartRepo)
 	if listUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: list usecase is nil"))
+		return closeStorages(errors.New("di.admin: list usecase is nil"))
 	}
 
 	// Admin側のResaleUsecaseはアバター通報および個別Resale通報の裁定専用。
@@ -151,7 +169,19 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		time.Now,
 	).WithCartItemCleanup(r.cartRepo)
 	if resaleUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: resale usecase is nil"))
+		return closeStorages(errors.New("di.admin: resale usecase is nil"))
+	}
+
+	// Admin側のAnnouncementUsecaseは通報裁定によるAnnouncement物理削除専用。
+	// Consoleの通常削除とは異なり、公開済みAnnouncementも
+	// DeleteAnnouncementByAdminによって削除できる。
+	announcementUsecase := usecase.NewAnnouncementUsecase(
+		r.announcementRepo,
+		nil,
+		r.announcementAttachmentRepo,
+	).WithAttachmentStorage(announcementAttachmentStorage)
+	if announcementUsecase == nil {
+		return closeStorages(errors.New("di.admin: announcement usecase is nil"))
 	}
 
 	reportUsecase := usecase.NewReportUsecase(
@@ -160,20 +190,27 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 			DecisionNotificationRepo: r.reportDecisionNotificationRepo,
 			ProductBlueprintRepo:     r.productBlueprintRepo,
 			ProductReviewModerator:   productBlueprintReviewUsecase,
-			ListRepo:                 r.listRepo,
-			InventoryRepo:            r.inventoryRepo,
-			ListModerator:            listUsecase,
-			TokenBlueprintRepo:       r.tokenBlueprintRepo,
-			TokenBlueprintModerator:  tokenBlueprintUsecase,
-			TokenCommentModerator:    tokenBlueprintReviewUsecase,
-			AvatarRepo:               r.avatarRepo,
-			AvatarResaleModerator:    resaleUsecase,
-			ResaleRepo:               r.resaleRepo,
-			ResaleModerator:          resaleUsecase,
+
+			ListRepo:      r.listRepo,
+			InventoryRepo: r.inventoryRepo,
+			ListModerator: listUsecase,
+
+			TokenBlueprintRepo:      r.tokenBlueprintRepo,
+			TokenBlueprintModerator: tokenBlueprintUsecase,
+			TokenCommentModerator:   tokenBlueprintReviewUsecase,
+
+			AvatarRepo:            r.avatarRepo,
+			AvatarResaleModerator: resaleUsecase,
+
+			ResaleRepo:      r.resaleRepo,
+			ResaleModerator: resaleUsecase,
+
+			AnnouncementRepo:      r.announcementRepo,
+			AnnouncementModerator: announcementUsecase,
 		},
 	)
 	if reportUsecase == nil {
-		return closeNewsStorage(errors.New("di.admin: report usecase is nil"))
+		return closeStorages(errors.New("di.admin: report usecase is nil"))
 	}
 
 	return &usecases{
@@ -184,6 +221,7 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		tokenBlueprintReviewUsecase:   tokenBlueprintReviewUsecase,
 		resaleReviewUsecase:           resaleReviewUsecase,
 		newsImageStorage:              newsImageStorage,
+		announcementAttachmentStorage: announcementAttachmentStorage,
 	}, nil
 }
 
@@ -199,9 +237,14 @@ func (u *usecases) applyToContainer(c *Container) {
 }
 
 func (u *usecases) closeOnBuildError() {
-	if u == nil || u.newsImageStorage == nil {
+	if u == nil {
 		return
 	}
 
-	_ = u.newsImageStorage.Close()
+	if u.announcementAttachmentStorage != nil {
+		_ = u.announcementAttachmentStorage.Close()
+	}
+	if u.newsImageStorage != nil {
+		_ = u.newsImageStorage.Close()
+	}
 }

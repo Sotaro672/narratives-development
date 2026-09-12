@@ -19,7 +19,8 @@ export type ReportTargetType =
   | "LIST"
   | "AVATAR"
   | "RESALE"
-  | "TRADE_MESSAGE";
+  | "TRADE_MESSAGE"
+  | "ANNOUNCEMENT";
 
 export type ReportRequest = {
   reason: ReportReason;
@@ -76,6 +77,12 @@ export type ReportResaleInput = {
 export type ReportTradeMessageInput = {
   tradeId: string;
   messageId: string;
+  reason: ReportReason;
+  detail?: string;
+};
+
+export type ReportAnnouncementInput = {
+  announcementId: string;
   reason: ReportReason;
   detail?: string;
 };

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
+	announcementdom "narratives/internal/domain/announcement"
 	avatar "narratives/internal/domain/avatar"
 	listdom "narratives/internal/domain/list"
 	pbr "narratives/internal/domain/productBlueprintReview"
@@ -51,6 +52,9 @@ type ReportUsecase struct {
 	tradeRepo        tradedom.Repository
 	tradeMessageRepo tradedom.MessageRepository
 
+	announcementRepo      announcementdom.Repository
+	announcementModerator ReportAnnouncementModerator
+
 	now func() time.Time
 }
 
@@ -82,6 +86,9 @@ type ReportUsecaseDeps struct {
 	TradeRepo        tradedom.Repository
 	TradeMessageRepo tradedom.MessageRepository
 
+	AnnouncementRepo      announcementdom.Repository
+	AnnouncementModerator ReportAnnouncementModerator
+
 	Now func() time.Time
 }
 
@@ -112,6 +119,8 @@ func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 		resaleModerator:          deps.ResaleModerator,
 		tradeRepo:                deps.TradeRepo,
 		tradeMessageRepo:         deps.TradeMessageRepo,
+		announcementRepo:         deps.AnnouncementRepo,
+		announcementModerator:    deps.AnnouncementModerator,
 		now:                      now,
 	}
 }

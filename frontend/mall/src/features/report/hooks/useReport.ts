@@ -7,6 +7,7 @@ import type {
   ReportResponse,
 } from "../../shared/types/report";
 import {
+  reportAnnouncement,
   reportAvatar,
   reportList,
   reportProductBlueprintReview,
@@ -47,6 +48,10 @@ export type ReportTarget =
       type: "TRADE_MESSAGE";
       tradeId: string;
       messageId: string;
+    }
+  | {
+      type: "ANNOUNCEMENT";
+      announcementId: string;
     };
 
 type OpenProductBlueprintReviewReportInput = {
@@ -78,6 +83,10 @@ type OpenResaleReportInput = {
 type OpenTradeMessageReportInput = {
   tradeId: string;
   messageId: string;
+};
+
+type OpenAnnouncementReportInput = {
+  announcementId: string;
 };
 
 const DEFAULT_REASON: ReportReason = "SPAM";
@@ -218,6 +227,22 @@ export function useReport() {
     [resetForm],
   );
 
+  const openAnnouncementReport = useCallback(
+    (input: OpenAnnouncementReportInput) => {
+      const announcementId = normalizeId(
+        input.announcementId,
+        "announcementId",
+      );
+
+      resetForm();
+      setTarget({
+        type: "ANNOUNCEMENT",
+        announcementId,
+      });
+    },
+    [resetForm],
+  );
+
   const close = useCallback(() => {
     if (submittingRef.current) {
       return;
@@ -325,6 +350,14 @@ export function useReport() {
             detail: normalizedDetail || undefined,
           });
           break;
+
+        case "ANNOUNCEMENT":
+          response = await reportAnnouncement({
+            announcementId: target.announcementId,
+            reason,
+            detail: normalizedDetail || undefined,
+          });
+          break;
       }
 
       setResult(response);
@@ -370,6 +403,7 @@ export function useReport() {
     openAvatarReport,
     openResaleReport,
     openTradeMessageReport,
+    openAnnouncementReport,
     close,
     setReason,
     setDetail,

@@ -190,15 +190,17 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
-	// /mall/me/announcements
+	// /mall/me/announcement
 	if cont.MeAvatarResolver != nil &&
 		cont.AnnouncementUC != nil &&
-		cont.AnnouncementQ != nil {
+		cont.AnnouncementQ != nil &&
+		cont.ReportUC != nil {
 
 		announcementH = mallhandler.NewMeAnnouncementHandler(
 			cont.MeAvatarResolver,
 			cont.AnnouncementUC,
 			cont.AnnouncementQ,
+			cont.ReportUC,
 		)
 	}
 

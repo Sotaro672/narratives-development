@@ -235,29 +235,43 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 
 	// PRODUCT_BLUEPRINT_REVIEW はレビュー投稿Avatar、AVATAR は対象Avatar自身、
 	// RESALE は出品Avatar、LIST は出品元Brand、TOKEN_BLUEPRINT はそのTokenBlueprintを
-	// 所有するBrandへ措置通知を送る。TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
+	// 所有するBrand、ANNOUNCEMENT は配信元Brandへ措置通知を送る。
+	// TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
-	case reportdom.TargetTypeProductBlueprintReview, reportdom.TargetTypeAvatar, reportdom.TargetTypeResale:
+	case reportdom.TargetTypeProductBlueprintReview,
+		reportdom.TargetTypeAvatar,
+		reportdom.TargetTypeResale:
+
 	case reportdom.TargetTypeList:
 		targetContext, err := u.resolveListTargetContext(ctx, reportCase.TargetID)
 		if err != nil {
 			return err
 		}
+
 		notificationCase.TargetAuthorID = targetContext.BrandID
 		notificationCase.TargetAuthorType = reportdom.ActorTypeBrand
 		companyID = targetContext.CompanyID
 
-	case reportdom.TargetTypeTokenBlueprint:
+	case reportdom.TargetTypeTokenBlueprint,
+		reportdom.TargetTypeAnnouncement:
 		if u.tokenBlueprintRepo == nil {
 			return ErrReportUsecaseNotConfigured
 		}
 
-		target, err := u.tokenBlueprintRepo.GetByID(ctx, reportCase.TargetID)
+		tokenBlueprintID := reportCase.TargetID
+		if reportCase.TargetType == reportdom.TargetTypeAnnouncement {
+			tokenBlueprintID = reportCase.TargetParentID
+		}
+		if tokenBlueprintID == "" {
+			return reportdom.ErrInvalidTargetParentID
+		}
+
+		target, err := u.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
 		if err != nil {
 			return err
 		}
-		if target == nil || target.ID != reportCase.TargetID {
-			return reportdom.ErrInvalidTargetID
+		if target == nil || target.ID != tokenBlueprintID {
+			return reportdom.ErrInvalidTargetParentID
 		}
 		if target.BrandID == "" {
 			return reportdom.ErrInvalidTargetAuthorID
@@ -266,8 +280,10 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 			return reportdom.ErrInvalidCompanyID
 		}
 
-		// 旧ReportCaseがCreatedBy(member ID)をTargetAuthorIDに保持している場合でも、
-		// 通知時にはTokenBlueprintの現在のBrandIDを正しい宛先として利用する。
+		// Announcement本体はREMOVE時点で物理削除済みのため、
+		// TargetParentIDに保存したTokenBlueprintから現在のBrand/Companyを解決する。
+		// TokenBlueprint通報についても、旧ReportCaseのTargetAuthorIDではなく
+		// 現在のTokenBlueprintのBrandIDを正しい通知先として利用する。
 		notificationCase.TargetAuthorID = target.BrandID
 		notificationCase.TargetAuthorType = reportdom.ActorTypeBrand
 		companyID = target.CompanyID

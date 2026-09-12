@@ -89,6 +89,8 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 		prefix = "resaleComment"
 	case TargetTypeTradeMessage:
 		prefix = "tradeMessage"
+	case TargetTypeAnnouncement:
+		prefix = "announcement"
 	default:
 		return "", ErrInvalidTargetType
 	}
@@ -143,6 +145,7 @@ const (
 	TargetTypeResale                 TargetType = "RESALE"
 	TargetTypeResaleComment          TargetType = "RESALE_COMMENT"
 	TargetTypeTradeMessage           TargetType = "TRADE_MESSAGE"
+	TargetTypeAnnouncement           TargetType = "ANNOUNCEMENT"
 )
 
 func (t TargetType) Validate() error {
@@ -154,7 +157,8 @@ func (t TargetType) Validate() error {
 		TargetTypeAvatar,
 		TargetTypeResale,
 		TargetTypeResaleComment,
-		TargetTypeTradeMessage:
+		TargetTypeTradeMessage,
+		TargetTypeAnnouncement:
 		return nil
 	default:
 		return ErrInvalidTargetType
@@ -289,11 +293,7 @@ func NewReportCase(params NewReportCaseParams) (ReportCase, error) {
 	if params.TargetAuthorID == "" {
 		return ReportCase{}, ErrInvalidTargetAuthorID
 	}
-	if err := validateSnapshotContent(
-		params.TargetType,
-		params.SnapshotTitle,
-		params.SnapshotBody,
-	); err != nil {
+	if err := validateSnapshotContent(params.TargetType, params.SnapshotTitle, params.SnapshotBody); err != nil {
 		return ReportCase{}, err
 	}
 	if params.CreatedAt.IsZero() {
@@ -362,11 +362,7 @@ func (c ReportCase) Validate() error {
 	if c.TargetAuthorID == "" {
 		return ErrInvalidTargetAuthorID
 	}
-	if err := validateSnapshotContent(
-		c.TargetType,
-		c.SnapshotTitle,
-		c.SnapshotBody,
-	); err != nil {
+	if err := validateSnapshotContent(c.TargetType, c.SnapshotTitle, c.SnapshotBody); err != nil {
 		return err
 	}
 	if _, err := normalizeSnapshotRating(c.TargetType, c.SnapshotRating); err != nil {
@@ -608,11 +604,7 @@ func (r Report) Validate() error {
 // Helpers
 // ============================================================
 
-func validateSnapshotContent(
-	targetType TargetType,
-	title string,
-	body string,
-) error {
+func validateSnapshotContent(targetType TargetType, title string, body string) error {
 	switch targetType {
 	case TargetTypeProductBlueprintReview,
 		TargetTypeTokenBlueprintComment,
@@ -647,6 +639,12 @@ func validateSnapshotContent(
 		}
 		return nil
 
+	case TargetTypeAnnouncement:
+		if title == "" && body == "" {
+			return fmt.Errorf("%w: announcement snapshot is empty", ErrInvalidTargetID)
+		}
+		return nil
+
 	default:
 		return ErrInvalidTargetType
 	}
@@ -668,7 +666,8 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		TargetTypeAvatar,
 		TargetTypeResale,
 		TargetTypeResaleComment,
-		TargetTypeTradeMessage:
+		TargetTypeTradeMessage,
+		TargetTypeAnnouncement:
 		if rating != nil {
 			return nil, ErrInvalidSnapshotRating
 		}

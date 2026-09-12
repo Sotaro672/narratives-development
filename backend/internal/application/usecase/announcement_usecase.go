@@ -1,10 +1,11 @@
-// backend\internal\application\usecase\announcement_usecase.go
+// backend/internal/application/usecase/announcement_usecase.go
 package usecase
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"time"
 
@@ -83,14 +84,12 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 	}
 
 	now := u.now()
-
 	id := input.ID
 	if id == "" {
 		generatedID, err := newAnnouncementID()
 		if err != nil {
 			return ann.Announcement{}, err
 		}
-
 		id = generatedID
 	}
 
@@ -128,7 +127,6 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 	if len(attachmentFiles) == 0 {
 		return created, nil
 	}
-
 	if u.attRepo == nil {
 		return ann.Announcement{}, ann.ErrNotFound
 	}
@@ -143,7 +141,6 @@ func (u *AnnouncementUsecase) CreateAnnouncement(
 	if err != nil {
 		return ann.Announcement{}, err
 	}
-
 	return refreshed, nil
 }
 
@@ -158,7 +155,6 @@ func (u *AnnouncementUsecase) ListAnnouncementsByTargetAvatar(
 	if avatarID == "" {
 		return common.PageResult[ann.Announcement]{}, ann.ErrInvalidAvatarID
 	}
-
 	return u.annRepo.ListByTargetAvatar(ctx, avatarID, page)
 }
 
@@ -219,7 +215,6 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	if err != nil {
 		return ann.Announcement{}, err
 	}
-
 	if input.Attachments == nil {
 		return updated, nil
 	}
@@ -233,7 +228,6 @@ func (u *AnnouncementUsecase) UpdateAnnouncement(
 	if err != nil {
 		return ann.Announcement{}, err
 	}
-
 	return returned, nil
 }
 
@@ -250,7 +244,6 @@ func (u *AnnouncementUsecase) MarkPublished(
 	}
 
 	now := u.now()
-
 	return u.annRepo.MarkPublished(ctx, announcementID, now, updatedBy)
 }
 
@@ -258,10 +251,7 @@ func (u *AnnouncementUsecase) DeleteAnnouncement(
 	ctx context.Context,
 	id string,
 ) error {
-	return u.DeleteAnnouncementCascade(
-		ctx,
-		id,
-	)
+	return u.DeleteAnnouncementCascade(ctx, id)
 }
 
 // =======================
@@ -281,7 +271,6 @@ func (u *AnnouncementUsecase) ListAnnouncementAvatars(
 	if u.avatarRepo == nil {
 		return nil, ann.ErrNotFound
 	}
-
 	return u.avatarRepo.ListByAnnouncementID(ctx, announcementID, filter)
 }
 
@@ -300,7 +289,6 @@ func (u *AnnouncementUsecase) UpsertAnnouncementAvatar(
 
 	isRead := input.IsRead
 	now := u.now()
-
 	patch := ann.AnnouncementAvatarPatch{
 		IsRead:    &isRead,
 		UpdatedAt: &now,
@@ -330,7 +318,6 @@ func (u *AnnouncementUsecase) MarkRead(
 	}
 
 	now := u.now()
-
 	return u.avatarRepo.MarkRead(
 		ctx,
 		announcementID,
@@ -397,7 +384,6 @@ func (u *AnnouncementUsecase) ReplaceAttachments(
 		if err != nil {
 			return nil, nil, err
 		}
-
 		saved = append(saved, out)
 	}
 
@@ -472,7 +458,6 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(
 	if announcementID == "" {
 		return ann.ErrInvalidAnnouncementID
 	}
-
 	if u.annRepo == nil {
 		return ann.ErrNotFound
 	}
@@ -515,6 +500,68 @@ func (u *AnnouncementUsecase) DeleteAnnouncementCascade(
 	return nil
 }
 
+// DeleteAnnouncementByAdmin physically deletes an Announcement as an Admin
+// moderation action. Unlike the normal Console deletion flow, published
+// Announcements may also be deleted.
+//
+// This method is intentionally idempotent because a REMOVE decision can be
+// retried after the target deletion succeeded but the ReportCase update failed.
+//
+// Delete order:
+//  1. Verify that the Announcement exists.
+//  2. Delete all Firebase Storage objects for the Announcement.
+//  3. Delete Firestore child records and the Announcement parent document
+//     through Announcement.Repository.Delete.
+//
+// If the Announcement has already been deleted, the operation succeeds.
+func (u *AnnouncementUsecase) DeleteAnnouncementByAdmin(
+	ctx context.Context,
+	input DeleteAnnouncementByAdminInput,
+) error {
+	if input.AnnouncementID == "" {
+		return ann.ErrInvalidAnnouncementID
+	}
+	if u == nil || u.annRepo == nil {
+		return ErrReportUsecaseNotConfigured
+	}
+
+	_, err := u.annRepo.GetByID(
+		ctx,
+		input.AnnouncementID,
+	)
+	if err != nil {
+		if errors.Is(err, ann.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	if u.attachmentStorage == nil {
+		return ErrNotSupported(
+			"Announcement.DeleteByAdmin.AttachmentStorage",
+		)
+	}
+
+	if err := u.attachmentStorage.DeleteAll(
+		ctx,
+		input.AnnouncementID,
+	); err != nil {
+		return err
+	}
+
+	if err := u.annRepo.Delete(
+		ctx,
+		input.AnnouncementID,
+	); err != nil {
+		if errors.Is(err, ann.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
 // =======================
 // Helpers
 // =======================
@@ -527,7 +574,6 @@ func toNewAttachmentInputs(
 	}
 
 	result := make([]NewAttachmentInput, 0, len(values))
-
 	for _, value := range values {
 		result = append(result, NewAttachmentInput{
 			ID:         value.ID,
@@ -579,6 +625,5 @@ func newAnnouncementID() (string, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
-
 	return hex.EncodeToString(b[:]), nil
 }

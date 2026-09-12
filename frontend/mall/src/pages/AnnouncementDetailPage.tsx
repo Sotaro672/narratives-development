@@ -15,6 +15,8 @@ import NewsDetail from "../features/notification/presentation/components/NewsDet
 import ReportDecisionDetail from "../features/notification/presentation/components/ReportDecisionDetail";
 import { useReportDecisionDetail } from "../features/notification/presentation/hooks/useReportDecisionDetail";
 import type { ReportDecisionNotification } from "../features/notification/infrastructure/reportDecisionNotificationApi";
+import ReportModal from "../features/report/components/ReportModal";
+import { useReport } from "../features/report/hooks/useReport";
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 import type { News } from "../features/shared/types/news";
 
@@ -46,6 +48,8 @@ export default function AnnouncementDetailPage() {
   const stateDecisionNotification =
     locationState?.reportDecisionNotification;
   const stateNews = locationState?.news;
+
+  const report = useReport();
 
   const effectiveNewsId = useMemo(
     () => newsId || stateNews?.id || "",
@@ -239,162 +243,199 @@ export default function AnnouncementDetailPage() {
       ? announcement.attachmentFiles
       : [];
 
+  const handleOpenAnnouncementReport = () => {
+    if (!announcement?.id) {
+      return;
+    }
+
+    report.openAnnouncementReport({
+      announcementId: announcement.id,
+    });
+  };
+
   return (
-    <Layout
-      title={
-        isNewsDetail
-          ? "システム通知"
-          : "お知らせ"
-      }
-      showBackButton
-      backTo="/announcements"
-      showFooter
-      mode="mypage"
-      mainClassName="announcement-page-layout"
-    >
-      <section className="page-section content-page-section announcement-page">
-        {error ? (
-          <div
-            className="announcement-page__error"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-
-        {loading ? (
-          <div className="announcement-page__state">
-            読み込み中...
-          </div>
-        ) : null}
-
-        {!loading &&
-        isNewsDetail &&
-        newsNotFound &&
-        !newsQueryError ? (
-          <div className="announcement-page__empty">
-            システム通知が見つかりません。
-          </div>
-        ) : null}
-
-        {!loading &&
-        isReportDecisionDetail &&
-        decisionNotFound ? (
-          <div className="announcement-page__empty">
-            通報結果通知が見つかりません。
-          </div>
-        ) : null}
-
-        {!loading &&
-        !isNewsDetail &&
-        !isReportDecisionDetail &&
-        announcementNotFound ? (
-          <div className="announcement-page__empty">
-            お知らせが見つかりません。
-          </div>
-        ) : null}
-
-        {!loading &&
-        isNewsDetail &&
-        news ? (
-          <NewsDetail news={news} />
-        ) : null}
-
-        {!loading &&
-        isReportDecisionDetail &&
-        decisionNotification ? (
-          <ReportDecisionDetail
-            notification={decisionNotification}
-          />
-        ) : null}
-
-        {!loading &&
-        !isNewsDetail &&
-        !isReportDecisionDetail &&
-        announcement ? (
-          <article className="announcement-page__detail">
-            <h1 className="announcement-page__detail-title">
-              {announcement.title}
-            </h1>
-
-            <div className="announcement-page__card-head">
-              <div className="announcement-page__card-meta">
-                <span className="announcement-page__token">
-                  {tokenLabel}
-                </span>
-
-                <time
-                  className="announcement-page__date"
-                  dateTime={
-                    announcement.publishedAt ??
-                    undefined
-                  }
-                >
-                  {publishedAtLabel}
-                </time>
-              </div>
+    <>
+      <Layout
+        title={
+          isNewsDetail
+            ? "システム通知"
+            : "お知らせ"
+        }
+        showBackButton
+        backTo="/announcements"
+        showFooter
+        mode="mypage"
+        mainClassName="announcement-page-layout"
+      >
+        <section className="page-section content-page-section announcement-page">
+          {error ? (
+            <div
+              className="announcement-page__error"
+              role="alert"
+            >
+              {error}
             </div>
+          ) : null}
 
-            <div className="announcement-page__detail-content">
-              {announcement.content}
+          {loading ? (
+            <div className="announcement-page__state">
+              読み込み中...
             </div>
+          ) : null}
 
-            {attachmentFiles.length > 0 ? (
-              <div className="announcement-page__detail-attachments">
-                <div className="announcement-page__attachment-list">
-                  {attachmentFiles.map((file, index) => {
-                    const fileName =
-                      file.fileName ||
-                      file.id ||
-                      `添付ファイル ${index + 1}`;
+          {!loading &&
+          isNewsDetail &&
+          newsNotFound &&
+          !newsQueryError ? (
+            <div className="announcement-page__empty">
+              システム通知が見つかりません。
+            </div>
+          ) : null}
 
-                    const fileUrl =
-                      file.fileUrl ||
-                      "";
+          {!loading &&
+          isReportDecisionDetail &&
+          decisionNotFound ? (
+            <div className="announcement-page__empty">
+              通報結果通知が見つかりません。
+            </div>
+          ) : null}
 
-                    const mimeType =
-                      file.mimeType ||
-                      "";
+          {!loading &&
+          !isNewsDetail &&
+          !isReportDecisionDetail &&
+          announcementNotFound ? (
+            <div className="announcement-page__empty">
+              お知らせが見つかりません。
+            </div>
+          ) : null}
 
-                    const isImage =
-                      mimeType.startsWith(
-                        "image/",
-                      );
+          {!loading &&
+          isNewsDetail &&
+          news ? (
+            <NewsDetail news={news} />
+          ) : null}
 
-                    const attachmentKey =
-                      `${file.id || fileName}-${index}`;
+          {!loading &&
+          isReportDecisionDetail &&
+          decisionNotification ? (
+            <ReportDecisionDetail
+              notification={decisionNotification}
+            />
+          ) : null}
 
-                    if (
-                      isImage &&
-                      fileUrl
-                    ) {
-                      return (
-                        <a
-                          key={attachmentKey}
-                          className="announcement-page__image-attachment"
-                          href={fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`${fileName} を開く`}
-                        >
-                          <img
-                            className="announcement-page__attachment-image"
-                            src={fileUrl}
-                            alt={fileName}
-                            loading="lazy"
-                          />
-                        </a>
-                      );
+          {!loading &&
+          !isNewsDetail &&
+          !isReportDecisionDetail &&
+          announcement ? (
+            <article className="announcement-page__detail">
+              <h1 className="announcement-page__detail-title">
+                {announcement.title}
+              </h1>
+
+              <div className="announcement-page__card-head">
+                <div className="announcement-page__card-meta">
+                  <span className="announcement-page__token">
+                    {tokenLabel}
+                  </span>
+
+                  <time
+                    className="announcement-page__date"
+                    dateTime={
+                      announcement.publishedAt ??
+                      undefined
                     }
+                  >
+                    {publishedAtLabel}
+                  </time>
+                </div>
 
-                    if (fileUrl) {
+                <button
+                  type="button"
+                  className="announcement-page__report-button"
+                  onClick={handleOpenAnnouncementReport}
+                >
+                  通報する
+                </button>
+              </div>
+
+              <div className="announcement-page__detail-content">
+                {announcement.content}
+              </div>
+
+              {attachmentFiles.length > 0 ? (
+                <div className="announcement-page__detail-attachments">
+                  <div className="announcement-page__attachment-list">
+                    {attachmentFiles.map((file, index) => {
+                      const fileName =
+                        file.fileName ||
+                        file.id ||
+                        `添付ファイル ${index + 1}`;
+
+                      const fileUrl =
+                        file.fileUrl ||
+                        "";
+
+                      const mimeType =
+                        file.mimeType ||
+                        "";
+
+                      const isImage =
+                        mimeType.startsWith(
+                          "image/",
+                        );
+
+                      const attachmentKey =
+                        `${file.id || fileName}-${index}`;
+
+                      if (
+                        isImage &&
+                        fileUrl
+                      ) {
+                        return (
+                          <a
+                            key={attachmentKey}
+                            className="announcement-page__image-attachment"
+                            href={fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`${fileName} を開く`}
+                          >
+                            <img
+                              className="announcement-page__attachment-image"
+                              src={fileUrl}
+                              alt={fileName}
+                              loading="lazy"
+                            />
+                          </a>
+                        );
+                      }
+
+                      if (fileUrl) {
+                        return (
+                          <a
+                            key={attachmentKey}
+                            className="announcement-page__attachment-item announcement-page__attachment-link"
+                            href={fileUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <span className="announcement-page__attachment-name">
+                              {fileName}
+                            </span>
+
+                            {mimeType ? (
+                              <span className="announcement-page__attachment-meta">
+                                {mimeType}
+                              </span>
+                            ) : null}
+                          </a>
+                        );
+                      }
+
                       return (
-                        <a
+                        <div
                           key={attachmentKey}
-                          className="announcement-page__attachment-item announcement-page__attachment-link"
-                          href={fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                          className="announcement-page__attachment-item"
                         >
                           <span className="announcement-page__attachment-name">
                             {fileName}
@@ -405,33 +446,31 @@ export default function AnnouncementDetailPage() {
                               {mimeType}
                             </span>
                           ) : null}
-                        </a>
+                        </div>
                       );
-                    }
-
-                    return (
-                      <div
-                        key={attachmentKey}
-                        className="announcement-page__attachment-item"
-                      >
-                        <span className="announcement-page__attachment-name">
-                          {fileName}
-                        </span>
-
-                        {mimeType ? (
-                          <span className="announcement-page__attachment-meta">
-                            {mimeType}
-                          </span>
-                        ) : null}
-                      </div>
-                    );
-                  })}
+                    })}
+                  </div>
                 </div>
-              </div>
-            ) : null}
-          </article>
-        ) : null}
-      </section>
-    </Layout>
+              ) : null}
+            </article>
+          ) : null}
+        </section>
+      </Layout>
+
+      <ReportModal
+        open={report.isOpen}
+        targetType={report.target?.type}
+        reason={report.reason}
+        detail={report.detail}
+        submitting={report.submitting}
+        error={report.error}
+        result={report.result}
+        canSubmit={report.canSubmit}
+        onReasonChange={report.setReason}
+        onDetailChange={report.setDetail}
+        onSubmit={report.submit}
+        onClose={report.close}
+      />
+    </>
   );
 }

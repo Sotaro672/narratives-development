@@ -97,6 +97,7 @@ export default function ReportsPage() {
             },
             { value: "AVATAR", label: "アバター" },
             { value: "TRADE_MESSAGE", label: "取引コメント" },
+            { value: "ANNOUNCEMENT", label: "お知らせ" },
           ],
         },
         nowrap: true,

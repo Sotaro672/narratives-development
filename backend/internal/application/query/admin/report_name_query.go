@@ -311,7 +311,8 @@ func (q *ReportNameQuery) ResolveTargetAuthorName(
 
 // ResolveTargetParentName は通報対象の親リソース名を解決する。
 // 商品レビュー / 再販出品では productName、LIST では List.title、
-// TokenBlueprint / トークンコメントでは tokenName、アバター通報では avatarName を返す。
+// TokenBlueprint / トークンコメント / Announcement では tokenName、
+// アバター通報では avatarName を返す。
 // 解決できない場合は空文字列を返し、レスポンス側で元 ID へフォールバックする。
 func (q *ReportNameQuery) ResolveTargetParentName(
 	ctx context.Context,
@@ -327,7 +328,8 @@ func (q *ReportNameQuery) ResolveTargetParentName(
 		return q.ResolveListName(ctx, targetParentID)
 
 	case reportdom.TargetTypeTokenBlueprint,
-		reportdom.TargetTypeTokenBlueprintComment:
+		reportdom.TargetTypeTokenBlueprintComment,
+		reportdom.TargetTypeAnnouncement:
 		return q.ResolveTokenName(ctx, targetParentID)
 
 	case reportdom.TargetTypeAvatar:
@@ -341,7 +343,7 @@ func (q *ReportNameQuery) ResolveTargetParentName(
 // ResolveTargetCompanyID は Admin の report detail から契約詳細配下へ遷移するため、
 // 通報対象に紐づく companyId を解決する。
 // ProductBlueprintReview / Resale は targetParentID=productBlueprintId、
-// TokenBlueprint / TokenBlueprintComment は targetParentID=tokenBlueprintId、
+// TokenBlueprint / TokenBlueprintComment / Announcement は targetParentID=tokenBlueprintId、
 // List は targetAuthorID=brandId から companyId を解決する。
 // 解決できない場合は空文字列を返す。
 func (q *ReportNameQuery) ResolveTargetCompanyID(
@@ -357,7 +359,8 @@ func (q *ReportNameQuery) ResolveTargetCompanyID(
 		return q.ResolveProductCompanyID(ctx, targetParentID)
 
 	case reportdom.TargetTypeTokenBlueprint,
-		reportdom.TargetTypeTokenBlueprintComment:
+		reportdom.TargetTypeTokenBlueprintComment,
+		reportdom.TargetTypeAnnouncement:
 		return q.ResolveTokenCompanyID(ctx, targetParentID)
 
 	case reportdom.TargetTypeList:
