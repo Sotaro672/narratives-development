@@ -102,12 +102,17 @@ export default function AnnouncementCreatePage() {
     setIsSendingInput(true);
 
     try {
-      await onSendAnnouncement({
+      const announcementId = await onSendAnnouncement({
         payload: inputPayload,
         targetAvatarIds,
       });
 
       window.alert("告知を送信しました。");
+
+      navigate(
+        `/sales/announcements/${encodeURIComponent(announcementId)}`,
+        { replace: true },
+      );
     } catch (error) {
       console.error(
         "[AnnouncementCreatePage] send announcement failed",
@@ -126,6 +131,7 @@ export default function AnnouncementCreatePage() {
     inputPayload,
     isSavingInput,
     isSendingInput,
+    navigate,
     onSendAnnouncement,
     targetAvatarIds,
   ]);

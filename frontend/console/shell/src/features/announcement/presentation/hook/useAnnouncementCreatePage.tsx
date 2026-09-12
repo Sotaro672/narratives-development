@@ -25,7 +25,7 @@ export type SubmitAnnouncementParams = {
 type UseAnnouncementCreatePageHandlers = {
   onBack: () => void;
   onSaveAnnouncement: (params: SubmitAnnouncementParams) => Promise<void>;
-  onSendAnnouncement: (params: SubmitAnnouncementParams) => Promise<void>;
+  onSendAnnouncement: (params: SubmitAnnouncementParams) => Promise<string>;
 };
 
 export type UseAnnouncementCreatePageResult = {
@@ -103,13 +103,18 @@ export function useAnnouncementCreatePage(): UseAnnouncementCreatePageResult {
   );
 
   const handleSendAnnouncement = useCallback(
-    async ({ payload, targetAvatarIds }: SubmitAnnouncementParams) => {
-      await sendAnnouncement({
+    async ({
+      payload,
+      targetAvatarIds,
+    }: SubmitAnnouncementParams): Promise<string> => {
+      const announcement = await sendAnnouncement({
         sales: vm.sales,
         payload,
         createdBy: resolveCreatedBy(),
         targetAvatarIds,
       });
+
+      return announcement.id;
     },
     [resolveCreatedBy, vm.sales],
   );
