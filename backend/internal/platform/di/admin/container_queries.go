@@ -17,6 +17,7 @@ type queries struct {
 	resaleTradeQuery                    *adminquery.ResaleTradeQuery
 	tradeMessageQuery                   *adminquery.TradeMessageQuery
 	contractDetailQuery                 *adminquery.ContractDetailQuery
+	contractAnnouncementDetailQuery     *adminquery.ContractAnnouncementDetailQuery
 	contractListQuery                   *adminquery.ContractListQuery
 	contractTokenBlueprintQuery         *adminquery.ContractTokenBlueprintQuery
 	contractProductBlueprintQuery       *adminquery.ContractProductBlueprintQuery
@@ -129,6 +130,17 @@ func buildQueries(
 		r.reportRepo,
 	)
 
+	contractAnnouncementDetailQuery := adminquery.NewContractAnnouncementDetailQuery(
+		r.companyRepo,
+		r.announcementRepo,
+		r.announcementAttachmentRepo,
+		r.tokenBlueprintRepo,
+		r.memberRepo,
+	)
+	if contractAnnouncementDetailQuery == nil {
+		return nil, errors.New("di.admin: contract announcement detail query is nil")
+	}
+
 	contractListQuery := adminquery.NewContractListQuery(
 		r.companyRepo,
 		r.brandRepo,
@@ -240,6 +252,7 @@ func buildQueries(
 		resaleTradeQuery:                    resaleTradeQuery,
 		tradeMessageQuery:                   tradeMessageQuery,
 		contractDetailQuery:                 contractDetailQuery,
+		contractAnnouncementDetailQuery:     contractAnnouncementDetailQuery,
 		contractListQuery:                   contractListQuery,
 		contractTokenBlueprintQuery:         contractTokenBlueprintQuery,
 		contractProductBlueprintQuery:       contractProductBlueprintQuery,
@@ -261,6 +274,7 @@ func (q *queries) applyToContainer(c *Container) {
 	c.resaleTradeQuery = q.resaleTradeQuery
 	c.tradeMessageQuery = q.tradeMessageQuery
 	c.contractDetailQuery = q.contractDetailQuery
+	c.contractAnnouncementDetailQuery = q.contractAnnouncementDetailQuery
 	c.contractListQuery = q.contractListQuery
 	c.contractTokenBlueprintQuery = q.contractTokenBlueprintQuery
 	c.contractProductBlueprintQuery = q.contractProductBlueprintQuery

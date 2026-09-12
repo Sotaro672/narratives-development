@@ -1,5 +1,4 @@
 // backend/internal/adapters/in/http/admin/handler/company_handler.go
-
 package handler
 
 import (
@@ -12,12 +11,8 @@ import (
 	adminquery "narratives/internal/application/query/admin"
 	common "narratives/internal/domain/common"
 	companydom "narratives/internal/domain/company"
-	inventorydom "narratives/internal/domain/inventory"
-	listdom "narratives/internal/domain/list"
 	memberdom "narratives/internal/domain/member"
-	productblueprintdom "narratives/internal/domain/productBlueprint"
 	productblueprintreviewdom "narratives/internal/domain/productBlueprintReview"
-	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 )
 
 const (
@@ -34,19 +29,42 @@ type MemberReader interface {
 }
 
 type ContractDetailReader interface {
-	Get(ctx context.Context, companyID string) (adminquery.ContractDetailResult, error)
+	Get(
+		ctx context.Context,
+		companyID string,
+	) (adminquery.ContractDetailResult, error)
+}
+
+type ContractAnnouncementDetailReader interface {
+	Get(
+		ctx context.Context,
+		companyID string,
+		announcementID string,
+	) (adminquery.ContractAnnouncementDetailResult, error)
 }
 
 type ContractListReader interface {
-	Get(ctx context.Context, companyID string, listID string) (adminquery.ContractListDetailResult, error)
+	Get(
+		ctx context.Context,
+		companyID string,
+		listID string,
+	) (adminquery.ContractListDetailResult, error)
 }
 
 type ContractTokenBlueprintReader interface {
-	Get(ctx context.Context, companyID string, tokenBlueprintID string) (adminquery.ContractTokenBlueprintDetailResult, error)
+	Get(
+		ctx context.Context,
+		companyID string,
+		tokenBlueprintID string,
+	) (adminquery.ContractTokenBlueprintDetailResult, error)
 }
 
 type ContractProductBlueprintReader interface {
-	Get(ctx context.Context, companyID string, productBlueprintID string) (adminquery.ContractProductBlueprintDetailResult, error)
+	Get(
+		ctx context.Context,
+		companyID string,
+		productBlueprintID string,
+	) (adminquery.ContractProductBlueprintDetailResult, error)
 }
 
 type ContractTokenBlueprintReviewReader interface {
@@ -72,6 +90,7 @@ type CompanyHandler struct {
 	companyRepo                         CompanyListReader
 	memberRepo                          MemberReader
 	contractDetailQuery                 ContractDetailReader
+	contractAnnouncementDetailQuery     ContractAnnouncementDetailReader
 	contractListQuery                   ContractListReader
 	contractTokenBlueprintQuery         ContractTokenBlueprintReader
 	contractProductBlueprintQuery       ContractProductBlueprintReader
@@ -96,6 +115,7 @@ func NewCompanyHandler(
 	companyRepo CompanyListReader,
 	memberRepo MemberReader,
 	contractDetailQuery ContractDetailReader,
+	contractAnnouncementDetailQuery ContractAnnouncementDetailReader,
 	contractListQuery ContractListReader,
 	contractTokenBlueprintQuery ContractTokenBlueprintReader,
 	contractProductBlueprintQuery ContractProductBlueprintReader,
@@ -106,6 +126,7 @@ func NewCompanyHandler(
 		companyRepo:                         companyRepo,
 		memberRepo:                          memberRepo,
 		contractDetailQuery:                 contractDetailQuery,
+		contractAnnouncementDetailQuery:     contractAnnouncementDetailQuery,
 		contractListQuery:                   contractListQuery,
 		contractTokenBlueprintQuery:         contractTokenBlueprintQuery,
 		contractProductBlueprintQuery:       contractProductBlueprintQuery,
@@ -134,6 +155,11 @@ func (h *CompanyHandler) handle(w http.ResponseWriter, r *http.Request) {
 
 	if companyID, productBlueprintID, ok := parseContractReviewResourcePath(path, "product-blueprints"); ok {
 		h.handleContractProductBlueprintReviews(w, r, companyID, productBlueprintID)
+		return
+	}
+
+	if companyID, announcementID, ok := parseContractResourcePath(path, "announcements"); ok {
+		h.handleContractAnnouncementDetail(w, r, companyID, announcementID)
 		return
 	}
 
@@ -177,304 +203,30 @@ func (h *CompanyHandler) handleList(w http.ResponseWriter, r *http.Request) {
 
 	items := make([]companyResponse, 0, len(companies))
 	for _, company := range companies {
-		representativeName, err := h.resolveRepresentativeName(r.Context(), company.Admin)
+		representativeName, err := h.resolveRepresentativeName(
+			r.Context(),
+			company.Admin,
+		)
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "company_representative_resolve_failed")
+			writeJSONError(
+				w,
+				http.StatusInternalServerError,
+				"company_representative_resolve_failed",
+			)
 			return
 		}
-		items = append(items, toAdminCompanyResponse(company, representativeName))
+
+		items = append(
+			items,
+			toAdminCompanyResponse(company, representativeName),
+		)
 	}
 
-	writeJSON(w, http.StatusOK, companyListResponse{Items: items})
-}
-
-func (h *CompanyHandler) handleContractDetail(
-	w http.ResponseWriter,
-	r *http.Request,
-	companyID string,
-) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if h.contractDetailQuery == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "contract_detail_query_not_initialized")
-		return
-	}
-
-	result, err := h.contractDetailQuery.Get(r.Context(), companyID)
-	if err != nil {
-		switch {
-		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "company_not_found")
-		case errors.Is(err, adminquery.ErrContractDetailQueryNotConfigured):
-			writeJSONError(w, http.StatusServiceUnavailable, "contract_detail_query_not_initialized")
-		default:
-			writeJSONError(w, http.StatusInternalServerError, "contract_detail_get_failed")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (h *CompanyHandler) handleContractListDetail(
-	w http.ResponseWriter,
-	r *http.Request,
-	companyID string,
-	listID string,
-) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if h.contractListQuery == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "contract_list_query_not_initialized")
-		return
-	}
-
-	result, err := h.contractListQuery.Get(r.Context(), companyID, listID)
-	if err != nil {
-		switch {
-		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "company_not_found")
-		case errors.Is(err, listdom.ErrNotFound),
-			errors.Is(err, listdom.ErrInvalidID),
-			errors.Is(err, inventorydom.ErrNotFound),
-			errors.Is(err, inventorydom.ErrInvalidMintID),
-			errors.Is(err, productblueprintdom.ErrNotFound),
-			errors.Is(err, tokenblueprintdom.ErrNotFound):
-			writeJSONError(w, http.StatusNotFound, "list_not_found")
-		case errors.Is(err, adminquery.ErrContractListQueryNotConfigured):
-			writeJSONError(w, http.StatusServiceUnavailable, "contract_list_query_not_initialized")
-		default:
-			writeJSONError(w, http.StatusInternalServerError, "contract_list_get_failed")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (h *CompanyHandler) handleContractTokenBlueprintDetail(
-	w http.ResponseWriter,
-	r *http.Request,
-	companyID string,
-	tokenBlueprintID string,
-) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if h.contractTokenBlueprintQuery == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "contract_token_blueprint_query_not_initialized")
-		return
-	}
-
-	result, err := h.contractTokenBlueprintQuery.Get(r.Context(), companyID, tokenBlueprintID)
-	if err != nil {
-		switch {
-		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "company_not_found")
-		case errors.Is(err, tokenblueprintdom.ErrNotFound), errors.Is(err, tokenblueprintdom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "token_blueprint_not_found")
-		case errors.Is(err, adminquery.ErrContractTokenBlueprintQueryNotConfigured):
-			writeJSONError(w, http.StatusServiceUnavailable, "contract_token_blueprint_query_not_initialized")
-		default:
-			writeJSONError(w, http.StatusInternalServerError, "contract_token_blueprint_get_failed")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (h *CompanyHandler) handleContractProductBlueprintDetail(
-	w http.ResponseWriter,
-	r *http.Request,
-	companyID string,
-	productBlueprintID string,
-) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if h.contractProductBlueprintQuery == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "contract_product_blueprint_query_not_initialized")
-		return
-	}
-
-	result, err := h.contractProductBlueprintQuery.Get(r.Context(), companyID, productBlueprintID)
-	if err != nil {
-		switch {
-		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "company_not_found")
-		case errors.Is(err, productblueprintdom.ErrNotFound), errors.Is(err, productblueprintdom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "product_blueprint_not_found")
-		case errors.Is(err, adminquery.ErrContractProductBlueprintQueryNotConfigured):
-			writeJSONError(w, http.StatusServiceUnavailable, "contract_product_blueprint_query_not_initialized")
-		default:
-			writeJSONError(w, http.StatusInternalServerError, "contract_product_blueprint_get_failed")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (h *CompanyHandler) handleContractTokenBlueprintReviews(
-	w http.ResponseWriter,
-	r *http.Request,
-	companyID string,
-	tokenBlueprintID string,
-) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if h.contractTokenBlueprintReviewQuery == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "contract_token_blueprint_review_query_not_initialized")
-		return
-	}
-
-	query := r.URL.Query()
-	page := common.Page{
-		Number:  parsePositiveInt(query.Get("page"), 1),
-		PerPage: parsePositiveInt(query.Get("perPage"), 20),
-	}
-
-	result, err := h.contractTokenBlueprintReviewQuery.List(
-		r.Context(),
-		companyID,
-		tokenBlueprintID,
-		page,
+	writeJSON(
+		w,
+		http.StatusOK,
+		companyListResponse{Items: items},
 	)
-	if err != nil {
-		switch {
-		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "company_not_found")
-		case errors.Is(err, tokenblueprintdom.ErrNotFound), errors.Is(err, tokenblueprintdom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "token_blueprint_not_found")
-		case errors.Is(err, adminquery.ErrContractTokenBlueprintReviewQueryNotConfigured):
-			writeJSONError(w, http.StatusServiceUnavailable, "contract_token_blueprint_review_query_not_initialized")
-		default:
-			writeJSONError(w, http.StatusInternalServerError, "contract_token_blueprint_review_list_failed")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (h *CompanyHandler) handleContractProductBlueprintReviews(
-	w http.ResponseWriter,
-	r *http.Request,
-	companyID string,
-	productBlueprintID string,
-) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method_not_allowed")
-		return
-	}
-	if h.contractProductBlueprintReviewQuery == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "contract_product_blueprint_review_query_not_initialized")
-		return
-	}
-
-	query := r.URL.Query()
-	status := productblueprintreviewdom.ReviewStatus(
-		strings.ToUpper(strings.TrimSpace(query.Get("status"))),
-	)
-	page := common.Page{
-		Number:  parsePositiveInt(query.Get("page"), 1),
-		PerPage: parsePositiveInt(query.Get("perPage"), 20),
-	}
-
-	result, err := h.contractProductBlueprintReviewQuery.List(
-		r.Context(),
-		companyID,
-		productBlueprintID,
-		status,
-		page,
-	)
-	if err != nil {
-		switch {
-		case errors.Is(err, companydom.ErrNotFound), errors.Is(err, companydom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "company_not_found")
-		case errors.Is(err, productblueprintdom.ErrNotFound), errors.Is(err, productblueprintdom.ErrInvalidID):
-			writeJSONError(w, http.StatusNotFound, "product_blueprint_not_found")
-		case errors.Is(err, productblueprintreviewdom.ErrInvalidStatus):
-			writeJSONError(w, http.StatusBadRequest, "invalid_review_status")
-		case errors.Is(err, adminquery.ErrContractProductBlueprintReviewQueryNotConfigured):
-			writeJSONError(w, http.StatusServiceUnavailable, "contract_product_blueprint_review_query_not_initialized")
-		default:
-			writeJSONError(w, http.StatusInternalServerError, "contract_product_blueprint_review_list_failed")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, result)
-}
-
-func parseContractDetailCompanyID(path string) (string, bool) {
-	prefix := adminCompaniesPath + "/"
-	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, adminContractDetailPathSuffix) {
-		return "", false
-	}
-
-	companyID := strings.TrimSuffix(strings.TrimPrefix(path, prefix), adminContractDetailPathSuffix)
-	companyID = strings.TrimSuffix(companyID, "/")
-	companyID = strings.TrimSpace(companyID)
-	if companyID == "" || strings.Contains(companyID, "/") {
-		return "", false
-	}
-	return companyID, true
-}
-
-func parseContractResourcePath(
-	path string,
-	resource string,
-) (companyID string, resourceID string, ok bool) {
-	prefix := adminCompaniesPath + "/"
-	if !strings.HasPrefix(path, prefix) {
-		return "", "", false
-	}
-
-	relativePath := strings.TrimPrefix(path, prefix)
-	parts := strings.Split(relativePath, "/")
-	if len(parts) != 3 || parts[1] != resource {
-		return "", "", false
-	}
-
-	companyID = strings.TrimSpace(parts[0])
-	resourceID = strings.TrimSpace(parts[2])
-	if companyID == "" || resourceID == "" {
-		return "", "", false
-	}
-	return companyID, resourceID, true
-}
-
-func parseContractReviewResourcePath(
-	path string,
-	resource string,
-) (companyID string, resourceID string, ok bool) {
-	prefix := adminCompaniesPath + "/"
-	if !strings.HasPrefix(path, prefix) {
-		return "", "", false
-	}
-
-	relativePath := strings.TrimPrefix(path, prefix)
-	parts := strings.Split(relativePath, "/")
-	if len(parts) != 4 || parts[1] != resource || parts[3] != "reviews" {
-		return "", "", false
-	}
-
-	companyID = strings.TrimSpace(parts[0])
-	resourceID = strings.TrimSpace(parts[2])
-	if companyID == "" || resourceID == "" {
-		return "", "", false
-	}
-	return companyID, resourceID, true
 }
 
 func (h *CompanyHandler) resolveRepresentativeName(
@@ -493,10 +245,14 @@ func (h *CompanyHandler) resolveRepresentativeName(
 		return "", err
 	}
 
-	name := memberdom.FormatLastFirst(record.Member.LastName, record.Member.FirstName)
+	name := memberdom.FormatLastFirst(
+		record.Member.LastName,
+		record.Member.FirstName,
+	)
 	if name == "" {
 		return "-", nil
 	}
+
 	return name, nil
 }
 

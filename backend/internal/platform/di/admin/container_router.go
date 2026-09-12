@@ -30,6 +30,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.companyRepo,
 		cont.memberRepo,
 		cont.contractDetailQuery,
+		cont.contractAnnouncementDetailQuery,
 		cont.contractListQuery,
 		cont.contractTokenBlueprintQuery,
 		cont.contractProductBlueprintQuery,
@@ -71,8 +72,14 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.mintListQuery,
 		cont.mintDetailQuery,
 	)
-	newsHandler := adminhandler.NewNewsHandler(cont.newsUsecase, cont.newsQuery)
-	reportHandler := adminhandler.NewReportHandler(cont.reportUsecase, cont.reportNameQuery)
+	newsHandler := adminhandler.NewNewsHandler(
+		cont.newsUsecase,
+		cont.newsQuery,
+	)
+	reportHandler := adminhandler.NewReportHandler(
+		cont.reportUsecase,
+		cont.reportNameQuery,
+	)
 
 	router := adminhttp.NewRouter(adminhttp.RouterDeps{
 		AuthMw:        authMw,
@@ -91,5 +98,11 @@ func Register(mux *http.ServeMux, cont *Container) {
 	})
 
 	mux.Handle("/admin/", router)
-	mux.Handle("/admin", http.RedirectHandler("/admin/", http.StatusPermanentRedirect))
+	mux.Handle(
+		"/admin",
+		http.RedirectHandler(
+			"/admin/",
+			http.StatusPermanentRedirect,
+		),
+	)
 }

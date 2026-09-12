@@ -53,6 +53,7 @@ type Container struct {
 	resaleTradeQuery                    *adminquery.ResaleTradeQuery
 	tradeMessageQuery                   *adminquery.TradeMessageQuery
 	contractDetailQuery                 *adminquery.ContractDetailQuery
+	contractAnnouncementDetailQuery     *adminquery.ContractAnnouncementDetailQuery
 	contractListQuery                   *adminquery.ContractListQuery
 	contractTokenBlueprintQuery         *adminquery.ContractTokenBlueprintQuery
 	contractProductBlueprintQuery       *adminquery.ContractProductBlueprintQuery
