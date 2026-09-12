@@ -108,7 +108,9 @@ export default function MintDetailPage() {
         <div role="alert">
           <p>Mint詳細を取得できませんでした。</p>
           <p>{error}</p>
-          <button type="button" onClick={() => void reload()}>再読み込み</button>
+          <button type="button" onClick={() => void reload()}>
+            再読み込み
+          </button>
         </div>
       );
     }
@@ -130,11 +132,17 @@ export default function MintDetailPage() {
           {detail.models.map((model) => (
             <article className="mint-detail-page__model" key={model.modelId}>
               <div className="mint-detail-page__model-header">
-                <h3 className="mint-detail-page__model-title">{model.modelNumber || model.modelId}</h3>
+                <h3 className="mint-detail-page__model-title">
+                  {model.modelNumber || model.modelId}
+                </h3>
 
                 <div className="mint-detail-page__product-count">
-                  <span className="mint-detail-page__product-count-value">{model.productCount.toLocaleString()}</span>
-                  <span className="mint-detail-page__product-count-unit">点</span>
+                  <span className="mint-detail-page__product-count-value">
+                    {model.productCount.toLocaleString()}
+                  </span>
+                  <span className="mint-detail-page__product-count-unit">
+                    点
+                  </span>
                 </div>
               </div>
 
@@ -152,13 +160,21 @@ export default function MintDetailPage() {
         title={detail?.tokenName || "Mint詳細"}
         meta={
           detail?.status ? (
-            <Tab tone={getStatusTone(detail.status)} aria-label={`Mintステータス ${STATUS_LABELS[detail.status]}`}>
+            <Tab
+              tone={getStatusTone(detail.status)}
+              aria-label={`Mintステータス ${STATUS_LABELS[detail.status]}`}
+            >
               {STATUS_LABELS[detail.status]}
             </Tab>
           ) : undefined
         }
         leading={
-          <button type="button" className="ui-page-header__back" aria-label="戻る" onClick={() => navigate("/gas")}>
+          <button
+            type="button"
+            className="ui-page-header__back"
+            aria-label="戻る"
+            onClick={() => navigate("/gas")}
+          >
             <svg
               width="18"
               height="18"
@@ -187,14 +203,31 @@ export default function MintDetailPage() {
                 <dd>{detail.companyName || "-"}</dd>
 
                 <dt>トークンブランド名</dt>
-                <dd>{detail.tokenBrandName || "-"}</dd>
+                <dd>
+                  {detail.tokenBrandId && detail.tokenBrandName ? (
+                    <TextLink
+                      tone="inherit"
+                      onClick={() =>
+                        navigate(
+                          `/contracts/${encodeURIComponent(detail.companyId)}/brands/${encodeURIComponent(detail.tokenBrandId)}`,
+                        )
+                      }
+                    >
+                      {detail.tokenBrandName}
+                    </TextLink>
+                  ) : (
+                    detail.tokenBrandName || "-"
+                  )}
+                </dd>
 
                 <dt>トークン名</dt>
                 <dd>
                   <TextLink
                     tone="inherit"
                     onClick={() =>
-                      navigate(`/contracts/${encodeURIComponent(detail.companyId)}/token-blueprints/${encodeURIComponent(detail.tokenBlueprintId)}`)
+                      navigate(
+                        `/contracts/${encodeURIComponent(detail.companyId)}/token-blueprints/${encodeURIComponent(detail.tokenBlueprintId)}`,
+                      )
                     }
                   >
                     {detail.tokenName || "-"}
@@ -202,14 +235,31 @@ export default function MintDetailPage() {
                 </dd>
 
                 <dt>商品ブランド名</dt>
-                <dd>{detail.productBrandName || "-"}</dd>
+                <dd>
+                  {detail.productBrandId && detail.productBrandName ? (
+                    <TextLink
+                      tone="inherit"
+                      onClick={() =>
+                        navigate(
+                          `/contracts/${encodeURIComponent(detail.companyId)}/brands/${encodeURIComponent(detail.productBrandId)}`,
+                        )
+                      }
+                    >
+                      {detail.productBrandName}
+                    </TextLink>
+                  ) : (
+                    detail.productBrandName || "-"
+                  )}
+                </dd>
 
                 <dt>商品名</dt>
                 <dd>
                   <TextLink
                     tone="inherit"
                     onClick={() =>
-                      navigate(`/contracts/${encodeURIComponent(detail.companyId)}/product-blueprints/${encodeURIComponent(detail.productBlueprintId)}`)
+                      navigate(
+                        `/contracts/${encodeURIComponent(detail.companyId)}/product-blueprints/${encodeURIComponent(detail.productBlueprintId)}`,
+                      )
                     }
                   >
                     {detail.productName || "-"}

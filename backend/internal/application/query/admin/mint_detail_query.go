@@ -78,10 +78,12 @@ type MintDetailResult struct {
 	CompanyName string `json:"companyName"`
 
 	TokenBlueprintID string `json:"tokenBlueprintId"`
+	TokenBrandID     string `json:"tokenBrandId"`
 	TokenBrandName   string `json:"tokenBrandName"`
 	TokenName        string `json:"tokenName"`
 
 	ProductBlueprintID string `json:"productBlueprintId"`
+	ProductBrandID     string `json:"productBrandId"`
 	ProductBrandName   string `json:"productBrandName"`
 	ProductName        string `json:"productName"`
 
@@ -248,9 +250,11 @@ func (q *MintDetailQuery) Get(
 		CompanyID:          productBlueprint.CompanyID,
 		CompanyName:        company.Name,
 		TokenBlueprintID:   tokenBlueprint.ID,
+		TokenBrandID:       tokenBlueprint.BrandID,
 		TokenBrandName:     tokenBrand.Name,
 		TokenName:          tokenBlueprint.Name,
 		ProductBlueprintID: productBlueprint.ID,
+		ProductBrandID:     productBlueprint.BrandID,
 		ProductBrandName:   productBrand.Name,
 		ProductName:        productBlueprint.ProductName,
 		Models:             models,
