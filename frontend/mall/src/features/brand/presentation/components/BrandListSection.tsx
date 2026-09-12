@@ -1,7 +1,10 @@
 // frontend/amol/src/features/brand/presentation/components/BrandListSection.tsx
 
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
+import ProductListingGrid, {
+  type ProductListingCardViewModel,
+} from "../../../shared/presentation/components/ProductListingGrid";
 import type { MallListItem } from "../../../shared/types/list";
 
 import { formatBrandListPrice } from "../utils/formatBrandListPrice";
@@ -15,6 +18,8 @@ export default function BrandListSection({
   listIds,
   listItems,
 }: BrandListSectionProps) {
+  const navigate = useNavigate();
+
   if (listIds.length === 0) {
     return (
       <section className="brand-page-section">
@@ -42,6 +47,22 @@ export default function BrandListSection({
     );
   }
 
+  const listingItems: ProductListingCardViewModel[] = listItems.map((item) => ({
+    id: item.id,
+    title: item.title.trim() || "商品名未設定",
+    imageUrl: item.image,
+    priceLabel: formatBrandListPrice(item.prices),
+  }));
+
+  const handleOpenItem = (listId: string) => {
+    const normalizedListId = listId.trim();
+    if (!normalizedListId) {
+      return;
+    }
+
+    navigate(`/lists/${encodeURIComponent(normalizedListId)}`);
+  };
+
   return (
     <section className="brand-page-section">
       <div className="brand-page-section-header">
@@ -49,48 +70,11 @@ export default function BrandListSection({
         <span>{listItems.length}件</span>
       </div>
 
-      <div className="lists-page-grid brand-page-list-grid">
-        {listItems.map((item) => (
-          <Link
-            key={item.id}
-            className="lists-page-card brand-page-list-card"
-            to={`/lists/${encodeURIComponent(item.id)}`}
-          >
-            <div className="lists-page-card-image-wrap">
-              {item.image ? (
-                <img
-                  src={item.image}
-                  alt={item.title}
-                  className="lists-page-card-image"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="lists-page-card-image-placeholder">
-                  No Image
-                </div>
-              )}
-            </div>
-
-            <div className="lists-page-card-body">
-              <h2 className="lists-page-card-title">
-                {item.title}
-              </h2>
-
-              {item.description ? (
-                <p className="lists-page-card-description">
-                  {item.description}
-                </p>
-              ) : null}
-
-              <div className="lists-page-card-footer">
-                <span className="lists-page-card-price">
-                  {formatBrandListPrice(item.prices)}
-                </span>
-              </div>
-            </div>
-          </Link>
-        ))}
-      </div>
+      <ProductListingGrid
+        items={listingItems}
+        onOpen={handleOpenItem}
+        className="brand-page-list-grid"
+      />
     </section>
   );
 }
