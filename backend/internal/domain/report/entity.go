@@ -83,6 +83,8 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 		prefix = "list"
 	case TargetTypeAvatar:
 		prefix = "avatar"
+	case TargetTypeBrand:
+		prefix = "brand"
 	case TargetTypeResale:
 		prefix = "resale"
 	case TargetTypeResaleComment:
@@ -142,6 +144,7 @@ const (
 	TargetTypeTokenBlueprintComment  TargetType = "TOKEN_BLUEPRINT_COMMENT"
 	TargetTypeList                   TargetType = "LIST"
 	TargetTypeAvatar                 TargetType = "AVATAR"
+	TargetTypeBrand                  TargetType = "BRAND"
 	TargetTypeResale                 TargetType = "RESALE"
 	TargetTypeResaleComment          TargetType = "RESALE_COMMENT"
 	TargetTypeTradeMessage           TargetType = "TRADE_MESSAGE"
@@ -155,6 +158,7 @@ func (t TargetType) Validate() error {
 		TargetTypeTokenBlueprintComment,
 		TargetTypeList,
 		TargetTypeAvatar,
+		TargetTypeBrand,
 		TargetTypeResale,
 		TargetTypeResaleComment,
 		TargetTypeTradeMessage,
@@ -633,6 +637,12 @@ func validateSnapshotContent(targetType TargetType, title string, body string) e
 		}
 		return nil
 
+	case TargetTypeBrand:
+		if title == "" && body == "" {
+			return fmt.Errorf("%w: brand snapshot is empty", ErrInvalidTargetID)
+		}
+		return nil
+
 	case TargetTypeResale:
 		if title == "" && body == "" {
 			return fmt.Errorf("%w: resale snapshot is empty", ErrInvalidTargetID)
@@ -664,6 +674,7 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		TargetTypeTokenBlueprintComment,
 		TargetTypeList,
 		TargetTypeAvatar,
+		TargetTypeBrand,
 		TargetTypeResale,
 		TargetTypeResaleComment,
 		TargetTypeTradeMessage,

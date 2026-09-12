@@ -235,7 +235,7 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 
 	// PRODUCT_BLUEPRINT_REVIEW はレビュー投稿Avatar、AVATAR は対象Avatar自身、
 	// RESALE は出品Avatar、LIST は出品元Brand、TOKEN_BLUEPRINT はそのTokenBlueprintを
-	// 所有するBrand、ANNOUNCEMENT は配信元Brandへ措置通知を送る。
+	// 所有するBrand、BRAND は対象Brand自身、ANNOUNCEMENT は配信元Brandへ措置通知を送る。
 	// TOKEN_BLUEPRINT_COMMENT は現時点では対象者通知の対象外とする。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview,
@@ -263,7 +263,10 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 			tokenBlueprintID = reportCase.TargetParentID
 		}
 		if tokenBlueprintID == "" {
-			return reportdom.ErrInvalidTargetParentID
+			if reportCase.TargetType == reportdom.TargetTypeAnnouncement {
+				return reportdom.ErrInvalidTargetParentID
+			}
+			return reportdom.ErrInvalidTargetID
 		}
 
 		target, err := u.tokenBlueprintRepo.GetByID(ctx, tokenBlueprintID)
@@ -271,7 +274,10 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 			return err
 		}
 		if target == nil || target.ID != tokenBlueprintID {
-			return reportdom.ErrInvalidTargetParentID
+			if reportCase.TargetType == reportdom.TargetTypeAnnouncement {
+				return reportdom.ErrInvalidTargetParentID
+			}
+			return reportdom.ErrInvalidTargetID
 		}
 		if target.BrandID == "" {
 			return reportdom.ErrInvalidTargetAuthorID
@@ -285,6 +291,29 @@ func (u *ReportUsecase) createTargetEnforcementDecisionNotification(
 		// TokenBlueprint通報についても、旧ReportCaseのTargetAuthorIDではなく
 		// 現在のTokenBlueprintのBrandIDを正しい通知先として利用する。
 		notificationCase.TargetAuthorID = target.BrandID
+		notificationCase.TargetAuthorType = reportdom.ActorTypeBrand
+		companyID = target.CompanyID
+
+	case reportdom.TargetTypeBrand:
+		if u.brandRepo == nil {
+			return ErrReportUsecaseNotConfigured
+		}
+
+		target, err := u.brandRepo.GetByID(ctx, reportCase.TargetID)
+		if err != nil {
+			return err
+		}
+		if target.ID != reportCase.TargetID {
+			return reportdom.ErrInvalidTargetID
+		}
+		if target.CompanyID == "" {
+			return reportdom.ErrInvalidCompanyID
+		}
+
+		// BRAND通報では対象Brand自身へ措置通知を送る。
+		// REMOVE後もBrandドキュメントは物理削除せずIsActive=falseで保持するため、
+		// 現在のBrandからCompanyIDを解決できる。
+		notificationCase.TargetAuthorID = target.ID
 		notificationCase.TargetAuthorType = reportdom.ActorTypeBrand
 		companyID = target.CompanyID
 

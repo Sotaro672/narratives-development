@@ -34,6 +34,7 @@ function buildTargetDetailPath(reportCase: ReportCase): string | null {
 
     case "TOKEN_BLUEPRINT":
     case "TOKEN_BLUEPRINT_COMMENT":
+    case "ANNOUNCEMENT":
       if (!companyId) return null;
       return `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodedTargetParentId}`;
 
@@ -70,11 +71,24 @@ function buildResaleDetailPath(reportCase: ReportCase): string | null {
 }
 
 function buildTargetAuthorDetailPath(reportCase: ReportCase): string | null {
+  const companyId = reportCase.targetCompanyId?.trim() || "";
   const targetAuthorId = reportCase.targetAuthorId?.trim() || "";
+
   if (!targetAuthorId) return null;
 
-  if (reportCase.targetType === "RESALE" && reportCase.targetAuthorType === "AVATAR") {
+  if (
+    reportCase.targetType === "RESALE" &&
+    reportCase.targetAuthorType === "AVATAR"
+  ) {
     return `/avatars/${encodeURIComponent(targetAuthorId)}`;
+  }
+
+  if (
+    reportCase.targetType === "ANNOUNCEMENT" &&
+    reportCase.targetAuthorType === "BRAND" &&
+    companyId
+  ) {
+    return `/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(targetAuthorId)}`;
   }
 
   return null;
@@ -145,7 +159,9 @@ export default function ReportCaseInfoSection({
           </>
         ) : null}
 
-        {reportCase.targetType !== "LIST" && reportCase.targetType !== "RESALE" ? (
+        {reportCase.targetType !== "LIST" &&
+        reportCase.targetType !== "RESALE" &&
+        reportCase.targetType !== "ANNOUNCEMENT" ? (
           <>
             <dt>{getTargetAuthorTypeLabel(reportCase.targetType)}</dt>
             <dd>{getActorTypeLabel(reportCase.targetAuthorType)}</dd>

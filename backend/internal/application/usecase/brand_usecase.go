@@ -296,6 +296,66 @@ func (u *BrandUsecase) Update(
 	return u.brandRepo.Update(ctx, id, patch)
 }
 
+// DeactivateBrandByAdmin deactivates a Brand as an Admin moderation action.
+// BRAND + REMOVE in Report means setting isActive=false.
+// The Brand document itself is intentionally preserved.
+//
+// This method is idempotent because a REMOVE decision can be retried after
+// the Brand update succeeded but the ReportCase update failed.
+func (u *BrandUsecase) DeactivateBrandByAdmin(
+	ctx context.Context,
+	input DeactivateBrandByAdminInput,
+) error {
+	if input.BrandID == "" {
+		return branddom.ErrInvalidID
+	}
+	if u == nil || u.brandRepo == nil {
+		return ErrReportUsecaseNotConfigured
+	}
+
+	current, err := u.brandRepo.GetByID(
+		ctx,
+		input.BrandID,
+	)
+	if err != nil {
+		if errors.Is(err, branddom.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	if !current.IsActive {
+		return nil
+	}
+
+	isActive := false
+	updatedAt := u.now().UTC()
+
+	patch := branddom.BrandPatch{
+		IsActive:  &isActive,
+		UpdatedAt: &updatedAt,
+	}
+
+	if input.AdminID != "" {
+		updatedBy := input.AdminID
+		patch.UpdatedBy = &updatedBy
+	}
+
+	_, err = u.brandRepo.Update(
+		ctx,
+		input.BrandID,
+		patch,
+	)
+	if err != nil {
+		if errors.Is(err, branddom.ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	return nil
+}
+
 func (u *BrandUsecase) Delete(
 	ctx context.Context,
 	id string,

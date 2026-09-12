@@ -25,7 +25,14 @@ type Deps struct {
 	// - public: GET /mall/catalog/product-blueprints/{pbId}/reviews
 	// - me:     GET/POST /mall/me/catalog/product-blueprints/{pbId}/reviews
 	ProductBlueprintReview http.Handler
-	Brand                  http.Handler
+
+	// Brand routes
+	// - public: GET /mall/brands/{brandId}
+	Brand http.Handler
+
+	// Brand report routes
+	// - report: POST /mall/me/brands/{brandId}/reports
+	BrandReport http.Handler
 
 	SignIn http.Handler
 
@@ -129,17 +136,31 @@ type Deps struct {
 
 // handleSafe registers pattern with h.
 // If h is nil, it logs and registers NotFoundHandler instead (so Cloud Run won't crash).
-func handleSafe(mux *http.ServeMux, pattern string, h http.Handler, name string) {
+func handleSafe(
+	mux *http.ServeMux,
+	pattern string,
+	h http.Handler,
+	name string,
+) {
 	if h == nil {
-		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
+		log.Printf(
+			"[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)",
+			name,
+			pattern,
+		)
 		h = http.NotFoundHandler()
 	}
 
 	mux.Handle(pattern, h)
 }
 
-func mallRouterUnavailableHandler(errorCode string) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func mallRouterUnavailableHandler(
+	errorCode string,
+) http.Handler {
+	return http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(`{"error":"` + errorCode + `"}`))
@@ -156,13 +177,28 @@ func handleSafeAuth(
 	auth func(http.Handler) http.Handler,
 ) {
 	if h == nil {
-		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
+		log.Printf(
+			"[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)",
+			name,
+			pattern,
+		)
 		h = http.NotFoundHandler()
 	}
 
 	if auth == nil {
-		log.Printf("[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)", name, pattern)
-		handleSafe(mux, pattern, mallRouterUnavailableHandler("auth_middleware_not_configured"), name)
+		log.Printf(
+			"[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)",
+			name,
+			pattern,
+		)
+		handleSafe(
+			mux,
+			pattern,
+			mallRouterUnavailableHandler(
+				"auth_middleware_not_configured",
+			),
+			name,
+		)
 		return
 	}
 
@@ -184,38 +220,83 @@ func handleSafeAuthAvatar(
 	avatar func(http.Handler) http.Handler,
 ) {
 	if h == nil {
-		log.Printf("[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)", name, pattern)
+		log.Printf(
+			"[mall.router] WARN: nil handler: %s pattern=%s (registering NotFoundHandler)",
+			name,
+			pattern,
+		)
 		h = http.NotFoundHandler()
 	}
 
 	if auth == nil {
-		log.Printf("[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)", name, pattern)
-		handleSafe(mux, pattern, mallRouterUnavailableHandler("auth_middleware_not_configured"), name)
+		log.Printf(
+			"[mall.router] ERROR: nil auth middleware: %s pattern=%s (failing closed)",
+			name,
+			pattern,
+		)
+		handleSafe(
+			mux,
+			pattern,
+			mallRouterUnavailableHandler(
+				"auth_middleware_not_configured",
+			),
+			name,
+		)
 		return
 	}
 
 	if avatar == nil {
-		log.Printf("[mall.router] ERROR: nil avatar context middleware: %s pattern=%s (failing closed)", name, pattern)
-		handleSafe(mux, pattern, mallRouterUnavailableHandler("avatar_context_middleware_not_configured"), name)
+		log.Printf(
+			"[mall.router] ERROR: nil avatar context middleware: %s pattern=%s (failing closed)",
+			name,
+			pattern,
+		)
+		handleSafe(
+			mux,
+			pattern,
+			mallRouterUnavailableHandler(
+				"avatar_context_middleware_not_configured",
+			),
+			name,
+		)
 		return
 	}
 
-	handleSafe(mux, pattern, auth(avatar(h)), name)
+	handleSafe(
+		mux,
+		pattern,
+		auth(avatar(h)),
+		name,
+	)
 }
 
 // avatarPublicHandler keeps public avatar reads available while requiring
 // user authentication for avatar creation.
 // If auth middleware is unavailable, avatar creation fails closed.
-func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) http.Handler {
+func avatarPublicHandler(
+	h http.Handler,
+	auth func(http.Handler) http.Handler,
+) http.Handler {
 	if h == nil {
 		return nil
 	}
 
 	if auth == nil {
-		log.Printf("[mall.router] ERROR: nil auth middleware: Avatar(create) (failing closed for POST)")
-		unavailable := mallRouterUnavailableHandler("auth_middleware_not_configured")
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.Method == http.MethodPost && (r.URL.Path == "/mall/avatars" || r.URL.Path == "/mall/avatars/") {
+		log.Printf(
+			"[mall.router] ERROR: nil auth middleware: Avatar(create) (failing closed for POST)",
+		)
+
+		unavailable := mallRouterUnavailableHandler(
+			"auth_middleware_not_configured",
+		)
+
+		return http.HandlerFunc(func(
+			w http.ResponseWriter,
+			r *http.Request,
+		) {
+			if r.Method == http.MethodPost &&
+				(r.URL.Path == "/mall/avatars" ||
+					r.URL.Path == "/mall/avatars/") {
 				unavailable.ServeHTTP(w, r)
 				return
 			}
@@ -225,8 +306,14 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 	}
 
 	authed := auth(h)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && (r.URL.Path == "/mall/avatars" || r.URL.Path == "/mall/avatars/") {
+
+	return http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if r.Method == http.MethodPost &&
+			(r.URL.Path == "/mall/avatars" ||
+				r.URL.Path == "/mall/avatars/") {
 			authed.ServeHTTP(w, r)
 			return
 		}
@@ -239,13 +326,19 @@ func avatarPublicHandler(h http.Handler, auth func(http.Handler) http.Handler) h
 //
 // Payment creation is performed only from the Console dispatch flow.
 // Mall clients must never be able to create or confirm a Stripe payment.
-func paymentReadOnlyHandler(h http.Handler) http.Handler {
+func paymentReadOnlyHandler(
+	h http.Handler,
+) http.Handler {
 	if h == nil {
 		return nil
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet || r.Method == http.MethodOptions {
+	return http.HandlerFunc(func(
+		w http.ResponseWriter,
+		r *http.Request,
+	) {
+		if r.Method == http.MethodGet ||
+			r.Method == http.MethodOptions {
 			h.ServeHTTP(w, r)
 			return
 		}
@@ -253,7 +346,9 @@ func paymentReadOnlyHandler(h http.Handler) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Allow", "GET, OPTIONS")
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		_, _ = w.Write([]byte(`{"error":"payment_creation_disabled"}`))
+		_, _ = w.Write(
+			[]byte(`{"error":"payment_creation_disabled"}`),
+		)
 	})
 }
 
@@ -279,67 +374,207 @@ func Register(
 	// ------------------------------------------------------------
 
 	// lists (public)
-	handleSafe(mux, "/mall/lists", deps.List, "List")
-	handleSafe(mux, "/mall/lists/", deps.List, "List")
+	handleSafe(
+		mux,
+		"/mall/lists",
+		deps.List,
+		"List",
+	)
+	handleSafe(
+		mux,
+		"/mall/lists/",
+		deps.List,
+		"List",
+	)
 
 	// catalog (public)
-	handleSafe(mux, "/mall/catalog", deps.Catalog, "Catalog")
-	handleSafe(mux, "/mall/catalog/", deps.Catalog, "Catalog")
+	handleSafe(
+		mux,
+		"/mall/catalog",
+		deps.Catalog,
+		"Catalog",
+	)
+	handleSafe(
+		mux,
+		"/mall/catalog/",
+		deps.Catalog,
+		"Catalog",
+	)
 
 	// productBlueprint reviews (public catalog)
-	handleSafe(mux, "/mall/catalog/product-blueprints", deps.ProductBlueprintReview, "ProductBlueprintReview(catalog)")
-	handleSafe(mux, "/mall/catalog/product-blueprints/", deps.ProductBlueprintReview, "ProductBlueprintReview(catalog)")
+	handleSafe(
+		mux,
+		"/mall/catalog/product-blueprints",
+		deps.ProductBlueprintReview,
+		"ProductBlueprintReview(catalog)",
+	)
+	handleSafe(
+		mux,
+		"/mall/catalog/product-blueprints/",
+		deps.ProductBlueprintReview,
+		"ProductBlueprintReview(catalog)",
+	)
 
 	// token blueprints (public)
-	handleSafe(mux, "/mall/token-blueprints", deps.TokenBlueprint, "TokenBlueprint")
-	handleSafe(mux, "/mall/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint")
+	handleSafe(
+		mux,
+		"/mall/token-blueprints",
+		deps.TokenBlueprint,
+		"TokenBlueprint",
+	)
+	handleSafe(
+		mux,
+		"/mall/token-blueprints/",
+		deps.TokenBlueprint,
+		"TokenBlueprint",
+	)
 
-	handleSafe(mux, "/mall/brands", deps.Brand, "Brand")
-	handleSafe(mux, "/mall/brands/", deps.Brand, "Brand")
+	// brands (public)
+	handleSafe(
+		mux,
+		"/mall/brands",
+		deps.Brand,
+		"Brand",
+	)
+	handleSafe(
+		mux,
+		"/mall/brands/",
+		deps.Brand,
+		"Brand",
+	)
 
 	// sign-in (public)
-	handleSafe(mux, "/mall/sign-in", deps.SignIn, "SignIn")
-	handleSafe(mux, "/mall/sign-in/", deps.SignIn, "SignIn")
+	handleSafe(
+		mux,
+		"/mall/sign-in",
+		deps.SignIn,
+		"SignIn",
+	)
+	handleSafe(
+		mux,
+		"/mall/sign-in/",
+		deps.SignIn,
+		"SignIn",
+	)
 
 	// stripe config (public publishable key)
-	handleSafe(mux, "/mall/config/stripe", deps.PaymentMethod, "PaymentMethod(stripe.config)")
-	handleSafe(mux, "/mall/config/stripe/", deps.PaymentMethod, "PaymentMethod(stripe.config)")
+	handleSafe(
+		mux,
+		"/mall/config/stripe",
+		deps.PaymentMethod,
+		"PaymentMethod(stripe.config)",
+	)
+	handleSafe(
+		mux,
+		"/mall/config/stripe/",
+		deps.PaymentMethod,
+		"PaymentMethod(stripe.config)",
+	)
 
 	// avatars
 	// - POST /mall/avatars: auth required
 	// - GET  /mall/avatars/{id}: public
-	avatarHandler := avatarPublicHandler(deps.Avatar, auth)
-	handleSafe(mux, "/mall/avatars", avatarHandler, "Avatar")
-	handleSafe(mux, "/mall/avatars/", avatarHandler, "Avatar")
+	avatarHandler := avatarPublicHandler(
+		deps.Avatar,
+		auth,
+	)
+	handleSafe(
+		mux,
+		"/mall/avatars",
+		avatarHandler,
+		"Avatar",
+	)
+	handleSafe(
+		mux,
+		"/mall/avatars/",
+		avatarHandler,
+		"Avatar",
+	)
 
 	// avatar reviews (public)
 	// - GET /mall/avatar-reviews/{avatarId}
-	handleSafe(mux, "/mall/avatar-reviews", deps.AvatarReview, "AvatarReview(public)")
-	handleSafe(mux, "/mall/avatar-reviews/", deps.AvatarReview, "AvatarReview(public)")
+	handleSafe(
+		mux,
+		"/mall/avatar-reviews",
+		deps.AvatarReview,
+		"AvatarReview(public)",
+	)
+	handleSafe(
+		mux,
+		"/mall/avatar-reviews/",
+		deps.AvatarReview,
+		"AvatarReview(public)",
+	)
 
 	// preview (public)
-	handleSafe(mux, "/mall/preview", deps.Preview, "Preview")
-	handleSafe(mux, "/mall/preview/", deps.Preview, "Preview")
+	handleSafe(
+		mux,
+		"/mall/preview",
+		deps.Preview,
+		"Preview",
+	)
+	handleSafe(
+		mux,
+		"/mall/preview/",
+		deps.Preview,
+		"Preview",
+	)
 
 	// resales by public avatar
-	handleSafe(mux, "/mall/resales", deps.Resale, "Resale(public)")
-	handleSafe(mux, "/mall/resales/", deps.Resale, "Resale(public)")
+	handleSafe(
+		mux,
+		"/mall/resales",
+		deps.Resale,
+		"Resale(public)",
+	)
+	handleSafe(
+		mux,
+		"/mall/resales/",
+		deps.Resale,
+		"Resale(public)",
+	)
 
 	// ------------------------------------------------------------
 	// Auth-required routes outside /mall/me
 	// ------------------------------------------------------------
 
 	// auth email verification - auth only
-	handleSafeAuth(mux, "/auth/email-verification/send", deps.Auth, "Auth(emailVerification)", auth)
-	handleSafeAuth(mux, "/auth/email-verification/send/", deps.Auth, "Auth(emailVerification)", auth)
+	handleSafeAuth(
+		mux,
+		"/auth/email-verification/send",
+		deps.Auth,
+		"Auth(emailVerification)",
+		auth,
+	)
+	handleSafeAuth(
+		mux,
+		"/auth/email-verification/send/",
+		deps.Auth,
+		"Auth(emailVerification)",
+		auth,
+	)
 
 	// ------------------------------------------------------------
 	// Auth+Avatar-required routes outside /mall/me
 	// ------------------------------------------------------------
 
 	// market resales
-	handleSafeAuthAvatar(mux, "/mall/market/resales", deps.Market, "Market", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/market/resales/", deps.Market, "Market", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/market/resales",
+		deps.Market,
+		"Market",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/market/resales/",
+		deps.Market,
+		"Market",
+		auth,
+		avatar,
+	)
 
 	// ------------------------------------------------------------
 	// Auth-required routes (/mall/me/**)
@@ -347,24 +582,84 @@ func Register(
 	// ------------------------------------------------------------
 
 	// setup status (me) - auth only
-	handleSafeAuth(mux, "/mall/me/setup-status", deps.SetupStatus, "SetupStatus(me)", auth)
-	handleSafeAuth(mux, "/mall/me/setup-status/", deps.SetupStatus, "SetupStatus(me)", auth)
+	handleSafeAuth(
+		mux,
+		"/mall/me/setup-status",
+		deps.SetupStatus,
+		"SetupStatus(me)",
+		auth,
+	)
+	handleSafeAuth(
+		mux,
+		"/mall/me/setup-status/",
+		deps.SetupStatus,
+		"SetupStatus(me)",
+		auth,
+	)
 
 	// users (me) - auth only
-	handleSafeAuth(mux, "/mall/me/users", deps.User, "User(me)", auth)
-	handleSafeAuth(mux, "/mall/me/users/", deps.User, "User(me)", auth)
+	handleSafeAuth(
+		mux,
+		"/mall/me/users",
+		deps.User,
+		"User(me)",
+		auth,
+	)
+	handleSafeAuth(
+		mux,
+		"/mall/me/users/",
+		deps.User,
+		"User(me)",
+		auth,
+	)
 
 	// shipping addresses (me) - auth only
-	handleSafeAuth(mux, "/mall/me/shipping-addresses", deps.ShippingAddress, "ShippingAddress(me)", auth)
-	handleSafeAuth(mux, "/mall/me/shipping-addresses/", deps.ShippingAddress, "ShippingAddress(me)", auth)
+	handleSafeAuth(
+		mux,
+		"/mall/me/shipping-addresses",
+		deps.ShippingAddress,
+		"ShippingAddress(me)",
+		auth,
+	)
+	handleSafeAuth(
+		mux,
+		"/mall/me/shipping-addresses/",
+		deps.ShippingAddress,
+		"ShippingAddress(me)",
+		auth,
+	)
 
 	// payment methods (me) - auth only
-	handleSafeAuth(mux, "/mall/me/payment-methods", deps.PaymentMethod, "PaymentMethod(me)", auth)
-	handleSafeAuth(mux, "/mall/me/payment-methods/", deps.PaymentMethod, "PaymentMethod(me)", auth)
+	handleSafeAuth(
+		mux,
+		"/mall/me/payment-methods",
+		deps.PaymentMethod,
+		"PaymentMethod(me)",
+		auth,
+	)
+	handleSafeAuth(
+		mux,
+		"/mall/me/payment-methods/",
+		deps.PaymentMethod,
+		"PaymentMethod(me)",
+		auth,
+	)
 
 	// payout account (me) - auth only
-	handleSafeAuth(mux, "/mall/me/payout-account", deps.PayoutAccount, "PayoutAccount(me)", auth)
-	handleSafeAuth(mux, "/mall/me/payout-account/", deps.PayoutAccount, "PayoutAccount(me)", auth)
+	handleSafeAuth(
+		mux,
+		"/mall/me/payout-account",
+		deps.PayoutAccount,
+		"PayoutAccount(me)",
+		auth,
+	)
+	handleSafeAuth(
+		mux,
+		"/mall/me/payout-account/",
+		deps.PayoutAccount,
+		"PayoutAccount(me)",
+		auth,
+	)
 
 	// ------------------------------------------------------------
 	// Auth+Avatar-required routes (/mall/me/**)
@@ -372,12 +667,59 @@ func Register(
 
 	// list reports (me)
 	// POST /mall/me/lists/{listId}/reports
-	handleSafeAuthAvatar(mux, "/mall/me/lists", deps.ListReport, "ListReport(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/lists/", deps.ListReport, "ListReport(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/lists",
+		deps.ListReport,
+		"ListReport(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/lists/",
+		deps.ListReport,
+		"ListReport(me)",
+		auth,
+		avatar,
+	)
+
+	// brand reports (me)
+	// POST /mall/me/brands/{brandId}/reports
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/brands",
+		deps.BrandReport,
+		"BrandReport(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/brands/",
+		deps.BrandReport,
+		"BrandReport(me)",
+		auth,
+		avatar,
+	)
 
 	// catalog (me)
-	handleSafeAuthAvatar(mux, "/mall/me/catalog", deps.Catalog, "Catalog(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/catalog/", deps.Catalog, "Catalog(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/catalog",
+		deps.Catalog,
+		"Catalog(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/catalog/",
+		deps.Catalog,
+		"Catalog(me)",
+		auth,
+		avatar,
+	)
 
 	// productBlueprint reviews (me catalog)
 	handleSafeAuthAvatar(
@@ -399,40 +741,166 @@ func Register(
 
 	// token blueprints (me)
 	// Includes POST /mall/me/token-blueprints/{tokenBlueprintId}/reports.
-	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/token-blueprints/", deps.TokenBlueprint, "TokenBlueprint(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/token-blueprints",
+		deps.TokenBlueprint,
+		"TokenBlueprint(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/token-blueprints/",
+		deps.TokenBlueprint,
+		"TokenBlueprint(me)",
+		auth,
+		avatar,
+	)
 
 	// me avatar
-	handleSafeAuthAvatar(mux, "/mall/me/avatars", deps.MeAvatar, "MeAvatar", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/avatars/", deps.MeAvatar, "MeAvatar", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/avatars",
+		deps.MeAvatar,
+		"MeAvatar",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/avatars/",
+		deps.MeAvatar,
+		"MeAvatar",
+		auth,
+		avatar,
+	)
 
 	// wallet (me)
-	handleSafeAuthAvatar(mux, "/mall/me/wallets", deps.MeWallet, "MeWallet(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/wallets/", deps.MeWallet, "MeWallet(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/wallets",
+		deps.MeWallet,
+		"MeWallet(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/wallets/",
+		deps.MeWallet,
+		"MeWallet(me)",
+		auth,
+		avatar,
+	)
 
 	// likes (me)
-	handleSafeAuthAvatar(mux, "/mall/me/likes", deps.Like, "Like(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/likes/", deps.Like, "Like(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/likes",
+		deps.Like,
+		"Like(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/likes/",
+		deps.Like,
+		"Like(me)",
+		auth,
+		avatar,
+	)
 
 	// cart (me)
-	handleSafeAuthAvatar(mux, "/mall/me/cart", deps.Cart, "Cart(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/cart/", deps.Cart, "Cart(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/cart",
+		deps.Cart,
+		"Cart(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/cart/",
+		deps.Cart,
+		"Cart(me)",
+		auth,
+		avatar,
+	)
 
 	// preview (me)
-	handleSafeAuthAvatar(mux, "/mall/me/preview", deps.PreviewMe, "Preview(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/preview/", deps.PreviewMe, "Preview(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/preview",
+		deps.PreviewMe,
+		"Preview(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/preview/",
+		deps.PreviewMe,
+		"Preview(me)",
+		auth,
+		avatar,
+	)
 
 	// order scan transfer (me)
-	handleSafeAuthAvatar(mux, "/mall/me/orders/scan/transfer", deps.OrderScanTransfer, "OrderScanTransfer(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/orders/scan/transfer/", deps.OrderScanTransfer, "OrderScanTransfer(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/orders/scan/transfer",
+		deps.OrderScanTransfer,
+		"OrderScanTransfer(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/orders/scan/transfer/",
+		deps.OrderScanTransfer,
+		"OrderScanTransfer(me)",
+		auth,
+		avatar,
+	)
 
 	// announcements (me)
-	handleSafeAuthAvatar(mux, "/mall/me/announcement", deps.Announcement, "Announcement(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/announcement/", deps.Announcement, "Announcement(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/announcement",
+		deps.Announcement,
+		"Announcement(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/announcement/",
+		deps.Announcement,
+		"Announcement(me)",
+		auth,
+		avatar,
+	)
 
 	// system news (me)
-	handleSafeAuthAvatar(mux, "/mall/me/news", deps.News, "News(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/news/", deps.News, "News(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/news",
+		deps.News,
+		"News(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/news/",
+		deps.News,
+		"News(me)",
+		auth,
+		avatar,
+	)
 
 	// report decision notifications (me)
 	handleSafeAuthAvatar(
@@ -453,32 +921,130 @@ func Register(
 	)
 
 	// shipping quote (me)
-	handleSafeAuthAvatar(mux, "/mall/me/shipping-quotes", deps.ShippingQuote, "ShippingQuote(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/shipping-quotes/", deps.ShippingQuote, "ShippingQuote(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/shipping-quotes",
+		deps.ShippingQuote,
+		"ShippingQuote(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/shipping-quotes/",
+		deps.ShippingQuote,
+		"ShippingQuote(me)",
+		auth,
+		avatar,
+	)
 
 	// payment context (me) - GET only
 	paymentHandler := paymentReadOnlyHandler(deps.Payment)
-	handleSafeAuthAvatar(mux, "/mall/me/payments", paymentHandler, "Payment(me.readOnly)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/payments/", paymentHandler, "Payment(me.readOnly)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/payments",
+		paymentHandler,
+		"Payment(me.readOnly)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/payments/",
+		paymentHandler,
+		"Payment(me.readOnly)",
+		auth,
+		avatar,
+	)
 
 	// orders (me)
-	handleSafeAuthAvatar(mux, "/mall/me/orders", deps.Order, "Order(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/orders/", deps.Order, "Order(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/orders",
+		deps.Order,
+		"Order(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/orders/",
+		deps.Order,
+		"Order(me)",
+		auth,
+		avatar,
+	)
 
 	// trades (me)
-	handleSafeAuthAvatar(mux, "/mall/me/trades", deps.Trade, "Trade(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/trades/", deps.Trade, "Trade(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/trades",
+		deps.Trade,
+		"Trade(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/trades/",
+		deps.Trade,
+		"Trade(me)",
+		auth,
+		avatar,
+	)
 
 	// avatar reviews (me)
 	// - POST /mall/me/avatar-reviews
-	handleSafeAuthAvatar(mux, "/mall/me/avatar-reviews", deps.AvatarReview, "AvatarReview(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/avatar-reviews/", deps.AvatarReview, "AvatarReview(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/avatar-reviews",
+		deps.AvatarReview,
+		"AvatarReview(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/avatar-reviews/",
+		deps.AvatarReview,
+		"AvatarReview(me)",
+		auth,
+		avatar,
+	)
 
 	// resales (me)
-	handleSafeAuthAvatar(mux, "/mall/me/resales", deps.Resale, "Resale(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/resales/", deps.Resale, "Resale(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/resales",
+		deps.Resale,
+		"Resale(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/resales/",
+		deps.Resale,
+		"Resale(me)",
+		auth,
+		avatar,
+	)
 
 	// inquiries (me)
-	handleSafeAuthAvatar(mux, "/mall/me/inquiries", deps.Inquiry, "Resale(me)", auth, avatar)
-	handleSafeAuthAvatar(mux, "/mall/me/inquiries/", deps.Inquiry, "Resale(me)", auth, avatar)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/inquiries",
+		deps.Inquiry,
+		"Resale(me)",
+		auth,
+		avatar,
+	)
+	handleSafeAuthAvatar(
+		mux,
+		"/mall/me/inquiries/",
+		deps.Inquiry,
+		"Resale(me)",
+		auth,
+		avatar,
+	)
 }

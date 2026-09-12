@@ -99,7 +99,7 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
-	// REMOVED 済みの LIST / TOKEN_BLUEPRINT / AVATAR / RESALE / ANNOUNCEMENT 裁定は、
+	// REMOVED 済みの LIST / TOKEN_BLUEPRINT / AVATAR / BRAND / RESALE / ANNOUNCEMENT 裁定は、
 	// 対象側の措置だけを再実行できるようにする。各 moderator は冪等に実装する。
 	if reportCase.IsRemoved() {
 		switch reportCase.TargetType {
@@ -125,6 +125,16 @@ func (u *ReportUsecase) removeReportCase(
 
 		case reportdom.TargetTypeAvatar:
 			if err := u.suspendAvatarResaleTarget(
+				ctx,
+				reportCase,
+				input.Reason,
+				input.DecidedBy,
+			); err != nil {
+				return reportdom.ReportCase{}, err
+			}
+
+		case reportdom.TargetTypeBrand:
+			if err := u.deactivateBrandTarget(
 				ctx,
 				reportCase,
 				input.Reason,
@@ -160,7 +170,8 @@ func (u *ReportUsecase) removeReportCase(
 	// IMPORTANT:
 	// REMOVE の対象側処理を先に完了する。
 	// 商品レビュー/コメント/ANNOUNCEMENT は削除、LIST / RESALE は Mall 上で出品停止、
-	// TOKEN_BLUEPRINT は AMOL UI 上で非表示、AVATAR は再販サービスのみ利用停止とする。
+	// TOKEN_BLUEPRINT / BRAND は AMOL UI 上で非表示、
+	// AVATAR は再販サービスのみ利用停止とする。
 	// 対象側処理に失敗した場合、ReportCase を REMOVED にしてはいけない。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview:
@@ -211,6 +222,16 @@ func (u *ReportUsecase) removeReportCase(
 			return reportdom.ReportCase{}, err
 		}
 
+	case reportdom.TargetTypeBrand:
+		if err := u.deactivateBrandTarget(
+			ctx,
+			reportCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
 	case reportdom.TargetTypeResale:
 		if err := u.suspendResaleTarget(
 			ctx,
@@ -252,8 +273,8 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
-	// LIST / AVATAR / RESALE は REMOVED を永続化した後でもう一度対象側の措置を実行する。
-	// 1 回目の措置と REMOVED 永続化の間に対象が再公開される競合を閉じるための後処理。
+	// LIST / AVATAR / BRAND / RESALE は REMOVED を永続化した後でもう一度対象側の措置を実行する。
+	// 1 回目の措置と REMOVED 永続化の間に対象が再公開・再有効化される競合を閉じるための後処理。
 	// ANNOUNCEMENT は物理削除するため、この後処理は不要。
 	// 失敗した場合は次回の同じ REMOVE 裁定で REMOVED 済み分岐から再試行できる。
 	switch updatedCase.TargetType {
@@ -269,6 +290,16 @@ func (u *ReportUsecase) removeReportCase(
 
 	case reportdom.TargetTypeAvatar:
 		if err := u.suspendAvatarResaleTarget(
+			ctx,
+			updatedCase,
+			input.Reason,
+			input.DecidedBy,
+		); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
+	case reportdom.TargetTypeBrand:
+		if err := u.deactivateBrandTarget(
 			ctx,
 			updatedCase,
 			input.Reason,

@@ -8,6 +8,7 @@ import (
 	applicationport "narratives/internal/application/port"
 	announcementdom "narratives/internal/domain/announcement"
 	avatar "narratives/internal/domain/avatar"
+	branddom "narratives/internal/domain/brand"
 	listdom "narratives/internal/domain/list"
 	pbr "narratives/internal/domain/productBlueprintReview"
 	reportdom "narratives/internal/domain/report"
@@ -46,6 +47,9 @@ type ReportUsecase struct {
 	avatarRepo            avatar.Repository
 	avatarResaleModerator ReportAvatarResaleModerator
 
+	brandRepo      branddom.Repository
+	brandModerator ReportBrandModerator
+
 	resaleRepo      resaledom.Repository
 	resaleModerator ReportResaleModerator
 
@@ -79,6 +83,9 @@ type ReportUsecaseDeps struct {
 
 	AvatarRepo            avatar.Repository
 	AvatarResaleModerator ReportAvatarResaleModerator
+
+	BrandRepo      branddom.Repository
+	BrandModerator ReportBrandModerator
 
 	ResaleRepo      resaledom.Repository
 	ResaleModerator ReportResaleModerator
@@ -115,6 +122,8 @@ func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 		tokenCommentModerator:    deps.TokenCommentModerator,
 		avatarRepo:               deps.AvatarRepo,
 		avatarResaleModerator:    deps.AvatarResaleModerator,
+		brandRepo:                deps.BrandRepo,
+		brandModerator:           deps.BrandModerator,
 		resaleRepo:               deps.ResaleRepo,
 		resaleModerator:          deps.ResaleModerator,
 		tradeRepo:                deps.TradeRepo,

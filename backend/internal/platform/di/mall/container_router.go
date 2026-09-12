@@ -43,6 +43,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var catalogH http.Handler
 	var pbReviewH http.Handler
 	var brandH http.Handler
+	var brandReportH http.Handler
 	var authH http.Handler
 	var userH http.Handler
 	var shipH http.Handler
@@ -112,9 +113,15 @@ func Register(mux *http.ServeMux, cont *Container) {
 		)
 	}
 
-	// Brand
+	// Brand (public)
 	if cont.BrandQ != nil {
 		brandH = mallhandler.NewMallBrandHandler(cont.BrandQ)
+	}
+
+	// Brand report
+	// POST /mall/me/brands/{brandId}/reports
+	if cont.ReportUC != nil {
+		brandReportH = mallhandler.NewBrandReportHandler(cont.ReportUC)
 	}
 
 	// Avatar
@@ -350,6 +357,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		TokenBlueprint:         tbH,
 		ProductBlueprintReview: pbReviewH,
 		Brand:                  brandH,
+		BrandReport:            brandReportH,
 		SignIn:                 signInH,
 		Auth:                   authH,
 

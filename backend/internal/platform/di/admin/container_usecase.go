@@ -46,6 +46,9 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 	if r.tokenBlueprintReviewRepo == nil {
 		return nil, errors.New("di.admin: token blueprint review repository is nil")
 	}
+	if r.brandRepo == nil {
+		return nil, errors.New("di.admin: brand repository is nil")
+	}
 	if r.resaleRepo == nil {
 		return nil, errors.New("di.admin: resale repository is nil")
 	}
@@ -158,6 +161,19 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 		return closeStorages(errors.New("di.admin: list usecase is nil"))
 	}
 
+	// Admin側のBrandUsecaseは通報裁定によるBrand無効化専用。
+	// Brand本体は物理削除せず、DeactivateBrandByAdminによって
+	// isActive=falseへ変更する。通常の作成・更新処理は行わないため、
+	// memberRepo / accountRepo / walletSvc は不要。
+	brandUsecase := usecase.NewBrandUsecase(
+		r.brandRepo,
+		nil,
+		nil,
+	)
+	if brandUsecase == nil {
+		return closeStorages(errors.New("di.admin: brand usecase is nil"))
+	}
+
 	// Admin側のResaleUsecaseはアバター通報および個別Resale通報の裁定専用。
 	// 出品作成・画像操作は行わないため、imageRepo / imageStorage /
 	// product identity repositories は不要。
@@ -201,6 +217,9 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 
 			AvatarRepo:            r.avatarRepo,
 			AvatarResaleModerator: resaleUsecase,
+
+			BrandRepo:      r.brandRepo,
+			BrandModerator: brandUsecase,
 
 			ResaleRepo:      r.resaleRepo,
 			ResaleModerator: resaleUsecase,

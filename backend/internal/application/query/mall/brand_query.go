@@ -62,6 +62,10 @@ func (q *BrandQuery) GetBrandDetailByID(
 		return BrandDetailDTO{}, err
 	}
 
+	if !b.IsActive {
+		return BrandDetailDTO{}, brand.ErrNotFound
+	}
+
 	companyName := ""
 	if q.companyRepo != nil && b.CompanyID != "" {
 		companyEntity, err := q.companyRepo.GetByID(ctx, b.CompanyID)

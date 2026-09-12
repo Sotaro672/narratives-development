@@ -281,6 +281,7 @@ func buildMallUsecases(
 			TokenAccessResolver:      walletUC,
 			TokenCommentModerator:    tokenBlueprintReviewUC,
 			AvatarRepo:               r.avatarRepo,
+			BrandRepo:                r.brandRepo,
 			ResaleRepo:               r.resaleRepo,
 			TradeRepo:                r.tradeRepo,
 			TradeMessageRepo:         r.tradeMessageRepo,
