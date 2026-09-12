@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementDetail } from "../features/announcement/hooks/useAnnouncementDetail";
@@ -349,13 +350,15 @@ export default function AnnouncementDetailPage() {
                   </time>
                 </div>
 
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
+                  size="sm"
                   className="announcement-page__report-button"
                   onClick={handleOpenAnnouncementReport}
                 >
                   通報する
-                </button>
+                </Button>
               </div>
 
               <div className="announcement-page__detail-content">

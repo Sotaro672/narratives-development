@@ -110,6 +110,23 @@
   font-size: 12px;
 }
 
+.announcement-page__report-button {
+  flex: 0 0 auto;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.announcement-page__report-button:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.announcement-page__report-button:focus-visible {
+  outline: 3px solid rgba(185, 28, 28, 0.18);
+  outline-offset: 2px;
+}
+
 .announcement-page__unread-badge,
 .announcement-page__read-badge {
   display: inline-flex;
