@@ -34,6 +34,11 @@ export default function ContractDetailPage() {
     navigate(`/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(brandId)}`);
   };
 
+  const handleAnnouncementClick = (announcementId: string) => {
+    if (!companyId || !announcementId) return;
+    navigate(`/contracts/${encodeURIComponent(companyId)}/announcements/${encodeURIComponent(announcementId)}`);
+  };
+
   const handleListClick = (listId: string) => {
     if (!companyId || !listId) return;
     navigate(`/contracts/${encodeURIComponent(companyId)}/lists/${encodeURIComponent(listId)}`);
@@ -166,7 +171,12 @@ export default function ContractDetailPage() {
             role="tabpanel"
             aria-labelledby="contract-detail-tab-announcements"
           >
-            <ContractAnnouncementTable announcements={detail.announcements} />
+            <ContractAnnouncementTable
+              announcements={detail.announcements}
+              onAnnouncementClick={(announcement) =>
+                handleAnnouncementClick(announcement.id)
+              }
+            />
           </div>
         )}
 

@@ -10,6 +10,7 @@ import { formatDateTime } from "../../../../shared/util/dateFormat";
 
 type ContractAnnouncementTableProps = {
   announcements: ContractAnnouncementRow[];
+  onAnnouncementClick?: (announcement: ContractAnnouncementRow) => void;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -17,15 +18,16 @@ const STATUS_LABELS: Record<string, string> = {
   draft: "下書き",
 };
 
-const STATUS_OPTIONS: TableFilterOption[] = Object.entries(
-  STATUS_LABELS,
-).map(([value, label]) => ({
-  value,
-  label,
-}));
+const STATUS_OPTIONS: TableFilterOption[] = Object.entries(STATUS_LABELS).map(
+  ([value, label]) => ({
+    value,
+    label,
+  }),
+);
 
 export default function ContractAnnouncementTable({
   announcements,
+  onAnnouncementClick,
 }: ContractAnnouncementTableProps) {
   const columns = useMemo<TableColumn<ContractAnnouncementRow>[]>(
     () => [
@@ -100,6 +102,7 @@ export default function ContractAnnouncementTable({
       columns={columns}
       rows={announcements}
       getRowKey={(announcement) => announcement.id}
+      onRowClick={onAnnouncementClick}
       emptyMessage="告知はありません。"
       filteredEmptyMessage="条件に一致する告知はありません。"
     />
