@@ -102,46 +102,13 @@ export const APPAREL_CATEGORY_FIELD_KEYS: Record<
   ApparelCategoryCode,
   ApparelCategoryFieldKey[]
 > = {
-  "apparel.tops": [
-    "weight",
-    "fit",
-    "material",
-    "washTags",
-  ],
-
-  "apparel.bottoms": [
-    "weight",
-    "fit",
-    "material",
-    "washTags",
-  ],
-
-  "apparel.outerwear": [
-    "material",
-    "washTags",
-  ],
-
-  "apparel.dress": [
-    "weight",
-    "fit",
-    "material",
-    "washTags",
-  ],
-
-  "apparel.shoes": [
-    "material",
-    "washTags",
-  ],
-
-  "apparel.bag": [
-    "material",
-    "washTags",
-  ],
-
-  "apparel.accessory": [
-    "material",
-    "washTags",
-  ],
+  "apparel.tops": ["weight", "fit", "material", "washTags"],
+  "apparel.bottoms": ["weight", "fit", "material", "washTags"],
+  "apparel.outerwear": ["material", "washTags"],
+  "apparel.dress": ["weight", "fit", "material", "washTags"],
+  "apparel.shoes": ["material", "washTags"],
+  "apparel.bag": ["material", "washTags"],
+  "apparel.accessory": ["material", "washTags"],
 };
 
 /**
@@ -161,6 +128,17 @@ export function getApparelCategoryFieldKeys(
 // ============================
 // Measurement definitions
 // ============================
+
+/**
+ * Apparelの採寸値で使用する正規単位。
+ *
+ * Console入力、Application、API、Repository、Domainの
+ * measurementsはすべてmm単位の整数値として扱う。
+ */
+export const APPAREL_MEASUREMENT_UNIT = "mm" as const;
+
+export type ApparelMeasurementUnit =
+  typeof APPAREL_MEASUREMENT_UNIT;
 
 export type MeasurementKey =
   // トップス
@@ -229,7 +207,6 @@ export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
     "肩幅",
     "袖丈",
   ],
-
   "apparel.bottoms": [
     "ウエスト",
     "ヒップ",
@@ -238,9 +215,7 @@ export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
     "わたり幅",
     "裾幅",
   ],
-
   "apparel.outerwear": [],
-
   "apparel.dress": [
     "着丈",
     "身幅",
@@ -250,7 +225,6 @@ export const APPAREL_CATEGORY_MEASUREMENT_KEYS: Record<
     "ウエスト",
     "ヒップ",
   ],
-
   "apparel.shoes": [],
   "apparel.bag": [],
   "apparel.accessory": [],
@@ -276,6 +250,11 @@ export const APPAREL_CATEGORY_MEASUREMENT_OPTIONS: Record<
 // Measurements
 // ============================
 
+/**
+ * Apparelの採寸値。
+ *
+ * 各valueはmm単位の値として扱う。
+ */
 export type ApparelMeasurements = Partial<
   Record<MeasurementKey, number | null>
 >;
@@ -293,6 +272,8 @@ export type ApparelMeasurementInput =
  * ModelとProductBlueprintで共通利用する、
  * UI固有IDを持たないサイズ・採寸入力型。
  *
+ * 採寸値はすべてmm単位で扱う。
+ *
  * Model側:
  *
  * type SizeRow = ApparelSizeInput & {
@@ -308,14 +289,14 @@ export type ApparelMeasurementInput =
 export type ApparelSizeInput = {
   sizeLabel: string;
 
-  // トップス
+  // トップス（mm）
   length?: number;
   width?: number;
   chest?: number;
   shoulder?: number;
   sleeveLength?: number;
 
-  // ボトムス
+  // ボトムス（mm）
   waist?: number;
   hip?: number;
   rise?: number;
@@ -368,7 +349,6 @@ export const APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEY: Readonly<
   chest: "胸囲",
   shoulder: "肩幅",
   sleeveLength: "袖丈",
-
   waist: "ウエスト",
   hip: "ヒップ",
   rise: "股上",
@@ -406,6 +386,7 @@ function toMeasurementKeyFromSizeField(
  * field名と日本語採寸キーの対応は
  * APPAREL_SIZE_FIELD_TO_MEASUREMENT_KEYを正とする。
  *
+ * 採寸値の単位はmm。
  * null / undefined / NaN / Infinityは含めない。
  */
 export function mapApparelSizeInputToMeasurements(
@@ -450,6 +431,7 @@ export function mapApparelSizeInputToMeasurements(
  * API・Repositoryのmeasurementsを
  * UI用のApparelSizeInputへ変換する。
  *
+ * - measurementsはmm単位
  * - カテゴリに許可された採寸項目だけを返す
  * - null / undefinedを除外
  * - NaN / Infinity / -Infinityを除外
@@ -502,6 +484,8 @@ export function mapMeasurementsToApparelSizeInput(
 /**
  * 採寸値をAPI・Repositoryで扱える形式へ正規化する。
  *
+ * 採寸値の正規単位はmm。
+ *
  * - null / undefinedを除外
  * - NaN / Infinity / -Infinityを除外
  * - SizeInputの英語field名を日本語の採寸キーへ変換
@@ -533,6 +517,7 @@ export function normalizeApparelMeasurements(
 /**
  * ModelVariationのrequest用に採寸値を正規化する。
  *
+ * measurementsはmm単位。
  * 有効な採寸値がない場合はundefinedを返し、
  * request bodyからmeasurementsを省略可能にする。
  */

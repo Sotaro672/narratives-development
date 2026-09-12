@@ -177,7 +177,7 @@ const SizeVariationCard: React.FC<
 
               {measurementCols.map((col) => (
                 <TableHead key={col.label}>
-                  {col.label}(cm)
+                  {col.label}(mm)
                 </TableHead>
               ))}
 
@@ -214,7 +214,9 @@ const SizeVariationCard: React.FC<
                       <Input
                         {...readonlyInputProps}
                         type="number"
-                        inputMode="decimal"
+                        min={0}
+                        step={1}
+                        inputMode="numeric"
                         value={
                           row[col.field] ?? ""
                         }
@@ -222,7 +224,7 @@ const SizeVariationCard: React.FC<
                           row.id,
                           col.field,
                         )}
-                        aria-label={`${row.sizeLabel} ${col.label}`}
+                        aria-label={`${row.sizeLabel} ${col.label} mm`}
                       />
                     ) : (
                       <span>

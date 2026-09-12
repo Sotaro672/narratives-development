@@ -12,8 +12,13 @@ import type {
  * ProductBlueprintは容量を保持しない。
  * Alcohol商品の容量はModel variationのVolumeだけを正とする。
  * 配送用の梱包情報はModel variationごとのShippingPackageを正とする。
+ *
+ * 配送用梱包寸法について:
+ * - Presentation層ではcm単位で入力・表示する。
+ * - Application層以降ではmm単位の整数値を正規値として扱う。
+ * - ShippingPackageのwidthMm / lengthMm / heightMmは常にmm単位とする。
  */
-
+ 
 /* =========================================================
  * Common
  * =======================================================*/
@@ -25,7 +30,21 @@ export type Volume = {
 
 /**
  * 配送用の梱包後情報。
- * weightGramsは重量(g)、widthMmは横(mm)、lengthMmは縦(mm)、heightMmは高さ(mm)を表す。
+ *
+ * Application層以降で使用する正規形式。
+ *
+ * - weightGrams: 重量(g)
+ * - widthMm: 横(mm)
+ * - lengthMm: 縦(mm)
+ * - heightMm: 高さ(mm)
+ *
+ * Console上では寸法をcm単位で入力・表示するが、
+ * ShippingPackageへ格納する時点ではmm単位の整数へ変換する。
+ *
+ * 例:
+ * - 32.5cm → widthMm: 325
+ * - 24cm   → lengthMm: 240
+ * - 8cm    → heightMm: 80
  */
 export type ShippingPackage = {
   weightGrams: number;
@@ -43,6 +62,8 @@ export type ModelVariationMode = "edit" | "view";
 /**
  * Model variation画面で使用するサイズ・採寸入力行。
  * 共通の入力項目はApparelSizeInputを使用し、UI上の行識別に必要なidだけを追加する。
+ *
+ * ApparelSizeInputの採寸値はmm単位で扱う。
  */
 export type SizeRow = ApparelSizeInput & {
   id: string;
@@ -54,7 +75,8 @@ export type SizeRow = ApparelSizeInput & {
 
 /**
  * Alcohol商品の容量入力行。
- * 容量はProductBlueprintやcategoryFieldsには保存せず、Model variationのvolumeとして保存する。
+ * 容量はProductBlueprintやcategoryFieldsには保存せず、
+ * Model variationのvolumeとして保存する。
  */
 export type VolumeRow = {
   id: string;
@@ -69,6 +91,8 @@ export type VolumeRow = {
 /**
  * Apparel用model number。
  * sizeとcolorの組み合わせごとにmodel numberと配送用梱包情報を持つ。
+ *
+ * shippingPackageの寸法値はmm単位。
  */
 export type ApparelModelNumber = {
   kind?: "apparel";
@@ -82,6 +106,8 @@ export type ApparelModelNumber = {
 /**
  * Alcohol用model number。
  * 容量はvolumeだけを正とし、model numberごとに配送用梱包情報を持つ。
+ *
+ * shippingPackageの寸法値はmm単位。
  */
 export type AlcoholModelNumber = {
   kind: "alcohol";

@@ -33,34 +33,43 @@ type AlcoholShippingPackageCardProps = CommonShippingPackageCardProps & {
   onChangeShippingPackage?: (volumeLabel: string, patch: ShippingPackagePatch) => void;
 };
 
-export type ShippingPackageCardProps = ApparelShippingPackageCardProps | AlcoholShippingPackageCardProps;
+export type ShippingPackageCardProps =
+  | ApparelShippingPackageCardProps
+  | AlcoholShippingPackageCardProps;
 
 type ShippingPackageField = keyof ShippingPackage;
 
-const SHIPPING_PACKAGE_FIELDS: Array<{
+type ShippingPackageFieldDefinition = {
   key: ShippingPackageField;
   label: string;
   ariaLabel: string;
-}> = [
+  unit: "g" | "cm";
+};
+
+const SHIPPING_PACKAGE_FIELDS: ShippingPackageFieldDefinition[] = [
   {
     key: "weightGrams",
     label: "重量(g)",
     ariaLabel: "梱包後重量",
+    unit: "g",
   },
   {
     key: "widthMm",
-    label: "横(mm)",
+    label: "横(cm)",
     ariaLabel: "梱包後横幅",
+    unit: "cm",
   },
   {
     key: "lengthMm",
-    label: "縦(mm)",
+    label: "縦(cm)",
     ariaLabel: "梱包後縦幅",
+    unit: "cm",
   },
   {
     key: "heightMm",
-    label: "高さ(mm)",
+    label: "高さ(cm)",
     ariaLabel: "梱包後高さ",
+    unit: "cm",
   },
 ];
 
@@ -72,7 +81,9 @@ function normalizeNumber(value: unknown): number {
   return value < 0 ? 0 : Math.floor(value);
 }
 
-function normalizeShippingPackage(value: ShippingPackage | null | undefined): ShippingPackage {
+function normalizeShippingPackage(
+  value: ShippingPackage | null | undefined,
+): ShippingPackage {
   return {
     weightGrams: normalizeNumber(value?.weightGrams),
     widthMm: normalizeNumber(value?.widthMm),
@@ -81,21 +92,69 @@ function normalizeShippingPackage(value: ShippingPackage | null | undefined): Sh
   };
 }
 
-function parseInputNumber(value: string): number {
+/**
+ * 内部値をConsole表示用の値へ変換する。
+ *
+ * 重量:
+ *   g → g
+ *
+ * 寸法:
+ *   mm → cm
+ *
+ * 例:
+ *   245mm → 24.5cm
+ *   300mm → 30cm
+ */
+function toDisplayValue(
+  value: number,
+  unit: ShippingPackageFieldDefinition["unit"],
+): number {
+  const normalized = normalizeNumber(value);
+
+  if (unit === "cm") {
+    return normalized / 10;
+  }
+
+  return normalized;
+}
+
+/**
+ * Consoleの入力値を内部保存用の値へ変換する。
+ *
+ * 重量:
+ *   g → g整数
+ *
+ * 寸法:
+ *   cm → mm整数
+ *
+ * 例:
+ *   24.5cm → 245mm
+ *   30cm   → 300mm
+ */
+function parseInputValue(
+  value: string,
+  unit: ShippingPackageFieldDefinition["unit"],
+): number {
   if (value === "") {
     return 0;
   }
 
   const parsed = Number(value);
 
-  if (!Number.isFinite(parsed)) {
+  if (!Number.isFinite(parsed) || parsed < 0) {
     return 0;
   }
 
-  return parsed < 0 ? 0 : Math.floor(parsed);
+  if (unit === "cm") {
+    return Math.round(parsed * 10);
+  }
+
+  return Math.floor(parsed);
 }
 
-function toAlcoholVolumeLabel(modelNumber: AlcoholModelNumber): string {
+function toAlcoholVolumeLabel(
+  modelNumber: AlcoholModelNumber,
+): string {
   const value = normalizeNumber(modelNumber.volume.value);
   const unit = String(modelNumber.volume.unit ?? "").trim() || "ml";
 
@@ -108,28 +167,41 @@ function toAlcoholVolumeLabel(modelNumber: AlcoholModelNumber): string {
 
 function ShippingPackageInput({
   value,
+  field,
   label,
   disabled,
   onChange,
 }: {
   value: number;
+  field: ShippingPackageFieldDefinition;
   label: string;
   disabled: boolean;
   onChange: (value: number) => void;
 }) {
+  const displayValue = toDisplayValue(value, field.unit);
+
   if (disabled) {
-    return <span>{value > 0 ? value : "-"}</span>;
+    return <span>{displayValue > 0 ? displayValue : "-"}</span>;
   }
+
+  const isDimension = field.unit === "cm";
 
   return (
     <Input
       type="number"
       min={0}
-      step={1}
-      inputMode="numeric"
-      value={value || ""}
-      onChange={(event) => onChange(parseInputNumber(event.target.value))}
-      aria-label={label}
+      step={isDimension ? 0.1 : 1}
+      inputMode={isDimension ? "decimal" : "numeric"}
+      value={displayValue || ""}
+      onChange={(event) =>
+        onChange(
+          parseInputValue(
+            event.target.value,
+            field.unit,
+          ),
+        )
+      }
+      aria-label={`${label} (${field.unit})`}
       placeholder="0"
     />
   );
@@ -142,7 +214,10 @@ function ApparelShippingPackageRows({
 }: {
   modelNumbers: ApparelModelNumber[];
   mode: ModelVariationMode;
-  onChangeShippingPackage?: (size: string, patch: ShippingPackagePatch) => void;
+  onChangeShippingPackage?: (
+    size: string,
+    patch: ShippingPackagePatch,
+  ) => void;
 }) {
   const isEdit = mode === "edit";
 
@@ -175,7 +250,8 @@ function ApparelShippingPackageRows({
   return (
     <>
       {sizeRows.map(([size, modelNumber]) => {
-        const shippingPackage = normalizeShippingPackage(modelNumber.shippingPackage);
+        const shippingPackage =
+          normalizeShippingPackage(modelNumber.shippingPackage);
 
         return (
           <TableRow key={size}>
@@ -185,6 +261,7 @@ function ApparelShippingPackageRows({
               <TableCell key={field.key}>
                 <ShippingPackageInput
                   value={shippingPackage[field.key]}
+                  field={field}
                   label={`${size} ${field.ariaLabel}`}
                   disabled={!isEdit}
                   onChange={(value) =>
@@ -209,7 +286,10 @@ function AlcoholShippingPackageRows({
 }: {
   modelNumbers: AlcoholModelNumber[];
   mode: ModelVariationMode;
-  onChangeShippingPackage?: (volumeLabel: string, patch: ShippingPackagePatch) => void;
+  onChangeShippingPackage?: (
+    volumeLabel: string,
+    patch: ShippingPackagePatch,
+  ) => void;
 }) {
   const isEdit = mode === "edit";
 
@@ -227,17 +307,21 @@ function AlcoholShippingPackageRows({
     <>
       {modelNumbers.map((modelNumber, index) => {
         const volumeLabel = toAlcoholVolumeLabel(modelNumber);
-        const shippingPackage = normalizeShippingPackage(modelNumber.shippingPackage);
+        const shippingPackage =
+          normalizeShippingPackage(modelNumber.shippingPackage);
         const rowKey = [volumeLabel, index].join(":");
 
         return (
           <TableRow key={rowKey}>
-            <TableCell className="mnc__size">{volumeLabel || "-"}</TableCell>
+            <TableCell className="mnc__size">
+              {volumeLabel || "-"}
+            </TableCell>
 
             {SHIPPING_PACKAGE_FIELDS.map((field) => (
               <TableCell key={field.key}>
                 <ShippingPackageInput
                   value={shippingPackage[field.key]}
+                  field={field}
                   label={`${volumeLabel || "容量"} ${field.ariaLabel}`}
                   disabled={!isEdit}
                   onChange={(value) => {
@@ -264,7 +348,9 @@ const ShippingPackageCard: React.FC<ShippingPackageCardProps> = (props) => {
   const isApparel = props.kind === "apparel";
 
   return (
-    <Card className={`spc ${mode === "view" ? "view-mode" : ""} ${className ?? ""}`}>
+    <Card
+      className={`spc ${mode === "view" ? "view-mode" : ""} ${className ?? ""}`}
+    >
       <CardHeader className="box__header">
         <Package size={16} />
 
@@ -285,7 +371,9 @@ const ShippingPackageCard: React.FC<ShippingPackageCardProps> = (props) => {
               <TableHead>{isApparel ? "サイズ" : "容量"}</TableHead>
 
               {SHIPPING_PACKAGE_FIELDS.map((field) => (
-                <TableHead key={field.key}>{field.label}</TableHead>
+                <TableHead key={field.key}>
+                  {field.label}
+                </TableHead>
               ))}
             </TableRow>
           </TableHeader>
