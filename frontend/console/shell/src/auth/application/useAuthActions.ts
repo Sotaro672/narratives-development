@@ -20,6 +20,7 @@ import {
 
 import {
   fetchJSON,
+  HttpError,
 } from "../../shared/http/fetchJSON";
 
 /**
@@ -69,6 +70,69 @@ function getErrorMessage(
   }
 
   return fallback;
+}
+
+/**
+ * Backendから返却されたJSONエラー本文から
+ * error文字列を取り出す。
+ */
+function getBackendErrorMessage(
+  bodyText?: string,
+): string | null {
+  if (!bodyText) {
+    return null;
+  }
+
+  try {
+    const parsed =
+      JSON.parse(
+        bodyText,
+      ) as unknown;
+
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "error" in parsed &&
+      typeof parsed.error === "string" &&
+      parsed.error.trim()
+    ) {
+      return parsed.error.trim();
+    }
+  } catch {
+    // JSONでない場合は下でプレーンテキストとして扱う。
+  }
+
+  const normalized =
+    bodyText.trim();
+
+  return normalized || null;
+}
+
+/**
+ * Bootstrap API失敗時に
+ * ユーザーへ表示するメッセージを生成する。
+ */
+function messageForBootstrapError(
+  error: unknown,
+  fallback: string,
+): string {
+  if (error instanceof HttpError) {
+    const backendMessage =
+      getBackendErrorMessage(
+        error.bodyText,
+      );
+
+    if (backendMessage) {
+      return `${fallback} ${backendMessage}`;
+    }
+
+    return `${fallback} HTTP ${error.status}`;
+  }
+
+  return getErrorMessage(
+    error,
+    fallback,
+  );
 }
 
 /**
@@ -240,6 +304,8 @@ function buildBootstrapBody(
  *
  * Backend側ではMemberとCompanyが
  * 冪等に作成される前提。
+ *
+ * Bootstrapに失敗した場合は例外を呼び出し元へ伝播させる。
  */
 async function callBootstrap(
   profile?: SignUpProfile,
@@ -313,6 +379,7 @@ export function useAuthActions() {
    *
    * - Firebase Authenticationでユーザーを作成する
    * - 作成後にBackendのbootstrapを呼び出す
+   * - Bootstrap失敗時はエラーを握りつぶさず画面へ通知する
    */
   async function signUp(
     email: string,
@@ -350,26 +417,33 @@ export function useAuthActions() {
         );
       }
 
-      try {
-        await callBootstrap(
-          profile,
-        );
-      } catch {
-        /**
-         * Firebase Authenticationへの新規登録自体は
-         * 完了しているため、bootstrapの失敗によって
-         * Firebaseユーザー作成成功を取り消さない。
-         *
-         * 次回サインイン時に冪等なbootstrapを再実行する。
-         */
-      }
+      await callBootstrap(
+        profile,
+      );
     } catch (caughtError: unknown) {
-      setError(
-        messageForSignUpError(
-          getAuthErrorCode(
-            caughtError,
+      const code =
+        getAuthErrorCode(
+          caughtError,
+        );
+
+      if (code) {
+        setError(
+          messageForSignUpError(
+            code,
           ),
-        ),
+        );
+      } else {
+        setError(
+          messageForBootstrapError(
+            caughtError,
+            "アカウント情報の作成に失敗しました。",
+          ),
+        );
+      }
+
+      console.error(
+        "[useAuthActions] signUp error:",
+        caughtError,
       );
     } finally {
       setSubmitting(false);
@@ -381,6 +455,7 @@ export function useAuthActions() {
    *
    * - EmailとPasswordでログインする
    * - ログイン成功後にBackendのbootstrapを呼び出す
+   * - Bootstrap失敗時はエラーを握りつぶさず画面へ通知する
    */
   async function signIn(
     email: string,
@@ -397,34 +472,33 @@ export function useAuthActions() {
         password,
       );
 
-      try {
-        await callBootstrap(
-          profile,
-        );
-      } catch {
-        /**
-         * Firebase Authenticationへのログイン自体は
-         * 完了しているため、bootstrapの失敗によって
-         * ログイン成功を取り消さない。
-         *
-         * bootstrapは次回サインイン時にも再実行される。
-         */
-      }
+      await callBootstrap(
+        profile,
+      );
     } catch (caughtError: unknown) {
       const code =
         getAuthErrorCode(
           caughtError,
         );
 
-      setError(
-        code
-          ? messageForSignInError(
-              code,
-            )
-          : getErrorMessage(
-              caughtError,
-              "ログインに失敗しました。",
-            ),
+      if (code) {
+        setError(
+          messageForSignInError(
+            code,
+          ),
+        );
+      } else {
+        setError(
+          messageForBootstrapError(
+            caughtError,
+            "ログイン後のアカウント情報確認に失敗しました。",
+          ),
+        );
+      }
+
+      console.error(
+        "[useAuthActions] signIn error:",
+        caughtError,
       );
     } finally {
       setSubmitting(false);
@@ -448,6 +522,11 @@ export function useAuthActions() {
           caughtError,
           "ログアウトに失敗しました。",
         ),
+      );
+
+      console.error(
+        "[useAuthActions] signOut error:",
+        caughtError,
       );
     } finally {
       setSubmitting(false);
