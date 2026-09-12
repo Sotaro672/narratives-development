@@ -1,4 +1,4 @@
-// backend/internal/application/query/admin/contract_detail_brand.go
+// backend\internal\application\query\admin\brand.go
 package query
 
 import (
@@ -73,6 +73,7 @@ func (q *ContractDetailQuery) buildBrandRows(
 				ID:                   brand.ID,
 				Name:                 brand.Name,
 				ManagerName:          managerName,
+				WebsiteURL:           brand.URL,
 				BrandIcon:            brand.BrandIcon,
 				BrandBackgroundImage: brand.BrandBackgroundImage,
 				IsActive:             brand.IsActive,

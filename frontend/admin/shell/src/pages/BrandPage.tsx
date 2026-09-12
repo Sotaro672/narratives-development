@@ -3,7 +3,9 @@
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useBrandDetail } from "../features/brand/presentation/hooks/useBrandDetail";
+import ExternalLinkButton from "../shared/ui/ExternalLinkButton/ExternalLinkButton";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
+import Tab from "../shared/ui/Tab/Tab";
 import { formatDateTime } from "../shared/util/dateFormat";
 
 import "./BrandPage.css";
@@ -86,10 +88,18 @@ export default function BrandPage() {
             </div>
 
             <div className="brand-page__field">
-              <div className="brand-page__field-label">責任者</div>
-              <div className="brand-page__field-value">
-                {brand.managerName || "-"}
-              </div>
+              <div className="brand-page__field-label">外部リンク</div>
+              {brand.websiteUrl ? (
+                <ExternalLinkButton
+                  href={brand.websiteUrl}
+                  title="ブランドサイトを開く"
+                  ariaLabel={`${brand.name || "ブランド"}の外部サイトを開く`}
+                >
+                  ブランドサイト
+                </ExternalLinkButton>
+              ) : (
+                <div className="brand-page__field-value">-</div>
+              )}
             </div>
           </div>
         </div>
@@ -101,6 +111,16 @@ export default function BrandPage() {
     <Page>
       <PageHeader
         title={brand?.name || "ブランド詳細"}
+        meta={
+          brand ? (
+            <Tab
+              tone={brand.isActive ? "success" : "danger"}
+              aria-label={`ブランド状態 ${brand.isActive ? "有効" : "無効"}`}
+            >
+              {brand.isActive ? "有効" : "無効"}
+            </Tab>
+          ) : undefined
+        }
         leading={
           <button
             type="button"
@@ -137,9 +157,6 @@ export default function BrandPage() {
 
                 <dt>責任者</dt>
                 <dd>{brand.managerName || "-"}</dd>
-
-                <dt>状態</dt>
-                <dd>{brand.isActive ? "有効" : "無効"}</dd>
 
                 <dt>登録日時</dt>
                 <dd>

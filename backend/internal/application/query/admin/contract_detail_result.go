@@ -23,6 +23,7 @@ type ContractBrandRow struct {
 	ID                   string `json:"id"`
 	Name                 string `json:"name"`
 	ManagerName          string `json:"managerName"`
+	WebsiteURL           string `json:"websiteUrl"`
 	BrandIcon            string `json:"brandIcon"`
 	BrandBackgroundImage string `json:"brandBackgroundImage"`
 	IsActive             bool   `json:"isActive"`

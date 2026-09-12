@@ -6,6 +6,7 @@ export type ContractBrandRow = {
   id: string;
   name: string;
   managerName: string;
+  websiteUrl: string;
   brandIcon: string;
   brandBackgroundImage: string;
   isActive: boolean;
