@@ -344,7 +344,7 @@ func (q *ReportNameQuery) ResolveTargetParentName(
 // 通報対象に紐づく companyId を解決する。
 // ProductBlueprintReview / Resale は targetParentID=productBlueprintId、
 // TokenBlueprint / TokenBlueprintComment / Announcement は targetParentID=tokenBlueprintId、
-// List は targetAuthorID=brandId から companyId を解決する。
+// List / Brand は targetAuthorID=brandId から companyId を解決する。
 // 解決できない場合は空文字列を返す。
 func (q *ReportNameQuery) ResolveTargetCompanyID(
 	ctx context.Context,
@@ -363,7 +363,8 @@ func (q *ReportNameQuery) ResolveTargetCompanyID(
 		reportdom.TargetTypeAnnouncement:
 		return q.ResolveTokenCompanyID(ctx, targetParentID)
 
-	case reportdom.TargetTypeList:
+	case reportdom.TargetTypeList,
+		reportdom.TargetTypeBrand:
 		if targetAuthorType != reportdom.ActorTypeBrand {
 			return ""
 		}
