@@ -17,6 +17,7 @@ export type AnnouncementDetail = {
   title: string;
   content: string;
   targetToken?: string;
+  tokenName: string;
   targetAvatars?: string[];
   published: boolean;
   publishedAt?: string;

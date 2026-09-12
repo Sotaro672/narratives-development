@@ -12,6 +12,7 @@ import Page, {
   PageHeader,
 } from "../shared/ui/Page/Page";
 import Tab from "../shared/ui/Tab/Tab";
+import TextLink from "../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../shared/util/dateFormat";
 
 export default function AnnouncementPage() {
@@ -68,12 +69,6 @@ export default function AnnouncementPage() {
     return (
       <div>
         <section className="ui-detail-section">
-          <h2>配信タイトル</h2>
-          <p>{announcement.title || "-"}</p>
-        </section>
-
-        <section className="ui-detail-section">
-          <h2>本文</h2>
           <div style={{ whiteSpace: "pre-wrap" }}>
             {announcement.content || "-"}
           </div>
@@ -81,7 +76,6 @@ export default function AnnouncementPage() {
 
         {galleryItems.length > 0 ? (
           <section className="ui-detail-section">
-            <h2>添付画像</h2>
             <MediaGallery
               items={galleryItems}
               altFallback={announcement.title || "告知添付画像"}
@@ -140,11 +134,23 @@ export default function AnnouncementPage() {
           aside={
             <section className="ui-detail-section">
               <dl className="ui-detail-definition-list ui-detail-definition-list--meta">
-                <dt>告知ID</dt>
-                <dd>{announcement.id || "-"}</dd>
-
-                <dt>対象トークンID</dt>
-                <dd>{announcement.targetToken || "-"}</dd>
+                <dt>トークン</dt>
+                <dd>
+                  {announcement.targetToken && announcement.tokenName ? (
+                    <TextLink
+                      tone="accent"
+                      onClick={() =>
+                        navigate(
+                          `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(announcement.targetToken!)}`,
+                        )
+                      }
+                    >
+                      {announcement.tokenName}
+                    </TextLink>
+                  ) : (
+                    announcement.tokenName || "-"
+                  )}
+                </dd>
 
                 <dt>送信対象数</dt>
                 <dd>

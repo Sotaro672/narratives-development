@@ -71,6 +71,7 @@ type ContractAnnouncementDetailResult struct {
 	Title           string                                     `json:"title"`
 	Content         string                                     `json:"content"`
 	TargetToken     *string                                    `json:"targetToken,omitempty"`
+	TokenName       string                                     `json:"tokenName"`
 	TargetAvatars   []string                                   `json:"targetAvatars,omitempty"`
 	Published       bool                                       `json:"published"`
 	PublishedAt     string                                     `json:"publishedAt,omitempty"`
@@ -201,6 +202,7 @@ func (q *ContractAnnouncementDetailQuery) Get(
 		Title:           announcement.Title,
 		Content:         announcement.Content,
 		TargetToken:     announcement.TargetToken,
+		TokenName:       tokenBlueprint.Name,
 		TargetAvatars:   cloneAnnouncementDetailStrings(announcement.TargetAvatars),
 		Published:       announcement.Published,
 		PublishedAt:     formatOptionalContractDetailTime(announcement.PublishedAt),
