@@ -1,15 +1,17 @@
-// frontend/admin/shell/src/features/company/presentation/components/ListDetailAside.tsx
+// frontend/admin/shell/src/features/list/presentation/components/ListDetailAside.tsx
 
 import type { Company } from "../../../../shared/type/company";
-import type { ContractListDetail } from "../../model/listDetail";
 import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
+import type { ContractListDetail } from "../../model/listDetail";
 
 type ListDetailAsideProps = {
   company: Company;
   list: ContractListDetail;
   onOpenProductBlueprint: () => void;
+  onOpenProductBrand: () => void;
   onOpenTokenBlueprint: () => void;
+  onOpenTokenBrand: () => void;
   onOpenReport: () => void;
 };
 
@@ -17,7 +19,9 @@ export default function ListDetailAside({
   company,
   list,
   onOpenProductBlueprint,
+  onOpenProductBrand,
   onOpenTokenBlueprint,
+  onOpenTokenBrand,
   onOpenReport,
 }: ListDetailAsideProps) {
   return (
@@ -39,7 +43,15 @@ export default function ListDetailAside({
           </dd>
 
           <dt>商品ブランド名</dt>
-          <dd>{list.productBrandName || "-"}</dd>
+          <dd>
+            {list.productBrandId && list.productBrandName ? (
+              <TextLink tone="inherit" onClick={onOpenProductBrand}>
+                {list.productBrandName}
+              </TextLink>
+            ) : (
+              list.productBrandName || "-"
+            )}
+          </dd>
         </dl>
       </section>
 
@@ -53,7 +65,15 @@ export default function ListDetailAside({
           </dd>
 
           <dt>トークンブランド名</dt>
-          <dd>{list.tokenBrandName || "-"}</dd>
+          <dd>
+            {list.tokenBrandId && list.tokenBrandName ? (
+              <TextLink tone="inherit" onClick={onOpenTokenBrand}>
+                {list.tokenBrandName}
+              </TextLink>
+            ) : (
+              list.tokenBrandName || "-"
+            )}
+          </dd>
         </dl>
       </section>
 
@@ -80,10 +100,14 @@ export default function ListDetailAside({
           <dd>{list.assigneeName || "-"}</dd>
 
           <dt>作成日時</dt>
-          <dd className="ui-detail-definition-list__nowrap">{formatDateTime(list.createdAt)}</dd>
+          <dd className="ui-detail-definition-list__nowrap">
+            {formatDateTime(list.createdAt)}
+          </dd>
 
           <dt>最終更新日時</dt>
-          <dd className="ui-detail-definition-list__nowrap">{formatDateTime(list.updatedAt)}</dd>
+          <dd className="ui-detail-definition-list__nowrap">
+            {formatDateTime(list.updatedAt)}
+          </dd>
         </dl>
       </section>
     </>

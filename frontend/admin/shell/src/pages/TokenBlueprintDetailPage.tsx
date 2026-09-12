@@ -189,7 +189,22 @@ export default function TokenBlueprintDetailPage() {
                 <dd>{company.name || "-"}</dd>
 
                 <dt>ブランド</dt>
-                <dd>{tokenBlueprint.brandName || "-"}</dd>
+                <dd>
+                  {tokenBlueprint.brandId && tokenBlueprint.brandName ? (
+                    <TextLink
+                      tone="accent"
+                      onClick={() =>
+                        navigate(
+                          `/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(tokenBlueprint.brandId)}`,
+                        )
+                      }
+                    >
+                      {tokenBlueprint.brandName}
+                    </TextLink>
+                  ) : (
+                    tokenBlueprint.brandName || "-"
+                  )}
+                </dd>
 
                 <dt>担当者</dt>
                 <dd>{tokenBlueprint.assigneeName || "-"}</dd>

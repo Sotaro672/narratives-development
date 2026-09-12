@@ -8,12 +8,14 @@ import type { ContractProductBlueprintDetail } from "../../model/productBlueprin
 type ProductBlueprintDetailAsideProps = {
   company: Company;
   productBlueprint: ContractProductBlueprintDetail;
+  onOpenBrand: () => void;
   onOpenReport: (reportCaseId: string) => void;
 };
 
 export default function ProductBlueprintDetailAside({
   company,
   productBlueprint,
+  onOpenBrand,
   onOpenReport,
 }: ProductBlueprintDetailAsideProps) {
   return (
@@ -24,7 +26,15 @@ export default function ProductBlueprintDetailAside({
           <dd>{company.name || "-"}</dd>
 
           <dt>ブランド</dt>
-          <dd>{productBlueprint.brandName || "-"}</dd>
+          <dd>
+            {productBlueprint.brandId && productBlueprint.brandName ? (
+              <TextLink tone="accent" onClick={onOpenBrand}>
+                {productBlueprint.brandName}
+              </TextLink>
+            ) : (
+              productBlueprint.brandName || "-"
+            )}
+          </dd>
 
           <dt>担当者</dt>
           <dd>{productBlueprint.assigneeName || "-"}</dd>

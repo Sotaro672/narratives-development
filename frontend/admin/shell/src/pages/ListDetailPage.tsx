@@ -125,9 +125,19 @@ export default function ListDetailPage() {
                   `/contracts/${encodeURIComponent(companyId)}/product-blueprints/${encodeURIComponent(list.productBlueprintId)}`,
                 )
               }
+              onOpenProductBrand={() =>
+                navigate(
+                  `/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(list.productBrandId)}`,
+                )
+              }
               onOpenTokenBlueprint={() =>
                 navigate(
                   `/contracts/${encodeURIComponent(companyId)}/token-blueprints/${encodeURIComponent(list.tokenBlueprintId)}`,
+                )
+              }
+              onOpenTokenBrand={() =>
+                navigate(
+                  `/contracts/${encodeURIComponent(companyId)}/brands/${encodeURIComponent(list.tokenBrandId)}`,
                 )
               }
               onOpenReport={() =>
