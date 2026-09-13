@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-import Button from "../components/ui/Button";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementDetail } from "../features/announcement/hooks/useAnnouncementDetail";
@@ -18,6 +17,7 @@ import { useReportDecisionDetail } from "../features/notification/presentation/h
 import type { ReportDecisionNotification } from "../features/notification/infrastructure/reportDecisionNotificationApi";
 import ReportModal from "../features/report/components/ReportModal";
 import { useReport } from "../features/report/hooks/useReport";
+import ReportFlagButton from "../features/shared/presentation/components/ReportFlagButton";
 import type { AnnouncementListItem } from "../features/shared/types/announcements";
 import type { News } from "../features/shared/types/news";
 
@@ -42,12 +42,10 @@ export default function AnnouncementDetailPage() {
   }>();
 
   const location = useLocation();
-  const locationState =
-    location.state as AnnouncementDetailLocationState | null;
+  const locationState = location.state as AnnouncementDetailLocationState | null;
 
   const stateAnnouncement = locationState?.announcement;
-  const stateDecisionNotification =
-    locationState?.reportDecisionNotification;
+  const stateDecisionNotification = locationState?.reportDecisionNotification;
   const stateNews = locationState?.news;
 
   const report = useReport();
@@ -70,8 +68,7 @@ export default function AnnouncementDetailPage() {
   );
 
   const isReportDecisionDetail =
-    !isNewsDetail &&
-    Boolean(effectiveNotificationId);
+    !isNewsDetail && Boolean(effectiveNotificationId);
 
   const {
     announcement,
@@ -81,9 +78,7 @@ export default function AnnouncementDetailPage() {
   } = useAnnouncementDetail({
     announcementId,
     initialAnnouncement: stateAnnouncement,
-    enabled:
-      !isNewsDetail &&
-      !isReportDecisionDetail,
+    enabled: !isNewsDetail && !isReportDecisionDetail,
   });
 
   const {
@@ -98,10 +93,7 @@ export default function AnnouncementDetailPage() {
   });
 
   const initialNews = useMemo(() => {
-    if (
-      !stateNews ||
-      stateNews.id !== effectiveNewsId
-    ) {
+    if (!stateNews || stateNews.id !== effectiveNewsId) {
       return null;
     }
 
@@ -111,13 +103,10 @@ export default function AnnouncementDetailPage() {
   const newsQuery = useNewsQuery({
     page: 1,
     perPage: 100,
-    enabled:
-      isNewsDetail &&
-      Boolean(effectiveNewsId),
+    enabled: isNewsDetail && Boolean(effectiveNewsId),
   });
 
-  const markNewsReadMutation =
-    useMarkNewsReadMutation();
+  const markNewsReadMutation = useMarkNewsReadMutation();
 
   const newsFromQuery = useMemo(() => {
     if (!newsQuery.data) {
@@ -125,48 +114,33 @@ export default function AnnouncementDetailPage() {
     }
 
     return (
-      newsQuery.data.items.find(
-        (item) => item.id === effectiveNewsId,
-      ) ?? null
+      newsQuery.data.items.find((item) => item.id === effectiveNewsId) ?? null
     );
   }, [effectiveNewsId, newsQuery.data]);
 
   const news =
-    isNewsDetail &&
-    newsQuery.data !== undefined
+    isNewsDetail && newsQuery.data !== undefined
       ? newsFromQuery
       : initialNews;
 
   const markedNewsReadRef = useRef<string>("");
 
   useEffect(() => {
-    if (
-      !isNewsDetail ||
-      !effectiveNewsId ||
-      !news
-    ) {
+    if (!isNewsDetail || !effectiveNewsId || !news) {
       return;
     }
 
     if (news.isRead === true) {
-      markedNewsReadRef.current =
-        effectiveNewsId;
+      markedNewsReadRef.current = effectiveNewsId;
       return;
     }
 
-    if (
-      markedNewsReadRef.current ===
-      effectiveNewsId
-    ) {
+    if (markedNewsReadRef.current === effectiveNewsId) {
       return;
     }
 
-    markedNewsReadRef.current =
-      effectiveNewsId;
-
-    markNewsReadMutation.mutate(
-      effectiveNewsId,
-    );
+    markedNewsReadRef.current = effectiveNewsId;
+    markNewsReadMutation.mutate(effectiveNewsId);
   }, [
     effectiveNewsId,
     isNewsDetail,
@@ -175,74 +149,49 @@ export default function AnnouncementDetailPage() {
   ]);
 
   const newsQueryError =
-    isNewsDetail &&
-    newsQuery.error instanceof Error
+    isNewsDetail && newsQuery.error instanceof Error
       ? newsQuery.error.message
-      : isNewsDetail &&
-          newsQuery.error
+      : isNewsDetail && newsQuery.error
         ? "システム通知の取得に失敗しました"
         : "";
 
   const newsMutationError =
-    isNewsDetail &&
-    markNewsReadMutation.error instanceof Error
+    isNewsDetail && markNewsReadMutation.error instanceof Error
       ? markNewsReadMutation.error.message
-      : isNewsDetail &&
-          markNewsReadMutation.error
+      : isNewsDetail && markNewsReadMutation.error
         ? "システム通知の既読化に失敗しました"
         : "";
 
   const loading = isNewsDetail
-    ? Boolean(effectiveNewsId) &&
-      newsQuery.isPending &&
-      !initialNews
+    ? Boolean(effectiveNewsId) && newsQuery.isPending && !initialNews
     : isReportDecisionDetail
       ? decisionLoading
       : announcementLoading;
 
   const newsNotFound =
     isNewsDetail &&
-    (
-      !effectiveNewsId ||
-      (
-        newsQuery.isSuccess &&
-        !news
-      )
-    );
+    (!effectiveNewsId || (newsQuery.isSuccess && !news));
 
   const error =
     newsMutationError ||
     newsQueryError ||
-    (
-      isReportDecisionDetail &&
-      !decisionNotFound
-        ? decisionError
-        : ""
-    ) ||
-    (
-      !isNewsDetail &&
-      !isReportDecisionDetail &&
-      !announcementNotFound
-        ? announcementError
-        : ""
-    );
+    (isReportDecisionDetail && !decisionNotFound ? decisionError : "") ||
+    (!isNewsDetail &&
+    !isReportDecisionDetail &&
+    !announcementNotFound
+      ? announcementError
+      : "");
 
   const tokenLabel =
     announcement?.tokenName ||
     announcement?.targetToken ||
     "対象トークン";
 
-  const publishedAtLabel =
-    formatDateTime(
-      announcement?.publishedAt,
-    );
+  const publishedAtLabel = formatDateTime(announcement?.publishedAt);
 
-  const attachmentFiles =
-    Array.isArray(
-      announcement?.attachmentFiles,
-    )
-      ? announcement.attachmentFiles
-      : [];
+  const attachmentFiles = Array.isArray(announcement?.attachmentFiles)
+    ? announcement.attachmentFiles
+    : [];
 
   const handleOpenAnnouncementReport = () => {
     if (!announcement?.id) {
@@ -257,11 +206,7 @@ export default function AnnouncementDetailPage() {
   return (
     <>
       <Layout
-        title={
-          isNewsDetail
-            ? "システム通知"
-            : "お知らせ"
-        }
+        title={isNewsDetail ? "システム通知" : "お知らせ"}
         showBackButton
         backTo="/announcements"
         showFooter
@@ -270,18 +215,13 @@ export default function AnnouncementDetailPage() {
       >
         <section className="page-section content-page-section announcement-page">
           {error ? (
-            <div
-              className="announcement-page__error"
-              role="alert"
-            >
+            <div className="announcement-page__error" role="alert">
               {error}
             </div>
           ) : null}
 
           {loading ? (
-            <div className="announcement-page__state">
-              読み込み中...
-            </div>
+            <div className="announcement-page__state">読み込み中...</div>
           ) : null}
 
           {!loading &&
@@ -310,18 +250,14 @@ export default function AnnouncementDetailPage() {
             </div>
           ) : null}
 
-          {!loading &&
-          isNewsDetail &&
-          news ? (
+          {!loading && isNewsDetail && news ? (
             <NewsDetail news={news} />
           ) : null}
 
           {!loading &&
           isReportDecisionDetail &&
           decisionNotification ? (
-            <ReportDecisionDetail
-              notification={decisionNotification}
-            />
+            <ReportDecisionDetail notification={decisionNotification} />
           ) : null}
 
           {!loading &&
@@ -341,24 +277,17 @@ export default function AnnouncementDetailPage() {
 
                   <time
                     className="announcement-page__date"
-                    dateTime={
-                      announcement.publishedAt ??
-                      undefined
-                    }
+                    dateTime={announcement.publishedAt ?? undefined}
                   >
                     {publishedAtLabel}
                   </time>
                 </div>
 
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="announcement-page__report-button"
+                <ReportFlagButton
+                  label="お知らせを通報"
+                  disabled={!announcement.id || report.submitting}
                   onClick={handleOpenAnnouncementReport}
-                >
-                  通報する
-                </Button>
+                />
               </div>
 
               <div className="announcement-page__detail-content">
@@ -374,26 +303,13 @@ export default function AnnouncementDetailPage() {
                         file.id ||
                         `添付ファイル ${index + 1}`;
 
-                      const fileUrl =
-                        file.fileUrl ||
-                        "";
-
-                      const mimeType =
-                        file.mimeType ||
-                        "";
-
-                      const isImage =
-                        mimeType.startsWith(
-                          "image/",
-                        );
-
+                      const fileUrl = file.fileUrl || "";
+                      const mimeType = file.mimeType || "";
+                      const isImage = mimeType.startsWith("image/");
                       const attachmentKey =
                         `${file.id || fileName}-${index}`;
 
-                      if (
-                        isImage &&
-                        fileUrl
-                      ) {
+                      if (isImage && fileUrl) {
                         return (
                           <a
                             key={attachmentKey}
