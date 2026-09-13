@@ -1,4 +1,4 @@
-// frontend/amol/src/router/index.tsx
+// frontend/mall/src/router/index.tsx
 
 import { useEffect, useState } from "react";
 import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
@@ -50,6 +50,7 @@ import AnnouncementPage from "../pages/AnnouncementPage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
 import HowToUsePage from "../pages/HowToUsePage";
+import HowToUseDetailPage from "../pages/HowToUseDetailPage";
 import ResaleCreatePage from "../pages/ResaleCreatePage";
 import ResaleDetailPage from "../pages/ResaleDetailPage";
 import ProtectedRoute from "../components/auth/ProtectedRoute";
@@ -119,6 +120,10 @@ export const router = createBrowserRouter([
   {
     path: "/how-to-use",
     element: <HowToUsePage />,
+  },
+  {
+    path: "/how-to-use/:category/:slug",
+    element: <HowToUseDetailPage />,
   },
   {
     path: "/resale",

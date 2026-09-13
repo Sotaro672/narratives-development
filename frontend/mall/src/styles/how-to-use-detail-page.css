@@ -1,0 +1,30 @@
+/* frontend/mall/src/styles/how-to-use-detail-page.css */
+
+.how-to-use-detail-page {
+  padding: 56px 32px 72px;
+}
+
+.how-to-use-detail-page__inner {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.how-to-use-detail-page__description {
+  margin: 0;
+  color: #64748b;
+  font-size: 16px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 768px) {
+  .how-to-use-detail-page {
+    padding: 40px 16px 56px;
+  }
+
+  .how-to-use-detail-page__description {
+    font-size: 15px;
+    line-height: 1.8;
+  }
+}
