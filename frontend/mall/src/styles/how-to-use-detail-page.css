@@ -10,6 +10,31 @@
   margin: 0 auto;
 }
 
+.how-to-use-detail-page__pdf-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 32px;
+  padding: 10px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.how-to-use-detail-page__pdf-button:hover {
+  background: #f8fafc;
+}
+
+.how-to-use-detail-page__pdf-button:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 3px;
+}
+
 .how-to-use-detail-page__description {
   margin: 0;
   color: #64748b;
@@ -23,8 +48,33 @@
     padding: 40px 16px 56px;
   }
 
+  .how-to-use-detail-page__pdf-button {
+    margin-bottom: 24px;
+  }
+
   .how-to-use-detail-page__description {
     font-size: 15px;
     line-height: 1.8;
+  }
+}
+
+@media print {
+  .how-to-use-detail-page {
+    padding: 0;
+  }
+
+  .how-to-use-detail-page__inner {
+    max-width: none;
+    margin: 0;
+  }
+
+  .how-to-use-detail-page__pdf-button {
+    display: none;
+  }
+
+  .how-to-use-detail-page__description {
+    color: #000000;
+    font-size: 12pt;
+    line-height: 1.7;
   }
 }

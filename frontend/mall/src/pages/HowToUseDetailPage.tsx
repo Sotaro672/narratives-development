@@ -7,6 +7,7 @@ import {
   findHowToUseItem,
   isHowToUseCategory,
 } from "../features/howToUse/application/howToUseSteps";
+import HowToUsePdfButton from "../features/howToUse/presentation/components/HowToUsePdfButton";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
@@ -39,6 +40,8 @@ export default function HowToUseDetailPage() {
     >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
+          <HowToUsePdfButton />
+
           <p className="how-to-use-detail-page__description">
             {item.description}
           </p>
