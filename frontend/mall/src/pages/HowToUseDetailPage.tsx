@@ -7,7 +7,7 @@ import {
   findHowToUseItem,
   isHowToUseCategory,
 } from "../features/howToUse/application/howToUseSteps";
-import HowToUsePdfButton from "../features/howToUse/presentation/components/HowToUsePdfButton";
+import { printHowToUsePdf } from "../features/howToUse/presentation/components/HowToUsePdfButton";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
@@ -32,19 +32,19 @@ export default function HowToUseDetailPage() {
   }
 
   return (
-<Layout
-  title={item.title}
-  titleClickable={false}
-  mode="landing"
-  showBackButton
-  backTo="/how-to-use"
-  hideAnnouncementButton
-  hideSettingsButton
->
+    <Layout
+      title={item.title}
+      titleClickable={false}
+      mode="landing"
+      showBackButton
+      backTo="/how-to-use"
+      hideAnnouncementButton
+      hideSettingsButton
+      actionButtonLabel="PDF"
+      onActionButtonClick={printHowToUsePdf}
+    >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
-          <HowToUsePdfButton />
-
           <p className="how-to-use-detail-page__description">
             {item.description}
           </p>
