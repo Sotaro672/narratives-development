@@ -1,4 +1,5 @@
-// frontend/src/pages/SignInSelectPage.tsx
+// frontend/mall/src/pages/SignInSelectPage.tsx
+
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -62,7 +63,7 @@ export default function SignInSelectPage() {
   };
 
   return (
-    <Layout title="AMOL" mode="landing">
+    <Layout title="AMOL" mode="signin">
       <main className="sign-up-select-page">
         <div className="sign-up-select-page__inner">
           <header className="sign-up-select-page__header">
