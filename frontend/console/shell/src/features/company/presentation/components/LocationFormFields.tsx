@@ -26,36 +26,21 @@ export type LocationFormFieldsProps = {
   value: LocationFormValue;
   errors: LocationFormErrors;
   disabled?: boolean;
+  addressSearching?: boolean;
 
-  onChangeName: (
-    value: string,
-  ) => void;
-
-  onChangeZipCode: (
-    value: string,
-  ) => void;
-
-  onChangeState: (
-    value: string,
-  ) => void;
-
-  onChangeCity: (
-    value: string,
-  ) => void;
-
-  onChangeStreet: (
-    value: string,
-  ) => void;
-
-  onChangeStreet2: (
-    value: string,
-  ) => void;
+  onChangeName: (value: string) => void;
+  onChangeZipCode: (value: string) => void;
+  onChangeState: (value: string) => void;
+  onChangeCity: (value: string) => void;
+  onChangeStreet: (value: string) => void;
+  onChangeStreet2: (value: string) => void;
 };
 
 export default function LocationFormFields({
   value,
   errors,
   disabled = false,
+  addressSearching = false,
   onChangeName,
   onChangeZipCode,
   onChangeState,
@@ -76,11 +61,7 @@ export default function LocationFormFields({
           type="text"
           placeholder="本社倉庫"
           value={value.name}
-          onChange={(event) =>
-            onChangeName(
-              event.target.value,
-            )
-          }
+          onChange={(event) => onChangeName(event.target.value)}
           disabled={disabled}
         />
 
@@ -104,15 +85,21 @@ export default function LocationFormFields({
           autoComplete="postal-code"
           placeholder="100-0001"
           value={value.zipCode}
-          onChange={(event) =>
-            onChangeZipCode(
-              event.target.value,
-            )
-          }
+          onChange={(event) => onChangeZipCode(event.target.value)}
           disabled={disabled}
         />
 
-        {errors.zipCode && (
+        {addressSearching && (
+          <p
+            className="mt-1 text-xs text-slate-500"
+            role="status"
+            aria-live="polite"
+          >
+            住所を検索しています...
+          </p>
+        )}
+
+        {!addressSearching && errors.zipCode && (
           <p className="mt-1 text-xs text-red-500">
             {errors.zipCode}
           </p>
@@ -131,11 +118,7 @@ export default function LocationFormFields({
           autoComplete="address-level1"
           placeholder="東京都"
           value={value.state}
-          onChange={(event) =>
-            onChangeState(
-              event.target.value,
-            )
-          }
+          onChange={(event) => onChangeState(event.target.value)}
           disabled={disabled}
         />
 
@@ -158,11 +141,7 @@ export default function LocationFormFields({
           autoComplete="address-level2"
           placeholder="千代田区"
           value={value.city}
-          onChange={(event) =>
-            onChangeCity(
-              event.target.value,
-            )
-          }
+          onChange={(event) => onChangeCity(event.target.value)}
           disabled={disabled}
         />
 
@@ -185,11 +164,7 @@ export default function LocationFormFields({
           autoComplete="address-line1"
           placeholder="千代田1-1"
           value={value.street}
-          onChange={(event) =>
-            onChangeStreet(
-              event.target.value,
-            )
-          }
+          onChange={(event) => onChangeStreet(event.target.value)}
           disabled={disabled}
         />
 
@@ -212,11 +187,7 @@ export default function LocationFormFields({
           autoComplete="address-line2"
           placeholder="AMOLビル 3F"
           value={value.street2}
-          onChange={(event) =>
-            onChangeStreet2(
-              event.target.value,
-            )
-          }
+          onChange={(event) => onChangeStreet2(event.target.value)}
           disabled={disabled}
         />
       </div>

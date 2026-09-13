@@ -1,11 +1,10 @@
 // frontend/console/shell/src/features/company/presentation/hook/useLocationCreate.tsx
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import {
-  createCompanyShippingAddress,
-} from "../../application/locationCreateService";
+import { createCompanyShippingAddress } from "../../application/locationCreateService";
+import { searchAddressByPostalCode } from "../../application/postalCodeSearchService";
 
 type LocationCreateFieldErrors = {
   name: string | null;
@@ -39,6 +38,7 @@ export type UseLocationCreateResult = {
     cityError: string | null;
     streetError: string | null;
 
+    addressSearching: boolean;
     saving: boolean;
     error: string | null;
   };
@@ -81,9 +81,11 @@ function getErrorMessage(error: unknown): string {
   return "在庫保管場所の登録に失敗しました。";
 }
 
-function validateForm(
-  form: LocationCreateForm,
-): LocationCreateFieldErrors {
+function normalizePostalCode(value: string): string {
+  return value.replace(/-/g, "").trim();
+}
+
+function validateForm(form: LocationCreateForm): LocationCreateFieldErrors {
   const errors: LocationCreateFieldErrors = {
     ...emptyFieldErrors,
   };
@@ -122,16 +124,13 @@ function validateForm(
   return errors;
 }
 
-function hasFieldError(
-  errors: LocationCreateFieldErrors,
-): boolean {
-  return Object.values(errors).some(
-    (value) => value !== null,
-  );
+function hasFieldError(errors: LocationCreateFieldErrors): boolean {
+  return Object.values(errors).some((value) => value !== null);
 }
 
 export function useLocationCreate(): UseLocationCreateResult {
   const navigate = useNavigate();
+  const postalCodeSearchSequence = useRef(0);
 
   const [form, setForm] = useState<LocationCreateForm>({
     ...emptyForm,
@@ -142,6 +141,7 @@ export function useLocationCreate(): UseLocationCreateResult {
       ...emptyFieldErrors,
     });
 
+  const [addressSearching, setAddressSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,6 +170,9 @@ export function useLocationCreate(): UseLocationCreateResult {
 
   const onChangeZipCode = useCallback(
     (value: string) => {
+      const normalizedZipCode = normalizePostalCode(value);
+      const searchSequence = ++postalCodeSearchSequence.current;
+
       setForm((current) => ({
         ...current,
         zipCode: value,
@@ -177,6 +180,59 @@ export function useLocationCreate(): UseLocationCreateResult {
 
       clearFieldError("zipCode");
       setError(null);
+
+      if (!/^[0-9]{7}$/.test(normalizedZipCode)) {
+        setAddressSearching(false);
+        return;
+      }
+
+      setAddressSearching(true);
+
+      void searchAddressByPostalCode(normalizedZipCode)
+        .then((address) => {
+          if (postalCodeSearchSequence.current !== searchSequence) {
+            return;
+          }
+
+          if (!address) {
+            setFieldErrors((current) => ({
+              ...current,
+              zipCode: "該当する住所が見つかりません。",
+            }));
+            return;
+          }
+
+          setForm((current) => ({
+            ...current,
+            state: address.state,
+            city: address.city,
+            street: address.street,
+          }));
+
+          setFieldErrors((current) => ({
+            ...current,
+            zipCode: null,
+            state: null,
+            city: null,
+            street: null,
+          }));
+        })
+        .catch((searchError: unknown) => {
+          if (postalCodeSearchSequence.current !== searchSequence) {
+            return;
+          }
+
+          setError(
+            searchError instanceof Error && searchError.message
+              ? searchError.message
+              : "郵便番号から住所を検索できませんでした。",
+          );
+        })
+        .finally(() => {
+          if (postalCodeSearchSequence.current === searchSequence) {
+            setAddressSearching(false);
+          }
+        });
     },
     [clearFieldError],
   );
@@ -233,55 +289,57 @@ export function useLocationCreate(): UseLocationCreateResult {
     navigate(-1);
   }, [navigate]);
 
-  const onSave = useCallback(
-    async (): Promise<void> => {
-      if (saving) {
+  const onSave = useCallback(async (): Promise<void> => {
+    if (saving) {
+      return;
+    }
+
+    const nextFieldErrors = validateForm(form);
+    setFieldErrors(nextFieldErrors);
+
+    if (hasFieldError(nextFieldErrors)) {
+      setError("入力内容を確認してください。");
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      const postalCodeAddress = await searchAddressByPostalCode(form.zipCode);
+
+      if (!postalCodeAddress) {
+        setFieldErrors((current) => ({
+          ...current,
+          zipCode: "該当する住所が見つかりません。",
+        }));
+        setError("郵便番号から住所を確認できませんでした。");
         return;
       }
 
-      const nextFieldErrors = validateForm(form);
+      const created = await createCompanyShippingAddress({
+        name: form.name,
+        zipCode: form.zipCode,
+        state: form.state,
+        city: form.city,
+        street: form.street,
+        street2: form.street2,
+        country: "JP",
+      });
 
-      setFieldErrors(nextFieldErrors);
-
-      if (hasFieldError(nextFieldErrors)) {
-        setError("入力内容を確認してください。");
-        return;
+      if (!created.id) {
+        throw new Error("在庫保管場所IDを取得できませんでした。");
       }
 
-      setSaving(true);
-      setError(null);
-
-      try {
-        const created = await createCompanyShippingAddress({
-          name: form.name,
-          zipCode: form.zipCode,
-          state: form.state,
-          city: form.city,
-          street: form.street,
-          street2: form.street2,
-          country: "JP",
-        });
-
-        if (!created.id) {
-          throw new Error(
-            "在庫保管場所IDを取得できませんでした。",
-          );
-        }
-
-        navigate(
-          `/stockLocation/${encodeURIComponent(created.id)}`,
-          {
-            replace: true,
-          },
-        );
-      } catch (saveError: unknown) {
-        setError(getErrorMessage(saveError));
-      } finally {
-        setSaving(false);
-      }
-    },
-    [form, saving, navigate],
-  );
+      navigate(`/stockLocation/${encodeURIComponent(created.id)}`, {
+        replace: true,
+      });
+    } catch (saveError: unknown) {
+      setError(getErrorMessage(saveError));
+    } finally {
+      setSaving(false);
+    }
+  }, [form, saving, navigate]);
 
   return {
     vm: {
@@ -298,6 +356,7 @@ export function useLocationCreate(): UseLocationCreateResult {
       cityError: fieldErrors.city,
       streetError: fieldErrors.street,
 
+      addressSearching,
       saving,
       error,
     },
