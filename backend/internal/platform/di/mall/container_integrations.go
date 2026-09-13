@@ -1,4 +1,5 @@
 // backend/internal/platform/di/mall/container_integrations.go
+
 package mall
 
 import (
@@ -66,6 +67,9 @@ func buildMallIntegrations(
 	}
 	if r.transportationRepo == nil {
 		return nil, errors.New("di.mall: transportation repository is nil")
+	}
+	if r.avatarRepo == nil {
+		return nil, errors.New("di.mall: avatar repository is nil")
 	}
 
 	var customerStore stripeadapter.PaymentMethodCustomerStore = r.paymentMethodRepo
@@ -144,6 +148,7 @@ func buildMallIntegrations(
 
 	inquiryMailer := mailadp.NewInquiryMailer(
 		resendClient,
+		r.avatarRepo,
 	)
 
 	refundCompletionNotificationMailer :=

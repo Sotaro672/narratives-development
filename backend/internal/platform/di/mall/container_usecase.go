@@ -147,7 +147,10 @@ func buildMallUsecases(
 		cfg.FrontendBaseURL,
 	)
 
-	inquiryMailer := mailadp.NewInquiryMailer(resendClient)
+	inquiryMailer := mailadp.NewInquiryMailer(
+		resendClient,
+		r.avatarRepo,
+	)
 
 	avatarWalletSvc := solana.NewAvatarWalletService(infra.ProjectID)
 	transportationSvc := transportationdom.NewService(r.transportationRepo)
