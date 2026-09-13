@@ -1,7 +1,11 @@
 // frontend/amol/src/features/avatar/services/avatarCreateService.ts
 
 import type { Auth } from "firebase/auth";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import {
+  getDownloadURL,
+  ref,
+  uploadBytesResumable,
+} from "firebase/storage";
 
 import { storage } from "../../../lib/firebase";
 import { createAvatar, getMyAvatar, updateAvatar } from "../api/avatarApi";
@@ -16,16 +20,47 @@ type AvatarCreateServiceParams = {
   auth: Auth;
 };
 
+export type AvatarIconUploadProgress = {
+  transferredBytes: number;
+  totalBytes: number;
+  percentage: number;
+};
+
+export type AvatarIconUploadProgressHandler = (
+  progress: AvatarIconUploadProgress,
+) => void;
+
 type SaveAvatarParams = {
   avatarNameRaw: string;
   profileRaw: string;
   externalLinkRaw: string;
   iconFile: File | null;
+  onUploadProgress?: AvatarIconUploadProgressHandler;
+  onUploadCompleted?: () => void;
 };
 
 type UpdateAvatarParams = SaveAvatarParams & {
   avatarId: string;
 };
+
+function calculateUploadPercentage(
+  transferredBytes: number,
+  totalBytes: number,
+): number {
+  if (totalBytes <= 0) {
+    return 100;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round(
+        (transferredBytes / totalBytes) * 100,
+      ),
+    ),
+  );
+}
 
 export class AvatarCreateService {
   private readonly auth: Auth;
@@ -43,7 +78,10 @@ export class AvatarCreateService {
 
     try {
       const url = new URL(value);
-      return (url.protocol === "http:" || url.protocol === "https:") && !!url.host;
+      return (
+        (url.protocol === "http:" || url.protocol === "https:") &&
+        !!url.host
+      );
     } catch {
       return false;
     }
@@ -94,7 +132,9 @@ export class AvatarCreateService {
       case "image/gif":
         return mimeType;
       default:
-        throw new Error("対応していない画像形式です。png, jpg, webp, gif を選択してください。");
+        throw new Error(
+          "対応していない画像形式です。png, jpg, webp, gif を選択してください。",
+        );
     }
   }
 
@@ -105,20 +145,56 @@ export class AvatarCreateService {
   private async uploadAvatarIconToFirebaseStorage({
     avatarId,
     iconFile,
+    onProgress,
   }: {
     avatarId: string;
     iconFile: File;
+    onProgress?: AvatarIconUploadProgressHandler;
   }): Promise<string> {
     const mimeType = this.ensureSupportedImage(iconFile);
     const objectPath = this.avatarIconStoragePath(avatarId);
     const storageRef = ref(storage, objectPath);
 
-    await uploadBytes(storageRef, iconFile, {
-      contentType: mimeType,
-      customMetadata: {
-        avatarId,
-        fileName: iconFile.name || "icon",
+    const uploadTask = uploadBytesResumable(
+      storageRef,
+      iconFile,
+      {
+        contentType: mimeType,
+        customMetadata: {
+          avatarId,
+          fileName: iconFile.name || "icon",
+        },
       },
+    );
+
+    await new Promise<void>((resolve, reject) => {
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          onProgress?.({
+            transferredBytes: snapshot.bytesTransferred,
+            totalBytes: snapshot.totalBytes,
+            percentage: calculateUploadPercentage(
+              snapshot.bytesTransferred,
+              snapshot.totalBytes,
+            ),
+          });
+        },
+        (error) => {
+          reject(error);
+        },
+        () => {
+          const snapshot = uploadTask.snapshot;
+
+          onProgress?.({
+            transferredBytes: snapshot.totalBytes,
+            totalBytes: snapshot.totalBytes,
+            percentage: 100,
+          });
+
+          resolve();
+        },
+      );
     });
 
     return getDownloadURL(storageRef);
@@ -133,6 +209,8 @@ export class AvatarCreateService {
     profileRaw,
     externalLinkRaw,
     iconFile,
+    onUploadProgress,
+    onUploadCompleted,
   }: SaveAvatarParams): Promise<AvatarCreateResult> {
     try {
       const user = this.auth.currentUser;
@@ -178,7 +256,10 @@ export class AvatarCreateService {
         const avatarIcon = await this.uploadAvatarIconToFirebaseStorage({
           avatarId: created.avatarId,
           iconFile,
+          onProgress: onUploadProgress,
         });
+
+        onUploadCompleted?.();
 
         await updateAvatar({
           payload: {
@@ -210,6 +291,8 @@ export class AvatarCreateService {
     profileRaw,
     externalLinkRaw,
     iconFile,
+    onUploadProgress,
+    onUploadCompleted,
   }: UpdateAvatarParams): Promise<AvatarUpdateResult> {
     try {
       if (!avatarNameRaw) {
@@ -232,7 +315,10 @@ export class AvatarCreateService {
         avatarIcon = await this.uploadAvatarIconToFirebaseStorage({
           avatarId,
           iconFile,
+          onProgress: onUploadProgress,
         });
+
+        onUploadCompleted?.();
       }
 
       const updated = await updateAvatar({

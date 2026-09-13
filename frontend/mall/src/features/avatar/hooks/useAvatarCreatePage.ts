@@ -5,6 +5,13 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { signOut as firebaseSignOut } from "firebase/auth";
 
 import { auth } from "../../../lib/firebase";
+import {
+  createFailedAvatarCreateProgress,
+  createInitialAvatarCreateProgress,
+  createPreparingAvatarCreateProgress,
+  createSavingAvatarCreateProgress,
+  createUploadingAvatarCreateProgress,
+} from "../models/avatarCreateProgress";
 import { AvatarCreateService } from "../services/avatarCreateService";
 import type { AvatarFormMode } from "../../shared/types/avatar";
 
@@ -36,19 +43,28 @@ export function useAvatarCreatePage() {
   const [createdAvatarId, setCreatedAvatarId] = useState("");
   const [successRedirectTo, setSuccessRedirectTo] = useState("");
 
+  const [progress, setProgress] = useState(
+    createInitialAvatarCreateProgress,
+  );
+  const [progressOpen, setProgressOpen] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const service = useMemo(() => new AvatarCreateService({ auth }), []);
 
   const loggedIn = auth.currentUser !== null;
   const backTo = useMemo(() => service.backTo(from), [from, service]);
-  const canSave = useMemo(() => !loading && !saving && avatarName.length > 0, [avatarName, loading, saving]);
+  const canSave = useMemo(
+    () => !loading && !saving && avatarName.length > 0,
+    [avatarName, loading, saving],
+  );
   const isSuccessMessage = useMemo(
     () => msg.includes("作成しました") || msg.includes("保存しました"),
     [msg],
   );
 
   const pageTitle = mode === "edit" ? "アバター編集" : "アバター作成";
-  const saveButtonLabel = saving ? "保存中..." : mode === "edit" ? "保存する" : "作成する";
+  const saveButtonLabel =
+    saving ? "保存中..." : mode === "edit" ? "保存する" : "作成する";
 
   useEffect(() => {
     let cancelled = false;
@@ -162,6 +178,15 @@ export function useAvatarCreatePage() {
     }
   }
 
+  function handleCloseProgress() {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
+    setProgressOpen(false);
+    setProgress(createInitialAvatarCreateProgress());
+  }
+
   async function signOut() {
     setMsg("");
 
@@ -169,7 +194,11 @@ export function useAvatarCreatePage() {
       await firebaseSignOut(auth);
       navigate("/", { replace: true });
     } catch (error) {
-      setMsg(error instanceof Error ? error.message : "サインアウトに失敗しました。");
+      setMsg(
+        error instanceof Error
+          ? error.message
+          : "サインアウトに失敗しました。",
+      );
     }
   }
 
@@ -181,6 +210,48 @@ export function useAvatarCreatePage() {
     setCreatedAvatarId("");
     setSuccessRedirectTo("");
 
+    if (iconFile) {
+      setProgress(createPreparingAvatarCreateProgress());
+      setProgressOpen(true);
+    } else {
+      setProgress(createInitialAvatarCreateProgress());
+      setProgressOpen(false);
+    }
+
+    const handleUploadProgress = ({
+      transferredBytes,
+      totalBytes,
+    }: {
+      transferredBytes: number;
+      totalBytes: number;
+      percentage: number;
+    }) => {
+      if (!iconFile) {
+        return;
+      }
+
+      setProgress(
+        createUploadingAvatarCreateProgress({
+          fileName: iconFile.name,
+          transferredBytes,
+          totalBytes,
+        }),
+      );
+    };
+
+    const handleUploadCompleted = () => {
+      if (!iconFile) {
+        return;
+      }
+
+      setProgress(
+        createSavingAvatarCreateProgress({
+          transferredBytes: iconFile.size,
+          totalBytes: iconFile.size,
+        }),
+      );
+    };
+
     try {
       let savedAvatarId: string;
 
@@ -191,11 +262,19 @@ export function useAvatarCreatePage() {
           profileRaw: profile,
           externalLinkRaw: externalLink,
           iconFile,
+          onUploadProgress: handleUploadProgress,
+          onUploadCompleted: handleUploadCompleted,
         });
 
         setMsg(result.message);
 
         if (!result.ok) {
+          if (iconFile) {
+            setProgress(
+              createFailedAvatarCreateProgress(result.message),
+            );
+          }
+
           return false;
         }
 
@@ -206,11 +285,19 @@ export function useAvatarCreatePage() {
           profileRaw: profile,
           externalLinkRaw: externalLink,
           iconFile,
+          onUploadProgress: handleUploadProgress,
+          onUploadCompleted: handleUploadCompleted,
         });
 
         setMsg(result.message);
 
         if (!result.ok) {
+          if (iconFile) {
+            setProgress(
+              createFailedAvatarCreateProgress(result.message),
+            );
+          }
+
           return false;
         }
 
@@ -220,9 +307,22 @@ export function useAvatarCreatePage() {
       setCreatedAvatarId(savedAvatarId);
       setSuccessRedirectTo(backTo);
       navigate(backTo, { replace: true });
+
       return true;
     } catch (error) {
-      setMsg(error instanceof Error ? error.message : String(error));
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : String(error);
+
+      setMsg(errorMessage);
+
+      if (iconFile) {
+        setProgress(
+          createFailedAvatarCreateProgress(errorMessage),
+        );
+      }
+
       return false;
     } finally {
       setSaving(false);
@@ -254,6 +354,9 @@ export function useAvatarCreatePage() {
     isSuccessMessage,
     pageTitle,
     saveButtonLabel,
+    progress,
+    progressOpen,
+    handleCloseProgress,
     clearMessage,
     openIconPicker,
     pickIcon,
