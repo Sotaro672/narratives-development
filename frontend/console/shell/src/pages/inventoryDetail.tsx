@@ -68,6 +68,10 @@ export default function InventoryDetail() {
     navigate("/stockLocation/create");
   }, [navigate]);
 
+  const onCreateTransportationFee = React.useCallback(() => {
+    navigate("/transportationFee/create");
+  }, [navigate]);
+
   const handleSave = React.useCallback(async () => {
     await handleSaveShippingAddress();
     await handleSaveTransportation();
@@ -181,6 +185,7 @@ export default function InventoryDetail() {
           transportationId={transportationId}
           onSelectTransportationOption={handleSelectTransportationOption}
           setTransportationId={setTransportationId}
+          onCreateTransportationFee={onCreateTransportationFee}
           loading={loading}
           disabled={transportationSaving}
         />
