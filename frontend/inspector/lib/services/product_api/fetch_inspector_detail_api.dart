@@ -8,6 +8,7 @@ import 'fetch_inspection_batch_api.dart';
 
 class FetchInspectorDetailApi {
   final ApiClient _client;
+
   FetchInspectorDetailApi(this._client);
 
   Future<InspectorProductDetail> fetchInspectorDetail(String productId) async {
@@ -51,6 +52,7 @@ class FetchInspectorDetailApi {
       productionId: baseDetail.productionId,
       modelId: baseDetail.modelId,
       productBlueprintId: baseDetail.productBlueprintId,
+      kind: baseDetail.kind,
       modelNumber: baseDetail.modelNumber,
       size: baseDetail.size,
       measurements: baseDetail.measurements,

@@ -27,10 +27,9 @@ class ProductBlueprintCard extends StatelessWidget {
             Text('商品名: ${bp.productName}'),
             Text('ブランド名: ${bp.brandName}'),
             Text('会社名: ${bp.companyName}'),
-            Text('アイテム種別: ${bp.itemType}'),
             if (bp.fit.isNotEmpty) Text('フィット: ${bp.fit}'),
             if (bp.material.isNotEmpty) Text('素材: ${bp.material}'),
-            Text('重さ: ${bp.weight}'),
+            if (bp.weight != null) Text('重さ: ${bp.weight}'),
             const SizedBox(height: 8),
             if (bp.qualityAssurance.isNotEmpty) ...[
               const Text(

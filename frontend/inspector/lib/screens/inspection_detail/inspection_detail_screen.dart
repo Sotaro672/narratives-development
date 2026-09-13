@@ -94,12 +94,18 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
               final bo = b.displayOrder;
 
               if (ao != null && bo != null) {
-                if (ao != bo) return ao.compareTo(bo);
+                if (ao != bo) {
+                  return ao.compareTo(bo);
+                }
                 return a.productId.compareTo(b.productId);
               }
 
-              if (ao != null && bo == null) return -1;
-              if (ao == null && bo != null) return 1;
+              if (ao != null && bo == null) {
+                return -1;
+              }
+              if (ao == null && bo != null) {
+                return 1;
+              }
 
               return a.productId.compareTo(b.productId);
             });
@@ -109,6 +115,7 @@ class _InspectionDetailScreenState extends State<InspectionDetailScreen> {
             productionId: detail.productionId,
             modelId: detail.modelId,
             productBlueprintId: detail.productBlueprintId,
+            kind: detail.kind,
             modelNumber: detail.modelNumber,
             size: detail.size,
             measurements: detail.measurements,

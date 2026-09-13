@@ -33,6 +33,7 @@ class ModelCard extends StatelessWidget {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
+            if (detail.kind.isNotEmpty) Text('kind: ${detail.kind}'),
             Text('modelNumber: ${detail.modelNumber}'),
             if (detail.size.isNotEmpty) Text('サイズ: ${detail.size}'),
             const SizedBox(height: 8),

@@ -9,6 +9,7 @@ class InspectorProductDetail {
   final String modelId;
   final String productBlueprintId;
 
+  final String kind;
   final String modelNumber;
   final String size;
   final Map<String, int> measurements;
@@ -25,6 +26,7 @@ class InspectorProductDetail {
     required this.productionId,
     required this.modelId,
     required this.productBlueprintId,
+    required this.kind,
     required this.modelNumber,
     required this.size,
     required this.measurements,
@@ -56,21 +58,26 @@ class InspectorProductDetail {
         .toList();
 
     return InspectorProductDetail(
-      productId: (json['productId'] ?? '') as String,
-      productionId: (json['productionId'] ?? '') as String,
-      modelId: (json['modelId'] ?? '') as String,
-      productBlueprintId: (json['productBlueprintId'] ?? '') as String,
-      modelNumber: (json['modelNumber'] ?? '') as String,
-      size: (json['size'] ?? '') as String,
+      productId: (json['productId'] ?? '').toString(),
+      productionId: (json['productionId'] ?? '').toString(),
+      modelId: (json['modelId'] ?? '').toString(),
+      productBlueprintId: (json['productBlueprintId'] ?? '').toString(),
+      kind: (json['kind'] ?? '').toString(),
+      modelNumber: (json['modelNumber'] ?? '').toString(),
+      size: (json['size'] ?? '').toString(),
       measurements: parseMeasurements(json['measurements']),
       color: InspectorColor.fromJson(
-        (json['color'] as Map<String, dynamic>? ?? const {}),
+        json['color'] is Map<String, dynamic>
+            ? json['color'] as Map<String, dynamic>
+            : const {},
       ),
       productBlueprint: InspectorProductBlueprint.fromJson(
-        (json['productBlueprint'] as Map<String, dynamic>? ?? const {}),
+        json['productBlueprint'] is Map<String, dynamic>
+            ? json['productBlueprint'] as Map<String, dynamic>
+            : const {},
       ),
       inspections: inspections,
-      inspectionResult: (json['inspectionResult'] ?? '') as String,
+      inspectionResult: (json['inspectionResult'] ?? '').toString(),
     );
   }
 }

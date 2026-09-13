@@ -8,8 +8,8 @@ class InspectorModelRef {
 
   factory InspectorModelRef.fromJson(Map<String, dynamic> json) {
     return InspectorModelRef(
-      modelId: (json['modelId'] ?? json['modelID'] ?? '') as String,
-      displayOrder: (json['displayOrder'] is num)
+      modelId: (json['modelId'] ?? json['modelID'] ?? '').toString(),
+      displayOrder: json['displayOrder'] is num
           ? (json['displayOrder'] as num).toInt()
           : 0,
     );
@@ -19,23 +19,16 @@ class InspectorModelRef {
 class InspectorProductBlueprint {
   final String id;
   final String productName;
-
-  // ▼ 会社ID → 会社名
   final String companyName;
-
-  // ▼ ブランドID → ブランド名
   final String brandName;
 
-  final String itemType;
   final String fit;
   final String material;
-  final double weight;
+  final double? weight;
   final List<String> qualityAssurance;
   final String productIdTagType;
   final String assigneeId;
 
-  // ✅ 追加: modelRefs（displayOrder含む）
-  // backend が modelRefs を返す想定。未対応/欠落時は空配列。
   final List<InspectorModelRef> modelRefs;
 
   InspectorProductBlueprint({
@@ -43,7 +36,6 @@ class InspectorProductBlueprint {
     required this.productName,
     required this.companyName,
     required this.brandName,
-    required this.itemType,
     required this.fit,
     required this.material,
     required this.weight,
@@ -54,61 +46,64 @@ class InspectorProductBlueprint {
   });
 
   factory InspectorProductBlueprint.fromJson(Map<String, dynamic> json) {
-    // バックエンド側が companyName / brandName を返す前提。
-    // もしまだ companyId / brandId しか無い場合はフォールバックする。
-    final companyName =
-        (json['companyName'] ?? json['companyId'] ?? '') as String;
-    final brandName = (json['brandName'] ?? json['brandId'] ?? '') as String;
-
-    final rawCategory = json['productBlueprintCategory'];
-    final category = rawCategory is Map<String, dynamic>
-        ? rawCategory
-        : const <String, dynamic>{};
+    final companyName = (json['companyName'] ?? json['companyId'] ?? '')
+        .toString();
+    final brandName = (json['brandName'] ?? json['brandId'] ?? '').toString();
 
     final rawCategoryFields = json['categoryFields'];
     final categoryFields = rawCategoryFields is Map<String, dynamic>
         ? rawCategoryFields
         : const <String, dynamic>{};
 
-    // ✅ modelRefs: [{modelId, displayOrder}] を受け取る
+    double? parseWeight(dynamic value) {
+      if (value == null) {
+        return null;
+      }
+
+      if (value is num) {
+        return value.toDouble();
+      }
+
+      return double.tryParse(value.toString());
+    }
+
+    final rawWashTags = categoryFields['washTags'];
+    final qualityAssurance = rawWashTags is List
+        ? rawWashTags.map((e) => e.toString()).toList()
+        : const <String>[];
+
     final rawModelRefs = json['modelRefs'];
-    final modelRefs = (rawModelRefs is List)
+    final modelRefs = rawModelRefs is List
         ? rawModelRefs
               .whereType<Map<String, dynamic>>()
               .map(InspectorModelRef.fromJson)
-              .where((r) => r.modelId.isNotEmpty)
+              .where((ref) => ref.modelId.isNotEmpty)
               .toList()
         : const <InspectorModelRef>[];
 
-    // ✅ 念のため displayOrder 昇順に整列（0は末尾扱い）
     final sortedModelRefs = [...modelRefs]
       ..sort((a, b) {
-        final ai = a.displayOrder == 0 ? 1 << 30 : a.displayOrder;
-        final bi = b.displayOrder == 0 ? 1 << 30 : b.displayOrder;
-        if (ai != bi) return ai.compareTo(bi);
+        final aOrder = a.displayOrder == 0 ? 1 << 30 : a.displayOrder;
+        final bOrder = b.displayOrder == 0 ? 1 << 30 : b.displayOrder;
+
+        if (aOrder != bOrder) {
+          return aOrder.compareTo(bOrder);
+        }
+
         return a.modelId.compareTo(b.modelId);
       });
 
     return InspectorProductBlueprint(
-      id: (json['id'] ?? '') as String,
-      productName: (json['productName'] ?? '') as String,
+      id: (json['id'] ?? '').toString(),
+      productName: (json['productName'] ?? '').toString(),
       companyName: companyName,
       brandName: brandName,
-      itemType:
-          (category['nameJa'] ?? category['code'] ?? category['kind'] ?? '')
-              .toString(),
       fit: (categoryFields['fit'] ?? '').toString(),
       material: (categoryFields['material'] ?? '').toString(),
-      weight: (categoryFields['weight'] is num)
-          ? (categoryFields['weight'] as num).toDouble()
-          : 0.0,
-      qualityAssurance:
-          (categoryFields['washTags'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-      productIdTagType: (json['productIdTagType'] ?? '') as String,
-      assigneeId: (json['assigneeId'] ?? '') as String,
+      weight: parseWeight(categoryFields['weight']),
+      qualityAssurance: qualityAssurance,
+      productIdTagType: (json['productIdTagType'] ?? '').toString(),
+      assigneeId: (json['assigneeId'] ?? '').toString(),
       modelRefs: sortedModelRefs,
     );
   }

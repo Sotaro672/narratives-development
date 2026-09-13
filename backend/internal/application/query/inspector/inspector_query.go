@@ -157,7 +157,6 @@ func (q *QueryService) GetInspectorProductDetail(
 		productBlueprintID string
 		kind               string
 		modelNumber        string
-		modelLabel         string
 
 		size         string
 		colorDTO     ProductColorDTO
@@ -172,7 +171,6 @@ func (q *QueryService) GetInspectorProductDetail(
 		productBlueprintID = model.ProductBlueprintID
 		kind = "apparel"
 		modelNumber = model.ModelNumber
-		modelLabel = model.ModelNumber
 		size = model.Size
 		colorDTO = ProductColorDTO{
 			RGB:  model.Color.RGB,
@@ -184,7 +182,6 @@ func (q *QueryService) GetInspectorProductDetail(
 		productBlueprintID = model.ProductBlueprintID
 		kind = "alcohol"
 		modelNumber = model.ModelNumber
-		modelLabel = model.ModelNumber
 		volumeValue = model.Volume.Value
 		volumeUnit = model.Volume.Unit
 
@@ -277,7 +274,6 @@ func (q *QueryService) GetInspectorProductDetail(
 		// common
 		Kind:        kind,
 		ModelNumber: modelNumber,
-		ModelLabel:  modelLabel,
 
 		// apparel
 		Size:         size,
@@ -406,7 +402,6 @@ type ProductDetail struct {
 	// common
 	Kind        string `json:"kind,omitempty"` // "apparel" / "alcohol"
 	ModelNumber string `json:"modelNumber"`
-	ModelLabel  string `json:"modelLabel,omitempty"` // 表示用共通ラベル
 
 	// apparel
 	Size         string                `json:"size,omitempty"`
