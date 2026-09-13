@@ -37,6 +37,7 @@ export default function HowToUseDetailPage() {
       mode="landing"
       showBackButton
       backTo="/how-to-use"
+      hideAnnouncementButton
     >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">

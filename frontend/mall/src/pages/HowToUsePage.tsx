@@ -66,7 +66,11 @@ export default function HowToUsePage() {
   };
 
   return (
-    <Layout title="使い方" mode="landing">
+    <Layout
+      title="使い方"
+      mode="landing"
+      hideAnnouncementButton
+    >
       <main className="how-to-use-page">
         <div className="how-to-use-page__inner">
           <ItemList
