@@ -13,7 +13,7 @@ export default function HowToUsePdfButton() {
       aria-label="PDFで保存"
       title="PDFで保存"
     >
-      PDFで保存
+      PDF
     </button>
   );
 }

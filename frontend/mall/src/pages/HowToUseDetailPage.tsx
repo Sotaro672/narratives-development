@@ -39,6 +39,7 @@ export default function HowToUseDetailPage() {
   showBackButton
   backTo="/how-to-use"
   hideAnnouncementButton
+  hideSettingsButton
 >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
