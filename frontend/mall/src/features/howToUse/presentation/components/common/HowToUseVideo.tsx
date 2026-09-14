@@ -3,14 +3,12 @@
 type HowToUseVideoProps = {
   src: string;
   label: string;
-  caption?: string;
   variant?: "default" | "iphone-12-pro";
 };
 
 export default function HowToUseVideo({
   src,
   label,
-  caption,
   variant = "default",
 }: HowToUseVideoProps) {
   const figureClassName = [
@@ -45,12 +43,6 @@ export default function HowToUseVideo({
           preload="metadata"
         />
       </div>
-
-      {caption ? (
-        <figcaption className="how-to-use-figure__caption">
-          {caption}
-        </figcaption>
-      ) : null}
     </figure>
   );
 }

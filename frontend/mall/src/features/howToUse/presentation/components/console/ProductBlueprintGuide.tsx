@@ -20,7 +20,6 @@ export default function ProductBlueprintGuide() {
         <HowToUseVideo
           src={goToProductBlueprintRegistrationVideo}
           label="商品設計一覧を開き、商品設計を作成ボタンから商品設計画面へ移動する手順"
-          caption="商品設計画面への移動"
         />
       </HowToUseSection>
 

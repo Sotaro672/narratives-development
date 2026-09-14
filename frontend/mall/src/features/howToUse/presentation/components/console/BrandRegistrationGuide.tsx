@@ -21,7 +21,6 @@ export default function BrandRegistrationGuide() {
         <HowToUseVideo
           src={goToBrandRegistrationVideo}
           label="サイドバーから組織、ブランドを選択し、ブランド追加ボタンをクリックしてブランド登録画面へ移動する手順"
-          caption="ブランド登録画面への移動"
         />
       </HowToUseSection>
 

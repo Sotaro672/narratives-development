@@ -125,6 +125,40 @@
 }
 
 /* =========================================================
+ * Mobile guide / iPhone video
+ * =======================================================*/
+
+.how-to-use-mobile-guide {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  align-items: start;
+  gap: 32px;
+  width: 100%;
+}
+
+.how-to-use-mobile-guide .how-to-use-step-list {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.how-to-use-figure--iphone-12-pro {
+  width: 190px;
+  max-width: 190px;
+  margin: 0;
+}
+
+.how-to-use-figure__image-wrap--iphone-12-pro {
+  width: 100%;
+  aspect-ratio: 390 / 844;
+}
+
+.how-to-use-figure__image-wrap--iphone-12-pro .how-to-use-figure__video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* =========================================================
  * Note
  * =======================================================*/
 
@@ -199,6 +233,25 @@
 
   .how-to-use-figure__image-wrap {
     border-radius: 8px;
+  }
+
+  .how-to-use-mobile-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .how-to-use-mobile-guide .how-to-use-step-list {
+    order: 1;
+    padding-top: 0;
+  }
+
+  .how-to-use-mobile-guide .how-to-use-figure--iphone-12-pro {
+    order: 2;
+    width: 180px;
+    max-width: 180px;
+    margin-right: auto;
+    margin-left: auto;
   }
 
   .how-to-use-note {

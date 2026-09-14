@@ -20,7 +20,6 @@ export default function ProductionRegistrationGuide() {
         <HowToUseVideo
           src={goToProductionRegistrationVideo}
           label="商品生産一覧を開き、生産計画を作成ボタンから生産計画作成画面へ移動する手順"
-          caption="生産計画作成画面への移動"
         />
       </HowToUseSection>
 

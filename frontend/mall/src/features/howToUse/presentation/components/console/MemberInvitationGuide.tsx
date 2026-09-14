@@ -21,7 +21,6 @@ export default function MemberInvitationGuide() {
         <HowToUseVideo
           src={goToMemberRegistrationVideo}
           label="サイドバーから組織、メンバーを選択し、メンバー追加ボタンをクリックしてメンバー登録画面へ移動する手順"
-          caption="メンバー登録画面への移動"
         />
       </HowToUseSection>
 

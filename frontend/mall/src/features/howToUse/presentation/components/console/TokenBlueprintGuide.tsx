@@ -20,7 +20,6 @@ export default function TokenBlueprintGuide() {
         <HowToUseVideo
           src={goToTokenBlueprintRegistrationVideo}
           label="トークン設計一覧を開き、トークン設計を作成ボタンからトークン設計画面へ移動する手順"
-          caption="トークン設計画面への移動"
         />
       </HowToUseSection>
 
