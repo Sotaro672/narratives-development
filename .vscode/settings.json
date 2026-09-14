@@ -1,3 +1,10 @@
 {
-    "cmake.sourceDirectory": "C:/Users/caota/narratives-development/frontend/inspector/linux"
+    "cmake.sourceDirectory": "C:/Users/caota/narratives-development/frontend/inspector/linux",
+    "python-envs.pythonProjects": [
+        {
+            "path": "frontend/mall/src/features/howToUse/presentation",
+            "envManager": "ms-python.python:venv",
+            "packageManager": "ms-python.python:pip"
+        }
+    ]
 }
