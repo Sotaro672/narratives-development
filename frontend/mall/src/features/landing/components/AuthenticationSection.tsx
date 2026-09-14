@@ -2,6 +2,9 @@
 
 import type { RefObject } from "react";
 
+import blockchainNetworkImage from "../assets/BlockchainNetwork.png";
+import scanningImage from "../assets/Scaning.png";
+
 type AuthenticationSectionProps = {
   authenticationEyebrowRef: RefObject<HTMLParagraphElement>;
 };
@@ -46,7 +49,7 @@ export default function AuthenticationSection({
 
             <div className="landing-page-service-case-card__image-wrap">
               <img
-                src="/Scaning.png"
+                src={scanningImage}
                 alt="日本酒ラベルのQRコードを読み取り、所有者情報が更新される流れ"
                 className="landing-page-service-case-card__image"
                 loading="lazy"
@@ -67,7 +70,7 @@ export default function AuthenticationSection({
 
             <div className="landing-page-service-case-card__image-wrap">
               <img
-                src="/BlockchainNetwork.png"
+                src={blockchainNetworkImage}
                 alt="世界中のサーバーに所有者情報が記録される図"
                 className="landing-page-service-case-card__image"
                 loading="lazy"

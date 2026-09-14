@@ -1,5 +1,11 @@
 // frontend/mall/src/features/landing/components/LandingFeatureOverview.tsx
 
+import type { KeyboardEvent } from "react";
+
+import fleaMarketImage from "../assets/2ndCustomer.png";
+import salesSupportImage from "../assets/comment.png";
+import authenticationImage from "../assets/scan.png";
+
 type LandingFeatureOverviewProps = {
   onAuthenticationClick: () => void;
   onFleaMarketClick: () => void;
@@ -12,7 +18,7 @@ export default function LandingFeatureOverview({
   onSalesSupportClick,
 }: LandingFeatureOverviewProps) {
   const handleKeyDown = (
-    event: React.KeyboardEvent<HTMLElement>,
+    event: KeyboardEvent<HTMLElement>,
     onActivate: () => void,
   ) => {
     if (
@@ -53,7 +59,7 @@ export default function LandingFeatureOverview({
 
             <div className="landing-page-feature-card__image-placeholder">
               <img
-                src="/scan.png"
+                src={authenticationImage}
                 alt="商品QRコードをスキャンした結果画面"
                 className="landing-page-feature-card__image"
                 loading="lazy"
@@ -84,7 +90,7 @@ export default function LandingFeatureOverview({
 
             <div className="landing-page-feature-card__image-placeholder">
               <img
-                src="/2ndCustomer.png"
+                src={fleaMarketImage}
                 alt="フリーマーケットで二次流通した商品の所有者が更新される図"
                 className="landing-page-feature-card__image"
                 loading="lazy"
@@ -115,7 +121,7 @@ export default function LandingFeatureOverview({
 
             <div className="landing-page-feature-card__image-placeholder">
               <img
-                src="/comment.png"
+                src={salesSupportImage}
                 alt="商品所有者とのコメント画面"
                 className="landing-page-feature-card__image"
                 loading="lazy"
