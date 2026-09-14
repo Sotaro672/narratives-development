@@ -2,8 +2,6 @@
 
 import enterProductionQuantityVideo from "../../../assets/console/production-registration/enter-production-quantity.mp4";
 import goToProductionRegistrationVideo from "../../../assets/console/production-registration/go-to-production-registration.mp4";
-
-import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
@@ -38,13 +36,7 @@ export default function ProductionRegistrationGuide() {
           label="ブランドと商品設計を選択し、モデル別生産数一覧で各モデルの生産数を入力する手順"
         />
 
-        <HowToUseNote title="商品設計">
-          生産計画を作成するには、あらかじめ対象商品の商品設計を登録しておく必要があります。ブランドを選択すると、そのブランドの商品設計から生産対象を選択できます。
-        </HowToUseNote>
 
-        <HowToUseNote title="モデル別生産数">
-          生産数は商品全体ではなく、商品設計に登録されているモデルごとに入力します。カラーやサイズ、容量などのバリエーションを確認し、それぞれの生産予定数を設定してください。
-        </HowToUseNote>
       </HowToUseSection>
     </>
   );
