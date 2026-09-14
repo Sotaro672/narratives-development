@@ -7,9 +7,16 @@ import {
 } from "firebase/storage";
 
 import { storage } from "../../../../auth/infrastructure/config/firebaseClient";
+import {
+  assertImageForStorage,
+  getImageContentType,
+  type ImageStorageTarget,
+} from "../../../../shared/storage/imageStoragePolicy";
 
-import type { BrandImageTarget } from "../../config/brandImagePolicy.generated";
-import { validateBrandImage } from "../../application/brandImageValidation";
+type BrandImageTarget = Extract<
+  ImageStorageTarget,
+  "brandIcon" | "brandBackgroundImage"
+>;
 
 export type BrandAssetUploadProgress = {
   transferredBytes: number;
@@ -94,20 +101,14 @@ export async function uploadBrandAssetToFirebaseStorage(
     );
   }
 
-  const validation = validateBrandImage(
+  assertImageForStorage(
     params.file,
     params.target,
   );
 
-  if (!validation.valid) {
-    throw new Error(validation.message);
-  }
-
-  if (!params.file.type) {
-    throw new Error(
-      "画像のMIMEタイプを取得できません。",
-    );
-  }
+  const contentType = getImageContentType(
+    params.file,
+  );
 
   const objectPath = buildBrandAssetPath({
     companyId: params.companyId,
@@ -115,7 +116,10 @@ export async function uploadBrandAssetToFirebaseStorage(
     target: params.target,
   });
 
-  const storageRef = ref(storage, objectPath);
+  const storageRef = ref(
+    storage,
+    objectPath,
+  );
 
   emitUploadProgress(
     params.onProgress,
@@ -127,7 +131,7 @@ export async function uploadBrandAssetToFirebaseStorage(
     storageRef,
     params.file,
     {
-      contentType: params.file.type,
+      contentType,
       cacheControl: "public,max-age=3600",
     },
   );

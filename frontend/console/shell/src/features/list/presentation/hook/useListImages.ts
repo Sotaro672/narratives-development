@@ -2,10 +2,10 @@
 
 import * as React from "react";
 
+import { validateImageForStorage } from "../../../../shared/storage/imageStoragePolicy";
 import {
   cloneDraftImagesFromImages,
   fileKey,
-  isImageFile,
   revokeDraftBlobUrls,
   type DraftImage,
   type ListImageSource,
@@ -49,14 +49,20 @@ export function useListImages(
 
   const addFiles = React.useCallback(
     (files: File[]) => {
-      if (!isEdit || saving) {
+      if (!isEdit || saving || files.length === 0) {
         return;
       }
 
-      const incomingFiles = files.filter(isImageFile);
+      for (const file of files) {
+        const validation = validateImageForStorage(
+          file,
+          "listImage",
+        );
 
-      if (incomingFiles.length === 0) {
-        return;
+        if (!validation.valid) {
+          window.alert(validation.reason);
+          return;
+        }
       }
 
       setDraftImages((previousImages) => {
@@ -71,7 +77,7 @@ export function useListImages(
 
         const newImages: DraftImage[] = [];
 
-        for (const file of incomingFiles) {
+        for (const file of files) {
           const key = fileKey(file);
 
           if (existingFileKeys.has(key)) {

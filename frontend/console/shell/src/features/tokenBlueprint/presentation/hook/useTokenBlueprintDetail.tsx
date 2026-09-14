@@ -4,9 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
-import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
+import { validateImageForStorage } from "../../../../shared/storage/imageStoragePolicy";
 import type { ContentFile, TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 
 import {
   deleteTokenBlueprintDetail,
@@ -102,6 +103,17 @@ async function uploadAndAppendExistingTokenBlueprintContents(params: {
   existingContentFiles: ContentFile[];
   progressHandlers?: ExistingTokenBlueprintContentsProgressHandlers;
 }): Promise<TokenBlueprint> {
+  for (const file of params.files) {
+    const validation = validateImageForStorage(
+      file,
+      "tokenBlueprintContentImage",
+    );
+
+    if (!validation.valid) {
+      throw new Error(validation.reason);
+    }
+  }
+
   let currentContentFiles = [...params.existingContentFiles];
   let updatedBlueprint: TokenBlueprint | null = null;
 
@@ -345,7 +357,6 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
     const iconFile = cardVm.iconFile ?? null;
     const totalBytes = iconFile?.size ?? 0;
-
     let transferredBytes = 0;
 
     try {
@@ -497,6 +508,18 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
       if (!memberId) {
         throw new Error("memberId is required");
+      }
+
+      for (const file of files) {
+        const validation = validateImageForStorage(
+          file,
+          "tokenBlueprintContentImage",
+        );
+
+        if (!validation.valid) {
+          window.alert(validation.reason);
+          return;
+        }
       }
 
       const totalBytes = files.reduce(

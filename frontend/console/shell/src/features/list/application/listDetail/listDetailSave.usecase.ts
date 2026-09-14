@@ -1,18 +1,19 @@
 // frontend/console/shell/src/features/list/application/listDetail/listDetailSave.usecase.ts
 
+import { assertImageForStorage } from "../../../../shared/storage/imageStoragePolicy";
+import type { ListStatus } from "../../../../shared/types/list";
 import type {
   ListDetailDTO,
   ListSaveOperationDTO,
   ListSaveOperationListPriceRowDTO,
   ListSaveOperationTargetListDTO,
 } from "../../infrastructure/dto";
-import { startListSaveOperationHTTP } from "../../infrastructure/repository";
-import type { ListStatus } from "../../../../shared/types/list";
-import { loadListDetailDTO } from "../listDetailService";
 import {
   deleteListImageFromFirebaseStorage,
   uploadListImageToFirebaseStorage,
 } from "../../infrastructure/firebase/listImageStorage";
+import { startListSaveOperationHTTP } from "../../infrastructure/repository";
+import { loadListDetailDTO } from "../listDetailService";
 
 export type SaveListDetailDraftImage = {
   id?: string;
@@ -138,7 +139,11 @@ function normalizePriceRows(
       throw new Error(`invalid_price_model_id_${index}`);
     }
 
-    if (!Number.isInteger(price) || price < 0 || price > 10_000_000) {
+    if (
+      !Number.isInteger(price) ||
+      price < 0 ||
+      price > 10_000_000
+    ) {
       throw new Error(`invalid_price_${index}`);
     }
 
@@ -161,7 +166,8 @@ function buildTargetList(args: {
 }): ListSaveOperationTargetListDTO {
   const title = args.title;
   const description = args.description;
-  const assigneeId = args.assigneeId ?? args.currentDTO.assigneeId;
+  const assigneeId =
+    args.assigneeId ?? args.currentDTO.assigneeId;
   const inventoryId = args.currentDTO.inventoryId;
   const createdBy = args.currentDTO.createdBy;
   const createdAt = args.currentDTO.createdAt;
@@ -188,7 +194,10 @@ function buildTargetList(args: {
 
   return {
     id: args.listId,
-    status: resolveListStatus(args.status, args.currentDTO.status),
+    status: resolveListStatus(
+      args.status,
+      args.currentDTO.status,
+    ),
     assigneeId,
     title,
     inventoryId,
@@ -202,18 +211,48 @@ function buildTargetList(args: {
   };
 }
 
+function assertNewDraftImagesForStorage(
+  draftImages: readonly SaveListDetailDraftImage[],
+): void {
+  for (const image of draftImages) {
+    if (!image.isNew) {
+      continue;
+    }
+
+    if (!image.file) {
+      throw new Error(
+        "追加する画像ファイルを取得できません。画像を選択し直してください。",
+      );
+    }
+
+    assertImageForStorage(
+      image.file,
+      "listImage",
+    );
+  }
+}
+
 async function buildNewImageUploadPlans(args: {
   listId: string;
   draftImages: SaveListDetailDraftImage[];
 }): Promise<NewImageUploadPlan[]> {
   const plans: NewImageUploadPlan[] = [];
 
-  for (let index = 0; index < args.draftImages.length; index++) {
+  for (
+    let index = 0;
+    index < args.draftImages.length;
+    index++
+  ) {
     const image = args.draftImages[index];
 
     if (!isNewDraftImageWithFile(image)) {
       continue;
     }
+
+    assertImageForStorage(
+      image.file,
+      "listImage",
+    );
 
     const imageId = await createStableListImageID({
       listId: args.listId,
@@ -241,32 +280,37 @@ async function uploadNewImages(args: {
   >;
 }): Promise<UploadedDraftImageItem[]> {
   const uploadedItems: UploadedDraftImageItem[] = [];
+
   const totalBytes = args.plans.reduce(
     (total, plan) => total + plan.file.size,
     0,
   );
+
   let completedBytes = 0;
 
   try {
     for (const [index, plan] of args.plans.entries()) {
-      const uploaded = await uploadListImageToFirebaseStorage({
-        listId: args.listId,
-        imageId: plan.imageId,
-        file: plan.file,
-        onProgress: (progress) => {
-          args.progressHandlers?.onImageProgress?.({
-            fileName: plan.file.name,
-            transferredBytes:
-              completedBytes + progress.transferredBytes,
-            totalBytes,
-            completedUploadCount:
-              progress.percentage >= 100
-                ? index + 1
-                : index,
-            expectedUploadCount: args.plans.length,
-          });
-        },
-      });
+      const uploaded =
+        await uploadListImageToFirebaseStorage({
+          listId: args.listId,
+          imageId: plan.imageId,
+          file: plan.file,
+          onProgress: (progress) => {
+            args.progressHandlers?.onImageProgress?.({
+              fileName: plan.file.name,
+              transferredBytes:
+                completedBytes +
+                progress.transferredBytes,
+              totalBytes,
+              completedUploadCount:
+                progress.percentage >= 100
+                  ? index + 1
+                  : index,
+              expectedUploadCount:
+                args.plans.length,
+            });
+          },
+        });
 
       completedBytes += plan.file.size;
 
@@ -281,11 +325,17 @@ async function uploadNewImages(args: {
 
     return uploadedItems;
   } catch (uploadError) {
-    const cleanupErrors = await cleanupUploadedImages(uploadedItems);
+    const cleanupErrors =
+      await cleanupUploadedImages(
+        uploadedItems,
+      );
 
     if (cleanupErrors.length > 0) {
       throw new AggregateError(
-        [uploadError, ...cleanupErrors],
+        [
+          uploadError,
+          ...cleanupErrors,
+        ],
         "list_image_upload_and_compensation_failed",
       );
     }
@@ -307,7 +357,9 @@ async function cleanupUploadedImages(
 
   return results
     .filter(
-      (result): result is PromiseRejectedResult =>
+      (
+        result,
+      ): result is PromiseRejectedResult =>
         result.status === "rejected",
     )
     .map((result) => result.reason);
@@ -325,30 +377,41 @@ function resolvePrimaryImageID(args: {
   const selectedIndex =
     Number.isInteger(args.mainImageIndex) &&
     args.mainImageIndex >= 0 &&
-    args.mainImageIndex < args.draftImages.length
+    args.mainImageIndex <
+      args.draftImages.length
       ? args.mainImageIndex
       : 0;
 
-  const selected = args.draftImages[selectedIndex];
+  const selected =
+    args.draftImages[selectedIndex];
 
   if (!selected) {
-    throw new Error("primary_image_unavailable");
+    throw new Error(
+      "primary_image_unavailable",
+    );
   }
 
   if (selected.isNew) {
-    const uploaded = args.uploadedItems.find(
-      (item) => item.draftIndex === selectedIndex,
-    );
+    const uploaded =
+      args.uploadedItems.find(
+        (item) =>
+          item.draftIndex ===
+          selectedIndex,
+      );
 
     if (!uploaded?.imageId) {
-      throw new Error("primary_image_id_unavailable");
+      throw new Error(
+        "primary_image_id_unavailable",
+      );
     }
 
     return uploaded.imageId;
   }
 
   if (!selected.id) {
-    throw new Error("primary_image_id_unavailable");
+    throw new Error(
+      "primary_image_id_unavailable",
+    );
   }
 
   return selected.id;
@@ -383,7 +446,8 @@ async function createIdempotencyKey(args: {
 }): Promise<string> {
   const fingerprint = JSON.stringify({
     listId: args.listId,
-    currentUpdatedAt: args.currentDTO.updatedAt ?? "",
+    currentUpdatedAt:
+      args.currentDTO.updatedAt ?? "",
     targetList: args.targetList,
     newImages: args.plans.map((plan) => ({
       imageId: plan.imageId,
@@ -393,54 +457,89 @@ async function createIdempotencyKey(args: {
       fileType: plan.file.type,
       lastModified: plan.file.lastModified,
     })),
-    deleteImageIds: [...args.deleteImageIds].sort(),
-    primaryImageId: args.primaryImageId,
+    deleteImageIds:
+      [...args.deleteImageIds].sort(),
+    primaryImageId:
+      args.primaryImageId,
   });
 
   return `list-save-${await hashText(fingerprint)}`;
 }
 
-async function hashText(value: string): Promise<string> {
+async function hashText(
+  value: string,
+): Promise<string> {
   if (
     typeof crypto !== "undefined" &&
     crypto.subtle &&
     typeof TextEncoder !== "undefined"
   ) {
-    const bytes = new TextEncoder().encode(value);
-    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    const bytes =
+      new TextEncoder().encode(value);
 
-    return Array.from(new Uint8Array(digest))
-      .map((item) => item.toString(16).padStart(2, "0"))
+    const digest =
+      await crypto.subtle.digest(
+        "SHA-256",
+        bytes,
+      );
+
+    return Array.from(
+      new Uint8Array(digest),
+    )
+      .map((item) =>
+        item
+          .toString(16)
+          .padStart(2, "0"),
+      )
       .join("");
   }
 
   let first = 2166136261;
   let second = 2246822519;
 
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index);
+  for (
+    let index = 0;
+    index < value.length;
+    index++
+  ) {
+    const code =
+      value.charCodeAt(index);
 
     first ^= code;
-    first = Math.imul(first, 16777619);
+    first = Math.imul(
+      first,
+      16777619,
+    );
 
     second ^= code + index;
-    second = Math.imul(second, 3266489917);
+    second = Math.imul(
+      second,
+      3266489917,
+    );
   }
 
   return (
-    (first >>> 0).toString(16).padStart(8, "0") +
-    (second >>> 0).toString(16).padStart(8, "0")
+    (first >>> 0)
+      .toString(16)
+      .padStart(8, "0") +
+    (second >>> 0)
+      .toString(16)
+      .padStart(8, "0")
   ).repeat(4);
 }
 
 function assertCompletedOperation(
   operation: ListSaveOperationDTO,
 ): void {
-  if (operation.status === "completed") {
+  if (
+    operation.status === "completed"
+  ) {
     return;
   }
 
-  const detail = String(operation.lastError ?? "").trim();
+  const detail = String(
+    operation.lastError ?? "",
+  ).trim();
 
   switch (operation.status) {
     case "failed_retryable":
@@ -478,115 +577,170 @@ function assertCompletedOperation(
 export async function saveListDetailChanges(
   input: SaveListDetailChangesInput,
 ): Promise<SaveListDetailChangesResult> {
-  const listId = input.listId.trim();
+  const listId =
+    input.listId.trim();
 
   if (!listId) {
-    throw new Error("invalid_list_id");
+    throw new Error(
+      "invalid_list_id",
+    );
   }
 
   if (!input.currentDTO) {
-    throw new Error("list_detail_not_loaded");
+    throw new Error(
+      "list_detail_not_loaded",
+    );
   }
 
-  const updatedBy = input.updatedBy.trim();
+  const updatedBy =
+    input.updatedBy.trim();
 
   if (!updatedBy) {
-    throw new Error("invalid_list_updated_by");
+    throw new Error(
+      "invalid_list_updated_by",
+    );
   }
+
+  const draftImages =
+    input.draftImages;
+
+  assertNewDraftImagesForStorage(
+    draftImages,
+  );
+
+  const currentImages =
+    getCurrentImages(
+      input.currentDTO,
+    );
+
+  const targetList =
+    buildTargetList({
+      listId,
+      currentDTO:
+        input.currentDTO,
+      title:
+        input.title,
+      description:
+        input.description,
+      status:
+        input.status,
+      assigneeId:
+        input.assigneeId,
+      updatedBy,
+      priceRows:
+        input.draftPriceRows,
+    });
+
+  const uploadPlans =
+    await buildNewImageUploadPlans({
+      listId,
+      draftImages,
+    });
+
+  const removedImages =
+    collectRemovedImages({
+      currentImages,
+      draftImages,
+    });
+
+  const deleteImageIds =
+    removedImages.map(
+      (image) => image.id,
+    );
+
+  const provisionalUploadedItems:
+    UploadedDraftImageItem[] =
+      uploadPlans.map((plan) => ({
+        draftIndex:
+          plan.draftIndex,
+        imageId:
+          plan.imageId,
+        url: "",
+        storagePath: "",
+        displayOrder:
+          plan.displayOrder,
+      }));
+
+  const primaryImageId =
+    resolvePrimaryImageID({
+      draftImages,
+      mainImageIndex:
+        input.mainImageIndex,
+      uploadedItems:
+        provisionalUploadedItems,
+    });
+
+  const idempotencyKey =
+    await createIdempotencyKey({
+      listId,
+      currentDTO:
+        input.currentDTO,
+      targetList,
+      plans:
+        uploadPlans,
+      deleteImageIds,
+      primaryImageId,
+    });
 
   input.progressHandlers?.onPreparing?.();
 
-  const draftImages = input.draftImages;
-  const currentImages = getCurrentImages(input.currentDTO);
+  const uploadedItems =
+    await uploadNewImages({
+      listId,
+      plans:
+        uploadPlans,
+      progressHandlers:
+        input.progressHandlers,
+    });
 
-  const targetList = buildTargetList({
-    listId,
-    currentDTO: input.currentDTO,
-    title: input.title,
-    description: input.description,
-    status: input.status,
-    assigneeId: input.assigneeId,
-    updatedBy,
-    priceRows: input.draftPriceRows,
-  });
-
-  const uploadPlans = await buildNewImageUploadPlans({
-    listId,
-    draftImages,
-  });
-
-  const removedImages = collectRemovedImages({
-    currentImages,
-    draftImages,
-  });
-
-  const deleteImageIds = removedImages.map(
-    (image) => image.id,
-  );
-
-  const provisionalUploadedItems: UploadedDraftImageItem[] =
-    uploadPlans.map((plan) => ({
-      draftIndex: plan.draftIndex,
-      imageId: plan.imageId,
-      url: "",
-      storagePath: "",
-      displayOrder: plan.displayOrder,
-    }));
-
-  const primaryImageId = resolvePrimaryImageID({
-    draftImages,
-    mainImageIndex: input.mainImageIndex,
-    uploadedItems: provisionalUploadedItems,
-  });
-
-  const idempotencyKey = await createIdempotencyKey({
-    listId,
-    currentDTO: input.currentDTO,
-    targetList,
-    plans: uploadPlans,
-    deleteImageIds,
-    primaryImageId,
-  });
-
-  const uploadedItems = await uploadNewImages({
-    listId,
-    plans: uploadPlans,
-    progressHandlers: input.progressHandlers,
-  });
-
-  const totalUploadBytes = uploadPlans.reduce(
-    (total, plan) => total + plan.file.size,
-    0,
-  );
+  const totalUploadBytes =
+    uploadPlans.reduce(
+      (total, plan) =>
+        total + plan.file.size,
+      0,
+    );
 
   input.progressHandlers?.onSaving?.({
-    transferredBytes: totalUploadBytes,
-    totalBytes: totalUploadBytes,
-    completedUploadCount: uploadPlans.length,
-    expectedUploadCount: uploadPlans.length,
+    transferredBytes:
+      totalUploadBytes,
+    totalBytes:
+      totalUploadBytes,
+    completedUploadCount:
+      uploadPlans.length,
+    expectedUploadCount:
+      uploadPlans.length,
   });
 
-  const operation = await startListSaveOperationHTTP({
-    idempotencyKey,
-    listId,
-    type: "update",
-    targetList,
-    newImages: uploadedItems.map((image) => ({
-      imageId: image.imageId,
-      url: image.url,
-      storagePath: image.storagePath,
-      displayOrder: image.displayOrder,
-    })),
-    deleteImageIds,
-    primaryImageId,
-    maxRetries: 3,
-  });
+  const operation =
+    await startListSaveOperationHTTP({
+      idempotencyKey,
+      listId,
+      type: "update",
+      targetList,
+      newImages:
+        uploadedItems.map((image) => ({
+          imageId:
+            image.imageId,
+          url:
+            image.url,
+          storagePath:
+            image.storagePath,
+          displayOrder:
+            image.displayOrder,
+        })),
+      deleteImageIds,
+      primaryImageId,
+      maxRetries: 3,
+    });
 
-  assertCompletedOperation(operation);
+  assertCompletedOperation(
+    operation,
+  );
 
-  const dto = await loadListDetailDTO({
-    listId,
-  });
+  const dto =
+    await loadListDetailDTO({
+      listId,
+    });
 
   return {
     dto,

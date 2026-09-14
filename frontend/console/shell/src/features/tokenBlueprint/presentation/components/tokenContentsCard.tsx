@@ -3,9 +3,10 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight, FileText, Trash2, Upload } from "lucide-react";
 
+import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
+import type { ContentFile } from "../../../../shared/types/tokenBlueprint";
 import { Button } from "../../../../shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
-import type { ContentFile } from "../../../../shared/types/tokenBlueprint";
 
 type Mode = "edit" | "view";
 
@@ -174,6 +175,7 @@ export default function TokenContentsCard({
         <input
           ref={inputRef}
           type="file"
+          accept={IMAGE_STORAGE_ACCEPT}
           multiple
           style={{ display: "none" }}
           onChange={(event) => {

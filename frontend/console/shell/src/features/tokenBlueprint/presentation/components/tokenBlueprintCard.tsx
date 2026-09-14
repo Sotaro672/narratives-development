@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Link2, Upload, X } from "lucide-react";
 
+import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import {
   Card,
   CardContent,
@@ -78,8 +79,7 @@ export default function TokenBlueprintCard({
    * tokenIconの選択・アップロード操作は、
    * mintedの状態にかかわらずeditモードでのみ許可する。
    */
-  const canEditIcon =
-    vm.isEditMode;
+  const canEditIcon = vm.isEditMode;
 
   /**
    * mint済みトークンでは、editモードへ移行しても
@@ -170,7 +170,7 @@ export default function TokenBlueprintCard({
                     undefined
                   }
                   type="file"
-                  accept="image/*"
+                  accept={IMAGE_STORAGE_ACCEPT}
                   className="token-blueprint-card__icon-input"
                   onChange={
                     handlers.onIconInputChange
@@ -230,17 +230,13 @@ export default function TokenBlueprintCard({
                   value={vm.name}
                   placeholder="例：LUMINA VIP 会員トークン"
                   onChange={(event) => {
-                    if (
-                      !isIdentityLocked
-                    ) {
+                    if (!isIdentityLocked) {
                       handlers.onChangeName?.(
                         event.target.value,
                       );
                     }
                   }}
-                  readOnly={
-                    isIdentityLocked
-                  }
+                  readOnly={isIdentityLocked}
                   className={`token-blueprint-card__readonly-input ${
                     isIdentityLocked
                       ? "readonly"
@@ -249,8 +245,7 @@ export default function TokenBlueprintCard({
                 />
               ) : (
                 <div className="token-blueprint-card__view-value">
-                  {vm.name ||
-                    "未設定"}
+                  {vm.name || "未設定"}
                 </div>
               )}
             </div>
@@ -265,17 +260,13 @@ export default function TokenBlueprintCard({
                   value={vm.symbol}
                   placeholder="例：LUMI"
                   onChange={(event) => {
-                    if (
-                      !isIdentityLocked
-                    ) {
+                    if (!isIdentityLocked) {
                       handlers.onChangeSymbol?.(
                         event.target.value.toUpperCase(),
                       );
                     }
                   }}
-                  readOnly={
-                    isIdentityLocked
-                  }
+                  readOnly={isIdentityLocked}
                   className={`token-blueprint-card__readonly-input ${
                     isIdentityLocked
                       ? "readonly"
@@ -284,8 +275,7 @@ export default function TokenBlueprintCard({
                 />
               ) : (
                 <div className="token-blueprint-card__view-value">
-                  {vm.symbol ||
-                    "未設定"}
+                  {vm.symbol || "未設定"}
                 </div>
               )}
             </div>
@@ -320,8 +310,7 @@ export default function TokenBlueprintCard({
                     align="start"
                     className="token-blueprint-card__popover"
                   >
-                    {vm.brandOptions.length ===
-                    0 ? (
+                    {vm.brandOptions.length === 0 ? (
                       <div className="token-blueprint-card__popover-empty">
                         ブランド候補が未設定です
                       </div>
@@ -334,8 +323,7 @@ export default function TokenBlueprintCard({
                               type="button"
                               className={
                                 "token-blueprint-card__popover-item" +
-                                (brand.id ===
-                                vm.brandId
+                                (brand.id === vm.brandId
                                   ? " is-active"
                                   : "")
                               }
@@ -398,8 +386,7 @@ export default function TokenBlueprintCard({
             />
           ) : (
             <div className="token-blueprint-card__description-value">
-              {vm.description ||
-                "未設定"}
+              {vm.description || "未設定"}
             </div>
           )}
         </div>

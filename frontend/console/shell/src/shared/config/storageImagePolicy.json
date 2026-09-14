@@ -2,7 +2,8 @@
   "allowedMimeTypes": [
     "image/jpeg",
     "image/png",
-    "image/webp"
+    "image/webp",
+    "image/avif"
   ],
   "defaultMaxBytes": 5242880,
   "targets": {
@@ -16,6 +17,9 @@
       "maxBytes": 10485760
     },
     "tokenBlueprintContentImage": {
+      "maxBytes": 10485760
+    },
+    "listImage": {
       "maxBytes": 10485760
     }
   }

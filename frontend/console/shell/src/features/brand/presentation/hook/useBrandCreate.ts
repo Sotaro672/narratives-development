@@ -11,15 +11,14 @@ import {
 import { useNavigate } from "react-router-dom";
 
 import { useAuthContext } from "../../../../auth/application/AuthContext";
+import {
+  IMAGE_STORAGE_ACCEPT,
+  validateImageForStorage,
+  type ImageStorageTarget,
+} from "../../../../shared/storage/imageStoragePolicy";
 import type { Account } from "../../../../shared/types/account";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { accountRepositoryHTTP } from "../../../account/infrastructure/http/accountRepositoryHTTP";
-
-import { validateBrandImage } from "../../application/brandImageValidation";
-import {
-  BRAND_IMAGE_ALLOWED_MIME_TYPES,
-  type BrandImageTarget,
-} from "../../config/brandImagePolicy.generated";
 import {
   brandRepositoryHTTP,
   type CreateBrandInput,
@@ -36,7 +35,10 @@ import {
   type BrandCreateProgress,
 } from "../model/brandCreateProgress";
 
-const BRAND_IMAGE_ACCEPT = BRAND_IMAGE_ALLOWED_MIME_TYPES.join(",");
+type BrandImageTarget = Extract<
+  ImageStorageTarget,
+  "brandIcon" | "brandBackgroundImage"
+>;
 
 export type BrandAccountCandidate = {
   id: string;
@@ -262,8 +264,8 @@ export function useBrandCreate() {
 
   const validateSelectedImage = useCallback(
     (file: File, target: BrandImageTarget): string | null => {
-      const validation = validateBrandImage(file, target);
-      return validation.valid ? null : validation.message;
+      const validation = validateImageForStorage(file, target);
+      return validation.valid ? null : validation.reason;
     },
     [],
   );
@@ -690,7 +692,7 @@ export function useBrandCreate() {
     displayBrandName,
     displayWebsiteUrl,
 
-    brandImageAccept: BRAND_IMAGE_ACCEPT,
+    brandImageAccept: IMAGE_STORAGE_ACCEPT,
 
     hasBrandIconSelection,
     hasBrandBackgroundSelection,

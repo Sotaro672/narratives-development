@@ -1,6 +1,7 @@
 // frontend/console/list/src/presentation/components/listImageCard.tsx
 // 商品画像カード（style 要素のみ / ロジックは hook に移譲）
 
+import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import { Button } from "../../../../shared/ui/button";
 import { useListImageCard } from "../hook/useListImageCard";
 
@@ -92,7 +93,7 @@ export default function ListImageCard(props: ListImageCardProps) {
         <input
           ref={vm.imageInputRef as any}
           type="file"
-          accept="image/*"
+          accept={IMAGE_STORAGE_ACCEPT}
           multiple
           style={{ display: "none" }}
           onChange={vm.handleInputChange}
@@ -165,6 +166,7 @@ export default function ListImageCard(props: ListImageCardProps) {
             <div className="lic__grid">
               {vm.thumbIndices.map((idx: number) => {
                 const url = vm.effectiveImageUrls[idx] ?? "";
+
                 return (
                   <div
                     key={`${url}-${idx}`}

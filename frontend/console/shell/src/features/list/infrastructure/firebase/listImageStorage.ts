@@ -8,6 +8,10 @@ import {
 } from "firebase/storage";
 
 import { storage } from "../../../../auth/infrastructure/config/firebaseClient";
+import {
+  assertImageForStorage,
+  getImageContentType,
+} from "../../../../shared/storage/imageStoragePolicy";
 
 export type ListImageUploadProgress = {
   transferredBytes: number;
@@ -37,7 +41,10 @@ export type DeleteListImageFromFirebaseStorageInput = {
 };
 
 function createListImageId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+  if (
+    typeof crypto !== "undefined" &&
+    typeof crypto.randomUUID === "function"
+  ) {
     return crypto.randomUUID();
   }
 
@@ -88,9 +95,7 @@ function calculateUploadPercentage(
     100,
     Math.max(
       0,
-      Math.round(
-        (transferredBytes / totalBytes) * 100,
-      ),
+      Math.round((transferredBytes / totalBytes) * 100),
     ),
   );
 }
@@ -126,8 +131,15 @@ export async function uploadListImageToFirebaseStorage(
   const file = input.file;
 
   if (!file) {
-    throw new Error("invalid_file");
+    throw new Error("画像ファイルが選択されていません。");
   }
+
+  assertImageForStorage(
+    file,
+    "listImage",
+  );
+
+  const contentType = getImageContentType(file);
 
   const objectPath = buildListImageObjectPath({
     listId,
@@ -150,7 +162,7 @@ export async function uploadListImageToFirebaseStorage(
     storageRef,
     file,
     {
-      contentType: file.type || "application/octet-stream",
+      contentType,
     },
   );
 
@@ -194,7 +206,9 @@ export async function uploadListImageToFirebaseStorage(
       // Download URL取得失敗を優先して返す。
     }
 
-    throw new Error("firebase_storage_download_url_empty");
+    throw new Error(
+      "firebase_storage_download_url_empty",
+    );
   }
 
   return {
@@ -276,7 +290,9 @@ function normalizeListImageObjectPath(
     fileName === ".." ||
     fileName.includes("\\")
   ) {
-    throw new Error("invalid_storage_path_file_name");
+    throw new Error(
+      "invalid_storage_path_file_name",
+    );
   }
 
   return storagePath;
@@ -308,7 +324,10 @@ function normalizeListImagePathSegment(
 function isFirebaseStorageObjectNotFound(
   error: unknown,
 ): boolean {
-  if (!error || typeof error !== "object") {
+  if (
+    !error ||
+    typeof error !== "object"
+  ) {
     return false;
   }
 

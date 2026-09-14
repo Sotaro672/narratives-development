@@ -1,12 +1,26 @@
 // frontend/console/shell/src/features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage.ts
+
 import {
   getDownloadURL,
   ref,
   uploadBytesResumable,
 } from "firebase/storage";
-import { auth, storage } from "../../../../auth/infrastructure/config/firebaseClient";
+
+import {
+  auth,
+  storage,
+} from "../../../../auth/infrastructure/config/firebaseClient";
+import {
+  assertImageForStorage,
+  getImageContentType,
+  type ImageStorageTarget,
+} from "../../../../shared/storage/imageStoragePolicy";
 import type { ContentType } from "../../../../shared/types/tokenBlueprint";
-const DEFAULT_CONTENT_TYPE = "application/octet-stream";
+
+type TokenBlueprintImageTarget = Extract<
+  ImageStorageTarget,
+  "tokenBlueprintIcon" | "tokenBlueprintContentImage"
+>;
 
 export type FirebaseStorageUploadResult = {
   downloadUrl: string;
@@ -16,9 +30,10 @@ export type FirebaseStorageUploadResult = {
   size: number;
 };
 
-export type FirebaseStorageContentUploadResult = FirebaseStorageUploadResult & {
-  kind: ContentType;
-};
+export type FirebaseStorageContentUploadResult =
+  FirebaseStorageUploadResult & {
+    kind: ContentType;
+  };
 
 export type FirebaseStorageUploadProgress = {
   transferredBytes: number;
@@ -29,30 +44,49 @@ export type FirebaseStorageUploadProgress = {
 export type FirebaseStorageUploadProgressHandler = (
   progress: FirebaseStorageUploadProgress,
 ) => void;
+
 function safeFileName(file: File): string {
   const fileName = file.name
     .trim()
-    .replace(/[\\/:*?"<>|#%{}[\]^~`]/g, "_")
+    .replace(/[\\/:"*?<>|#%{}^~]/g, "_")
+    .replace(/\[/g, "_")
+    .replace(/\]/g, "_")
+    .replace(/`/g, "_")
     .replace(/\s+/g, "_")
     .replace(/^_+/, "")
     .replace(/_+$/, "");
 
   if (!fileName) {
-   throw new Error("file.name is invalid.");
-
+    throw new Error("file.name is invalid.");
   }
+
   return fileName;
 }
 
-export function getTokenBlueprintContentType(file: File): string {
-  return file.type.trim() || DEFAULT_CONTENT_TYPE;
+export function getTokenBlueprintContentType(
+  file: File,
+): string {
+  return getImageContentType(file);
 }
 
-export function guessTokenBlueprintContentType(file: File): ContentType {
-  const contentType = getTokenBlueprintContentType(file).toLowerCase();
-  if (contentType.startsWith("image/")) return "image";
-  if (contentType.startsWith("video/")) return "video";
-  if (contentType === "application/pdf") return "pdf";
+export function guessTokenBlueprintContentType(
+  file: File,
+): ContentType {
+  const contentType =
+    getTokenBlueprintContentType(file);
+
+  if (contentType.startsWith("image/")) {
+    return "image";
+  }
+
+  if (contentType.startsWith("video/")) {
+    return "video";
+  }
+
+  if (contentType === "application/pdf") {
+    return "pdf";
+  }
+
   return "document";
 }
 
@@ -61,7 +95,6 @@ function buildTokenBlueprintIconPath(params: {
   tokenBlueprintId: string;
   file: File;
 }): string {
-
   return [
     "token-blueprints",
     params.companyId,
@@ -86,12 +119,16 @@ function buildTokenBlueprintContentPath(params: {
     safeFileName(params.file),
   ].join("/");
 }
+
 async function assertSignedIn(): Promise<void> {
   const user = auth.currentUser;
 
   if (!user) {
-    throw new Error("Firebase Auth user is not signed in.");
+    throw new Error(
+      "Firebase Auth user is not signed in.",
+    );
   }
+
   await user.getIdToken();
 }
 
@@ -99,31 +136,37 @@ function assertUploadRequiredParams(params: {
   companyId: string;
   tokenBlueprintId: string;
   file: File;
+  target: TokenBlueprintImageTarget;
   targetLabel: string;
 }): void {
-
   if (!params.companyId) {
-    throw new Error(`companyId is required before uploading ${params.targetLabel}.`);
+    throw new Error(
+      `companyId is required before uploading ${params.targetLabel}.`,
+    );
   }
 
   if (!params.tokenBlueprintId) {
-    throw new Error(`tokenBlueprintId is required before uploading ${params.targetLabel}.`);
+    throw new Error(
+      `tokenBlueprintId is required before uploading ${params.targetLabel}.`,
+    );
   }
 
   if (!params.file) {
-    throw new Error(`file is required before uploading ${params.targetLabel}.`);
+    throw new Error(
+      `file is required before uploading ${params.targetLabel}.`,
+    );
   }
 
-  if (!params.file.name) {
-    throw new Error(`file.name is required before uploading ${params.targetLabel}.`);
-  }
+  assertImageForStorage(
+    params.file,
+    params.target,
+  );
 }
 
 function calculateUploadPercentage(
   transferredBytes: number,
   totalBytes: number,
 ): number {
-
   if (totalBytes <= 0) {
     return 100;
   }
@@ -146,11 +189,11 @@ function uploadResumable(params: {
   customMetadata: Record<string, string>;
   onProgress?: FirebaseStorageUploadProgressHandler;
 }): Promise<void> {
-
   const storageRef = ref(
     storage,
     params.objectPath,
   );
+
   const uploadTask = uploadBytesResumable(
     storageRef,
     params.file,
@@ -160,35 +203,43 @@ function uploadResumable(params: {
     },
   );
 
-  return new Promise<void>((resolve, reject) => {
-    uploadTask.on(
-      "state_changed",
-      (snapshot) => {
+  return new Promise<void>(
+    (resolve, reject) => {
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          params.onProgress?.({
+            transferredBytes:
+              snapshot.bytesTransferred,
+            totalBytes:
+              snapshot.totalBytes,
+            percentage:
+              calculateUploadPercentage(
+                snapshot.bytesTransferred,
+                snapshot.totalBytes,
+              ),
+          });
+        },
+        (error) => {
+          reject(error);
+        },
+        () => {
+          const snapshot =
+            uploadTask.snapshot;
 
-        params.onProgress?.({
-          transferredBytes: snapshot.bytesTransferred,
-          totalBytes: snapshot.totalBytes,
-          percentage: calculateUploadPercentage(
-            snapshot.bytesTransferred,
-            snapshot.totalBytes,
-          ),
-        });
-      },
-      (error) => {
-        reject(error);
-      },
-      () => {
-        const snapshot = uploadTask.snapshot;
+          params.onProgress?.({
+            transferredBytes:
+              snapshot.totalBytes,
+            totalBytes:
+              snapshot.totalBytes,
+            percentage: 100,
+          });
 
-        params.onProgress?.({
-          transferredBytes: snapshot.totalBytes,
-          totalBytes: snapshot.totalBytes,
-          percentage: 100,
-        });
-        resolve();
-      },
-    );
-  });
+          resolve();
+        },
+      );
+    },
+  );
 }
 
 export async function uploadTokenBlueprintIconToFirebaseStorage(params: {
@@ -197,35 +248,58 @@ export async function uploadTokenBlueprintIconToFirebaseStorage(params: {
   file: File;
   onProgress?: FirebaseStorageUploadProgressHandler;
 }): Promise<FirebaseStorageUploadResult> {
-
-  assertUploadRequiredParams({ ...params, targetLabel: "token blueprint icon" });
+  assertUploadRequiredParams({
+    ...params,
+    target: "tokenBlueprintIcon",
+    targetLabel: "トークンアイコン",
+  });
 
   await assertSignedIn();
-  const objectPath = buildTokenBlueprintIconPath(params);
-  const storageRef = ref(storage, objectPath);
-  const contentType = getTokenBlueprintContentType(params.file);
+
+  const objectPath =
+    buildTokenBlueprintIconPath(params);
+
+  const storageRef = ref(
+    storage,
+    objectPath,
+  );
+
+  const contentType =
+    getTokenBlueprintContentType(
+      params.file,
+    );
 
   await uploadResumable({
     objectPath,
     file: params.file,
     contentType,
     customMetadata: {
-      companyId: params.companyId,
-      tokenBlueprintId: params.tokenBlueprintId,
-      target: "tokenBlueprintIcon",
-      originalFileName: params.file.name,
+      companyId:
+        params.companyId,
+      tokenBlueprintId:
+        params.tokenBlueprintId,
+      target:
+        "tokenBlueprintIcon",
+      originalFileName:
+        params.file.name,
     },
-    onProgress: params.onProgress,
+    onProgress:
+      params.onProgress,
   });
 
-  const downloadUrl = await getDownloadURL(storageRef);
+  const downloadUrl =
+    await getDownloadURL(
+      storageRef,
+    );
 
   return {
     downloadUrl,
     objectPath,
-    fileName: params.file.name,
+    fileName:
+      params.file.name,
     contentType,
-    size: params.file.size,
+    size:
+      params.file.size,
   };
 }
 
@@ -236,45 +310,76 @@ export async function uploadTokenBlueprintContentToFirebaseStorage(params: {
   file: File;
   onProgress?: FirebaseStorageUploadProgressHandler;
 }): Promise<FirebaseStorageContentUploadResult> {
-
-  assertUploadRequiredParams({ ...params, targetLabel: "token blueprint content" });
+  assertUploadRequiredParams({
+    ...params,
+    target:
+      "tokenBlueprintContentImage",
+    targetLabel:
+      "コンテンツ画像",
+  });
 
   if (!params.contentId) {
-    throw new Error("contentId is required before uploading token blueprint content.");
+    throw new Error(
+      "contentId is required before uploading token blueprint content.",
+    );
   }
 
   await assertSignedIn();
-  const objectPath = buildTokenBlueprintContentPath(params);
-  const storageRef = ref(storage, objectPath);
-  const contentType = getTokenBlueprintContentType(params.file);
-  const kind = guessTokenBlueprintContentType(params.file);
+
+  const objectPath =
+    buildTokenBlueprintContentPath(
+      params,
+    );
+
+  const storageRef = ref(
+    storage,
+    objectPath,
+  );
+
+  const contentType =
+    getTokenBlueprintContentType(
+      params.file,
+    );
+
+  const kind =
+    guessTokenBlueprintContentType(
+      params.file,
+    );
 
   await uploadResumable({
-
     objectPath,
     file: params.file,
     contentType,
-
     customMetadata: {
-      companyId: params.companyId,
-      tokenBlueprintId: params.tokenBlueprintId,
-      contentId: params.contentId,
-      target: "tokenBlueprintContents",
+      companyId:
+        params.companyId,
+      tokenBlueprintId:
+        params.tokenBlueprintId,
+      contentId:
+        params.contentId,
+      target:
+        "tokenBlueprintContents",
       kind,
-      originalFileName: params.file.name,
+      originalFileName:
+        params.file.name,
     },
-
-    onProgress: params.onProgress,
+    onProgress:
+      params.onProgress,
   });
 
-  const downloadUrl = await getDownloadURL(storageRef);
+  const downloadUrl =
+    await getDownloadURL(
+      storageRef,
+    );
 
   return {
     downloadUrl,
     objectPath,
-    fileName: params.file.name,
+    fileName:
+      params.file.name,
     contentType,
-    size: params.file.size,
+    size:
+      params.file.size,
     kind,
   };
 }

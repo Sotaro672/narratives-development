@@ -3,14 +3,13 @@
 import * as React from "react";
 import { useNavigate, useParams, type NavigateFunction } from "react-router-dom";
 
-import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
-import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
-import type { AssigneeCandidate } from "../../../admin/application/AdminService";
-import type {
-  ListStatus,
-} from "../../../../shared/types/list";
+import { validateImageForStorage } from "../../../../shared/storage/imageStoragePolicy";
 import type { ListCreateDTO } from "../../../../shared/types/inventory";
+import type { ListStatus } from "../../../../shared/types/list";
+import type { AssigneeCandidate } from "../../../admin/application/AdminService";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { fetchListsByInventoryIdHTTP } from "../../../list/infrastructure/repository";
+import { usePriceCard } from "../../../list/presentation/hook/usePriceCard";
 
 import {
   createCompletedListProgress,
@@ -48,32 +47,25 @@ export type UseListCreateResult = {
   title: string;
   onBack: () => void;
   onCreate: () => void;
-
   saving: boolean;
   isUploading: boolean;
-
   progress: ListProgress;
   progressOpen: boolean;
   onCloseProgress: () => void;
-
   dto: ListCreateDTO | null;
   loadingDTO: boolean;
   dtoError: string;
-
   productBrandName: string;
   productName: string;
   tokenBrandName: string;
   tokenName: string;
-
   priceRows: PriceRow[];
   onChangePrice: (index: number, price: number | undefined) => void;
   priceCard: ReturnType<typeof usePriceCard>;
-
   listingTitle: string;
   setListingTitle: React.Dispatch<React.SetStateAction<string>>;
   description: string;
   setDescription: React.Dispatch<React.SetStateAction<string>>;
-
   images: File[];
   imagePreviewUrls: string[];
   mainImageIndex: number;
@@ -82,17 +74,14 @@ export type UseListCreateResult = {
   onAddImages: (files: FileList | null) => void;
   onRemoveImageAt: (index: number) => void;
   onClearImages: () => void;
-
   assigneeName: string;
   assigneeCandidates: AssigneeCandidate[];
   loadingMembers: boolean;
   handleSelectAssignee: (id: string) => void;
-
   listItems: ListCreateInventoryListItem[];
   listLoading: boolean;
   listError: string | null;
   onOpenList: (listId: string) => void;
-
   status: ListStatus;
   setStatus: React.Dispatch<React.SetStateAction<ListStatus>>;
 };
@@ -105,14 +94,8 @@ type UsePriceRowsResult = {
   priceCard: ReturnType<typeof usePriceCard>;
 };
 
-function errorMessageFromUnknown(
-  error: unknown,
-): string {
-  return String(
-    error instanceof Error
-      ? error.message
-      : error,
-  );
+function errorMessageFromUnknown(error: unknown): string {
+  return String(error instanceof Error ? error.message : error);
 }
 
 function dedupeFiles(previousFiles: File[], addedFiles: File[]): File[] {
@@ -132,12 +115,20 @@ function dedupeFiles(previousFiles: File[], addedFiles: File[]): File[] {
   return [...previousFiles, ...filteredFiles];
 }
 
-function filterImageFiles(
+function validateListImageFiles(
   files: FileList | File[] | null | undefined,
 ): File[] {
-  return Array.from(files ?? [])
-    .filter(Boolean)
-    .filter((file) => String(file.type || "").startsWith("image/")) as File[];
+  const nextFiles = Array.from(files ?? []).filter(Boolean) as File[];
+
+  for (const file of nextFiles) {
+    const validation = validateImageForStorage(file, "listImage");
+
+    if (!validation.valid) {
+      throw new Error(validation.reason);
+    }
+  }
+
+  return nextFiles;
 }
 
 function useListCreateParamsAndTitle(): {
@@ -145,7 +136,6 @@ function useListCreateParamsAndTitle(): {
   title: string;
 } {
   const params = useParams<ListCreateRouteParams>();
-
   const resolvedParams = React.useMemo(
     () => resolveListCreateParams(params),
     [params],
@@ -199,20 +189,27 @@ function useListingImages(): {
   const [images, setImages] = React.useState<File[]>([]);
   const [mainImageIndex, setMainImageIndex] = React.useState(0);
   const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
-
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const appendImages = React.useCallback(
     (filesLike: FileList | File[] | null) => {
-      const files = filterImageFiles(filesLike);
+      try {
+        const files = validateListImageFiles(filesLike);
 
-      if (files.length === 0) {
-        return;
+        if (files.length === 0) {
+          return;
+        }
+
+        setImages((previousFiles) =>
+          dedupeFiles(previousFiles, files),
+        );
+      } catch (error) {
+        window.alert(
+          error instanceof Error
+            ? error.message
+            : "画像を選択できませんでした。",
+        );
       }
-
-      setImages((previousFiles) =>
-        dedupeFiles(previousFiles, files),
-      );
     },
     [],
   );
@@ -268,13 +265,11 @@ function useListingImages(): {
       if (mainImageIndex !== 0) {
         setMainImageIndex(0);
       }
+
       return;
     }
 
-    if (
-      mainImageIndex < 0 ||
-      mainImageIndex >= images.length
-    ) {
+    if (mainImageIndex < 0 || mainImageIndex >= images.length) {
       setMainImageIndex(0);
     }
   }, [images.length, mainImageIndex]);
@@ -349,11 +344,7 @@ function useListCreateNavigation(
     }
 
     navigate(buildBackPath(resolvedParams));
-  }, [
-    navigate,
-    resolvedParams,
-    isUploading,
-  ]);
+  }, [navigate, resolvedParams, isUploading]);
 
   return {
     navigate,
@@ -370,11 +361,10 @@ function useExistingInventoryLists(
   listError: string | null;
   onOpenList: (listId: string) => void;
 } {
-  const inventoryId = String(
-    resolvedParams.inventoryId ?? "",
-  );
+  const inventoryId = String(resolvedParams.inventoryId ?? "");
 
-  const [listItems, setListItems] = React.useState<ListCreateInventoryListItem[]>([]);
+  const [listItems, setListItems] =
+    React.useState<ListCreateInventoryListItem[]>([]);
   const [listLoading, setListLoading] = React.useState(false);
   const [listError, setListError] = React.useState<string | null>(null);
 
@@ -393,9 +383,7 @@ function useExistingInventoryLists(
         setListLoading(true);
         setListError(null);
 
-        const items = await fetchListsByInventoryIdHTTP(
-          inventoryId,
-        );
+        const items = await fetchListsByInventoryIdHTTP(inventoryId);
 
         if (cancelled) {
           return;
@@ -403,10 +391,7 @@ function useExistingInventoryLists(
 
         setListItems(
           items
-            .filter(
-              (item) =>
-                item.inventoryId === inventoryId,
-            )
+            .filter((item) => item.inventoryId === inventoryId)
             .map((item) => ({
               id: item.id,
               readableId: item.readableId,
@@ -437,9 +422,7 @@ function useExistingInventoryLists(
     return () => {
       cancelled = true;
     };
-  }, [
-    inventoryId,
-  ]);
+  }, [inventoryId]);
 
   const onOpenList = React.useCallback(
     (listId: string) => {
@@ -447,9 +430,7 @@ function useExistingInventoryLists(
         return;
       }
 
-      navigate(
-        `/list/${encodeURIComponent(listId)}`,
-      );
+      navigate(`/list/${encodeURIComponent(listId)}`);
     },
     [navigate],
   );
@@ -601,7 +582,6 @@ function useCreateList(
     }
 
     let imageUploadFailedMessage = "";
-
     let transferredBytes = 0;
     let totalBytes = 0;
     let completedUploadCount = 0;
@@ -639,38 +619,19 @@ function useCreateList(
           },
 
           onImageProgress: (imageProgress) => {
-            transferredBytes =
-              imageProgress.transferredBytes;
-
-            totalBytes =
-              imageProgress.totalBytes;
-
-            completedUploadCount =
-              imageProgress.completedUploadCount;
-
-            expectedUploadCount =
-              imageProgress.expectedUploadCount;
+            transferredBytes = imageProgress.transferredBytes;
+            totalBytes = imageProgress.totalBytes;
+            completedUploadCount = imageProgress.completedUploadCount;
+            expectedUploadCount = imageProgress.expectedUploadCount;
 
             setProgress(
               createUploadingListProgress({
-                fileName:
-                  imageProgress.fileName,
-
-                transferredBytes:
-                  imageProgress.transferredBytes,
-
-                totalBytes:
-                  imageProgress.totalBytes,
-
-                completedUploadCount:
-                  imageProgress.completedUploadCount,
-
-                expectedUploadCount:
-                  imageProgress.expectedUploadCount,
-
-                title:
-                  "画像を転送中",
-
+                fileName: imageProgress.fileName,
+                transferredBytes: imageProgress.transferredBytes,
+                totalBytes: imageProgress.totalBytes,
+                completedUploadCount: imageProgress.completedUploadCount,
+                expectedUploadCount: imageProgress.expectedUploadCount,
+                title: "画像を転送中",
                 message:
                   "画像転送が完了するまで、この画面を閉じたり移動したりしないでください。",
               }),
@@ -678,35 +639,18 @@ function useCreateList(
           },
 
           onSaving: (savingProgress) => {
-            transferredBytes =
-              savingProgress.transferredBytes;
-
-            totalBytes =
-              savingProgress.totalBytes;
-
-            completedUploadCount =
-              savingProgress.completedUploadCount;
-
-            expectedUploadCount =
-              savingProgress.expectedUploadCount;
+            transferredBytes = savingProgress.transferredBytes;
+            totalBytes = savingProgress.totalBytes;
+            completedUploadCount = savingProgress.completedUploadCount;
+            expectedUploadCount = savingProgress.expectedUploadCount;
 
             setProgress(
               createSavingListProgress({
-                transferredBytes:
-                  savingProgress.transferredBytes,
-
-                totalBytes:
-                  savingProgress.totalBytes,
-
-                completedUploadCount:
-                  savingProgress.completedUploadCount,
-
-                expectedUploadCount:
-                  savingProgress.expectedUploadCount,
-
-                title:
-                  "出品を保存中",
-
+                transferredBytes: savingProgress.transferredBytes,
+                totalBytes: savingProgress.totalBytes,
+                completedUploadCount: savingProgress.completedUploadCount,
+                expectedUploadCount: savingProgress.expectedUploadCount,
+                title: "出品を保存中",
                 message:
                   "画像転送が完了しました。出品情報を保存しています。",
               }),
@@ -723,18 +667,13 @@ function useCreateList(
         throw new Error("created_list_missing_id");
       }
 
-      setCreatedListId(
-        created.id,
-      );
+      setCreatedListId(created.id);
 
       if (imageUploadFailedMessage) {
         setProgress(
           createCompletedListProgress({
-            title:
-              "出品を作成しました",
-
-            message:
-              imageUploadFailedMessage,
+            title: "出品を作成しました",
+            message: imageUploadFailedMessage,
           }),
         );
 
@@ -744,35 +683,22 @@ function useCreateList(
       setProgress(
         createCompletedListProgress({
           transferredBytes,
-
           totalBytes,
-
           completedUploadCount,
-
           expectedUploadCount,
-
-          title:
-            "作成が完了しました",
-
-          message:
-            "出品の作成が完了しました。",
+          title: "作成が完了しました",
+          message: "出品の作成が完了しました。",
         }),
       );
     } catch (error) {
-      const message =
-        errorMessageFromUnknown(
-          error,
-        );
+      const message = errorMessageFromUnknown(error);
 
       setProgress(
         createFailedListProgress(
           message,
           {
-            title:
-              "作成に失敗しました",
-
-            message:
-              "出品の作成中にエラーが発生しました。",
+            title: "作成に失敗しました",
+            message: "出品の作成中にエラーが発生しました。",
           },
         ),
       );
@@ -838,26 +764,17 @@ export function useListCreate(): UseListCreateResult {
 
   const [saving, setSaving] = React.useState(false);
 
-  const [
-    progress,
-    setProgress,
-  ] = React.useState<ListProgress>(
+  const [progress, setProgress] = React.useState<ListProgress>(
     createInitialListProgress,
   );
 
-  const [
-    createdListId,
-    setCreatedListId,
-  ] = React.useState("");
+  const [createdListId, setCreatedListId] = React.useState("");
 
   const isUploading =
     progress.phase === "uploading" &&
     saving;
 
-  const progressOpen =
-    isListProgressVisible(
-      progress,
-    );
+  const progressOpen = isListProgressVisible(progress);
 
   const {
     navigate,
@@ -890,9 +807,7 @@ export function useListCreate(): UseListCreateResult {
         handleBeforeUnload,
       );
     };
-  }, [
-    isUploading,
-  ]);
+  }, [isUploading]);
 
   const onCloseProgress = React.useCallback(() => {
     if (isUploading) {
@@ -908,12 +823,8 @@ export function useListCreate(): UseListCreateResult {
       setProgress(
         createInitialListProgress(),
       );
-
       setCreatedListId("");
-
-      navigate(
-        `/list/${encodeURIComponent(listId)}`,
-      );
+      navigate(`/list/${encodeURIComponent(listId)}`);
 
       return;
     }
@@ -983,52 +894,41 @@ export function useListCreate(): UseListCreateResult {
     title,
     onBack,
     onCreate,
-
     saving,
     isUploading,
-
     progress,
     progressOpen,
     onCloseProgress,
-
     dto,
     loadingDTO,
     dtoError,
-
     productBrandName,
     productName,
     tokenBrandName,
     tokenName,
-
     priceRows,
     onChangePrice,
     priceCard,
-
     listingTitle,
     setListingTitle,
     description,
     setDescription,
-
     images,
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
     imageInputRef,
-
     onAddImages: onSelectImages,
     onRemoveImageAt: removeImageAt,
     onClearImages: clearImages,
-
     assigneeName,
     assigneeCandidates,
     loadingMembers,
     handleSelectAssignee,
-
     listItems,
     listLoading,
     listError,
     onOpenList,
-
     status,
     setStatus,
   };

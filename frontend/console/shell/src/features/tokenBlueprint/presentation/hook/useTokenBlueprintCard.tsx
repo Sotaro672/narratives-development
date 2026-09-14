@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { validateImageForStorage } from "../../../../shared/storage/imageStoragePolicy";
 import type { TokenBlueprint } from "../../../../shared/types/tokenBlueprint";
 import { useBrandSelection } from "../../../brand/presentation/hook/useBrandSelection";
 import type {
@@ -20,6 +21,7 @@ import type {
  * - minted=trueでもトークンアイコンは編集できる
  * - minted=trueの場合、トークン名・シンボル・ブランドは変更できない
  * - APIスキーマはname・brandNameを正とする
+ * - アイコン画像の検証はshared/storage/imageStoragePolicy.tsを正とする
  */
 export function useTokenBlueprintCard(params: {
   initialTokenBlueprint?: Partial<TokenBlueprint>;
@@ -173,7 +175,15 @@ export function useTokenBlueprintCard(params: {
         return;
       }
 
-      if (!file.type.toLowerCase().startsWith("image/")) {
+      const validation = validateImageForStorage(
+        file,
+        "tokenBlueprintIcon",
+      );
+
+      if (!validation.valid) {
+        setSelectedIconFile(null);
+        clearLocalPreview();
+        window.alert(validation.reason);
         return;
       }
 

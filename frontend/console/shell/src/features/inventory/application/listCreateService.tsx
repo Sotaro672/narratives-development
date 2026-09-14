@@ -3,6 +3,7 @@
 import type * as React from "react";
 
 import { getListCreateRaw } from "../infrastructure/listCreateApi";
+import { assertImageForStorage } from "../../../shared/storage/imageStoragePolicy";
 import type { ListCreateDTO } from "../../../shared/types/inventory";
 
 import type {
@@ -393,6 +394,15 @@ export function validateCreateListInput(
   }
 }
 
+function assertListImagesForStorage(files: File[]): void {
+  for (const file of files) {
+    assertImageForStorage(
+      file,
+      "listImage",
+    );
+  }
+}
+
 function calculateAggregateUploadPercentage(
   transferredBytes: number,
   totalBytes: number,
@@ -458,6 +468,8 @@ export async function uploadListImagesPolicyB(
   if (args.files.length === 0) {
     throw new Error(IMAGE_REQUIRED_MESSAGE);
   }
+
+  assertListImagesForStorage(args.files);
 
   const mainImageIndex =
     args.mainImageIndex >= 0 &&
@@ -606,13 +618,14 @@ export async function loadListCreateDTOFromParams(
  * list作成（POST /lists）と画像登録。
  *
  * Policy B:
- * 1. 必須項目を検証する
- * 2. 画像なしでListを先に作成する
+ * 1. 必須項目と全画像を検証する
+ * 2. 検証成功後に画像なしでListを先に作成する
  * 3. 作成済みlistIdを使ってFirebase Storageへuploadする
  * 4. backendにimage recordを作成する
  * 5. primary imageを設定する
  *
- * List作成後に画像登録が失敗しても、
+ * 未対応形式、0 byte、容量超過の画像はList作成前に拒否する。
+ * List作成後の通信障害などで画像登録が失敗した場合は、
  * List作成自体は成功として扱う。
  */
 export async function createListWithImages(
@@ -643,6 +656,7 @@ export async function createListWithImages(
     throw new Error(IMAGE_REQUIRED_MESSAGE);
   }
 
+  assertListImagesForStorage(args.images);
   assertCompletedPriceRows(args.priceRows);
 
   const input =

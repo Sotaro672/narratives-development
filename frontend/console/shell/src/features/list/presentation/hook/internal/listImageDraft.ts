@@ -1,5 +1,7 @@
 // frontend/console/shell/src/features/list/presentation/hook/internal/listImageDraft.ts
 
+import { validateImageForStorage } from "../../../../../shared/storage/imageStoragePolicy";
+
 export type ListImageSource = {
   id: string;
   url: string;
@@ -39,9 +41,7 @@ export function revokeDraftBlobUrls(
   }
 }
 
-export function fileKey(
-  file: File,
-): string {
+export function fileKey(file: File): string {
   return [
     file.name,
     file.size,
@@ -49,8 +49,9 @@ export function fileKey(
   ].join("__");
 }
 
-export function isImageFile(
-  file: File,
-): boolean {
-  return file.type.startsWith("image/");
+export function isImageFile(file: File): boolean {
+  return validateImageForStorage(
+    file,
+    "listImage",
+  ).valid;
 }

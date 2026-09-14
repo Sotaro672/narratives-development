@@ -9,12 +9,13 @@ import TokenContentsCard from "../features/tokenBlueprint/presentation/component
 import TokenBlueprintCreateProgressModal from "../features/tokenBlueprint/presentation/components/tokenBlueprintCreateProgressModal";
 import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
 import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
-import type { ContentFile } from "../shared/types/tokenBlueprint";
 import { createTokenBlueprintContentId } from "../features/tokenBlueprint/application/tokenBlueprintContentService";
 import {
   getTokenBlueprintContentType,
   guessTokenBlueprintContentType,
 } from "../features/tokenBlueprint/infrastructure/storage/tokenBlueprintAssetStorage";
+import { validateImageForStorage } from "../shared/storage/imageStoragePolicy";
+import type { ContentFile } from "../shared/types/tokenBlueprint";
 
 import "../styles/tokenBlueprint.css";
 
@@ -75,6 +76,18 @@ export default function TokenBlueprintCreate() {
     (files: File[]): void => {
       if (saving || files.length === 0) {
         return;
+      }
+
+      for (const file of files) {
+        const validation = validateImageForStorage(
+          file,
+          "tokenBlueprintContentImage",
+        );
+
+        if (!validation.valid) {
+          window.alert(validation.reason);
+          return;
+        }
       }
 
       setPending((previousItems) => {
