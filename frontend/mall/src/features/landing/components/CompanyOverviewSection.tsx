@@ -1,9 +1,7 @@
 // frontend/mall/src/features/landing/components/CompanyOverviewSection.tsx
 
-type CompanyOverviewRow = {
-  label: string;
-  value: string;
-};
+import founderImage from "../assets/founder.jpg";
+import type { CompanyOverviewRow } from "./companyOverview";
 
 type CompanyOverviewSectionProps = {
   companyOverviewRows: CompanyOverviewRow[];
@@ -45,7 +43,7 @@ export default function CompanyOverviewSection({
           <figure className="landing-page-company-overview__portrait">
             <div className="landing-page-company-overview__portrait-image-wrap">
               <img
-                src="/founder.jpg"
+                src={founderImage}
                 alt="株式会社AMOL代表 奥岡曹太朗"
                 className="landing-page-company-overview__portrait-image"
                 loading="lazy"

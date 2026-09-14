@@ -4,6 +4,7 @@ import type { RefObject } from "react";
 
 import blockchainNetworkImage from "../assets/BlockchainNetwork.png";
 import scanningImage from "../assets/Scaning.png";
+import AntiCopySection from "./AntiCopySection";
 
 type AuthenticationSectionProps = {
   authenticationEyebrowRef: RefObject<HTMLParagraphElement>;
@@ -78,6 +79,8 @@ export default function AuthenticationSection({
             </div>
           </article>
         </div>
+
+        <AntiCopySection />
       </div>
     </section>
   );

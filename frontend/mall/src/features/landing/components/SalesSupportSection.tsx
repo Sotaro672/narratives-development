@@ -5,6 +5,11 @@ import { useNavigate } from "react-router-dom";
 
 import Button from "../../../components/ui/Button";
 
+import afterConnection1Image from "../assets/AfterConnection1.png";
+import afterConnection2Image from "../assets/AfterConnection2.png";
+import beforeConnection1Image from "../assets/BeforeConnection1.png";
+import beforeConnection2Image from "../assets/BeforeConnection2.png";
+
 type SalesSupportSectionProps = {
   salesSupportEyebrowRef: RefObject<HTMLParagraphElement>;
 };
@@ -54,7 +59,7 @@ export default function SalesSupportSection({
 
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/BeforeConnection1.png"
+                  src={beforeConnection1Image}
                   alt="従来のSNSを用いたお客様との繋がり"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"
@@ -71,7 +76,7 @@ export default function SalesSupportSection({
 
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/BeforeConnection2.png"
+                  src={beforeConnection2Image}
                   alt="二次流通でお客様との繋がりを追跡できない状態"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"
@@ -96,7 +101,7 @@ export default function SalesSupportSection({
 
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/AfterConnection1.png"
+                  src={afterConnection1Image}
                   alt="電子名札を介したお客様との繋がり"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"
@@ -113,7 +118,7 @@ export default function SalesSupportSection({
 
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/AfterConnection2.png"
+                  src={afterConnection2Image}
                   alt="二次流通市場でも現在の所有者と繋がれる状態"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"

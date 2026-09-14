@@ -2,6 +2,9 @@
 
 import type { RefObject } from "react";
 
+import fleaMarketFivePercentImage from "../assets/fleamarket_5percent.jpg";
+import fleaMarketExpectImage from "../assets/fleamarket_expect.jpg";
+
 type FleaMarketSectionProps = {
   fleaMarketEyebrowRef: RefObject<HTMLParagraphElement>;
 };
@@ -52,7 +55,7 @@ export default function FleaMarketSection({
 
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/freemarket_expect.jpg"
+                  src={fleaMarketExpectImage}
                   alt="二次流通市場でブランドに利益が還元されにくい状態"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"
@@ -77,7 +80,7 @@ export default function FleaMarketSection({
 
               <div className="landing-page-sales-support-benefit__image-wrap">
                 <img
-                  src="/freemarket_5percent.jpg"
+                  src={fleaMarketFivePercentImage}
                   alt="フリーマーケットでの売上の一部がブランドに還元される状態"
                   className="landing-page-sales-support-benefit__image"
                   loading="lazy"

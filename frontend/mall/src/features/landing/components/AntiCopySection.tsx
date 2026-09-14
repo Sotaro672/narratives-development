@@ -1,5 +1,7 @@
 // frontend/mall/src/features/landing/components/AntiCopySection.tsx
 
+import antiCopyImage from "../assets/antiCopy.png";
+
 export default function AntiCopySection() {
   return (
     <div className="landing-page-anti-copy">
@@ -12,7 +14,7 @@ export default function AntiCopySection() {
       <div className="landing-page-anti-copy__body">
         <div className="landing-page-anti-copy__image-wrap">
           <img
-            src="/antiCopy.png"
+            src={antiCopyImage}
             alt="QRコードのコピーとブロックチェーントークンによる真贋判定のイメージ"
             className="landing-page-anti-copy__image"
             loading="lazy"
@@ -21,10 +23,7 @@ export default function AntiCopySection() {
 
         <div className="landing-page-anti-copy__content">
           <p className="landing-page-anti-copy__text">
-            QRコード自体はコピーできますが、
-            ブロックチェーントークンの移譲履歴は枝分かれできません。
-            模倣品偽造業者が１点の本物からコピー品を量産したとしても、正常に決済処理できるのは１点のみです。
-            よって偽造業者は模造品から利益を上げることができません。
+            QRコード自体はコピーできますが、ブロックチェーントークンの移譲履歴は枝分かれできません。模倣品偽造業者が１点の本物からコピー品を量産したとしても、正常に決済処理できるのは１点のみです。よって偽造業者は模造品から利益を上げることができません。
           </p>
         </div>
       </div>
