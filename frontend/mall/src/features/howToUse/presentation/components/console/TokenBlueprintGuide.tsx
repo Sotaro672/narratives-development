@@ -1,5 +1,6 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/TokenBlueprintGuide.tsx
 
+import createTokenBlueprintVideo from "../../../assets/console/token-blueprint/create-tokenBlueprint.mp4";
 import goToTokenBlueprintRegistrationVideo from "../../../assets/console/token-blueprint/go-to-tokenBlueprint-registration.mp4";
 
 import HowToUseNote from "../common/HowToUseNote";
@@ -33,6 +34,11 @@ export default function TokenBlueprintGuide() {
           <HowToUseStep>トークン設計の担当者を選択してください。</HowToUseStep>
           <HowToUseStep>すべての入力が完了したら、画面上部の「保存」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
+
+        <HowToUseVideo
+          src={createTokenBlueprintVideo}
+          label="ブランド、トークン名、シンボル、説明、アイコン画像、コンテンツ、担当者を設定し、トークン設計を保存する手順"
+        />
 
         <HowToUseNote title="トークンコンテンツ">
           トークンには画像やファイルなどのコンテンツを登録できます。登録したコンテンツはトークンに紐づく情報として管理されます。
