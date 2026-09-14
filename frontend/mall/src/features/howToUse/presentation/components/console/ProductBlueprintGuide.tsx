@@ -32,6 +32,7 @@ export default function ProductBlueprintGuide() {
 
       <HowToUseSection title="商品カテゴリの選択">
         <HowToUseStepList>
+          <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
           <HowToUseStep>商品を販売するブランドを選択してください。</HowToUseStep>
           <HowToUseStep>商品名を入力してください。</HowToUseStep>
           <HowToUseStep>商品カテゴリを選択してください。</HowToUseStep>
@@ -101,7 +102,7 @@ export default function ProductBlueprintGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="型番の登録（衣類）">
+      <HowToUseSection title="型番の登録">
         <HowToUseStepList>
           <HowToUseStep>登録したカラーとサイズの組み合わせを確認してください。</HowToUseStep>
           <HowToUseStep>各モデルに対応する型番を入力してください。</HowToUseStep>
@@ -118,7 +119,7 @@ export default function ProductBlueprintGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="配送時の梱包情報の登録（衣類）">
+      <HowToUseSection title="配送時の梱包情報の登録">
         <HowToUseStepList>
           <HowToUseStep>各モデルの配送時の重量を入力してください。</HowToUseStep>
           <HowToUseStep>梱包後の横、縦、高さを入力してください。</HowToUseStep>
@@ -137,8 +138,6 @@ export default function ProductBlueprintGuide() {
 
       <HowToUseSection title="商品設計の保存">
         <HowToUseStepList>
-          <HowToUseStep>酒類商品の場合は、容量、型番、配送時の梱包情報を登録してください。</HowToUseStep>
-          <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
           <HowToUseStep>すべての入力内容を確認してください。</HowToUseStep>
           <HowToUseStep>画面上部の「保存」をクリックして商品設計を登録してください。</HowToUseStep>
         </HowToUseStepList>
