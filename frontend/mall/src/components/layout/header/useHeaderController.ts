@@ -1,56 +1,32 @@
-// frontend/amol/src/components/layout/header/useHeaderController.ts
+// frontend/mall/src/components/layout/header/useHeaderController.ts
 
-import {
-  useEffect,
-  useState,
-} from "react";
-import {
-  useLocation,
-  useNavigate,
-} from "react-router-dom";
-import {
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
+import { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { onAuthStateChanged, type User } from "firebase/auth";
 
 import { fetchCart } from "../../../features/cart/api/cartApi";
-import type {
-  CartDTO,
-  CartItemDTO,
-} from "../../../features/shared/types/cart";
+import type { CartDTO, CartItemDTO } from "../../../features/shared/types/cart";
 import { auth } from "../../../lib/firebase";
 import { WALLET_PATH } from "../../../lib/navigation";
-import type {
-  HeaderActionState,
-  HeaderProps,
-} from "./types";
+import type { HeaderActionState, HeaderProps } from "./types";
 
-function getCartItemQty(
-  item: CartItemDTO,
-): number {
-  if (
-    !Number.isFinite(item.qty) ||
-    item.qty <= 0
-  ) {
+function getCartItemQty(item: CartItemDTO): number {
+  if (!Number.isFinite(item.qty) || item.qty <= 0) {
     return 0;
   }
 
   return item.qty;
 }
 
-function sumCartItemQty(
-  cart: CartDTO,
-): number {
+function sumCartItemQty(cart: CartDTO): number {
   return Object.values(cart.items).reduce(
-    (sum, item) =>
-      sum + getCartItemQty(item),
+    (sum, item) => sum + getCartItemQty(item),
     0,
   );
 }
 
 async function fetchCartItemCount(): Promise<number> {
   const cart = await fetchCart();
-
   return sumCartItemQty(cart);
 }
 
@@ -87,128 +63,72 @@ export function useHeaderController({
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [
-    menuOpen,
-    setMenuOpen,
-  ] = useState(false);
-
-  const [
-    settingsOpen,
-    setSettingsOpen,
-  ] = useState(false);
-
-  const [
-    currentUser,
-    setCurrentUser,
-  ] = useState<User | null>(null);
-
-  const [
-    authResolved,
-    setAuthResolved,
-  ] = useState(false);
-
-  const [
-    isDesktop,
-    setIsDesktop,
-  ] = useState(false);
-
-  const [
-    fetchedCartItemCount,
-    setFetchedCartItemCount,
-  ] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
+  const [fetchedCartItemCount, setFetchedCartItemCount] = useState(0);
 
   useEffect(() => {
     setMenuOpen(false);
     setSettingsOpen(false);
-  }, [
-    location.pathname,
-  ]);
+  }, [location.pathname]);
 
   useEffect(() => {
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        (user) => {
-          setCurrentUser(user);
-          setAuthResolved(true);
-        },
-      );
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthResolved(true);
+    });
 
     return unsubscribe;
   }, []);
 
   useEffect(() => {
-    if (
-      typeof window === "undefined"
-    ) {
+    if (typeof window === "undefined") {
       return;
     }
 
-    const desktopQuery =
-      window.matchMedia(
-        "(min-width: 1024px)",
-      );
+    const desktopQuery = window.matchMedia("(min-width: 1024px)");
 
-    const updateViewportState =
-      () => {
-        setIsDesktop(
-          desktopQuery.matches,
-        );
-      };
+    const updateViewportState = () => {
+      setIsDesktop(desktopQuery.matches);
+    };
 
     updateViewportState();
 
-    if (
-      typeof desktopQuery.addEventListener ===
-      "function"
-    ) {
-      desktopQuery.addEventListener(
-        "change",
-        updateViewportState,
-      );
+    if (typeof desktopQuery.addEventListener === "function") {
+      desktopQuery.addEventListener("change", updateViewportState);
 
       return () => {
-        desktopQuery.removeEventListener(
-          "change",
-          updateViewportState,
-        );
+        desktopQuery.removeEventListener("change", updateViewportState);
       };
     }
 
-    desktopQuery.addListener(
-      updateViewportState,
-    );
+    desktopQuery.addListener(updateViewportState);
 
     return () => {
-      desktopQuery.removeListener(
-        updateViewportState,
-      );
+      desktopQuery.removeListener(updateViewportState);
     };
   }, []);
 
-  const isLoggedIn =
-    !!currentUser;
+  const isLoggedIn = !!currentUser;
 
-  const isContactPage =
-    location.pathname === "/contact";
+  const isContactPage = location.pathname === "/contact";
 
   const isInfoPage =
     location.pathname === "/" ||
-    location.pathname ===
-      "/landing" ||
-    location.pathname ===
-      "/specified-commercial-transactions" ||
-    location.pathname ===
-      "/terms" ||
-    location.pathname ===
-      "/privacy-policy" ||
-    location.pathname ===
-      "/contact";
+    location.pathname === "/landing" ||
+    location.pathname === "/specified-commercial-transactions" ||
+    location.pathname === "/terms" ||
+    location.pathname === "/privacy-policy" ||
+    location.pathname === "/contact";
+
+  const isSignInSelectPage =
+    location.pathname === "/signin/select";
 
   const isRoomDetailPage =
-    /^\/lists\/[^/]+$/.test(
-      location.pathname,
-    );
+    /^\/lists\/[^/]+$/.test(location.pathname);
 
   const shouldHideHamburgerMenu =
     hideHamburgerMenu ||
@@ -218,29 +138,25 @@ export function useHeaderController({
     mode !== "signin" &&
     authResolved &&
     !!actionButtonLabel &&
-    typeof onActionButtonClick ===
-      "function";
+    typeof onActionButtonClick === "function";
 
   const hasSecondaryActionButton =
     mode !== "signin" &&
     authResolved &&
     !!secondaryActionButtonLabel &&
-    typeof onSecondaryActionButtonClick ===
-      "function";
+    typeof onSecondaryActionButtonClick === "function";
 
   const hasTertiaryActionButton =
     mode !== "signin" &&
     authResolved &&
     !!tertiaryActionButtonLabel &&
-    typeof onTertiaryActionButtonClick ===
-      "function";
+    typeof onTertiaryActionButtonClick === "function";
 
   const shouldShowCartButton =
     mode !== "signin" &&
     authResolved &&
     !!showCartButton &&
-    typeof onCartButtonClick ===
-      "function";
+    typeof onCartButtonClick === "function";
 
   useEffect(() => {
     let cancelled = false;
@@ -250,21 +166,17 @@ export function useHeaderController({
         !authResolved ||
         !currentUser ||
         !shouldShowCartButton ||
-        typeof cartItemCount ===
-          "number"
+        typeof cartItemCount === "number"
       ) {
         setFetchedCartItemCount(0);
         return;
       }
 
       try {
-        const count =
-          await fetchCartItemCount();
+        const count = await fetchCartItemCount();
 
         if (!cancelled) {
-          setFetchedCartItemCount(
-            count,
-          );
+          setFetchedCartItemCount(count);
         }
       } catch {
         if (!cancelled) {
@@ -291,8 +203,7 @@ export function useHeaderController({
       ? Math.max(0, cartItemCount)
       : fetchedCartItemCount;
 
-  const displayTitle =
-    title ?? "AMOL";
+  const displayTitle = title ?? "AMOL";
 
   const shouldShowBackButton =
     isContactPage
@@ -334,7 +245,7 @@ export function useHeaderController({
     !shouldShowCartButton;
 
   const shouldShowGuestMenuButton =
-    mode !== "signin" &&
+    (mode !== "signin" || isSignInSelectPage) &&
     authResolved &&
     !isLoggedIn &&
     !isDesktop &&
@@ -346,8 +257,7 @@ export function useHeaderController({
     isLoggedIn &&
     !shouldHideHamburgerMenu;
 
-  const shouldShowLandscapeSidebarMenuButton =
-    false;
+  const shouldShowLandscapeSidebarMenuButton = false;
 
   const shouldShowMenuButton =
     shouldShowGuestMenuButton ||
@@ -363,18 +273,12 @@ export function useHeaderController({
 
   const toggleMenu = () => {
     setSettingsOpen(false);
-
-    setMenuOpen(
-      (previous) => !previous,
-    );
+    setMenuOpen((previous) => !previous);
   };
 
   const toggleSettings = () => {
     setMenuOpen(false);
-
-    setSettingsOpen(
-      (previous) => !previous,
-    );
+    setSettingsOpen((previous) => !previous);
   };
 
   const handleBack = () => {
@@ -383,8 +287,7 @@ export function useHeaderController({
       return;
     }
 
-    const normalizedBackTo =
-      backTo.trim();
+    const normalizedBackTo = backTo.trim();
 
     navigate(
       normalizedBackTo ||
@@ -398,22 +301,17 @@ export function useHeaderController({
 
   const actions: HeaderActionState = {
     hasActionButton,
-    actionButtonLabel:
-      actionButtonLabel ?? "",
+    actionButtonLabel: actionButtonLabel ?? "",
     onActionButtonClick,
     actionButtonDisabled,
 
     hasSecondaryActionButton,
-    secondaryActionButtonLabel:
-      secondaryActionButtonLabel ??
-      "",
+    secondaryActionButtonLabel: secondaryActionButtonLabel ?? "",
     onSecondaryActionButtonClick,
     secondaryActionButtonDisabled,
 
     hasTertiaryActionButton,
-    tertiaryActionButtonLabel:
-      tertiaryActionButtonLabel ??
-      "",
+    tertiaryActionButtonLabel: tertiaryActionButtonLabel ?? "",
     onTertiaryActionButtonClick,
     tertiaryActionButtonDisabled,
 
@@ -421,8 +319,7 @@ export function useHeaderController({
     cartButtonLabel,
     onCartButtonClick,
     cartButtonDisabled,
-    cartItemCount:
-      displayCartItemCount,
+    cartItemCount: displayCartItemCount,
 
     shouldShowLoginButton,
     shouldShowAnnouncementButton,
