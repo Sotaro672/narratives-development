@@ -6,10 +6,27 @@ import Layout from "../components/layout/Layout";
 import {
   findHowToUseItem,
   isHowToUseCategory,
+  type HowToUseCategory,
 } from "../features/howToUse/application/howToUseSteps";
+import HowToUseArticle from "../features/howToUse/presentation/components/common/HowToUseArticle";
+import BrandRegistrationGuide from "../features/howToUse/presentation/components/console/BrandRegistrationGuide";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
+
+function renderGuide(
+  category: HowToUseCategory,
+  slug: string,
+) {
+  if (
+    category === "console" &&
+    slug === "brand-registration"
+  ) {
+    return <BrandRegistrationGuide />;
+  }
+
+  return null;
+}
 
 export default function HowToUseDetailPage() {
   const {
@@ -42,9 +59,9 @@ export default function HowToUseDetailPage() {
     >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
-          <p className="how-to-use-detail-page__description">
-            {item.description}
-          </p>
+          <HowToUseArticle description={item.description}>
+            {renderGuide(category, slug)}
+          </HowToUseArticle>
         </div>
       </main>
     </Layout>

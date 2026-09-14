@@ -1,8 +1,8 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/BrandRegistrationGuide.tsx
 
-import brandRegistrationOpenImage from "../../../assets/console/brand-registration/brand-registration-open.png";
-import brandRegistrationImagesImage from "../../../assets/console/brand-registration/brand-registration-images.png";
 import brandRegistrationDetailsImage from "../../../assets/console/brand-registration/brand-registration-details.png";
+import brandRegistrationImagesImage from "../../../assets/console/brand-registration/brand-registration-images.png";
+import brandRegistrationOpenImage from "../../../assets/console/brand-registration/brand-registration-open.png";
 import brandRegistrationSaveImage from "../../../assets/console/brand-registration/brand-registration-save.png";
 
 import HowToUseFigure from "../common/HowToUseFigure";
@@ -16,38 +16,24 @@ export default function BrandRegistrationGuide() {
     <>
       <HowToUseSection title="ブランド登録画面の開け方">
         <HowToUseStepList>
-          <HowToUseStep>
-            サイドバーの「組織」をクリックしてください。
-          </HowToUseStep>
-          <HowToUseStep>
-            「組織」をクリックした際に表示される「ブランド」をクリックしてください。
-          </HowToUseStep>
-          <HowToUseStep>
-            ブランド管理画面右上にある「ブランド追加」をクリックしてください。
-          </HowToUseStep>
+          <HowToUseStep>サイドバーの「組織」をクリックしてください。</HowToUseStep>
+          <HowToUseStep>「組織」をクリックした際に表示される「ブランド」をクリックしてください。</HowToUseStep>
+          <HowToUseStep>ブランド管理画面右上にある「ブランド追加」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseFigure
           src={brandRegistrationOpenImage}
           alt="サイドバーから組織、ブランドを選択し、ブランド追加ボタンをクリックする手順"
-          caption="ブランド登録画面の開き方"
+          caption="ブランド登録画面の開け方"
         />
       </HowToUseSection>
 
       <HowToUseSection title="ブランド登録手順">
         <HowToUseStepList>
-          <HowToUseStep>
-            ブランド担当者を選択してください。
-          </HowToUseStep>
-          <HowToUseStep>
-            ブランド売上振込口座を選択してください。開発環境ではテスト口座で固定されています。
-          </HowToUseStep>
-          <HowToUseStep>
-            ブランドアイコン画像をアップロードしてください。ブランドアイコンは出品画面やレビューへの返答時にブランド名と共に表示されます。
-          </HowToUseStep>
-          <HowToUseStep>
-            ブランド背景画像をアップロードしてください。Mallのブランド商品一覧画面のトップに表示される画像です。ブランドの世界観や、お客様へ伝えたいメッセージを表現する画像を設定してください。
-          </HowToUseStep>
+          <HowToUseStep>ブランド担当者を選択してください。</HowToUseStep>
+          <HowToUseStep>ブランド売上振込口座を選択してください。開発環境ではテスト口座で固定されています。</HowToUseStep>
+          <HowToUseStep>ブランドアイコン画像をアップロードしてください。ブランドアイコンは出品画面やレビューへの返答時にブランド名と共に表示されます。</HowToUseStep>
+          <HowToUseStep>ブランド背景画像をアップロードしてください。Mallのブランド商品一覧画面のトップに表示される画像です。ブランドの世界観や、お客様へ伝えたいメッセージを表現する画像を設定してください。</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseFigure
@@ -57,9 +43,7 @@ export default function BrandRegistrationGuide() {
         />
 
         <HowToUseStepList>
-          <HowToUseStep>
-            ブランド名、ブランド説明、会社サイトURL、ブランド責任者を入力・選択してください。
-          </HowToUseStep>
+          <HowToUseStep>ブランド名、ブランド説明、会社サイトURL、ブランド責任者を入力・選択してください。</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseFigure
@@ -69,9 +53,7 @@ export default function BrandRegistrationGuide() {
         />
 
         <HowToUseStepList>
-          <HowToUseStep>
-            すべての入力が完了したら、画面右上にある「保存」ボタンをクリックしてください。
-          </HowToUseStep>
+          <HowToUseStep>すべての入力が完了したら、画面右上にある「保存」ボタンをクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseFigure
