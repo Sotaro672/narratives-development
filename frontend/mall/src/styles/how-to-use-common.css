@@ -1,0 +1,237 @@
+/* frontend/mall/src/styles/how-to-use-common.css */
+
+/* =========================================================
+ * Article
+ * =======================================================*/
+
+.how-to-use-article {
+  width: 100%;
+  min-width: 0;
+}
+
+.how-to-use-article__content {
+  display: flex;
+  flex-direction: column;
+  gap: 56px;
+  margin-top: 48px;
+}
+
+/* =========================================================
+ * Section
+ * =======================================================*/
+
+.how-to-use-article-section {
+  min-width: 0;
+}
+
+.how-to-use-article-section__title {
+  margin: 0;
+  color: var(--color-text, #111827);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+}
+
+.how-to-use-article-section__content {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  margin-top: 24px;
+}
+
+/* =========================================================
+ * Step list
+ * =======================================================*/
+
+.how-to-use-step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: how-to-use-step;
+}
+
+.how-to-use-step {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  min-width: 0;
+  counter-increment: how-to-use-step;
+}
+
+.how-to-use-step::before {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  content: counter(how-to-use-step);
+}
+
+.how-to-use-step__content {
+  min-width: 0;
+  padding-top: 2px;
+  color: var(--color-text, #1f2937);
+  font-size: 15px;
+  line-height: 1.9;
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
+ * Figure / Video
+ * =======================================================*/
+
+.how-to-use-figure {
+  width: 100%;
+  margin: 4px 0 0;
+}
+
+.how-to-use-figure__image-wrap {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.how-to-use-figure__image,
+.how-to-use-figure__video {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.how-to-use-figure__video {
+  object-fit: contain;
+}
+
+.how-to-use-figure__caption {
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* =========================================================
+ * Note
+ * =======================================================*/
+
+.how-to-use-note {
+  padding: 20px 22px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.how-to-use-note__title {
+  margin: 0 0 8px;
+  color: var(--color-text, #111827);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.how-to-use-note__content {
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+
+.how-to-use-note__content > :first-child {
+  margin-top: 0;
+}
+
+.how-to-use-note__content > :last-child {
+  margin-bottom: 0;
+}
+
+/* =========================================================
+ * Responsive
+ * =======================================================*/
+
+@media (max-width: 768px) {
+  .how-to-use-article__content {
+    gap: 44px;
+    margin-top: 36px;
+  }
+
+  .how-to-use-article-section__title {
+    font-size: 21px;
+  }
+
+  .how-to-use-article-section__content {
+    gap: 24px;
+    margin-top: 20px;
+  }
+
+  .how-to-use-step-list {
+    gap: 14px;
+  }
+
+  .how-to-use-step {
+    gap: 12px;
+  }
+
+  .how-to-use-step::before {
+    width: 26px;
+    height: 26px;
+    flex-basis: 26px;
+    font-size: 12px;
+  }
+
+  .how-to-use-step__content {
+    font-size: 14px;
+    line-height: 1.8;
+  }
+
+  .how-to-use-figure__image-wrap {
+    border-radius: 8px;
+  }
+
+  .how-to-use-note {
+    padding: 18px;
+  }
+}
+
+/* =========================================================
+ * Print
+ * =======================================================*/
+
+@media print {
+  .how-to-use-article__content {
+    gap: 32px;
+    margin-top: 32px;
+  }
+
+  .how-to-use-article-section__title {
+    color: #000000;
+    font-size: 18pt;
+  }
+
+  .how-to-use-step__content,
+  .how-to-use-note__content {
+    color: #000000;
+  }
+
+  .how-to-use-figure__image-wrap {
+    border-color: #cccccc;
+  }
+
+  .how-to-use-note {
+    border-color: #cccccc;
+    background: transparent;
+  }
+}

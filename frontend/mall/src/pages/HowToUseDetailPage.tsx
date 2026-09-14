@@ -13,15 +13,10 @@ import BrandRegistrationGuide from "../features/howToUse/presentation/components
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
+import "../styles/how-to-use-common.css";
 
-function renderGuide(
-  category: HowToUseCategory,
-  slug: string,
-) {
-  if (
-    category === "console" &&
-    slug === "brand-registration"
-  ) {
+function renderGuide(category: HowToUseCategory, slug: string) {
+  if (category === "console" && slug === "brand-registration") {
     return <BrandRegistrationGuide />;
   }
 
@@ -29,10 +24,7 @@ function renderGuide(
 }
 
 export default function HowToUseDetailPage() {
-  const {
-    category,
-    slug = "",
-  } = useParams<{
+  const { category, slug = "" } = useParams<{
     category?: string;
     slug?: string;
   }>();
