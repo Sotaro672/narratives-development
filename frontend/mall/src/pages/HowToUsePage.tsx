@@ -3,7 +3,6 @@
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-import Button from "../components/ui/Button";
 import {
   consoleItems,
   mallItems,
@@ -84,15 +83,6 @@ export default function HowToUsePage() {
             items={mallItems}
             onDetailClick={handleDetailClick}
           />
-
-          <div className="page-actions">
-            <Button
-              variant="primary"
-              onClick={() => navigate("/signin/select")}
-            >
-              試作品を体験
-            </Button>
-          </div>
         </div>
       </main>
     </Layout>
