@@ -1,6 +1,7 @@
-// frontend/// frontend/mall/src/features/howToUse/presentation/components/console/BrandRegistrationGuide.tsx
+// frontend/mall/src/features/howToUse/presentation/components/console/BrandRegistrationGuide.tsx
 
 import goToBrandRegistrationVideo from "../../../assets/console/brand-registration/go-to-brand-registration.mp4";
+import registrateBrandVideo from "../../../assets/console/brand-registration/registrate-brand.mp4";
 
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
@@ -33,6 +34,11 @@ export default function BrandRegistrationGuide() {
           <HowToUseStep>ブランド名、ブランド説明、会社サイトURL、ブランド責任者を入力・選択してください。</HowToUseStep>
           <HowToUseStep>すべての入力が完了したら、画面右上にある「保存」ボタンをクリックしてください。</HowToUseStep>
         </HowToUseStepList>
+
+        <HowToUseVideo
+          src={registrateBrandVideo}
+          label="ブランド担当者、振込口座、ブランド画像、ブランド情報を入力し、ブランドを登録する手順"
+        />
 
         <HowToUseNote title="ブランド専用ウォレット">
           ブランド登録と同時に、ブランド専用のブロックチェーンウォレットが開設されます。商品やトークン設計を登録する際にはブランド名義が必要です。
