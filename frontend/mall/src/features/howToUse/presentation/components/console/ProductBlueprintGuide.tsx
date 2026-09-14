@@ -62,7 +62,7 @@ export default function ProductBlueprintGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="カラーの登録">
+      <HowToUseSection title="カラーの登録（衣類）">
         <HowToUseStepList>
           <HowToUseStep>商品のカラーバリエーションを追加してください。</HowToUseStep>
           <HowToUseStep>カラー名と商品の実際の色に対応するカラー情報を入力してください。</HowToUseStep>
