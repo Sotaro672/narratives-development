@@ -1,4 +1,4 @@
-// frontend/amol/src/components/layout/header/HeaderDesktopNavigation.tsx
+// frontend/mall/src/components/layout/header/HeaderDesktopNavigation.tsx
 
 import { useEffect, useState } from "react";
 import {
@@ -9,6 +9,7 @@ import {
 import {
   Link,
   NavLink,
+  useLocation,
 } from "react-router-dom";
 import {
   Heart,
@@ -19,36 +20,25 @@ import {
 } from "lucide-react";
 
 import { getMyAvatar } from "../../../features/avatar/api/avatarApi";
-import { getApiBaseUrl } from "../../../lib/apiBaseUrl";
-import { publicHeaderNavigationItems } from "./headerNavigationItems";
+import { getVisiblePublicHeaderNavigationItems } from "./headerNavigationItems";
 
 export default function HeaderDesktopNavigation() {
-  const [
-    authResolved,
-    setAuthResolved,
-  ] = useState(false);
+  const location = useLocation();
 
-  const [
-    currentUser,
-    setCurrentUser,
-  ] = useState<User | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [avatarIcon, setAvatarIcon] = useState("");
 
-  const [
-    avatarIcon,
-    setAvatarIcon,
-  ] = useState("");
+  const publicNavigationItems =
+    getVisiblePublicHeaderNavigationItems(location.pathname);
 
   useEffect(() => {
     const auth = getAuth();
 
-    const unsubscribe =
-      onAuthStateChanged(
-        auth,
-        (user) => {
-          setCurrentUser(user);
-          setAuthResolved(true);
-        },
-      );
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthResolved(true);
+    });
 
     return unsubscribe;
   }, []);
@@ -63,32 +53,13 @@ export default function HeaderDesktopNavigation() {
       }
 
       try {
-        const apiBaseUrl =
-          getApiBaseUrl();
-
-        if (!apiBaseUrl) {
-          setAvatarIcon("");
-          return;
-        }
-
-        const idToken =
-          await currentUser.getIdToken(
-            true,
-          );
-
-        const avatar =
-          await getMyAvatar({
-            backendUrl: apiBaseUrl,
-            idToken,
-          });
+        const avatar = await getMyAvatar();
 
         if (cancelled) {
           return;
         }
 
-        setAvatarIcon(
-          avatar?.avatarIcon ?? "",
-        );
+        setAvatarIcon(avatar?.avatarIcon ?? "");
       } catch {
         if (!cancelled) {
           setAvatarIcon("");
@@ -113,17 +84,15 @@ export default function HeaderDesktopNavigation() {
         className="header__desktop-nav"
         aria-label="ページナビゲーション"
       >
-        {publicHeaderNavigationItems.map(
-          (item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="header__desktop-nav-link"
-            >
-              {item.label}
-            </Link>
-          ),
-        )}
+        {publicNavigationItems.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className="header__desktop-nav-link"
+          >
+            {item.label}
+          </Link>
+        ))}
       </nav>
     );
   }
@@ -142,9 +111,7 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive
-              ? "header__desktop-nav-link--active"
-              : "",
+            isActive ? "header__desktop-nav-link--active" : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -155,7 +122,6 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
-
         <span>モール</span>
       </NavLink>
 
@@ -165,9 +131,7 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive
-              ? "header__desktop-nav-link--active"
-              : "",
+            isActive ? "header__desktop-nav-link--active" : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -178,7 +142,6 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
-
         <span>マーケット</span>
       </NavLink>
 
@@ -188,9 +151,7 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive
-              ? "header__desktop-nav-link--active"
-              : "",
+            isActive ? "header__desktop-nav-link--active" : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -201,7 +162,6 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
-
         <span>スキャン</span>
       </NavLink>
 
@@ -211,9 +171,7 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive
-              ? "header__desktop-nav-link--active"
-              : "",
+            isActive ? "header__desktop-nav-link--active" : "",
           ]
             .filter(Boolean)
             .join(" ")
@@ -224,7 +182,6 @@ export default function HeaderDesktopNavigation() {
           strokeWidth={2.2}
           aria-hidden="true"
         />
-
         <span>お気に入り</span>
       </NavLink>
 
@@ -234,9 +191,7 @@ export default function HeaderDesktopNavigation() {
           [
             "header__desktop-nav-link",
             "header__desktop-nav-link--with-icon",
-            isActive
-              ? "header__desktop-nav-link--active"
-              : "",
+            isActive ? "header__desktop-nav-link--active" : "",
           ]
             .filter(Boolean)
             .join(" ")

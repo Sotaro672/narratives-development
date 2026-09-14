@@ -27,3 +27,15 @@ export const publicHeaderNavigationItems: HeaderNavigationItem[] = [
     to: "/landing#contact",
   },
 ];
+
+export function getVisiblePublicHeaderNavigationItems(
+  pathname: string,
+): HeaderNavigationItem[] {
+  if (pathname.startsWith("/how-to-use")) {
+    return publicHeaderNavigationItems.filter(
+      (item) => item.to !== "/how-to-use",
+    );
+  }
+
+  return publicHeaderNavigationItems;
+}

@@ -1,13 +1,10 @@
 // frontend/mall/src/features/landing/hooks/useContactSectionVisibility.ts
 
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 
 export type UseContactSectionVisibilityResult = {
-  contactSectionRef: React.RefObject<HTMLElement | null>;
+  contactSectionRef: RefObject<HTMLElement>;
   isContactSectionVisible: boolean;
 };
 
@@ -18,41 +15,30 @@ type UseContactSectionVisibilityOptions = {
 export function useContactSectionVisibility({
   isDesktop,
 }: UseContactSectionVisibilityOptions): UseContactSectionVisibilityResult {
-  const contactSectionRef =
-    useRef<HTMLElement | null>(null);
-
-  const [
-    isContactSectionVisible,
-    setIsContactSectionVisible,
-  ] = useState(false);
+  const contactSectionRef = useRef<HTMLElement>(null);
+  const [isContactSectionVisible, setIsContactSectionVisible] =
+    useState(false);
 
   useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      isDesktop
-    ) {
+    if (typeof window === "undefined" || isDesktop) {
       setIsContactSectionVisible(false);
       return;
     }
 
-    const contactSection =
-      contactSectionRef.current;
+    const contactSection = contactSectionRef.current;
 
     if (!contactSection) {
       return;
     }
 
-    const observer =
-      new IntersectionObserver(
-        ([entry]) => {
-          setIsContactSectionVisible(
-            entry.isIntersecting,
-          );
-        },
-        {
-          threshold: 0.1,
-        },
-      );
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsContactSectionVisible(entry.isIntersecting);
+      },
+      {
+        threshold: 0.1,
+      },
+    );
 
     observer.observe(contactSection);
 

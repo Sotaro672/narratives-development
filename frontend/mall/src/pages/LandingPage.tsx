@@ -1,7 +1,6 @@
-// frontend/amol/src/pages/LandingPage.tsx
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { onAuthStateChanged, type User } from "firebase/auth";
+// frontend/mall/src/pages/LandingPage.tsx
+
+import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/landing-page.css";
@@ -12,11 +11,18 @@ import "../styles/contact-page.css";
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
 import Button from "../components/ui/Button";
+
 import ContactForm from "../features/contact/components/ContactForm";
 import ContactUploadProgressModal from "../features/contact/components/ContactUploadProgressModal";
 import { useContactAttachments } from "../features/contact/hooks/useContactAttachments";
 import { useContactSubmit } from "../features/contact/hooks/useContactSubmit";
-import { auth } from "../lib/firebase";
+
+import LandingFeatureOverview from "../features/landing/components/LandingFeatureOverview";
+import LandingHero from "../features/landing/components/LandingHero";
+import useContactSectionVisibility from "../features/landing/hooks/useContactSectionVisibility";
+import useLandingAuth from "../features/landing/hooks/useLandingAuth";
+import useLandingSectionScroll from "../features/landing/hooks/useLandingSectionScroll";
+import useLandingViewport from "../features/landing/hooks/useLandingViewport";
 
 const subscriptionPlanColumns = [
   "Starter",
@@ -105,17 +111,33 @@ const companyOverviewRows = [
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const location = useLocation();
 
-  const authenticationEyebrowRef = useRef<HTMLParagraphElement | null>(null);
-  const salesSupportEyebrowRef = useRef<HTMLParagraphElement | null>(null);
-  const fleaMarketEyebrowRef = useRef<HTMLParagraphElement | null>(null);
-  const contactSectionRef = useRef<HTMLElement | null>(null);
+  const {
+    currentUser,
+    authResolved,
+    isLoggedIn,
+  } = useLandingAuth();
 
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [authResolved, setAuthResolved] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isContactSectionVisible, setIsContactSectionVisible] = useState(false);
+  const {
+    isMobile,
+    isDesktop,
+  } = useLandingViewport();
+
+  const {
+    authenticationEyebrowRef,
+    salesSupportEyebrowRef,
+    fleaMarketEyebrowRef,
+    scrollToAuthentication,
+    scrollToSalesSupport,
+    scrollToFleaMarket,
+  } = useLandingSectionScroll();
+
+  const {
+    contactSectionRef,
+    isContactSectionVisible,
+  } = useContactSectionVisibility({
+    isDesktop,
+  });
 
   const {
     mediaInputRef,
@@ -130,9 +152,6 @@ export default function LandingPage() {
     handleMoveToSlide,
     revokeAllAttachmentPreviewUrls,
   } = useContactAttachments();
-
-  const isLoggedIn = !!currentUser;
-  const isDesktop = !isMobile;
 
   const {
     name,
@@ -159,268 +178,47 @@ export default function LandingPage() {
     revokeAllAttachmentPreviewUrls,
   });
 
-  const shouldShowGuestEmailInput = authResolved && !isLoggedIn;
-  const submitButtonLabel = submitting ? "送信中..." : "問い合わせる";
-  const shouldShowFooterNav = authResolved && isLoggedIn && isMobile;
+  const shouldShowGuestEmailInput =
+    authResolved && !isLoggedIn;
 
-  const scrollToElement = useCallback((element: HTMLElement | null) => {
-    if (!element || typeof window === "undefined") {
-      return;
-    }
+  const submitButtonLabel =
+    submitting ? "送信中..." : "問い合わせる";
 
-    const isMobileViewport = window.matchMedia("(max-width: 767px)").matches;
-    const headerOffset = isMobileViewport ? 72 : 88;
-    const elementTop =
-      window.scrollY + element.getBoundingClientRect().top - headerOffset;
-
-    window.scrollTo({
-      top: Math.max(0, elementTop),
-      behavior: "smooth",
-    });
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setAuthResolved(true);
-    });
-
-    return unsubscribe;
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia("(max-width: 1023px)");
-
-    const updateViewportState = () => {
-      setIsMobile(mediaQuery.matches);
-    };
-
-    updateViewportState();
-
-    if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", updateViewportState);
-
-      return () => {
-        mediaQuery.removeEventListener("change", updateViewportState);
-      };
-    }
-
-    mediaQuery.addListener(updateViewportState);
-
-    return () => {
-      mediaQuery.removeListener(updateViewportState);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const sectionId = location.hash.replace(/^#/, "").trim();
-
-    if (!sectionId) {
-      return;
-    }
-
-    let firstFrameId = 0;
-    let secondFrameId = 0;
-
-    firstFrameId = window.requestAnimationFrame(() => {
-      secondFrameId = window.requestAnimationFrame(() => {
-        const section = document.getElementById(sectionId);
-        scrollToElement(section);
-      });
-    });
-
-    return () => {
-      window.cancelAnimationFrame(firstFrameId);
-      window.cancelAnimationFrame(secondFrameId);
-    };
-  }, [location.hash, location.key, scrollToElement]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || isDesktop) {
-      setIsContactSectionVisible(false);
-      return;
-    }
-
-    const contactSection = contactSectionRef.current;
-
-    if (!contactSection) {
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsContactSectionVisible(entry.isIntersecting);
-      },
-      {
-        threshold: 0.1,
-      },
-    );
-
-    observer.observe(contactSection);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [isDesktop]);
-
-  const scrollToAuthentication = () => {
-    scrollToElement(authenticationEyebrowRef.current);
-  };
-
-  const scrollToSalesSupport = () => {
-    scrollToElement(salesSupportEyebrowRef.current);
-  };
-
-  const scrollToFleaMarket = () => {
-    scrollToElement(fleaMarketEyebrowRef.current);
-  };
+  const shouldShowFooterNav =
+    authResolved &&
+    isLoggedIn &&
+    isMobile;
 
   return (
-    <Layout title="AMOL" mode="landing">
+    <Layout
+      title="AMOL"
+      mode="landing"
+    >
       <div
         className={[
           "landing-page",
-          shouldShowFooterNav || (!isDesktop && isContactSectionVisible)
+          shouldShowFooterNav ||
+          (!isDesktop &&
+            isContactSectionVisible)
             ? "landing-page--with-footer-nav"
             : "",
         ]
           .filter(Boolean)
           .join(" ")}
       >
-        <section className="landing-page-hero">
-          <div className="landing-page-hero__inner">
-            <div className="landing-page-hero__content">
-              <p className="landing-page-hero__eyebrow">
-                二次流通まで繋げる真贋証明
-              </p>
+        <LandingHero />
 
-              <h1 className="landing-page-hero__title">AMOL</h1>
-
-              <div className="page-actions">
-                <Button
-                  variant="primary"
-                  onClick={() => navigate("/how-to-use")}
-                >
-                  使い方解説
-                </Button>
-              </div>
-            </div>
-
-            <div className="landing-page-hero__video-wrap">
-              <iframe
-                className="landing-page-hero__video"
-                src="https://www.youtube.com/embed/fOH4hQUXwhc"
-                title="AMOL 紹介動画"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
-            </div>
-          </div>
-        </section>
-
-        <section className="landing-page-section">
-          <div className="landing-page-section__inner">
-            <div className="landing-page-feature-grid">
-              <article
-                className="landing-page-feature-card landing-page-feature-card--clickable"
-                role="button"
-                tabIndex={0}
-                aria-label="真贋証明の詳細へ移動"
-                onClick={scrollToAuthentication}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    scrollToAuthentication();
-                  }
-                }}
-              >
-                <h2 className="landing-page-feature-card__title">真贋証明</h2>
-
-                <p className="landing-page-feature-card__text">
-                  商品のQRコードをスキャンするだけで、製品情報、コメント、所有履歴にアクセスでき、本物であると瞬時に分かります。
-                </p>
-
-                <div className="landing-page-feature-card__image-placeholder">
-                  <img
-                    src="/scan.png"
-                    alt="商品QRコードをスキャンした結果画面"
-                    className="landing-page-feature-card__image"
-                    loading="lazy"
-                  />
-                </div>
-              </article>
-
-              <article
-                className="landing-page-feature-card landing-page-feature-card--clickable"
-                role="button"
-                tabIndex={0}
-                aria-label="フリーマーケットの詳細へ移動"
-                onClick={scrollToFleaMarket}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    scrollToFleaMarket();
-                  }
-                }}
-              >
-                <h2 className="landing-page-feature-card__title">
-                  フリーマーケット
-                </h2>
-
-                <p className="landing-page-feature-card__text">
-                  フリーマーケットでの売上の5%をブランド様に還元します。
-                </p>
-
-                <div className="landing-page-feature-card__image-placeholder">
-                  <img
-                    src="/2ndCustomer.png"
-                    alt="フリーマーケットで二次流通した商品の所有者が更新される図"
-                    className="landing-page-feature-card__image"
-                    loading="lazy"
-                  />
-                </div>
-              </article>
-
-              <article
-                className="landing-page-feature-card landing-page-feature-card--clickable"
-                role="button"
-                tabIndex={0}
-                aria-label="営業支援の詳細へ移動"
-                onClick={scrollToSalesSupport}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    scrollToSalesSupport();
-                  }
-                }}
-              >
-                <h2 className="landing-page-feature-card__title">営業支援</h2>
-
-                <p className="landing-page-feature-card__text">
-                  商品を誰が所有しているかがリアルタイムで分かり、販売後も新商品の情報を本当に興味のある人に届けることができます。
-                </p>
-
-                <div className="landing-page-feature-card__image-placeholder">
-                  <img
-                    src="/comment.png"
-                    alt="商品所有者とのコメント画面"
-                    className="landing-page-feature-card__image"
-                    loading="lazy"
-                  />
-                </div>
-              </article>
-            </div>
-          </div>
-        </section>
+        <LandingFeatureOverview
+          onAuthenticationClick={
+            scrollToAuthentication
+          }
+          onFleaMarketClick={
+            scrollToFleaMarket
+          }
+          onSalesSupportClick={
+            scrollToSalesSupport
+          }
+        />
 
         <section
           id="authentication"
@@ -706,7 +504,12 @@ export default function LandingPage() {
             </div>
 
             <div className="page-actions">
-              <Button variant="primary" onClick={() => navigate("/how-to-use")}>
+              <Button
+                variant="primary"
+                onClick={() =>
+                  navigate("/how-to-use")
+                }
+              >
                 使い方解説
               </Button>
             </div>
@@ -719,7 +522,9 @@ export default function LandingPage() {
         >
           <div className="landing-page-section__inner">
             <div className="landing-page-sales-support__header">
-              <p className="landing-page-sales-support__eyebrow">利用料金</p>
+              <p className="landing-page-sales-support__eyebrow">
+                利用料金
+              </p>
 
               <h2 className="landing-page-section__title landing-page-sales-support__title">
                 本番運用時の料金体系
@@ -732,11 +537,14 @@ export default function LandingPage() {
 
             <div className="landing-page-pricing-grid">
               <article className="landing-page-pricing-card">
-                <p className="landing-page-pricing-card__label">基本利用料金</p>
+                <p className="landing-page-pricing-card__label">
+                  基本利用料金
+                </p>
 
                 <h3 className="landing-page-pricing-card__price">
                   4,990円/月～
                 </h3>
+
                 <p className="landing-page-pricing-card__text">
                   試験運用価格であり、今後金額が上下する可能性があります。
                 </p>
@@ -747,7 +555,9 @@ export default function LandingPage() {
                   電子名札発行手数料
                 </p>
 
-                <h3 className="landing-page-pricing-card__price">10円/点</h3>
+                <h3 className="landing-page-pricing-card__price">
+                  10円/点
+                </h3>
 
                 <p className="landing-page-pricing-card__text">
                   発行した点数に応じて課金されます。
@@ -759,7 +569,9 @@ export default function LandingPage() {
                   販売手数料
                 </p>
 
-                <h3 className="landing-page-pricing-card__price">売上の10%</h3>
+                <h3 className="landing-page-pricing-card__price">
+                  売上の10%
+                </h3>
 
                 <p className="landing-page-pricing-card__text">
                   AMOLモール上で商品が販売された場合に発生します。
@@ -767,45 +579,61 @@ export default function LandingPage() {
               </article>
             </div>
 
-            <h3 className="price-plan-page__table-title">基本料金表</h3>
+            <h3 className="price-plan-page__table-title">
+              基本料金表
+            </h3>
 
             <div className="price-plan-table-wrap">
               <table className="price-plan-table">
                 <thead>
                   <tr>
-                    <th scope="col" className="price-plan-table__corner">
+                    <th
+                      scope="col"
+                      className="price-plan-table__corner"
+                    >
                       プラン
                     </th>
 
-                    {subscriptionPlanColumns.map((column) => (
-                      <th key={column} scope="col">
-                        {column}
-                      </th>
-                    ))}
+                    {subscriptionPlanColumns.map(
+                      (column) => (
+                        <th
+                          key={column}
+                          scope="col"
+                        >
+                          {column}
+                        </th>
+                      ),
+                    )}
                   </tr>
                 </thead>
 
                 <tbody>
-                  {subscriptionPlanRows.map((row) => (
-                    <tr key={row.label}>
-                      <th scope="row">{row.label}</th>
+                  {subscriptionPlanRows.map(
+                    (row) => (
+                      <tr key={row.label}>
+                        <th scope="row">
+                          {row.label}
+                        </th>
 
-                      {row.values.map((value, index) => (
-                        <td
-                          key={`${row.label}-${subscriptionPlanColumns[index]}`}
-                          className={
-                            value === "〇"
-                              ? "price-plan-table__available"
-                              : value === "×"
-                                ? "price-plan-table__unavailable"
-                                : ""
-                          }
-                        >
-                          {value}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
+                        {row.values.map(
+                          (value, index) => (
+                            <td
+                              key={`${row.label}-${subscriptionPlanColumns[index]}`}
+                              className={
+                                value === "〇"
+                                  ? "price-plan-table__available"
+                                  : value === "×"
+                                    ? "price-plan-table__unavailable"
+                                    : ""
+                              }
+                            >
+                              {value}
+                            </td>
+                          ),
+                        )}
+                      </tr>
+                    ),
+                  )}
                 </tbody>
               </table>
             </div>
@@ -818,7 +646,9 @@ export default function LandingPage() {
         >
           <div className="landing-page-section__inner">
             <header className="landing-page-company-overview__header">
-              <p className="landing-page-sales-support__eyebrow">Company</p>
+              <p className="landing-page-sales-support__eyebrow">
+                Company
+              </p>
 
               <h2 className="landing-page-section__title landing-page-company-overview__title">
                 会社概要
@@ -829,12 +659,18 @@ export default function LandingPage() {
               <div className="landing-page-company-overview__table-wrap">
                 <table className="landing-page-company-overview__table">
                   <tbody>
-                    {companyOverviewRows.map((row) => (
-                      <tr key={row.label}>
-                        <th scope="row">{row.label}</th>
-                        <td>{row.value}</td>
-                      </tr>
-                    ))}
+                    {companyOverviewRows.map(
+                      (row) => (
+                        <tr key={row.label}>
+                          <th scope="row">
+                            {row.label}
+                          </th>
+                          <td>
+                            {row.value}
+                          </td>
+                        </tr>
+                      ),
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -870,13 +706,20 @@ export default function LandingPage() {
         >
           <div className="landing-page-section__inner">
             <header className="how-to-use-page__header">
-              <p className="how-to-use-page__eyebrow">Contact</p>
-              <h2 className="how-to-use-page__title">お問い合わせ</h2>
+              <p className="how-to-use-page__eyebrow">
+                Contact
+              </p>
+
+              <h2 className="how-to-use-page__title">
+                お問い合わせ
+              </h2>
             </header>
 
             <div className="landing-page-card">
               <ContactForm
-                shouldShowGuestEmailInput={shouldShowGuestEmailInput}
+                shouldShowGuestEmailInput={
+                  shouldShowGuestEmailInput
+                }
                 name={name}
                 guestEmail={guestEmail}
                 company={company}
@@ -887,13 +730,27 @@ export default function LandingPage() {
                 mediaInputRef={mediaInputRef}
                 carouselRef={carouselRef}
                 onNameChange={setName}
-                onGuestEmailChange={setGuestEmail}
-                onCompanyChange={setCompany}
-                onMessageChange={setMessage}
-                onFilesSelected={handleFilesSelected}
-                onRemoveAttachment={handleRemoveAttachment}
-                onCarouselScroll={handleCarouselScroll}
-                onMoveToSlide={handleMoveToSlide}
+                onGuestEmailChange={
+                  setGuestEmail
+                }
+                onCompanyChange={
+                  setCompany
+                }
+                onMessageChange={
+                  setMessage
+                }
+                onFilesSelected={
+                  handleFilesSelected
+                }
+                onRemoveAttachment={
+                  handleRemoveAttachment
+                }
+                onCarouselScroll={
+                  handleCarouselScroll
+                }
+                onMoveToSlide={
+                  handleMoveToSlide
+                }
               />
 
               {isDesktop ? (
@@ -920,7 +777,8 @@ export default function LandingPage() {
         fileCount={uploadFileCount}
       />
 
-      {!isDesktop && isContactSectionVisible ? (
+      {!isDesktop &&
+      isContactSectionVisible ? (
         <FooterNav
           variant="action"
           buttonLabel={submitButtonLabel}
