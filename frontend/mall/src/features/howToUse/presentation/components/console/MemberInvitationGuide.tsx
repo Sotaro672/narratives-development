@@ -1,6 +1,8 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/MemberInvitationGuide.tsx
 
+import deleteInvitationVideo from "../../../assets/console/member-invitation/delete-invitation.mp4";
 import goToMemberRegistrationVideo from "../../../assets/console/member-invitation/go-to-member-registration.mp4";
+import sendInvitationMailVideo from "../../../assets/console/member-invitation/send-invitation-mail.mp4";
 
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
@@ -33,12 +35,33 @@ export default function MemberInvitationGuide() {
           <HowToUseStep>招待されたメンバーは、届いた招待から会社名と割り当てブランドを確認し、氏名とパスワードを設定して登録を完了します。</HowToUseStep>
         </HowToUseStepList>
 
+        <HowToUseVideo
+          src={sendInvitationMailVideo}
+          label="メンバーのメールアドレス、割り当てブランド、権限を設定して招待メールを送信する手順"
+        />
+
         <HowToUseNote title="招待メール">
           招待されたメンバーは、招待情報を使用してConsoleへのアカウント登録を行います。招待するメールアドレスに誤りがないことを確認してください。
         </HowToUseNote>
 
         <HowToUseNote title="ブランドの割り当て">
           メンバーがConsoleで操作できる対象は、招待時に割り当てられたブランドに基づきます。担当するブランドを確認してから招待してください。
+        </HowToUseNote>
+      </HowToUseSection>
+
+      <HowToUseSection title="招待の取り消し">
+        <HowToUseStepList>
+          <HowToUseStep>メンバー管理画面から、取り消したい招待を選択してください。</HowToUseStep>
+          <HowToUseStep>招待内容を確認し、招待を削除してください。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo
+          src={deleteInvitationVideo}
+          label="送信済みのメンバー招待を選択し、招待を削除する手順"
+        />
+
+        <HowToUseNote title="招待の削除">
+          誤ったメールアドレスやブランドへ招待を送信した場合は、対象の招待を削除してから正しい内容で再度招待してください。
         </HowToUseNote>
       </HowToUseSection>
     </>
