@@ -10,6 +10,7 @@ import {
 } from "../features/howToUse/application/howToUseSteps";
 import HowToUseArticle from "../features/howToUse/presentation/components/common/HowToUseArticle";
 import BrandRegistrationGuide from "../features/howToUse/presentation/components/console/BrandRegistrationGuide";
+import InspectionGuide from "../features/howToUse/presentation/components/console/InspectionGuide";
 import MemberInvitationGuide from "../features/howToUse/presentation/components/console/MemberInvitationGuide";
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
 import ProductionRegistrationGuide from "../features/howToUse/presentation/components/console/ProductionRegistrationGuide";
@@ -38,6 +39,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "production") {
     return <ProductionRegistrationGuide />;
+  }
+
+  if (category === "console" && slug === "inspection") {
+    return <InspectionGuide />;
   }
 
   return null;
