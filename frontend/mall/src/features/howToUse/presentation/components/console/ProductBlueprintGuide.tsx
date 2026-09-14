@@ -1,5 +1,6 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/ProductBlueprintGuide.tsx
 
+import enterCategoryFieldVideo from "../../../assets/console/product-blueprint/enter-category-field.mp4";
 import goToProductBlueprintRegistrationVideo from "../../../assets/console/product-blueprint/go-to-productBlueprint-registration.mp4";
 import selectCategoryVideo from "../../../assets/console/product-blueprint/select-category.mp4";
 
@@ -38,13 +39,30 @@ export default function ProductBlueprintGuide() {
         />
 
         <HowToUseNote title="商品カテゴリ">
-          当解説画面では衣類、トップスを選択した場合で登録手順を解説します。順次登録ができるカテゴリを実装していきます。
+          商品設計で入力する項目は選択した商品カテゴリによって変わります。商品に該当するカテゴリを選択してから、表示された項目を入力してください。
+        </HowToUseNote>
+      </HowToUseSection>
+
+      <HowToUseSection title="カテゴリ固有情報の入力">
+        <HowToUseStepList>
+          <HowToUseStep>商品の重さを入力してください。</HowToUseStep>
+          <HowToUseStep>商品のフィットを選択してください。</HowToUseStep>
+          <HowToUseStep>商品の素材を入力してください。</HowToUseStep>
+          <HowToUseStep>品質保証に関する情報を入力してください。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo
+          src={enterCategoryFieldVideo}
+          label="商品の重さ、フィット、素材、品質保証の情報を入力する手順"
+        />
+
+        <HowToUseNote title="カテゴリ固有情報">
+          重さ、フィット、素材、品質保証などの商品情報は、選択した商品カテゴリに応じて表示されます。実際の商品情報に合わせて入力してください。
         </HowToUseNote>
       </HowToUseSection>
 
       <HowToUseSection title="商品設計手順">
         <HowToUseStepList>
-          <HowToUseStep>表示されたカテゴリ固有の商品情報を入力してください。</HowToUseStep>
           <HowToUseStep>アパレル商品の場合は、カラー、サイズ、採寸、型番、配送時の梱包情報を登録してください。</HowToUseStep>
           <HowToUseStep>酒類商品の場合は、容量、型番、配送時の梱包情報を登録してください。</HowToUseStep>
           <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
