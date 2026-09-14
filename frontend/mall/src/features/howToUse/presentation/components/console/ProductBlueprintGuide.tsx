@@ -1,6 +1,7 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/ProductBlueprintGuide.tsx
 
 import enterCategoryFieldVideo from "../../../assets/console/product-blueprint/enter-category-field.mp4";
+import enterColorVideo from "../../../assets/console/product-blueprint/enter-color.mp4";
 import goToProductBlueprintRegistrationVideo from "../../../assets/console/product-blueprint/go-to-productBlueprint-registration.mp4";
 import selectCategoryVideo from "../../../assets/console/product-blueprint/select-category.mp4";
 
@@ -43,7 +44,7 @@ export default function ProductBlueprintGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="カテゴリ固有情報の入力">
+      <HowToUseSection title="カテゴリ固有情報の入力（衣類）">
         <HowToUseStepList>
           <HowToUseStep>商品の重さを入力してください。</HowToUseStep>
           <HowToUseStep>商品のフィットを選択してください。</HowToUseStep>
@@ -61,9 +62,26 @@ export default function ProductBlueprintGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
+      <HowToUseSection title="カラーの登録">
+        <HowToUseStepList>
+          <HowToUseStep>商品のカラーバリエーションを追加してください。</HowToUseStep>
+          <HowToUseStep>カラー名と商品の実際の色に対応するカラー情報を入力してください。</HowToUseStep>
+          <HowToUseStep>複数のカラーがある場合は、それぞれのカラーバリエーションを登録してください。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo
+          src={enterColorVideo}
+          label="商品のカラーバリエーションを追加し、カラー情報を登録する手順"
+        />
+
+        <HowToUseNote title="カラーバリエーション">
+          商品に複数のカラーがある場合は、それぞれを個別のカラーバリエーションとして登録してください。登録したカラーはサイズとの組み合わせによりモデルを構成します。
+        </HowToUseNote>
+      </HowToUseSection>
+
       <HowToUseSection title="商品設計手順">
         <HowToUseStepList>
-          <HowToUseStep>アパレル商品の場合は、カラー、サイズ、採寸、型番、配送時の梱包情報を登録してください。</HowToUseStep>
+          <HowToUseStep>アパレル商品の場合は、サイズ、採寸、型番、配送時の梱包情報を登録してください。</HowToUseStep>
           <HowToUseStep>酒類商品の場合は、容量、型番、配送時の梱包情報を登録してください。</HowToUseStep>
           <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
           <HowToUseStep>すべての入力が完了したら、画面上部の「保存」をクリックしてください。</HowToUseStep>
