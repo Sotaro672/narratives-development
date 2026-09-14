@@ -12,18 +12,20 @@ export default function InspectionGuide() {
   return (
     <>
       <HowToUseSection title="検品スキャナーの開き方">
-        <HowToUseStepList>
-          <HowToUseStep>AMOLのログイン画面を開いてください。</HowToUseStep>
-          <HowToUseStep>サービス選択画面から「検品スキャナーにログイン」をクリックしてください。</HowToUseStep>
-          <HowToUseStep>検品スキャナーでログインしてください。</HowToUseStep>
-        </HowToUseStepList>
+        <div className="how-to-use-mobile-guide">
+          <HowToUseVideo
+            src={goToInspectorVideo}
+            label="AMOLのサービス選択画面から検品スキャナーを開く手順"
+            caption="検品スキャナーへの移動"
+            variant="iphone-12-pro"
+          />
 
-        <HowToUseVideo
-          src={goToInspectorVideo}
-          label="AMOLのサービス選択画面から検品スキャナーを開く手順"
-          caption="検品スキャナーへの移動"
-          variant="iphone-12-pro"
-        />
+          <HowToUseStepList>
+            <HowToUseStep>AMOLのログイン画面を開いてください。</HowToUseStep>
+            <HowToUseStep>サービス選択画面から「検品スキャナーにログイン」をクリックしてください。</HowToUseStep>
+            <HowToUseStep>検品スキャナーでログインしてください。</HowToUseStep>
+          </HowToUseStepList>
+        </div>
       </HowToUseSection>
 
       <HowToUseSection title="検品手順">

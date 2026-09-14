@@ -13,31 +13,27 @@ export default function HowToUseVideo({
   caption,
   variant = "default",
 }: HowToUseVideoProps) {
-  const isIPhone12Pro = variant === "iphone-12-pro";
+  const figureClassName = [
+    "how-to-use-figure",
+    variant === "iphone-12-pro"
+      ? "how-to-use-figure--iphone-12-pro"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const imageWrapClassName = [
+    "how-to-use-figure__image-wrap",
+    variant === "iphone-12-pro"
+      ? "how-to-use-figure__image-wrap--iphone-12-pro"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <figure
-      className="how-to-use-figure"
-      style={
-        isIPhone12Pro
-          ? {
-              maxWidth: "390px",
-              marginLeft: "auto",
-              marginRight: "auto",
-            }
-          : undefined
-      }
-    >
-      <div
-        className="how-to-use-figure__image-wrap"
-        style={
-          isIPhone12Pro
-            ? {
-                aspectRatio: "390 / 844",
-              }
-            : undefined
-        }
-      >
+    <figure className={figureClassName}>
+      <div className={imageWrapClassName}>
         <video
           src={src}
           aria-label={label}
@@ -47,15 +43,6 @@ export default function HowToUseVideo({
           loop
           playsInline
           preload="metadata"
-          style={
-            isIPhone12Pro
-              ? {
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "contain",
-                }
-              : undefined
-          }
         />
       </div>
 
