@@ -12,6 +12,7 @@ import HowToUseArticle from "../features/howToUse/presentation/components/common
 import BrandRegistrationGuide from "../features/howToUse/presentation/components/console/BrandRegistrationGuide";
 import MemberInvitationGuide from "../features/howToUse/presentation/components/console/MemberInvitationGuide";
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
+import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
@@ -28,6 +29,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "product-design") {
     return <ProductBlueprintGuide />;
+  }
+
+  if (category === "console" && slug === "token-design") {
+    return <TokenBlueprintGuide />;
   }
 
   return null;
