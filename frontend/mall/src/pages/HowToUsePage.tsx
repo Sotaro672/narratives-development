@@ -65,37 +65,36 @@ export default function HowToUsePage() {
     navigate(`/how-to-use/${item.category}/${item.slug}`);
   };
 
-return (
-  <Layout
-    title="使い方"
-    titleClickable={false}
-    mode="landing"
-    hideAnnouncementButton
-  >
-    <main className="how-to-use-page">
-      <div className="how-to-use-page__inner">
-        <ItemList
-          title="出品者Console"
-          items={consoleItems}
-          onDetailClick={handleDetailClick}
-        />
+  return (
+    <Layout
+      title="AMOL"
+      mode="landing"
+      hideAnnouncementButton
+    >
+      <main className="how-to-use-page">
+        <div className="how-to-use-page__inner">
+          <ItemList
+            title="出品者Consoleの使い方"
+            items={consoleItems}
+            onDetailClick={handleDetailClick}
+          />
 
-        <ItemList
-          title="購入者Mall"
-          items={mallItems}
-          onDetailClick={handleDetailClick}
-        />
+          <ItemList
+            title="購入者Mallの使い方"
+            items={mallItems}
+            onDetailClick={handleDetailClick}
+          />
 
-        <div className="page-actions">
-          <Button
-            variant="primary"
-            onClick={() => navigate("/signin/select")}
-          >
-            試作品を体験
-          </Button>
+          <div className="page-actions">
+            <Button
+              variant="primary"
+              onClick={() => navigate("/signin/select")}
+            >
+              試作品を体験
+            </Button>
+          </div>
         </div>
-      </div>
-    </main>
-  </Layout>
-);
+      </main>
+    </Layout>
+  );
 }

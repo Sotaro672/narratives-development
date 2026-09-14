@@ -62,9 +62,6 @@ export default function LandingContactSection({
     >
       <div className="landing-page-section__inner">
         <header className="how-to-use-page__header">
-          <p className="how-to-use-page__eyebrow">
-            Contact
-          </p>
 
           <h2 className="how-to-use-page__title">
             お問い合わせ
