@@ -3,6 +3,8 @@
 import enterCategoryFieldVideo from "../../../assets/console/product-blueprint/enter-category-field.mp4";
 import enterColorVideo from "../../../assets/console/product-blueprint/enter-color.mp4";
 import enterMeasurementVideo from "../../../assets/console/product-blueprint/enter-meaturement.mp4";
+import enterModelNumberVideo from "../../../assets/console/product-blueprint/enter-modelNumber.mp4";
+import enterShippingPackageVideo from "../../../assets/console/product-blueprint/enter-shipping-package.mp4";
 import goToProductBlueprintRegistrationVideo from "../../../assets/console/product-blueprint/go-to-productBlueprint-registration.mp4";
 import selectCategoryVideo from "../../../assets/console/product-blueprint/select-category.mp4";
 
@@ -98,16 +100,50 @@ export default function ProductBlueprintGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="商品設計手順">
+      <HowToUseSection title="型番の登録（衣類）">
         <HowToUseStepList>
-          <HowToUseStep>アパレル商品の場合は、型番と配送時の梱包情報を登録してください。</HowToUseStep>
-          <HowToUseStep>酒類商品の場合は、容量、型番、配送時の梱包情報を登録してください。</HowToUseStep>
-          <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
-          <HowToUseStep>すべての入力が完了したら、画面上部の「保存」をクリックしてください。</HowToUseStep>
+          <HowToUseStep>登録したカラーとサイズの組み合わせを確認してください。</HowToUseStep>
+          <HowToUseStep>各モデルに対応する型番を入力してください。</HowToUseStep>
+          <HowToUseStep>複数のモデルがある場合は、それぞれに固有の型番を設定してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseNote title="型番と配送情報">
-          アパレル商品の型番はカラーとサイズの組み合わせごと、酒類商品の型番は容量ごとに設定します。配送に使用する重量と梱包寸法も各型番に対応する情報として登録してください。
+        <HowToUseVideo
+          src={enterModelNumberVideo}
+          label="カラーとサイズの組み合わせごとに商品の型番を入力する手順"
+        />
+
+        <HowToUseNote title="型番">
+          型番はカラーとサイズの組み合わせによって作成される各モデルを識別するために使用します。それぞれのモデルに対応する型番を登録してください。
+        </HowToUseNote>
+      </HowToUseSection>
+
+      <HowToUseSection title="配送時の梱包情報の登録（衣類）">
+        <HowToUseStepList>
+          <HowToUseStep>各モデルの配送時の重量を入力してください。</HowToUseStep>
+          <HowToUseStep>梱包後の横、縦、高さを入力してください。</HowToUseStep>
+          <HowToUseStep>カラーとサイズごとに、実際の配送状態に合わせた梱包情報を確認してください。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo
+          src={enterShippingPackageVideo}
+          label="カラーとサイズごとに配送時の重量と梱包後の横、縦、高さを入力する手順"
+        />
+
+        <HowToUseNote title="配送時の梱包情報">
+          配送時の重量と梱包寸法は、配送料の計算に使用する情報です。商品単体の寸法ではなく、配送時に梱包した状態の重量と横、縦、高さを登録してください。
+        </HowToUseNote>
+      </HowToUseSection>
+
+      <HowToUseSection title="商品設計の保存">
+        <HowToUseStepList>
+          <HowToUseStep>酒類商品の場合は、容量、型番、配送時の梱包情報を登録してください。</HowToUseStep>
+          <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
+          <HowToUseStep>すべての入力内容を確認してください。</HowToUseStep>
+          <HowToUseStep>画面上部の「保存」をクリックして商品設計を登録してください。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseNote title="モデルと配送情報">
+          アパレル商品のモデルはカラーとサイズの組み合わせによって構成されます。型番と配送時の梱包情報は、それぞれのモデルに対応する内容を登録してください。
         </HowToUseNote>
       </HowToUseSection>
     </>
