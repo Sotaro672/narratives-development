@@ -108,7 +108,11 @@ export default function LandingPage() {
     authResolved && isLoggedIn && isMobile;
 
   return (
-    <Layout title="AMOL" mode="landing">
+<Layout
+  title="AMOL"
+  titleClickable={false}
+  mode="landing"
+>
       <div
         className={[
           "landing-page",
