@@ -1,5 +1,6 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/MemberInvitationGuide.tsx
 
+import acceptInvitationVideo from "../../../assets/console/member-invitation/accept-invitation.mp4";
 import deleteInvitationVideo from "../../../assets/console/member-invitation/delete-invitation.mp4";
 import goToMemberRegistrationVideo from "../../../assets/console/member-invitation/go-to-member-registration.mp4";
 import sendInvitationMailVideo from "../../../assets/console/member-invitation/send-invitation-mail.mp4";
@@ -32,7 +33,6 @@ export default function MemberInvitationGuide() {
           <HowToUseStep>メンバーへ割り当てるブランドを選択してください。</HowToUseStep>
           <HowToUseStep>必要な権限を設定してください。</HowToUseStep>
           <HowToUseStep>入力内容を確認し、招待を送信してください。</HowToUseStep>
-          <HowToUseStep>招待されたメンバーは、届いた招待から会社名と割り当てブランドを確認し、氏名とパスワードを設定して登録を完了します。</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseVideo
@@ -41,11 +41,31 @@ export default function MemberInvitationGuide() {
         />
 
         <HowToUseNote title="招待メール">
-          招待されたメンバーは、招待情報を使用してConsoleへのアカウント登録を行います。招待するメールアドレスに誤りがないことを確認してください。
+          招待されたメンバーは、届いた招待からConsoleへのアカウント登録を行います。招待するメールアドレスに誤りがないことを確認してください。
         </HowToUseNote>
 
         <HowToUseNote title="ブランドの割り当て">
           メンバーがConsoleで操作できる対象は、招待時に割り当てられたブランドに基づきます。担当するブランドを確認してから招待してください。
+        </HowToUseNote>
+      </HowToUseSection>
+
+      <HowToUseSection title="招待の受諾">
+        <HowToUseStepList>
+          <HowToUseStep>届いた招待からメンバー登録画面を開いてください。</HowToUseStep>
+          <HowToUseStep>表示されている会社名と割り当てブランドを確認してください。</HowToUseStep>
+          <HowToUseStep>招待されたメールアドレスを入力してください。</HowToUseStep>
+          <HowToUseStep>姓、姓（かな）、名、名（かな）を入力してください。</HowToUseStep>
+          <HowToUseStep>パスワードと確認用パスワードを入力してください。</HowToUseStep>
+          <HowToUseStep>入力内容を確認し、「サインイン」をクリックして登録を完了してください。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo
+          src={acceptInvitationVideo}
+          label="届いた招待から会社名と割り当てブランドを確認し、メールアドレス、氏名、パスワードを入力して招待を受諾する手順"
+        />
+
+        <HowToUseNote title="招待内容の確認">
+          登録する前に、表示されている会社名と割り当てブランドが正しいことを確認してください。内容に誤りがある場合は登録を進めず、招待した管理者へ確認してください。
         </HowToUseNote>
       </HowToUseSection>
 
