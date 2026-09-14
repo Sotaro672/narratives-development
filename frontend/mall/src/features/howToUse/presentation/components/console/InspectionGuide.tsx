@@ -22,6 +22,7 @@ export default function InspectionGuide() {
           src={goToInspectorVideo}
           label="AMOLのサービス選択画面から検品スキャナーを開く手順"
           caption="検品スキャナーへの移動"
+          variant="iphone-12-pro"
         />
       </HowToUseSection>
 
