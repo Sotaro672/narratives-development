@@ -40,8 +40,8 @@ export default function HowToUseDetailPage() {
       backTo="/how-to-use"
       hideAnnouncementButton
       hideSettingsButton
-      actionButtonLabel="PDF"
-      onActionButtonClick={printHowToUsePdf}
+      secondaryActionButtonLabel="PDF"
+      onSecondaryActionButtonClick={printHowToUsePdf}
     >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
