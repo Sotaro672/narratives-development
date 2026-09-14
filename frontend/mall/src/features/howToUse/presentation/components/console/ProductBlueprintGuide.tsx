@@ -2,6 +2,7 @@
 
 import enterCategoryFieldVideo from "../../../assets/console/product-blueprint/enter-category-field.mp4";
 import enterColorVideo from "../../../assets/console/product-blueprint/enter-color.mp4";
+import enterMeasurementVideo from "../../../assets/console/product-blueprint/enter-meaturement.mp4";
 import goToProductBlueprintRegistrationVideo from "../../../assets/console/product-blueprint/go-to-productBlueprint-registration.mp4";
 import selectCategoryVideo from "../../../assets/console/product-blueprint/select-category.mp4";
 
@@ -79,9 +80,27 @@ export default function ProductBlueprintGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
+      <HowToUseSection title="サイズ・採寸の登録（衣類）">
+        <HowToUseStepList>
+          <HowToUseStep>商品のサイズバリエーションを追加してください。</HowToUseStep>
+          <HowToUseStep>登録するサイズを選択してください。</HowToUseStep>
+          <HowToUseStep>サイズごとに必要な採寸項目を入力してください。</HowToUseStep>
+          <HowToUseStep>複数のサイズがある場合は、それぞれのサイズと採寸情報を登録してください。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo
+          src={enterMeasurementVideo}
+          label="商品のサイズバリエーションを追加し、サイズごとの採寸情報を入力する手順"
+        />
+
+        <HowToUseNote title="サイズと採寸">
+          採寸情報はサイズごとに登録してください。登録したサイズはカラーとの組み合わせによりモデルを構成します。
+        </HowToUseNote>
+      </HowToUseSection>
+
       <HowToUseSection title="商品設計手順">
         <HowToUseStepList>
-          <HowToUseStep>アパレル商品の場合は、サイズ、採寸、型番、配送時の梱包情報を登録してください。</HowToUseStep>
+          <HowToUseStep>アパレル商品の場合は、型番と配送時の梱包情報を登録してください。</HowToUseStep>
           <HowToUseStep>酒類商品の場合は、容量、型番、配送時の梱包情報を登録してください。</HowToUseStep>
           <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
           <HowToUseStep>すべての入力が完了したら、画面上部の「保存」をクリックしてください。</HowToUseStep>
