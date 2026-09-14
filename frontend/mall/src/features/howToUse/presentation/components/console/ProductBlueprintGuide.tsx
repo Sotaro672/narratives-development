@@ -6,6 +6,7 @@ import enterMeasurementVideo from "../../../assets/console/product-blueprint/ent
 import enterModelNumberVideo from "../../../assets/console/product-blueprint/enter-modelNumber.mp4";
 import enterShippingPackageVideo from "../../../assets/console/product-blueprint/enter-shipping-package.mp4";
 import goToProductBlueprintRegistrationVideo from "../../../assets/console/product-blueprint/go-to-productBlueprint-registration.mp4";
+import saveProductBlueprintVideo from "../../../assets/console/product-blueprint/save-productBlueprint.mp4";
 import selectCategoryVideo from "../../../assets/console/product-blueprint/select-category.mp4";
 
 import HowToUseNote from "../common/HowToUseNote";
@@ -141,6 +142,11 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>すべての入力内容を確認してください。</HowToUseStep>
           <HowToUseStep>画面上部の「保存」をクリックして商品設計を登録してください。</HowToUseStep>
         </HowToUseStepList>
+
+        <HowToUseVideo
+          src={saveProductBlueprintVideo}
+          label="商品設計の担当者と入力内容を確認し、保存ボタンをクリックして商品設計を登録する手順"
+        />
 
         <HowToUseNote title="モデルと配送情報">
           アパレル商品のモデルはカラーとサイズの組み合わせによって構成されます。型番と配送時の梱包情報は、それぞれのモデルに対応する内容を登録してください。
