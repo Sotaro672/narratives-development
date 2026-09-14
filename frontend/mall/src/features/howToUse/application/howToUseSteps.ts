@@ -60,9 +60,15 @@ export const consoleItems: HowToUseItem[] = [
   },
   {
     category: "console",
-    slug: "orders-reviews",
-    title: "注文・レビュー確認",
-    description: "Mallからの注文と購入者からのレビューを確認します。",
+    slug: "orders",
+    title: "注文",
+    description: "Mallからの注文内容を確認します。",
+  },
+  {
+    category: "console",
+    slug: "reviews",
+    title: "レビュー",
+    description: "購入者から投稿されたレビューを確認します。",
   },
   {
     category: "console",
