@@ -11,6 +11,7 @@ import {
 import HowToUseArticle from "../features/howToUse/presentation/components/common/HowToUseArticle";
 import BrandRegistrationGuide from "../features/howToUse/presentation/components/console/BrandRegistrationGuide";
 import MemberInvitationGuide from "../features/howToUse/presentation/components/console/MemberInvitationGuide";
+import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
@@ -23,6 +24,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "member-invite") {
     return <MemberInvitationGuide />;
+  }
+
+  if (category === "console" && slug === "product-design") {
+    return <ProductBlueprintGuide />;
   }
 
   return null;
