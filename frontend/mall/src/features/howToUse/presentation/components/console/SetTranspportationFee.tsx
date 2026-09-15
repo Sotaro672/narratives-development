@@ -12,10 +12,9 @@ export default function SetTranspportationFee() {
     <>
       <HowToUseSection title="配送料金体系の設定">
         <HowToUseStepList>
-          <HowToUseStep>サイドバーから「配送」を開いてください。</HowToUseStep>
-          <HowToUseStep>配送料金体系の設定画面を開いてください。</HowToUseStep>
-          <HowToUseStep>配送方法と料金を設定してください。</HowToUseStep>
-          <HowToUseStep>入力内容を確認し、保存してください。</HowToUseStep>
+          <HowToUseStep>サイドバーから「配送」「配送料金」「配送料金を作成」を開いてください。</HowToUseStep>
+          <HowToUseStep>料金設定画面に地域・都道府県・島嶼部への配送料金を入力してください。</HowToUseStep>
+          <HowToUseStep>料金体系に名前を付け、保存ボタンを押してください。</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseVideo

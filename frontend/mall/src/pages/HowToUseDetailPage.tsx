@@ -11,6 +11,7 @@ import {
 import HowToUseArticle from "../features/howToUse/presentation/components/common/HowToUseArticle";
 import BrandRegistrationGuide from "../features/howToUse/presentation/components/console/BrandRegistrationGuide";
 import InspectionGuide from "../features/howToUse/presentation/components/console/InspectionGuide";
+import ListGuide from "../features/howToUse/presentation/components/console/ListGuide";
 import MemberInvitationGuide from "../features/howToUse/presentation/components/console/MemberInvitationGuide";
 import MintGuide from "../features/howToUse/presentation/components/console/MintGuide";
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
@@ -60,14 +61,15 @@ function renderGuide(category: HowToUseCategory, slug: string) {
     return <SetTranspportationFee />;
   }
 
+  if (category === "console" && slug === "listing") {
+    return <ListGuide />;
+  }
+
   return null;
 }
 
 export default function HowToUseDetailPage() {
-  const { category, slug = "" } = useParams<{
-    category?: string;
-    slug?: string;
-  }>();
+  const { category, slug = "" } = useParams<{ category?: string; slug?: string }>();
 
   if (!isHowToUseCategory(category) || !slug) {
     return <Navigate to="/how-to-use" replace />;
@@ -83,9 +85,7 @@ export default function HowToUseDetailPage() {
     <Layout title={item.title} titleClickable={false} mode="landing" showBackButton backTo="/how-to-use" hideAnnouncementButton hideSettingsButton>
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
-          <HowToUseArticle description={item.description}>
-            {renderGuide(category, slug)}
-          </HowToUseArticle>
+          <HowToUseArticle description={item.description}>{renderGuide(category, slug)}</HowToUseArticle>
         </div>
       </main>
     </Layout>
