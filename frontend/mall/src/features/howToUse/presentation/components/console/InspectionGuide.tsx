@@ -1,5 +1,6 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/InspectionGuide.tsx
 
+import completeInspectionVideo from "../../../assets/console/inspection/complete-inspection.mp4";
 import enterInspectionVideo from "../../../assets/console/inspection/enter-inspection.mp4";
 import goToInspectorVideo from "../../../assets/console/inspection/go-to-inspector.mp4";
 
@@ -26,16 +27,28 @@ export default function InspectionGuide() {
 
       <HowToUseSection title="検品手順">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={enterInspectionVideo} label="商品のQRコードを読み取り、検品結果を入力して検品を完了する手順" variant="iphone-12-pro" />
+          <HowToUseVideo src={enterInspectionVideo} label="商品のQRコードを読み取り、検品結果を入力する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>検品スキャナーで商品のQRコードをスキャンしてください。</HowToUseStep>
             <HowToUseStep>検品結果として「合格」「不合格」「未製造」のいずれかを選択してください。</HowToUseStep>
             <HowToUseStep>続けて別の商品を検品する場合はヘッダーの戻るアイコンを押してください。</HowToUseStep>
-            <HowToUseStep>ミント申請画面で検品完了ボタンを押すと、未検査の商品はすべて「合格」として登録されます。</HowToUseStep>
           </HowToUseStepList>
         </div>
+
         <HowToUseNote title="検品はネガティブ登録制">この検品はネガティブ登録制です。「不合格」「未製造」の商品IDをミント対象から弾くことを目的とします。</HowToUseNote>
+      </HowToUseSection>
+
+      <HowToUseSection title="検品の完了">
+        <HowToUseStepList>
+          <HowToUseStep>コンソール画面に戻り、トークン、ミント、対象生産計画行を押してミント申請画面を開いてください。</HowToUseStep>
+          <HowToUseStep>検品内容を確認し、「検品完了」ボタンをクリックしてください。</HowToUseStep>
+          <HowToUseStep>検品完了時点で未検査の商品は、すべて「合格」として登録されます。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo src={completeInspectionVideo} label="PCのミント申請画面から検品を完了する手順" />
+
+        <HowToUseNote title="未検査商品の扱い">「検品完了」を実行すると、個別に「不合格」「未製造」として登録されていない未検査の商品はすべて「合格」として扱われます。検品完了前に、不合格品や未製造品の登録漏れがないことを確認してください。</HowToUseNote>
       </HowToUseSection>
     </>
   );
