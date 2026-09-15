@@ -2,6 +2,7 @@
 
 import enterProductionQuantityVideo from "../../../assets/console/production-registration/enter-production-quantity.mp4";
 import goToProductionRegistrationVideo from "../../../assets/console/production-registration/go-to-production-registration.mp4";
+import printProductVideo from "../../../assets/console/production-registration/print-product.mp4";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
@@ -35,8 +36,19 @@ export default function ProductionRegistrationGuide() {
           src={enterProductionQuantityVideo}
           label="ブランドと商品設計を選択し、モデル別生産数一覧で各モデルの生産数を入力する手順"
         />
+      </HowToUseSection>
 
+      <HowToUseSection title="印刷">
+        <HowToUseStepList>
+          <HowToUseStep>保存した生産計画を開いてください。</HowToUseStep>
+          <HowToUseStep>画面上部の印刷ボタンをクリックしてください。</HowToUseStep>
+          <HowToUseStep>表示された内容を確認し、商品の印刷を実行してください。</HowToUseStep>
+        </HowToUseStepList>
 
+        <HowToUseVideo
+          src={printProductVideo}
+          label="保存した生産計画から商品の印刷を実行する手順"
+        />
       </HowToUseSection>
     </>
   );
