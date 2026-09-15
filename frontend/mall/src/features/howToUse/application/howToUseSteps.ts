@@ -78,6 +78,12 @@ export const consoleItems: HowToUseItem[] = [
   },
   {
     category: "console",
+    slug: "inquiry",
+    title: "お問い合わせ",
+    description: "購入者から送信された商品や取引内容についてのお問い合わせを確認します。",
+  },
+  {
+    category: "console",
     slug: "reviews",
     title: "レビュー",
     description: "購入者から投稿されたレビューを確認します。",
@@ -126,12 +132,6 @@ export const mallItems: HowToUseItem[] = [
     slug: "review",
     title: "レビュー投稿",
     description: "購入後に商品の体験や評価をレビューとして投稿します。",
-  },
-  {
-    category: "mall",
-    slug: "inquiry",
-    title: "お問い合わせ",
-    description: "購入した商品や取引内容について出品者へお問い合わせを送信します。",
   },
   {
     category: "mall",
