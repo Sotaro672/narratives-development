@@ -23,6 +23,7 @@ import TokenBlueprintGuide from "../features/howToUse/presentation/components/co
 import AvatarCreateGuide from "../features/howToUse/presentation/components/mall/AvatarCreateGuide";
 import CancelOderGuide from "../features/howToUse/presentation/components/mall/CancelOderGuide";
 import PurchaseGuide from "../features/howToUse/presentation/components/mall/PurchaseGuide";
+import RequestRefundGuide from "../features/howToUse/presentation/components/mall/RequestRefundGuide";
 import ShippingAddressRegistrationGuide from "../features/howToUse/presentation/components/mall/ShippingAddressRegistrationGuide";
 
 import "../styles/page-layout.css";
@@ -88,6 +89,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "mall" && slug === "cancel") {
     return <CancelOderGuide />;
+  }
+
+  if (category === "mall" && slug === "return") {
+    return <RequestRefundGuide />;
   }
 
   return null;
