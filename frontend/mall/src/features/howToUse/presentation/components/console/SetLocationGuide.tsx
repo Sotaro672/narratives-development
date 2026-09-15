@@ -10,7 +10,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function SetLocationGuide() {
   return (
     <>
-      <HowToUseSection title="在庫保管場所の設定画面を開く">
+      <HowToUseSection title="在庫の保管場所を設定します。">
         <HowToUseStepList>
           <HowToUseStep>サイドバーから「配送」「保管場所」「保管場所を追加」を開いてください。</HowToUseStep>
           <HowToUseStep>ミントした在庫商品の保管場所の住所を入力し、保存ボタンを押してください。</HowToUseStep>
