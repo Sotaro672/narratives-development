@@ -20,6 +20,7 @@ import SetLocationGuide from "../features/howToUse/presentation/components/conso
 import SetTranspportationFee from "../features/howToUse/presentation/components/console/SetTranspportationFee";
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
 import AvatarCreateGuide from "../features/howToUse/presentation/components/mall/AvatarCreateGuide";
+import ShippingAddressRegistrationGuide from "../features/howToUse/presentation/components/mall/ShippingAddressRegistrationGuide";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
@@ -68,6 +69,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "mall" && slug === "avatar-registration") {
     return <AvatarCreateGuide />;
+  }
+
+  if (category === "mall" && slug === "shipping-address") {
+    return <ShippingAddressRegistrationGuide />;
   }
 
   return null;

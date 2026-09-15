@@ -99,9 +99,27 @@ export const mallItems: HowToUseItem[] = [
   },
   {
     category: "mall",
+    slug: "shipping-address",
+    title: "配送先住所",
+    description: "購入した商品の配送先として使用する住所を登録・管理します。",
+  },
+  {
+    category: "mall",
     slug: "purchase",
     title: "購入",
     description: "商品を購入し、届いた商品のQRコードをスキャンしてブロックチェーントークンを受け取ります。",
+  },
+  {
+    category: "mall",
+    slug: "cancel",
+    title: "キャンセル",
+    description: "購入した商品の注文をキャンセルする手順を確認します。",
+  },
+  {
+    category: "mall",
+    slug: "return",
+    title: "返品",
+    description: "購入した商品の返品手続きと返送方法を確認します。",
   },
   {
     category: "mall",
