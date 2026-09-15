@@ -35,7 +35,7 @@ export default function InspectionGuide() {
             <HowToUseStep>ミント申請画面で検品完了ボタンを押すと、未検査の商品はすべて「合格」として登録されます。</HowToUseStep>
           </HowToUseStepList>
         </div>
-        <HowToUseNote title="検品スキャナー">この検品はネガティブ登録制です。「不合格」「未製造」の商品IDをミント対象から弾くことを目的とします。</HowToUseNote>
+        <HowToUseNote title="検品はネガティブ登録制">この検品はネガティブ登録制です。「不合格」「未製造」の商品IDをミント対象から弾くことを目的とします。</HowToUseNote>
       </HowToUseSection>
     </>
   );
