@@ -19,6 +19,7 @@ import ProductionRegistrationGuide from "../features/howToUse/presentation/compo
 import SetLocationGuide from "../features/howToUse/presentation/components/console/SetLocationGuide";
 import SetTranspportationFee from "../features/howToUse/presentation/components/console/SetTranspportationFee";
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
+import AvatarCreateGuide from "../features/howToUse/presentation/components/mall/AvatarCreateGuide";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
@@ -63,6 +64,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "listing") {
     return <ListGuide />;
+  }
+
+  if (category === "mall" && slug === "avatar-registration") {
+    return <AvatarCreateGuide />;
   }
 
   return null;

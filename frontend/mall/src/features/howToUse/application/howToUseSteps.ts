@@ -94,7 +94,7 @@ export const mallItems: HowToUseItem[] = [
   {
     category: "mall",
     slug: "avatar-registration",
-    title: "アバター登録",
+    title: "登録",
     description: "購入者Mallでアカウントを作成し、アバター情報を登録します。",
   },
   {
