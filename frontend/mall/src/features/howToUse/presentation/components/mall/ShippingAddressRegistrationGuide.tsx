@@ -21,7 +21,8 @@ export default function ShippingAddressRegistrationGuide() {
           <HowToUseStepList>
             <HowToUseStep>ウォレットページへ移動してください。</HowToUseStep>
             <HowToUseStep>画面右上の設定アイコンを押してください。</HowToUseStep>
-            <HowToUseStep>配送先住所を選択してください。</HowToUseStep>
+            <HowToUseStep>配送先情報を選択してください。</HowToUseStep>
+            <HowToUseStep>配送先住所を入力し、登録ボタンを教えてください。</HowToUseStep>
           </HowToUseStepList>
         </div>
       </HowToUseSection>
