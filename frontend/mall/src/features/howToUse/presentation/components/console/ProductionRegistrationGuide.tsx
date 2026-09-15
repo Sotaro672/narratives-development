@@ -3,6 +3,8 @@
 import enterProductionQuantityVideo from "../../../assets/console/production-registration/enter-production-quantity.mp4";
 import goToProductionRegistrationVideo from "../../../assets/console/production-registration/go-to-production-registration.mp4";
 import printProductVideo from "../../../assets/console/production-registration/print-product.mp4";
+import viewPrintResultVideo from "../../../assets/console/production-registration/view-print-result.mp4";
+import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
@@ -16,11 +18,7 @@ export default function ProductionRegistrationGuide() {
           <HowToUseStep>サイドバーから「商品生産」を開いてください。</HowToUseStep>
           <HowToUseStep>商品生産一覧の「生産計画を作成」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
-
-        <HowToUseVideo
-          src={goToProductionRegistrationVideo}
-          label="商品生産一覧を開き、生産計画を作成ボタンから生産計画作成画面へ移動する手順"
-        />
+        <HowToUseVideo src={goToProductionRegistrationVideo} label="商品生産一覧を開き、生産計画を作成ボタンから生産計画作成画面へ移動する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="生産数の入力">
@@ -31,24 +29,25 @@ export default function ProductionRegistrationGuide() {
           <HowToUseStep>「モデル別 生産数一覧」で、各モデルの生産数を入力してください。</HowToUseStep>
           <HowToUseStep>すべての入力が完了したら、画面上部の「保存」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
-
-        <HowToUseVideo
-          src={enterProductionQuantityVideo}
-          label="ブランドと商品設計を選択し、モデル別生産数一覧で各モデルの生産数を入力する手順"
-        />
+        <HowToUseVideo src={enterProductionQuantityVideo} label="ブランドと商品設計を選択し、モデル別生産数一覧で各モデルの生産数を入力する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="印刷">
+      <HowToUseSection title="商品の印刷">
         <HowToUseStepList>
           <HowToUseStep>保存した生産計画を開いてください。</HowToUseStep>
           <HowToUseStep>画面上部の印刷ボタンをクリックしてください。</HowToUseStep>
           <HowToUseStep>表示された内容を確認し、商品の印刷を実行してください。</HowToUseStep>
         </HowToUseStepList>
+        <HowToUseNote>一度印刷した商品設計は編集できなくなります。商品名やモデル情報など、商品設計の内容に誤りがないことを確認してから印刷を実行してください。</HowToUseNote>
+        <HowToUseVideo src={printProductVideo} label="保存した生産計画から商品の印刷を実行する手順" />
+      </HowToUseSection>
 
-        <HowToUseVideo
-          src={printProductVideo}
-          label="保存した生産計画から商品の印刷を実行する手順"
-        />
+      <HowToUseSection title="印刷結果の確認">
+        <HowToUseStepList>
+          <HowToUseStep>商品の印刷後、生産計画の画面を開いてください。</HowToUseStep>
+          <HowToUseStep>印刷結果を確認してください。</HowToUseStep>
+        </HowToUseStepList>
+        <HowToUseVideo src={viewPrintResultVideo} label="商品の印刷後に印刷結果を確認する手順" />
       </HowToUseSection>
     </>
   );
