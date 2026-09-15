@@ -35,9 +35,8 @@ export default function ListGuide() {
 
       <HowToUseSection title="出品停止">
         <HowToUseStepList>
-          <HowToUseStep>出品一覧から停止する出品を開いてください。</HowToUseStep>
-          <HowToUseStep>出品詳細画面から出品停止を実行してください。</HowToUseStep>
-          <HowToUseStep>出品を停止すると、購入者Mallでの販売が停止されます。</HowToUseStep>
+          <HowToUseStep>出品一覧から停止する出品行を押してください。</HowToUseStep>
+          <HowToUseStep>出品詳細画面右上の保留ボタンを押してください。</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseVideo src={stopListingVideo} label="出品中の商品を停止し、購入者Mallでの販売を停止する手順" />
