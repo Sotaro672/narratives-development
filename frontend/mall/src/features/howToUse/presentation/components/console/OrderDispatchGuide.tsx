@@ -16,7 +16,7 @@ export default function OrderDispatchGuide() {
           <HowToUseStep>サイドバーから「注文」を開いてください。</HowToUseStep>
           <HowToUseStep>発送する注文を選択してください。</HowToUseStep>
           <HowToUseStep>注文内容と配送先住所を確認してください。</HowToUseStep>
-          <HowToUseStep>商品を発送したら、発送手続きを完了してください。</HowToUseStep>
+          <HowToUseStep>画面右上にある発送ボタンを押してください</HowToUseStep>
         </HowToUseStepList>
 
         <HowToUseVideo src={dispatchOrderVideo} label="注文内容を確認し、商品の発送手続きを完了する手順" />
