@@ -15,6 +15,7 @@ import MemberInvitationGuide from "../features/howToUse/presentation/components/
 import MintGuide from "../features/howToUse/presentation/components/console/MintGuide";
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
 import ProductionRegistrationGuide from "../features/howToUse/presentation/components/console/ProductionRegistrationGuide";
+import SetLocationGuide from "../features/howToUse/presentation/components/console/SetLocationGuide";
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
 
 import "../styles/page-layout.css";
@@ -48,6 +49,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "mint") {
     return <MintGuide />;
+  }
+
+  if (category === "console" && slug === "inventory") {
+    return <SetLocationGuide />;
   }
 
   return null;

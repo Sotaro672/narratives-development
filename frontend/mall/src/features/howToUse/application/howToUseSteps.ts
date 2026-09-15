@@ -54,6 +54,18 @@ export const consoleItems: HowToUseItem[] = [
   },
   {
     category: "console",
+    slug: "inventory",
+    title: "在庫",
+    description: "在庫保管場所の住所を設定します。",
+  },
+  {
+    category: "console",
+    slug: "shipping",
+    title: "配送",
+    description: "配送料金体系を設定します。",
+  },
+  {
+    category: "console",
     slug: "listing",
     title: "出品",
     description: "すべての準備が完了した商品を購入者Mallに出品し、販売を開始します。",
