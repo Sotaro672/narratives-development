@@ -16,6 +16,7 @@ import MintGuide from "../features/howToUse/presentation/components/console/Mint
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
 import ProductionRegistrationGuide from "../features/howToUse/presentation/components/console/ProductionRegistrationGuide";
 import SetLocationGuide from "../features/howToUse/presentation/components/console/SetLocationGuide";
+import SetTranspportationFee from "../features/howToUse/presentation/components/console/SetTranspportationFee";
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
 
 import "../styles/page-layout.css";
@@ -53,6 +54,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "inventory") {
     return <SetLocationGuide />;
+  }
+
+  if (category === "console" && slug === "shipping") {
+    return <SetTranspportationFee />;
   }
 
   return null;
