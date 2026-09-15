@@ -45,9 +45,9 @@ export default function ProductionRegistrationGuide() {
       <HowToUseSection title="印刷結果の確認">
         <HowToUseStepList>
           <HowToUseStep>商品の印刷後、生産計画の画面を開いてください。</HowToUseStep>
-          <HowToUseStep>印刷結果を確認してください。</HowToUseStep>
+          <HowToUseStep>印刷結果はQRコードとCSV出力が可能です。</HowToUseStep>
         </HowToUseStepList>
-        <HowToUseVideo src={viewPrintResultVideo} label="商品の印刷後に印刷結果を確認する手順" />
+        <HowToUseVideo src={viewPrintResultVideo} label="商品の印刷後に印刷結果を確認し、QRコード出力とCSV出力を確認する手順" />
       </HowToUseSection>
     </>
   );
