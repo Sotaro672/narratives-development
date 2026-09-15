@@ -12,6 +12,7 @@ import HowToUseArticle from "../features/howToUse/presentation/components/common
 import BrandRegistrationGuide from "../features/howToUse/presentation/components/console/BrandRegistrationGuide";
 import InspectionGuide from "../features/howToUse/presentation/components/console/InspectionGuide";
 import MemberInvitationGuide from "../features/howToUse/presentation/components/console/MemberInvitationGuide";
+import MintGuide from "../features/howToUse/presentation/components/console/MintGuide";
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
 import ProductionRegistrationGuide from "../features/howToUse/presentation/components/console/ProductionRegistrationGuide";
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
@@ -45,6 +46,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
     return <InspectionGuide />;
   }
 
+  if (category === "console" && slug === "mint") {
+    return <MintGuide />;
+  }
+
   return null;
 }
 
@@ -65,15 +70,7 @@ export default function HowToUseDetailPage() {
   }
 
   return (
-    <Layout
-      title={item.title}
-      titleClickable={false}
-      mode="landing"
-      showBackButton
-      backTo="/how-to-use"
-      hideAnnouncementButton
-      hideSettingsButton
-    >
+    <Layout title={item.title} titleClickable={false} mode="landing" showBackButton backTo="/how-to-use" hideAnnouncementButton hideSettingsButton>
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
           <HowToUseArticle description={item.description}>
