@@ -14,6 +14,7 @@ import InspectionGuide from "../features/howToUse/presentation/components/consol
 import ListGuide from "../features/howToUse/presentation/components/console/ListGuide";
 import MemberInvitationGuide from "../features/howToUse/presentation/components/console/MemberInvitationGuide";
 import MintGuide from "../features/howToUse/presentation/components/console/MintGuide";
+import OrderDispatchGuide from "../features/howToUse/presentation/components/console/OrderDispatchGuide";
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
 import ProductionRegistrationGuide from "../features/howToUse/presentation/components/console/ProductionRegistrationGuide";
 import SetLocationGuide from "../features/howToUse/presentation/components/console/SetLocationGuide";
@@ -67,6 +68,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "listing") {
     return <ListGuide />;
+  }
+
+  if (category === "console" && slug === "orders") {
+    return <OrderDispatchGuide />;
   }
 
   if (category === "mall" && slug === "avatar-registration") {
