@@ -5,9 +5,6 @@ import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
 import HowToUseVideo from "../common/HowToUseVideo";
 
-const responseRefundVideo =
-  "https://firebasestorage.googleapis.com/v0/b/narratives-development-26c2d.firebasestorage.app/o/how-to-use%2Fconsole%2Finquiry%2Fresponse-refund.mp4?alt=media";
-
 export default function InquiryGuide() {
   return (
     <>
@@ -18,7 +15,7 @@ export default function InquiryGuide() {
           <HowToUseStep>返品申請に対する返信を入力してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo src={responseRefundVideo} label="Consoleのお問い合わせ画面から返品申請を確認し、購入者へ回答する手順" />
+        <HowToUseVideo storagePath="console/inquiry/response-refund.mp4" label="Consoleのお問い合わせ画面から返品申請を確認し、購入者へ回答する手順" />
       </HowToUseSection>
     </>
   );

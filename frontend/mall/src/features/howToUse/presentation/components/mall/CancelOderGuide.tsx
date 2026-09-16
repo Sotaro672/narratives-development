@@ -1,7 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/mall/CancelOderGuide.tsx
 
-import cancelOrderVideo from "../../../assets/mall/cancel/cancel-order.mp4";
-
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
@@ -13,7 +11,7 @@ export default function CancelOderGuide() {
     <>
       <HowToUseSection title="注文のキャンセル">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={cancelOrderVideo} label="Mallで注文内容を確認し、注文をキャンセルする手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/cancel/cancel-order.mp4" label="Mallで注文内容を確認し、注文をキャンセルする手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>ウォレットページへ移動し、取引履歴を開けてください。</HowToUseStep>

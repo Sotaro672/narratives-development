@@ -1,9 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/InspectionGuide.tsx
 
-import completeInspectionVideo from "../../../assets/console/inspection/complete-inspection.mp4";
-import enterInspectionVideo from "../../../assets/console/inspection/enter-inspection.mp4";
-import goToInspectorVideo from "../../../assets/console/inspection/go-to-inspector.mp4";
-
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
@@ -15,7 +11,7 @@ export default function InspectionGuide() {
     <>
       <HowToUseSection title="検品スキャナーの開き方">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={goToInspectorVideo} label="AMOLのサービス選択画面から検品スキャナーを開く手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="console/inspection/go-to-inspector.mp4" label="AMOLのサービス選択画面から検品スキャナーを開く手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>AMOLのログイン画面を開いてください。</HowToUseStep>
@@ -27,7 +23,7 @@ export default function InspectionGuide() {
 
       <HowToUseSection title="検品手順">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={enterInspectionVideo} label="商品のQRコードを読み取り、検品結果を入力する手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="console/inspection/enter-inspection.mp4" label="商品のQRコードを読み取り、検品結果を入力する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>検品スキャナーで商品のQRコードをスキャンしてください。</HowToUseStep>
@@ -46,7 +42,7 @@ export default function InspectionGuide() {
           <HowToUseStep>検品完了時点で未検査の商品は、すべて「合格」として登録されます。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo src={completeInspectionVideo} label="PCのミント申請画面から検品を完了する手順" />
+        <HowToUseVideo storagePath="console/inspection/complete-inspection.mp4" label="PCのミント申請画面から検品を完了する手順" />
 
         <HowToUseNote title="未検査商品の扱い">「検品完了」を実行すると、個別に「不合格」「未製造」として登録されていない未検査の商品はすべて「合格」として扱われます。検品完了前に、不合格品や未製造品の登録漏れがないことを確認してください。</HowToUseNote>
       </HowToUseSection>

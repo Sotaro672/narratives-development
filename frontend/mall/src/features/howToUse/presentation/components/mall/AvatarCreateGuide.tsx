@@ -1,8 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/mall/AvatarCreateGuide.tsx
 
-import createAvatarVideo from "../../../assets/mall/avatar/create-avatar.mp4";
-import signUpMallVideo from "../../../assets/mall/avatar/signUp-mall.mp4";
-
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
@@ -14,7 +11,7 @@ export default function AvatarCreateGuide() {
     <>
       <HowToUseSection title="Mallアカウントの作成">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={signUpMallVideo} label="Mallでアカウントを作成する手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/avatar/signUp-mall.mp4" label="Mallでアカウントを作成する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>AMOLのMallを開いてください。</HowToUseStep>
@@ -29,7 +26,7 @@ export default function AvatarCreateGuide() {
 
       <HowToUseSection title="アバターの作成">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={createAvatarVideo} label="Mallでアバター情報を入力してアバターを作成する手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/avatar/create-avatar.mp4" label="Mallでアバター情報を入力してアバターを作成する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>サインイン後、アバター作成画面を開いてください。</HowToUseStep>

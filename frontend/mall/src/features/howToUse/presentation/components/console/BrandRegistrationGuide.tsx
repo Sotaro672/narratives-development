@@ -1,8 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/BrandRegistrationGuide.tsx
 
-import goToBrandRegistrationVideo from "../../../assets/console/brand-registration/go-to-brand-registration.mp4";
-import registrateBrandVideo from "../../../assets/console/brand-registration/registrate-brand.mp4";
-
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
@@ -19,10 +16,7 @@ export default function BrandRegistrationGuide() {
           <HowToUseStep>ブランド管理画面右上にある「ブランド追加」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo
-          src={goToBrandRegistrationVideo}
-          label="サイドバーから組織、ブランドを選択し、ブランド追加ボタンをクリックしてブランド登録画面へ移動する手順"
-        />
+        <HowToUseVideo storagePath="console/brand-registration/go-to-brand-registration.mp4" label="サイドバーから組織、ブランドを選択し、ブランド追加ボタンをクリックしてブランド登録画面へ移動する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="ブランド登録手順">
@@ -35,18 +29,11 @@ export default function BrandRegistrationGuide() {
           <HowToUseStep>すべての入力が完了したら、画面右上にある「保存」ボタンをクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo
-          src={registrateBrandVideo}
-          label="ブランド担当者、振込口座、ブランド画像、ブランド情報を入力し、ブランドを登録する手順"
-        />
+        <HowToUseVideo storagePath="console/brand-registration/registrate-brand.mp4" label="ブランド担当者、振込口座、ブランド画像、ブランド情報を入力し、ブランドを登録する手順" />
 
-        <HowToUseNote title="ブランド専用ウォレット">
-          ブランド登録と同時に、ブランド専用のブロックチェーンウォレットが開設されます。商品やトークン設計を登録する際にはブランド名義が必要です。
-        </HowToUseNote>
+        <HowToUseNote title="ブランド専用ウォレット">ブランド登録と同時に、ブランド専用のブロックチェーンウォレットが開設されます。商品やトークン設計を登録する際にはブランド名義が必要です。</HowToUseNote>
 
-        <HowToUseNote title="ガスについて">
-          ミントや購入されたお客様へトークンを移譲する際に必要なガスは、必要量が自動で補給されます。ガス代は電子名札発行手数料として商品1点につき10円で請求されます。
-        </HowToUseNote>
+        <HowToUseNote title="ガスについて">ミントや購入されたお客様へトークンを移譲する際に必要なガスは、必要量が自動で補給されます。ガス代は電子名札発行手数料として商品1点につき10円で請求されます。</HowToUseNote>
       </HowToUseSection>
     </>
   );

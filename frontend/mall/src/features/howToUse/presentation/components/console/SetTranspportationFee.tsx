@@ -1,7 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/SetTranspportationFee.tsx
 
-import setTransportationFeeVideo from "../../../assets/console/inventory/set-transportation-fee.mp4";
-
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
@@ -17,10 +15,7 @@ export default function SetTranspportationFee() {
           <HowToUseStep>料金体系に名前を付け、保存ボタンを押してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo
-          src={setTransportationFeeVideo}
-          label="配送画面から配送料金体系を設定して保存する手順"
-        />
+        <HowToUseVideo storagePath="console/inventory/set-transportation-fee.mp4" label="配送画面から配送料金体系を設定して保存する手順" />
       </HowToUseSection>
     </>
   );

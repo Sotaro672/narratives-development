@@ -6,14 +6,12 @@ import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
 import HowToUseVideo from "../common/HowToUseVideo";
 
-const requestRefundVideo = import.meta.env.VITE_HOW_TO_USE_REQUEST_REFUND_VIDEO_URL;
-
 export default function RequestRefundGuide() {
   return (
     <>
       <HowToUseSection title="返品申請">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={requestRefundVideo} label="Mallの注文詳細から返品を申請する手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/refund/request-refund.mp4" label="Mallの注文詳細から返品を申請する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>注文一覧から返品する注文を開いてください。</HowToUseStep>

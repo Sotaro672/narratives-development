@@ -1,7 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/mall/PurchaseGuide.tsx
 
-import purchaseVideo from "../../../assets/mall/purchase/purchase.mp4";
-
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
@@ -13,7 +11,7 @@ export default function PurchaseGuide() {
     <>
       <HowToUseSection title="商品の購入">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo src={purchaseVideo} label="Mallで商品を選択し、購入手続きを行う手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/purchase/purchase.mp4" label="Mallで商品を選択し、購入手続きを行う手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>購入する商品を開いてください。</HowToUseStep>
@@ -23,9 +21,7 @@ export default function PurchaseGuide() {
           </HowToUseStepList>
         </div>
 
-        <HowToUseNote title="注文確定メール">
-          注文確定後、登録しているメールアドレス宛に注文確定メールが送信されます。
-        </HowToUseNote>
+        <HowToUseNote title="注文確定メール">注文確定後、登録しているメールアドレス宛に注文確定メールが送信されます。</HowToUseNote>
       </HowToUseSection>
     </>
   );

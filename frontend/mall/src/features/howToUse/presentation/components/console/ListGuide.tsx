@@ -1,9 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/ListGuide.tsx
 
-import createListVideo from "../../../assets/console/list/create-list.mp4";
-import setLocationAndTransportationVideo from "../../../assets/console/list/set-location-and-transportation.mp4";
-import stopListingVideo from "../../../assets/console/list/stop-listing.mp4";
-
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
@@ -21,7 +17,7 @@ export default function ListGuide() {
           <HowToUseStep>保存すると出品ボタンが表示されるので、押してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo src={setLocationAndTransportationVideo} label="出品する商品に在庫保管場所と配送料金体系を設定する手順" />
+        <HowToUseVideo storagePath="console/list/set-location-and-transportation.mp4" label="出品する商品に在庫保管場所と配送料金体系を設定する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="出品作成">
@@ -30,7 +26,7 @@ export default function ListGuide() {
           <HowToUseStep>画面右上の作成ボタンを押してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo src={createListVideo} label="商品の出品情報を入力し、購入者Mallへの出品を作成する手順" />
+        <HowToUseVideo storagePath="console/list/create-list.mp4" label="商品の出品情報を入力し、購入者Mallへの出品を作成する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="出品停止">
@@ -39,7 +35,7 @@ export default function ListGuide() {
           <HowToUseStep>出品詳細画面右上の保留ボタンを押してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo src={stopListingVideo} label="出品中の商品を停止し、購入者Mallでの販売を停止する手順" />
+        <HowToUseVideo storagePath="console/list/stop-listing.mp4" label="出品中の商品を停止し、購入者Mallでの販売を停止する手順" />
       </HowToUseSection>
     </>
   );

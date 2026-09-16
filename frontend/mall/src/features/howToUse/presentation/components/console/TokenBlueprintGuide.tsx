@@ -1,8 +1,5 @@
 // frontend/mall/src/features/howToUse/presentation/components/console/TokenBlueprintGuide.tsx
 
-import createTokenBlueprintVideo from "../../../assets/console/token-blueprint/create-tokenBlueprint.mp4";
-import goToTokenBlueprintRegistrationVideo from "../../../assets/console/token-blueprint/go-to-tokenBlueprint-registration.mp4";
-
 import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
@@ -18,10 +15,7 @@ export default function TokenBlueprintGuide() {
           <HowToUseStep>トークン設計一覧の「トークン設計を作成」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo
-          src={goToTokenBlueprintRegistrationVideo}
-          label="トークン設計一覧を開き、トークン設計を作成ボタンからトークン設計画面へ移動する手順"
-        />
+        <HowToUseVideo storagePath="console/token-blueprint/go-to-tokenBlueprint-registration.mp4" label="トークン設計一覧を開き、トークン設計を作成ボタンからトークン設計画面へ移動する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="トークン設計手順">
@@ -35,18 +29,11 @@ export default function TokenBlueprintGuide() {
           <HowToUseStep>すべての入力が完了したら、画面上部の「保存」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo
-          src={createTokenBlueprintVideo}
-          label="ブランド、トークン名、シンボル、説明、アイコン画像、コンテンツ、担当者を設定し、トークン設計を保存する手順"
-        />
+        <HowToUseVideo storagePath="console/token-blueprint/create-tokenBlueprint.mp4" label="ブランド、トークン名、シンボル、説明、アイコン画像、コンテンツ、担当者を設定し、トークン設計を保存する手順" />
 
-        <HowToUseNote title="トークンコンテンツ">
-          トークンには画像やファイルなどのコンテンツを登録できます。登録したコンテンツはトークンに紐づく情報として管理されます。
-        </HowToUseNote>
+        <HowToUseNote title="トークンコンテンツ">トークンには画像やファイルなどのコンテンツを登録できます。登録したコンテンツはトークンに紐づく情報として管理されます。</HowToUseNote>
 
-        <HowToUseNote title="保存処理">
-          保存時にはトークン設計の作成と、アイコン画像やコンテンツのアップロードが実行されます。処理中は進捗画面が表示されるため、完了するまで画面を閉じないでください。
-        </HowToUseNote>
+        <HowToUseNote title="保存処理">保存時にはトークン設計の作成と、アイコン画像やコンテンツのアップロードが実行されます。処理中は進捗画面が表示されるため、完了するまで画面を閉じないでください。</HowToUseNote>
       </HowToUseSection>
     </>
   );
