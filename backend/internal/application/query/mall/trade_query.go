@@ -12,6 +12,7 @@ import (
 	mallshared "narratives/internal/application/query/mall/shared"
 	avatardom "narratives/internal/domain/avatar"
 	orderdom "narratives/internal/domain/order"
+	refunddom "narratives/internal/domain/refund"
 	resaledom "narratives/internal/domain/resale"
 	tradedom "narratives/internal/domain/trade"
 )
@@ -405,6 +406,8 @@ type tradeOrderItemState struct {
 	IsReturnCompleted bool
 	ReturnCompletedAt *time.Time
 
+	MerchandiseRefundMaxAmount int
+
 	Transferred   bool
 	TransferredAt *time.Time
 
@@ -448,18 +451,27 @@ func (q *TradeQuery) getTradeOrderItemState(
 		return tradeOrderItemState{}, ErrTradeQueryUnsupportedTrade
 	}
 
+	refundAmountSummary, err := refunddom.CalculateOrderItemRefundAmount(
+		order,
+		trade.OrderItemIndex,
+	)
+	if err != nil {
+		return tradeOrderItemState{}, err
+	}
+
 	return tradeOrderItemState{
-		IsCancelled:        item.IsCancelled,
-		IsDispatched:       item.IsDispatched,
-		IsReturnRequested:  item.IsReturnRequested,
-		ReturnRequestKind:  item.ReturnRequestKind,
-		ReturnRequestedAt:  item.ReturnRequestedAt,
-		IsReturnCompleted:  item.IsReturnCompleted,
-		ReturnCompletedAt:  item.ReturnCompletedAt,
-		Transferred:        item.Transferred,
-		TransferredAt:      item.TransferredAt,
-		ResaleID:           item.ResaleID,
-		ProductBlueprintID: item.ProductBlueprintID,
+		IsCancelled:                item.IsCancelled,
+		IsDispatched:               item.IsDispatched,
+		IsReturnRequested:          item.IsReturnRequested,
+		ReturnRequestKind:          item.ReturnRequestKind,
+		ReturnRequestedAt:          item.ReturnRequestedAt,
+		IsReturnCompleted:          item.IsReturnCompleted,
+		ReturnCompletedAt:          item.ReturnCompletedAt,
+		MerchandiseRefundMaxAmount: refundAmountSummary.RefundAmount,
+		Transferred:                item.Transferred,
+		TransferredAt:              item.TransferredAt,
+		ResaleID:                   item.ResaleID,
+		ProductBlueprintID:         item.ProductBlueprintID,
 	}, nil
 }
 
@@ -776,26 +788,27 @@ func buildTradeDetailDTO(
 	}
 
 	out := tradedto.TradeDetail{
-		ID:                trade.ID,
-		OrderID:           trade.OrderID,
-		OrderItemIndex:    trade.OrderItemIndex,
-		ViewerSide:        viewerSide,
-		ProductName:       display.ProductName,
-		Resale:            resale,
-		BuyerAvatarID:     trade.BuyerAvatarID,
-		BuyerAvatarName:   display.BuyerAvatarName,
-		BuyerAvatarIcon:   display.BuyerAvatarIcon,
-		SellerAvatarID:    trade.SellerAvatarID,
-		SellerAvatarName:  display.SellerAvatarName,
-		SellerAvatarIcon:  display.SellerAvatarIcon,
-		Status:            trade.Status,
-		IsCancelled:       orderItemState.IsCancelled,
-		IsDispatched:      orderItemState.IsDispatched,
-		IsReturnRequested: orderItemState.IsReturnRequested,
-		ReturnRequestKind: orderItemState.ReturnRequestKind,
-		IsReturnCompleted: orderItemState.IsReturnCompleted,
-		Transferred:       orderItemState.Transferred,
-		Messages:          messageDTOs,
+		ID:                         trade.ID,
+		OrderID:                    trade.OrderID,
+		OrderItemIndex:             trade.OrderItemIndex,
+		ViewerSide:                 viewerSide,
+		ProductName:                display.ProductName,
+		Resale:                     resale,
+		BuyerAvatarID:              trade.BuyerAvatarID,
+		BuyerAvatarName:            display.BuyerAvatarName,
+		BuyerAvatarIcon:            display.BuyerAvatarIcon,
+		SellerAvatarID:             trade.SellerAvatarID,
+		SellerAvatarName:           display.SellerAvatarName,
+		SellerAvatarIcon:           display.SellerAvatarIcon,
+		Status:                     trade.Status,
+		IsCancelled:                orderItemState.IsCancelled,
+		IsDispatched:               orderItemState.IsDispatched,
+		IsReturnRequested:          orderItemState.IsReturnRequested,
+		ReturnRequestKind:          orderItemState.ReturnRequestKind,
+		IsReturnCompleted:          orderItemState.IsReturnCompleted,
+		MerchandiseRefundMaxAmount: orderItemState.MerchandiseRefundMaxAmount,
+		Transferred:                orderItemState.Transferred,
+		Messages:                   messageDTOs,
 	}
 
 	if orderItemState.ReturnRequestedAt != nil &&

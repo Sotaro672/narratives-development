@@ -1,6 +1,10 @@
 // frontend/amol/src/features/trade/presentation/components/TradeOrderActionPrompt.tsx
 
-export type TradeOrderAction = "cancel" | "dispatch" | "return";
+export type TradeOrderAction =
+  | "cancel"
+  | "dispatch"
+  | "return"
+  | "receive-return";
 
 type TradeOrderActionPromptProps = {
   action: TradeOrderAction;
@@ -17,10 +21,15 @@ function getPromptText(action: TradeOrderAction): string {
       return "商品を発送しますか？";
     case "return":
       return "商品の返品を申請しますか？";
+    case "receive-return":
+      return "返品商品を受領しましたか？";
   }
 }
 
-function getActionLabel(action: TradeOrderAction, processing: boolean): string {
+function getActionLabel(
+  action: TradeOrderAction,
+  processing: boolean,
+): string {
   if (processing) {
     switch (action) {
       case "cancel":
@@ -29,6 +38,8 @@ function getActionLabel(action: TradeOrderAction, processing: boolean): string {
         return "発送処理中...";
       case "return":
         return "返品申請中...";
+      case "receive-return":
+        return "返品処理中...";
     }
   }
 
@@ -39,6 +50,8 @@ function getActionLabel(action: TradeOrderAction, processing: boolean): string {
       return "発送する";
     case "return":
       return "返品を申請";
+    case "receive-return":
+      return "返品受領・返金";
   }
 }
 
@@ -56,16 +69,25 @@ export default function TradeOrderActionPrompt({
         </div>
       </div>
 
-      <p className="chat-detail-page__content">{getPromptText(action)}</p>
+      <p className="chat-detail-page__content">
+        {getPromptText(action)}
+      </p>
 
       {error ? (
-        <div className="chat-detail-page__modal-error" role="alert">
+        <div
+          className="chat-detail-page__modal-error"
+          role="alert"
+        >
           {error}
         </div>
       ) : null}
 
       <div className="chat-detail-page__close-prompt-actions">
-        <button type="button" onClick={onAction} disabled={processing}>
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={processing}
+        >
           {getActionLabel(action, processing)}
         </button>
       </div>

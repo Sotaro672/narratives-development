@@ -60,10 +60,10 @@ export type ReceiveTradeReturnParams =
   };
 
 export type ReceiveTradeReturnResult = {
-  FinanciallyCompleted: boolean;
-  OrderCompleted: boolean;
-  NotificationEnsured: boolean;
-  AlreadyCompleted: boolean;
+  financiallyCompleted: boolean;
+  orderCompleted: boolean;
+  notificationEnsured: boolean;
+  alreadyCompleted: boolean;
 };
 
 export type ReceiveTradeReturnResponse = {
@@ -144,7 +144,7 @@ export type TradeDetail = {
   returnRequestedAt?: string;
   isReturnCompleted: boolean;
   returnCompletedAt?: string;
-  merchandiseRefundMaxAmount?: number;
+  merchandiseRefundMaxAmount: number;
   transferred: boolean;
   transferredAt?: string;
   messages: TradeMessage[];

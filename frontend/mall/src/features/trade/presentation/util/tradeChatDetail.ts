@@ -1,8 +1,15 @@
 // frontend/mall/src/features/trade/presentation/util/tradeChatDetail.ts
 
-import type { TradeDetail, TradeMessage } from "../../../shared/types/trade";
+import type {
+  TradeDetail,
+  TradeMessage,
+} from "../../../shared/types/trade";
 
-export type TradeOrderActionKind = "dispatch" | "return" | "cancel";
+export type TradeOrderActionKind =
+  | "dispatch"
+  | "return"
+  | "receive-return"
+  | "cancel";
 
 export function getErrorMessage(
   caught: unknown,
@@ -32,12 +39,27 @@ export function sortTradeMessages(
 export function getTradeOrderAction(
   trade: TradeDetail | null,
 ): TradeOrderActionKind | null {
-  if (!trade || trade.status !== "active" || trade.isCancelled) {
+  if (
+    !trade ||
+    trade.status !== "active" ||
+    trade.isCancelled
+  ) {
     return null;
   }
 
   if (trade.viewerSide === "seller") {
-    return trade.isDispatched ? null : "dispatch";
+    if (!trade.isDispatched) {
+      return "dispatch";
+    }
+
+    if (
+      trade.isReturnRequested &&
+      !trade.isReturnCompleted
+    ) {
+      return "receive-return";
+    }
+
+    return null;
   }
 
   if (!trade.isDispatched) {

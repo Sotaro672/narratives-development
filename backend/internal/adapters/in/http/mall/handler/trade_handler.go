@@ -216,6 +216,17 @@ type receiveTradeReturnRequest struct {
 	CoverReturnShipping     bool `json:"coverReturnShipping"`
 }
 
+type receiveTradeReturnResponse struct {
+	Data receiveTradeReturnResultResponse `json:"data"`
+}
+
+type receiveTradeReturnResultResponse struct {
+	FinanciallyCompleted bool `json:"financiallyCompleted"`
+	OrderCompleted       bool `json:"orderCompleted"`
+	NotificationEnsured  bool `json:"notificationEnsured"`
+	AlreadyCompleted     bool `json:"alreadyCompleted"`
+}
+
 // GET /mall/me/trades
 //
 // Returns all Resale Trades in which the authenticated Avatar participates as
@@ -702,8 +713,13 @@ func (h *TradeHandler) receiveReturn(
 		status = http.StatusAccepted
 	}
 
-	writeJSON(w, status, map[string]any{
-		"data": result,
+	writeJSON(w, status, receiveTradeReturnResponse{
+		Data: receiveTradeReturnResultResponse{
+			FinanciallyCompleted: result.FinanciallyCompleted,
+			OrderCompleted:       result.OrderCompleted,
+			NotificationEnsured:  result.NotificationEnsured,
+			AlreadyCompleted:     result.AlreadyCompleted,
+		},
 	})
 }
 
@@ -801,7 +817,8 @@ func writeTradeReturnReceiptErr(
 			"error": "avatar context is required",
 		})
 
-	case errors.Is(err, refunddom.ErrInvalidReturnRefundAmount):
+	case errors.Is(err, refunddom.ErrInvalidReturnRefundAmount),
+		errors.Is(err, refunddom.ErrInvalidReturnRefundAmounts):
 		badRequest(w, err.Error())
 
 	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptOrderNotPaid),

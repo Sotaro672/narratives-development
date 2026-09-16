@@ -45,8 +45,8 @@ type TradeResaleDetail struct {
 // ViewerSide is resolved by the backend from the authenticated Avatar and must
 // not be supplied by the client.
 //
-// Cancellation, dispatch, return, and transfer state are read from the
-// authoritative Order item associated with this Trade and are not owned by
+// Cancellation, dispatch, return, transfer, and refund-limit state are read from
+// the authoritative Order item associated with this Trade and are not owned by
 // the Trade aggregate.
 type TradeDetail struct {
 	ID             string `json:"id"`
@@ -74,7 +74,10 @@ type TradeDetail struct {
 	IsReturnRequested bool                       `json:"isReturnRequested"`
 	ReturnRequestKind orderdom.ReturnRequestKind `json:"returnRequestKind,omitempty"`
 	IsReturnCompleted bool                       `json:"isReturnCompleted"`
-	Transferred       bool                       `json:"transferred"`
+
+	MerchandiseRefundMaxAmount int `json:"merchandiseRefundMaxAmount"`
+
+	Transferred bool `json:"transferred"`
 
 	ReturnRequestedAt string `json:"returnRequestedAt,omitempty"`
 	ReturnCompletedAt string `json:"returnCompletedAt,omitempty"`
