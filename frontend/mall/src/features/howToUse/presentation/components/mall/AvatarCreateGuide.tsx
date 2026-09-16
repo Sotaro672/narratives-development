@@ -11,7 +11,7 @@ export default function AvatarCreateGuide() {
     <>
       <HowToUseSection title="Mallアカウントの作成">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo storagePath="mall/avatar/signUp-mall.mp4" label="Mallでアカウントを作成する手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/avatar/sign-up-mall.mp4" label="Mallでアカウントを作成する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>AMOLのMallを開いてください。</HowToUseStep>

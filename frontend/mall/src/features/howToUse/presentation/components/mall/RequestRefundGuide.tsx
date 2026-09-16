@@ -23,6 +23,17 @@ export default function RequestRefundGuide() {
 
         <HowToUseNote title="未開封商品の返品について">未開封として返品申請した後に商品のQRコードをスキャンすると、開封後での返品として自動的に更新されます。ご注意ください。</HowToUseNote>
       </HowToUseSection>
+
+      <HowToUseSection title="返信入力">
+        <div className="how-to-use-mobile-guide">
+          <HowToUseVideo storagePath="mall/refund/refund-from-mall.mp4" label="Mallから返品手続きを行う手順" variant="iphone-12-pro" />
+          <HowToUseStepList>
+            <HowToUseStep>ブランドから返品申請の返答が届くとヘッダーのメッセージアイコンに未読カウンターが更新されます。</HowToUseStep>
+            <HowToUseStep>ヘッダーのメッセージアイコンを押すと、返信を確認できます。</HowToUseStep>
+            <HowToUseStep>フッターの返信アイコンを押して返信を入力してください。</HowToUseStep>
+          </HowToUseStepList>
+        </div>
+      </HowToUseSection>
     </>
   );
 }
