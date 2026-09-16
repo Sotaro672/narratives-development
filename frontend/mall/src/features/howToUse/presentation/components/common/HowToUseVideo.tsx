@@ -1,33 +1,29 @@
 // frontend/mall/src/features/howToUse/presentation/components/common/HowToUseVideo.tsx
 
+import { getHowToUseVideoUrl } from "../../../infrastructure/howToUseVideoUrl";
+
 type HowToUseVideoProps = {
-  src: string;
+  storagePath: string;
   label: string;
   variant?: "default" | "iphone-12-pro";
 };
 
 export default function HowToUseVideo({
-  src,
+  storagePath,
   label,
   variant = "default",
 }: HowToUseVideoProps) {
+  const src = getHowToUseVideoUrl(storagePath);
+
   const figureClassName = [
     "how-to-use-figure",
-    variant === "iphone-12-pro"
-      ? "how-to-use-figure--iphone-12-pro"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    variant === "iphone-12-pro" ? "how-to-use-figure--iphone-12-pro" : "",
+  ].filter(Boolean).join(" ");
 
   const imageWrapClassName = [
     "how-to-use-figure__image-wrap",
-    variant === "iphone-12-pro"
-      ? "how-to-use-figure__image-wrap--iphone-12-pro"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+    variant === "iphone-12-pro" ? "how-to-use-figure__image-wrap--iphone-12-pro" : "",
+  ].filter(Boolean).join(" ");
 
   return (
     <figure className={figureClassName}>
