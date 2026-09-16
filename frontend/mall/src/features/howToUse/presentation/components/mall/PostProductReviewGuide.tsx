@@ -1,5 +1,6 @@
 // frontend/mall/src/features/howToUse/presentation/components/mall/PostProductReviewGuide.tsx
 
+import HowToUseNote from "../common/HowToUseNote";
 import HowToUseSection from "../common/HowToUseSection";
 import HowToUseStep from "../common/HowToUseStep";
 import HowToUseStepList from "../common/HowToUseStepList";
@@ -16,12 +17,14 @@ export default function PostProductReviewGuide() {
         />
 
         <HowToUseStepList>
-          <HowToUseStep>ウォレットからレビューを投稿する商品を開いてください。</HowToUseStep>
-          <HowToUseStep>レビューを開き、商品の評価を選択してください。</HowToUseStep>
-          <HowToUseStep>商品の感想や体験を入力してください。</HowToUseStep>
-          <HowToUseStep>「投稿」を押すと、商品レビューが投稿されます。</HowToUseStep>
+          <HowToUseStep>トークンコンテンツ画面の商品名タブを押してスキャン画面へ移動してください。またはスキャン画面でQRコードをスキャンしてください。</HowToUseStep>
+          <HowToUseStep>スキャン画面にて商品に対する感想を投稿してください。</HowToUseStep>
         </HowToUseStepList>
       </div>
+
+      <HowToUseNote title="購入者のみレビュー投稿が可能">
+        商品レビューは、その商品を購入したユーザーのみ投稿できます。
+      </HowToUseNote>
     </HowToUseSection>
   );
 }

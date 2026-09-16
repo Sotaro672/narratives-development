@@ -84,6 +84,12 @@ export const consoleItems: HowToUseItem[] = [
   },
   {
     category: "console",
+    slug: "comment-reply",
+    title: "コメント返信",
+    description: "トークンコンテンツに投稿されたコメントを確認し、ブランドから返信します。",
+  },
+  {
+    category: "console",
     slug: "reviews",
     title: "レビュー",
     description: "購入者から投稿されたレビューを確認します。",
