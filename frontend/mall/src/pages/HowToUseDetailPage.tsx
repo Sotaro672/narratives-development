@@ -18,6 +18,7 @@ import MintGuide from "../features/howToUse/presentation/components/console/Mint
 import OrderDispatchGuide from "../features/howToUse/presentation/components/console/OrderDispatchGuide";
 import ProductBlueprintGuide from "../features/howToUse/presentation/components/console/ProductBlueprintGuide";
 import ProductionRegistrationGuide from "../features/howToUse/presentation/components/console/ProductionRegistrationGuide";
+import ReplyTokenCommentGuide from "../features/howToUse/presentation/components/console/ReplyTokenCommentGuide";
 import SetLocationGuide from "../features/howToUse/presentation/components/console/SetLocationGuide";
 import SetTranspportationFee from "../features/howToUse/presentation/components/console/SetTranspportationFee";
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
@@ -80,6 +81,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "inquiry") {
     return <InquiryGuide />;
+  }
+
+  if (category === "console" && slug === "comment-reply") {
+    return <ReplyTokenCommentGuide />;
   }
 
   if (category === "mall" && slug === "avatar-registration") {
