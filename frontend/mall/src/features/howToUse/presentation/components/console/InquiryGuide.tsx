@@ -17,6 +17,15 @@ export default function InquiryGuide() {
 
         <HowToUseVideo storagePath="console/inquiry/response-refund.mp4" label="Consoleのお問い合わせ画面から返品申請を確認し、購入者へ回答する手順" />
       </HowToUseSection>
+
+      <HowToUseSection title="返品受領後の手順">
+        <HowToUseStepList>
+          <HowToUseStep>返品商品を受領した後、画面右上にある返品受領ボタンを押してください。</HowToUseStep>
+          <HowToUseStep>返品受領すると自動で返金処理と返金完了のメッセージが購入客へ送信されます。</HowToUseStep>
+        </HowToUseStepList>
+
+        <HowToUseVideo storagePath="console/inquiry/accept-refund.mp4" label="Consoleのお問い合わせ画面から返品申請を確認し、返品を承認する手順" />
+      </HowToUseSection>
     </>
   );
 }

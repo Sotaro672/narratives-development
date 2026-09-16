@@ -10,6 +10,7 @@ import {
 } from "../features/howToUse/application/howToUseSteps";
 import HowToUseArticle from "../features/howToUse/presentation/components/common/HowToUseArticle";
 import BrandRegistrationGuide from "../features/howToUse/presentation/components/console/BrandRegistrationGuide";
+import InquiryGuide from "../features/howToUse/presentation/components/console/InquiryGuide";
 import InspectionGuide from "../features/howToUse/presentation/components/console/InspectionGuide";
 import ListGuide from "../features/howToUse/presentation/components/console/ListGuide";
 import MemberInvitationGuide from "../features/howToUse/presentation/components/console/MemberInvitationGuide";
@@ -73,6 +74,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "orders") {
     return <OrderDispatchGuide />;
+  }
+
+  if (category === "console" && slug === "inquiry") {
+    return <InquiryGuide />;
   }
 
   if (category === "mall" && slug === "avatar-registration") {
