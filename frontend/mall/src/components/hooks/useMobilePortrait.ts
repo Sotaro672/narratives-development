@@ -1,22 +1,53 @@
-// frontend/amol/src/features/shared/hooks/useMobilePortrait.ts
+// frontend/mall/src/components/hooks/useMobilePortrait.ts
 
 import { useEffect, useState } from "react";
 
 export const MOBILE_PORTRAIT_MEDIA_QUERY =
-  "(max-width: 959px) and (orientation: portrait)";
+  "(max-width: 959px)";
+
+type LegacyOrientationWindow = Window & {
+  orientation?: number;
+};
+
+function isPhysicalPortrait(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const legacyOrientation =
+    (window as LegacyOrientationWindow).orientation;
+
+  if (typeof legacyOrientation === "number") {
+    return Math.abs(legacyOrientation) !== 90;
+  }
+
+  const orientationType =
+    window.screen.orientation?.type;
+
+  if (orientationType) {
+    return orientationType.startsWith("portrait");
+  }
+
+  return window.screen.height >= window.screen.width;
+}
 
 export function useMobilePortrait(): boolean {
-  const [isMobilePortrait, setIsMobilePortrait] = useState(false);
+  const [isMobilePortrait, setIsMobilePortrait] =
+    useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") {
       return;
     }
 
-    const mediaQuery = window.matchMedia(MOBILE_PORTRAIT_MEDIA_QUERY);
+    const mediaQuery = window.matchMedia(
+      MOBILE_PORTRAIT_MEDIA_QUERY,
+    );
 
     const updateMobilePortraitState = () => {
-      setIsMobilePortrait(mediaQuery.matches);
+      setIsMobilePortrait(
+        mediaQuery.matches && isPhysicalPortrait(),
+      );
     };
 
     updateMobilePortraitState();
@@ -26,19 +57,57 @@ export function useMobilePortrait(): boolean {
         "change",
         updateMobilePortraitState,
       );
+    } else {
+      mediaQuery.addListener(updateMobilePortraitState);
+    }
 
-      return () => {
+    const screenOrientation =
+      window.screen.orientation;
+
+    if (
+      screenOrientation &&
+      typeof screenOrientation.addEventListener === "function"
+    ) {
+      screenOrientation.addEventListener(
+        "change",
+        updateMobilePortraitState,
+      );
+    }
+
+    window.addEventListener(
+      "orientationchange",
+      updateMobilePortraitState,
+    );
+
+    return () => {
+      if (
+        typeof mediaQuery.removeEventListener === "function"
+      ) {
         mediaQuery.removeEventListener(
           "change",
           updateMobilePortraitState,
         );
-      };
-    }
+      } else {
+        mediaQuery.removeListener(
+          updateMobilePortraitState,
+        );
+      }
 
-    mediaQuery.addListener(updateMobilePortraitState);
+      if (
+        screenOrientation &&
+        typeof screenOrientation.removeEventListener ===
+          "function"
+      ) {
+        screenOrientation.removeEventListener(
+          "change",
+          updateMobilePortraitState,
+        );
+      }
 
-    return () => {
-      mediaQuery.removeListener(updateMobilePortraitState);
+      window.removeEventListener(
+        "orientationchange",
+        updateMobilePortraitState,
+      );
     };
   }, []);
 

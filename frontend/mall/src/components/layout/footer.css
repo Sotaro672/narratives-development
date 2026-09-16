@@ -1,4 +1,4 @@
-/* frontend/amol/src/components/layout/footer.css */
+/* frontend/mall/src/components/layout/footer.css */
 
 :root {
   --footer-nav-height: calc(72px + env(safe-area-inset-bottom));
@@ -353,7 +353,7 @@
   max-height: 96px;
 }
 
-@media (max-width: 1023px) and (orientation: portrait) {
+@media (max-width: 959px) {
   .footer-nav--action {
     display: block;
   }
@@ -370,7 +370,7 @@
   }
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 960px) {
   .footer-nav--action,
   .footer-nav--comment-action,
   .footer-nav--review-action {
@@ -380,12 +380,6 @@
 
 @media (orientation: landscape) {
   .footer-nav:not(.footer-nav--sidebar):not(.footer-nav--action):not(.footer-nav--comment-action):not(.footer-nav--review-action) {
-    display: none;
-  }
-
-  .footer-nav--action,
-  .footer-nav--comment-action,
-  .footer-nav--review-action {
     display: none;
   }
 }
@@ -465,6 +459,7 @@
 }
 
 /* avatar icon in footer nav */
+
 .footer-nav__avatar-icon {
   width: 24px;
   height: 24px;
@@ -494,7 +489,9 @@
   }
 }
 
-/* frontend/amol/src/components/layout/footer.css */
+/* ==============================
+   Triple action footer
+   ============================== */
 
 .footer-nav--triple-action {
   position: fixed;
