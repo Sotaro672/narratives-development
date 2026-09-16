@@ -16,7 +16,6 @@ import (
 	refunddom "narratives/internal/domain/refund"
 )
 
-// InquiryHandler は /inquiries 関連のエンドポイントを担当します。
 type InquiryHandler struct {
 	uc                    *usecase.InquiryUsecase
 	returnReceiptUC       *usecase.ReturnReceiptUsecase
@@ -25,7 +24,6 @@ type InquiryHandler struct {
 	detailQuery           *consolequery.InquiryDetailQuery
 }
 
-// NewInquiryHandler はHTTPハンドラを初期化します。
 func NewInquiryHandler(
 	uc *usecase.InquiryUsecase,
 	returnReceiptUC *usecase.ReturnReceiptUsecase,
@@ -42,7 +40,6 @@ func NewInquiryHandler(
 	}
 }
 
-// ServeHTTP はHTTPルーティングの入口です。
 func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -61,11 +58,6 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// GET /inquiries/company/{companyId}
-	// GET /inquiries/company/{companyId}/action-required-count
-	//
-	// URL 上の companyId は既存 route 互換のため受け取るが、
-	// 実際の company boundary は middleware の companyId を正とする。
 	if parts[0] == "company" {
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w)
@@ -159,23 +151,6 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.get(w, r, id)
 }
 
-// GET /inquiries/company/{companyId}
-//
-// Query:
-//   - searchQuery
-//   - productId
-//   - orderId
-//   - avatarId
-//   - status
-//   - inquiryType
-//   - updatedBy
-//   - deletedBy
-//   - resolvedBy
-//   - closedBy
-//   - imageFileName
-//   - deleted=true|false
-//   - resolved=true|false
-//   - closed=true|false
 func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -201,7 +176,6 @@ func (h *InquiryHandler) listByCompanyID(w http.ResponseWriter, r *http.Request)
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-// GET /inquiries/company/{companyId}/action-required-count
 func (h *InquiryHandler) countActionRequiredByCompanyID(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -280,7 +254,6 @@ func inquiryFilterFromRequest(r *http.Request) inquirydom.Filter {
 	return filter
 }
 
-// GET /inquiries/{id}
 func (h *InquiryHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -325,23 +298,15 @@ func hasUnreadAvatarReply(replies []inquirydom.Reply) bool {
 		if reply.IsRead {
 			continue
 		}
+
 		if reply.SenderType == inquirydom.ReplySenderTypeAvatar {
 			return true
 		}
 	}
+
 	return false
 }
 
-// POST /inquiries/{id}/reply
-//
-// Body:
-//
-//	{
-//	  "content": "返信本文",
-//	  "images": []
-//	}
-//
-// memberId は request body から受け取らず、認証 context の memberId を正とします。
 func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -407,27 +372,6 @@ func (h *InquiryHandler) reply(w http.ResponseWriter, r *http.Request, id string
 	_ = json.NewEncoder(w).Encode(created)
 }
 
-// POST /inquiries/{id}/receive-return
-//
-// 未開封返品の商品受領を確定し、選択された refund policy に従って返金します。
-//
-// Body:
-//
-//	{
-//	  "policy": "merchandise_only"
-//	}
-//
-// policy は開封後返品と同じ次の3択のみです:
-//
-//   - half_merchandise
-//   - merchandise_only
-//   - merchandise_round_trip_shipping
-//
-// request body から返金額・送料・orderId・orderItemIndex は受け取りません。
-// Inquiry.OrderID + Inquiry.OrderItemIndex と Order snapshot を正とします。
-//
-// companyId / memberId は request body から受け取らず、
-// 認証 context の値を正とします。
 func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -442,7 +386,9 @@ func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, i
 	}
 
 	var req struct {
-		Policy refunddom.OpenedReturnRefundPolicy `json:"policy"`
+		MerchandiseRefundAmount int  `json:"merchandiseRefundAmount"`
+		RefundOutboundShipping  bool `json:"refundOutboundShipping"`
+		CoverReturnShipping     bool `json:"coverReturnShipping"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -454,14 +400,17 @@ func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, i
 		return
 	}
 
-	if err := refunddom.ValidateOpenedReturnRefundPolicy(req.Policy); err != nil {
+	selection := refunddom.ReturnRefundSelection{
+		MerchandiseRefundAmount: req.MerchandiseRefundAmount,
+		RefundOutboundShipping:  req.RefundOutboundShipping,
+		CoverReturnShipping:     req.CoverReturnShipping,
+	}
+
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	// ReturnReceiptUsecase 自体でも company boundary を再検証するが、
-	// 先に Console detail query を通して他 company の Inquiry を
-	// financial usecase へ渡さない。
 	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -478,7 +427,7 @@ func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, i
 			InquiryID: id,
 			CompanyID: companyID,
 			MemberID:  memberID,
-			Policy:    req.Policy,
+			Selection: selection,
 		},
 	)
 	if err != nil {
@@ -493,33 +442,45 @@ func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, i
 	}
 
 	response := struct {
-		Inquiry                 inquirydom.Inquiry `json:"inquiry"`
-		RefundID                string             `json:"refundId"`
-		Policy                  string             `json:"policy"`
-		RefundAmount            int                `json:"refundAmount"`
-		ReturnShippingAmount    int                `json:"returnShippingAmount"`
-		ReturnShippingTaxAmount int                `json:"returnShippingTaxAmount"`
-		TotalSellerBurdenAmount int                `json:"totalSellerBurdenAmount"`
-		RefundStatus            string             `json:"refundStatus"`
-		TransferReversalStatus  string             `json:"transferReversalStatus"`
-		FinanciallyCompleted    bool               `json:"financiallyCompleted"`
-		OrderCompleted          bool               `json:"orderCompleted"`
-		InquiryResolved         bool               `json:"inquiryResolved"`
-		AlreadyCompleted        bool               `json:"alreadyCompleted"`
+		Inquiry                   inquirydom.Inquiry `json:"inquiry"`
+		RefundID                  string             `json:"refundId"`
+		MerchandiseRefundAmount   int                `json:"merchandiseRefundAmount"`
+		RefundOutboundShipping    bool               `json:"refundOutboundShipping"`
+		CoverReturnShipping       bool               `json:"coverReturnShipping"`
+		MerchandiseAmount         int                `json:"merchandiseAmount"`
+		MerchandiseTaxAmount      int                `json:"merchandiseTaxAmount"`
+		OutboundShippingAmount    int                `json:"outboundShippingAmount"`
+		OutboundShippingTaxAmount int                `json:"outboundShippingTaxAmount"`
+		ReturnShippingAmount      int                `json:"returnShippingAmount"`
+		ReturnShippingTaxAmount   int                `json:"returnShippingTaxAmount"`
+		RefundAmount              int                `json:"refundAmount"`
+		TotalSellerBurdenAmount   int                `json:"totalSellerBurdenAmount"`
+		RefundStatus              string             `json:"refundStatus"`
+		TransferReversalStatus    string             `json:"transferReversalStatus"`
+		FinanciallyCompleted      bool               `json:"financiallyCompleted"`
+		OrderCompleted            bool               `json:"orderCompleted"`
+		InquiryResolved           bool               `json:"inquiryResolved"`
+		AlreadyCompleted          bool               `json:"alreadyCompleted"`
 	}{
-		Inquiry:                 result.Inquiry,
-		RefundID:                result.Refund.ID,
-		Policy:                  string(result.Refund.Policy),
-		RefundAmount:            result.Refund.RefundAmount,
-		ReturnShippingAmount:    result.Refund.ReturnShippingAmount,
-		ReturnShippingTaxAmount: result.Refund.ReturnShippingTaxAmount,
-		TotalSellerBurdenAmount: totalSellerBurdenAmount,
-		RefundStatus:            string(result.Refund.Status),
-		TransferReversalStatus:  string(result.Refund.TransferReversalStatus),
-		FinanciallyCompleted:    result.FinanciallyCompleted,
-		OrderCompleted:          result.OrderCompleted,
-		InquiryResolved:         result.InquiryResolved,
-		AlreadyCompleted:        result.AlreadyCompleted,
+		Inquiry:                   result.Inquiry,
+		RefundID:                  result.Refund.ID,
+		MerchandiseRefundAmount:   result.Refund.RequestedMerchandiseRefundAmount,
+		RefundOutboundShipping:    result.Refund.RefundOutboundShipping,
+		CoverReturnShipping:       result.Refund.CoverReturnShipping,
+		MerchandiseAmount:         result.Refund.MerchandiseAmount,
+		MerchandiseTaxAmount:      result.Refund.MerchandiseTaxAmount,
+		OutboundShippingAmount:    result.Refund.OutboundShippingAmount,
+		OutboundShippingTaxAmount: result.Refund.OutboundShippingTaxAmount,
+		ReturnShippingAmount:      result.Refund.ReturnShippingAmount,
+		ReturnShippingTaxAmount:   result.Refund.ReturnShippingTaxAmount,
+		RefundAmount:              result.Refund.RefundAmount,
+		TotalSellerBurdenAmount:   totalSellerBurdenAmount,
+		RefundStatus:              string(result.Refund.Status),
+		TransferReversalStatus:    string(result.Refund.TransferReversalStatus),
+		FinanciallyCompleted:      result.FinanciallyCompleted,
+		OrderCompleted:            result.OrderCompleted,
+		InquiryResolved:           result.InquiryResolved,
+		AlreadyCompleted:          result.AlreadyCompleted,
 	}
 
 	if !result.FinanciallyCompleted {
@@ -529,27 +490,6 @@ func (h *InquiryHandler) receiveReturn(w http.ResponseWriter, r *http.Request, i
 	_ = json.NewEncoder(w).Encode(response)
 }
 
-// POST /inquiries/{id}/receive-opened-return
-//
-// 開封後返品の商品受領を確定し、選択された refund policy に従って返金します。
-//
-// Body:
-//
-//	{
-//	  "policy": "half_merchandise"
-//	}
-//
-// policy は次の3択のみです:
-//
-//   - half_merchandise
-//   - merchandise_only
-//   - merchandise_round_trip_shipping
-//
-// request body から返金額・送料・orderId・orderItemIndex は受け取りません。
-// Inquiry.OrderID + Inquiry.OrderItemIndex と Order snapshot を正とします。
-//
-// companyId / memberId は request body から受け取らず、
-// 認証 context の値を正とします。
 func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -564,7 +504,9 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 	}
 
 	var req struct {
-		Policy refunddom.OpenedReturnRefundPolicy `json:"policy"`
+		MerchandiseRefundAmount int  `json:"merchandiseRefundAmount"`
+		RefundOutboundShipping  bool `json:"refundOutboundShipping"`
+		CoverReturnShipping     bool `json:"coverReturnShipping"`
 	}
 
 	decoder := json.NewDecoder(r.Body)
@@ -576,14 +518,17 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := refunddom.ValidateOpenedReturnRefundPolicy(req.Policy); err != nil {
+	selection := refunddom.ReturnRefundSelection{
+		MerchandiseRefundAmount: req.MerchandiseRefundAmount,
+		RefundOutboundShipping:  req.RefundOutboundShipping,
+		CoverReturnShipping:     req.CoverReturnShipping,
+	}
+
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
 		writeInquiryErr(w, err)
 		return
 	}
 
-	// OpenedReturnReceiptUsecase 自体でも company boundary を再検証するが、
-	// 先に Console detail query を通して他 company の Inquiry を
-	// financial usecase へ渡さない。
 	if _, err := h.detailQuery.GetDetailByIDForCompany(ctx, id, companyID); err != nil {
 		writeInquiryErr(w, err)
 		return
@@ -600,7 +545,7 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 			InquiryID: id,
 			CompanyID: companyID,
 			MemberID:  memberID,
-			Policy:    req.Policy,
+			Selection: selection,
 		},
 	)
 	if err != nil {
@@ -615,33 +560,45 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 	}
 
 	response := struct {
-		Inquiry                 inquirydom.Inquiry `json:"inquiry"`
-		RefundID                string             `json:"refundId"`
-		Policy                  string             `json:"policy"`
-		RefundAmount            int                `json:"refundAmount"`
-		ReturnShippingAmount    int                `json:"returnShippingAmount"`
-		ReturnShippingTaxAmount int                `json:"returnShippingTaxAmount"`
-		TotalSellerBurdenAmount int                `json:"totalSellerBurdenAmount"`
-		RefundStatus            string             `json:"refundStatus"`
-		TransferReversalStatus  string             `json:"transferReversalStatus"`
-		FinanciallyCompleted    bool               `json:"financiallyCompleted"`
-		OrderCompleted          bool               `json:"orderCompleted"`
-		InquiryResolved         bool               `json:"inquiryResolved"`
-		AlreadyCompleted        bool               `json:"alreadyCompleted"`
+		Inquiry                   inquirydom.Inquiry `json:"inquiry"`
+		RefundID                  string             `json:"refundId"`
+		MerchandiseRefundAmount   int                `json:"merchandiseRefundAmount"`
+		RefundOutboundShipping    bool               `json:"refundOutboundShipping"`
+		CoverReturnShipping       bool               `json:"coverReturnShipping"`
+		MerchandiseAmount         int                `json:"merchandiseAmount"`
+		MerchandiseTaxAmount      int                `json:"merchandiseTaxAmount"`
+		OutboundShippingAmount    int                `json:"outboundShippingAmount"`
+		OutboundShippingTaxAmount int                `json:"outboundShippingTaxAmount"`
+		ReturnShippingAmount      int                `json:"returnShippingAmount"`
+		ReturnShippingTaxAmount   int                `json:"returnShippingTaxAmount"`
+		RefundAmount              int                `json:"refundAmount"`
+		TotalSellerBurdenAmount   int                `json:"totalSellerBurdenAmount"`
+		RefundStatus              string             `json:"refundStatus"`
+		TransferReversalStatus    string             `json:"transferReversalStatus"`
+		FinanciallyCompleted      bool               `json:"financiallyCompleted"`
+		OrderCompleted            bool               `json:"orderCompleted"`
+		InquiryResolved           bool               `json:"inquiryResolved"`
+		AlreadyCompleted          bool               `json:"alreadyCompleted"`
 	}{
-		Inquiry:                 result.Inquiry,
-		RefundID:                result.Refund.ID,
-		Policy:                  string(result.Refund.Policy),
-		RefundAmount:            result.Refund.RefundAmount,
-		ReturnShippingAmount:    result.Refund.ReturnShippingAmount,
-		ReturnShippingTaxAmount: result.Refund.ReturnShippingTaxAmount,
-		TotalSellerBurdenAmount: totalSellerBurdenAmount,
-		RefundStatus:            string(result.Refund.Status),
-		TransferReversalStatus:  string(result.Refund.TransferReversalStatus),
-		FinanciallyCompleted:    result.FinanciallyCompleted,
-		OrderCompleted:          result.OrderCompleted,
-		InquiryResolved:         result.InquiryResolved,
-		AlreadyCompleted:        result.AlreadyCompleted,
+		Inquiry:                   result.Inquiry,
+		RefundID:                  result.Refund.ID,
+		MerchandiseRefundAmount:   result.Refund.RequestedMerchandiseRefundAmount,
+		RefundOutboundShipping:    result.Refund.RefundOutboundShipping,
+		CoverReturnShipping:       result.Refund.CoverReturnShipping,
+		MerchandiseAmount:         result.Refund.MerchandiseAmount,
+		MerchandiseTaxAmount:      result.Refund.MerchandiseTaxAmount,
+		OutboundShippingAmount:    result.Refund.OutboundShippingAmount,
+		OutboundShippingTaxAmount: result.Refund.OutboundShippingTaxAmount,
+		ReturnShippingAmount:      result.Refund.ReturnShippingAmount,
+		ReturnShippingTaxAmount:   result.Refund.ReturnShippingTaxAmount,
+		RefundAmount:              result.Refund.RefundAmount,
+		TotalSellerBurdenAmount:   totalSellerBurdenAmount,
+		RefundStatus:              string(result.Refund.Status),
+		TransferReversalStatus:    string(result.Refund.TransferReversalStatus),
+		FinanciallyCompleted:      result.FinanciallyCompleted,
+		OrderCompleted:            result.OrderCompleted,
+		InquiryResolved:           result.InquiryResolved,
+		AlreadyCompleted:          result.AlreadyCompleted,
 	}
 
 	if !result.FinanciallyCompleted {
@@ -651,9 +608,6 @@ func (h *InquiryHandler) receiveOpenedReturn(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(response)
 }
 
-// POST /inquiries/{id}/resolve
-//
-// memberId は request body から受け取らず、認証 context の memberId を正とします。
 func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -673,17 +627,6 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 		return
 	}
 
-	// 返品 Inquiry は返金処理を必須とするため generic resolve では
-	// 対応済みにしない。
-	//
-	// return_unopened:
-	// POST /inquiries/{id}/receive-return
-	//
-	// return_opened:
-	// POST /inquiries/{id}/receive-opened-return
-	//
-	// どちらも seller-side financial completion -> Order return completion の
-	// 完了後に専用 Usecase から Inquiry を resolved へ遷移させる。
 	if detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnUnopened ||
 		detail.Inquiry.InquiryType == inquirydom.InquiryTypeReturnOpened {
 		writeInquiryErr(w, inquirydom.ErrInquiryInvalidWorkflow)
@@ -702,9 +645,6 @@ func (h *InquiryHandler) resolve(w http.ResponseWriter, r *http.Request, id stri
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-// POST /inquiries/{id}/reopen
-//
-// memberId は request body から受け取らず、認証 context の memberId を正とします。
 func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -735,22 +675,6 @@ func (h *InquiryHandler) reopen(w http.ResponseWriter, r *http.Request, id strin
 	_ = json.NewEncoder(w).Encode(updated)
 }
 
-// POST /inquiries/{id}/images
-//
-// Body:
-//
-//	{
-//	  "fileName": "sample.png",
-//	  "fileUrl": "https://firebasestorage.googleapis.com/...",
-//	  "objectPath": "inquiry-images/{inquiryId}/{imageId}/sample.png",
-//	  "fileSize": 123,
-//	  "mimeType": "image/png",
-//	  "createdAt": "2026-01-01T00:00:00Z"
-//	}
-//
-// 画像バイナリは frontend から Firebase Storage へ直接保存します。
-// backend は Firebase Storage downloadURL と objectPath のみ保存します。
-// createdBy は request body ではなく認証 context の memberId を正とします。
 func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -845,11 +769,6 @@ func (h *InquiryHandler) addImage(w http.ResponseWriter, r *http.Request, id str
 	_ = json.NewEncoder(w).Encode(added)
 }
 
-// DELETE /inquiries/{id}/images?fileName=sample.png
-//
-// Firestore 上の Inquiry.Images から対象画像メタデータを削除します。
-// Firebase Storage の実ファイル削除は、この handler の外側、または usecase 側で
-// 削除前に ObjectPath を取得して実行してください。
 func (h *InquiryHandler) deleteImage(w http.ResponseWriter, r *http.Request, id string) {
 	ctx := r.Context()
 
@@ -961,6 +880,7 @@ func currentCompanyID(w http.ResponseWriter, r *http.Request) (string, bool) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "companyId not found"})
 		return "", false
 	}
+
 	return companyID, true
 }
 
@@ -971,10 +891,10 @@ func currentMemberID(w http.ResponseWriter, r *http.Request) (string, bool) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"error": "memberId not found"})
 		return "", false
 	}
+
 	return memberID, true
 }
 
-// エラーハンドリング
 func writeInquiryErr(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
 
@@ -982,7 +902,7 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, inquirydom.ErrInvalidID),
 		errors.Is(err, usecase.ErrReturnReceiptInvalidInquiryType),
 		errors.Is(err, usecase.ErrOpenedReturnReceiptInvalidInquiryType),
-		errors.Is(err, refunddom.ErrInvalidOpenedReturnRefundPolicy),
+		errors.Is(err, refunddom.ErrInvalidReturnRefundAmount),
 		errors.Is(err, inquirydom.ErrInvalidProductID),
 		errors.Is(err, inquirydom.ErrInvalidAvatarID),
 		errors.Is(err, inquirydom.ErrInvalidSubject),
@@ -1080,5 +1000,6 @@ func findImageByFileName(images []inquirydom.ImageFile, fileName string) *inquir
 			return &images[i]
 		}
 	}
+
 	return nil
 }

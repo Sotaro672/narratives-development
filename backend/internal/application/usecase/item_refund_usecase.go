@@ -21,7 +21,7 @@ import (
 // ItemRefundOrderReader provides the authoritative Order snapshot required for
 // one item-level refund.
 //
-// Refund amount, seller identity, item type, and seller-side financial reference
+// Refund amount, seller identity, item type and seller-side financial reference
 // must always be derived from authoritative persisted state. They must never be
 // accepted from the frontend.
 type ItemRefundOrderReader interface {
@@ -227,21 +227,27 @@ var (
 // The productBlueprint Brand fee is separate and may require a full Stripe
 // Transfer Reversal after the purchaser Refund succeeds.
 //
-// Unopened returns use the existing merchandise-only calculation:
+// Both unopened and opened returns use the same ReturnRefundSelection:
 //
-//	merchandise amount
-//	+ merchandise consumption tax
+//	MerchandiseRefundAmount
+//	RefundOutboundShipping
+//	CoverReturnShipping
 //
-// Opened returns require an explicit OpenedReturnRefundPolicy and may include:
+// MerchandiseRefundAmount is tax-inclusive. The backend automatically separates
+// the selected amount into merchandise and consumption-tax components using the
+// authoritative Order snapshot.
 //
-//	merchandise amount
-//	+ merchandise consumption tax
-//	+ outbound shipping amount
-//	+ outbound shipping consumption tax
+// The frontend never provides merchandise tax, outbound shipping amount,
+// outbound shipping tax, return shipping amount or return shipping tax.
 //
-// Return shipping is recorded as additional seller-side burden in refund.Refund
-// but is not included in the purchaser Stripe Refund because it was not part of
-// the original Charge.
+// Purchaser Stripe Refund amount:
+//
+//	merchandise refund including tax
+//	+ outbound shipping including tax when RefundOutboundShipping=true
+//
+// Return shipping is recorded as additional seller-side burden when
+// CoverReturnShipping=true. It is not included in the purchaser Stripe Refund
+// because it was not part of the original Charge.
 //
 // For a transferred primary List Settlement, seller-side reversal amount is:
 //
@@ -254,27 +260,28 @@ var (
 //
 //  1. Load authoritative Order.
 //  2. Validate the target Order item.
-//  3. Calculate the exact refund amount from the Order snapshot.
-//  4. Load succeeded Payment.
-//  5. Resolve seller-side financial state.
+//  3. Validate ReturnRefundSelection.
+//  4. Calculate exact merchandise/tax/shipping refund amounts from Order.
+//  5. Load succeeded Payment.
+//  6. Resolve seller-side financial state.
 //
 // List path:
 //
-//  6. Resolve primary-sale Settlement.
-//  7. Calculate any required partial Stripe Transfer Reversal.
-//  8. Load or create deterministic Refund aggregate.
-//  9. Create or resume purchaser Stripe Refund.
-//  10. If purchaser Refund succeeded, execute any required Transfer Reversal.
+//  7. Resolve primary-sale Settlement.
+//  8. Calculate any required partial Stripe Transfer Reversal.
+//  9. Load or create deterministic Refund aggregate.
+//  10. Create or resume purchaser Stripe Refund.
+//  11. If purchaser Refund succeeded, execute any required Transfer Reversal.
 //
 // Resale path:
 //
-//  6. Resolve the exact item-level SalesReceivable.
-//  7. Require pending, available, or already canceled.
-//  8. Cancel pending/available SalesReceivable before purchaser Refund creation.
-//  9. Prepare the exact item-level BrandFeeSettlement before purchaser Refund.
-//  10. Load or create deterministic Refund aggregate referencing SalesReceivable.
-//  11. Create or resume purchaser Stripe Refund.
-//  12. After Refund success, reverse the Brand fee when it was transferred.
+//  7. Resolve the exact item-level SalesReceivable.
+//  8. Require pending, available or already canceled.
+//  9. Cancel pending/available SalesReceivable before purchaser Refund creation.
+//  10. Prepare the exact item-level BrandFeeSettlement before purchaser Refund.
+//  11. Load or create deterministic Refund aggregate referencing SalesReceivable.
+//  12. Create or resume purchaser Stripe Refund.
+//  13. After Refund success, reverse the Brand fee when it was transferred.
 //
 // reserved and paid SalesReceivables are intentionally rejected until
 // BankPayout coordination and paid-receivable recovery are implemented.
@@ -328,6 +335,7 @@ func (u *ItemRefundUsecase) SetNowFunc(now func() time.Time) {
 	if u == nil || now == nil {
 		return
 	}
+
 	u.now = now
 }
 
@@ -335,24 +343,14 @@ func (u *ItemRefundUsecase) SetNowFunc(now func() time.Time) {
 // Refund Order Item
 // ============================================================
 
-// RefundOpenedReturnItemInput identifies one opened-return financial refund.
-//
-// Only Policy is accepted in addition to identity fields. All monetary amounts
-// are calculated from the authoritative Order snapshot.
-//
-// CompanyID remains present because the current Console return-receipt endpoint
-// supplies it. It is authoritative only for primary List items. Consumer resale
-// seller identity is resolved from the Order SellerSnapshot instead.
-type RefundOpenedReturnItemInput struct {
-	InquiryID string
-	OrderID   string
-	ItemIndex int
-	CompanyID string
-	Policy    refunddom.OpenedReturnRefundPolicy
-}
-
 // itemRefundRequest is the internal normalized request boundary shared by
 // unopened and opened return flows.
+//
+// Selection is the only caller-controlled financial input.
+//
+// MerchandiseRefundAmount is tax-inclusive. The backend derives the
+// corresponding merchandise/tax allocation and every shipping amount from the
+// authoritative Order snapshot.
 //
 // CompanyID is required for a primary List item but is not used as the resale
 // seller identity.
@@ -361,54 +359,60 @@ type itemRefundRequest struct {
 	OrderID   string
 	ItemIndex int
 	CompanyID string
-	Policy    refunddom.OpenedReturnRefundPolicy
+	Selection refunddom.ReturnRefundSelection
 }
 
+// itemRefundAmountSummary contains the authoritative monetary result calculated
+// from Order plus ReturnRefundSelection.
+//
+// Selection is retained so creation and idempotent retry validation can confirm
+// that an existing Refund represents exactly the same seller decision.
 type itemRefundAmountSummary struct {
-	Policy                    refunddom.OpenedReturnRefundPolicy
-	MerchandiseAmount         int
-	MerchandiseTaxAmount      int
+	Selection refunddom.ReturnRefundSelection
+
+	MerchandiseAmount    int
+	MerchandiseTaxAmount int
+
 	OutboundShippingAmount    int
 	OutboundShippingTaxAmount int
-	ReturnShippingAmount      int
-	ReturnShippingTaxAmount   int
-	RefundAmount              int
+
+	ReturnShippingAmount    int
+	ReturnShippingTaxAmount int
+
+	RefundAmount            int
+	TotalSellerBurdenAmount int
 }
 
-// RefundOrderItem executes or resumes the existing unopened-return refund.
+// RefundOrderItem executes or resumes one item-level return refund.
+//
+// This method is shared by return_unopened and return_opened. Physical return
+// state is validated by each return-receipt orchestrator before calling this
+// financial usecase.
 //
 // List items validate CompanyID against the seller Company.
 //
 // Resale items ignore CompanyID for seller identity and instead validate the
 // immutable resale SellerSnapshot and SalesReceivable.
-func (u *ItemRefundUsecase) RefundOrderItem(ctx context.Context, in RefundOrderItemInput) (refunddom.Refund, error) {
-	return u.refundOrderItem(ctx, itemRefundRequest{
-		InquiryID: in.InquiryID,
-		OrderID:   in.OrderID,
-		ItemIndex: in.ItemIndex,
-		CompanyID: in.CompanyID,
-	})
-}
-
-// RefundOpenedReturnOrderItem executes or resumes one opened-return refund.
 //
-// The operation is idempotent. Policy is persisted in the deterministic Refund
-// aggregate and a retry must use the same Policy.
-//
-// List items validate CompanyID against the seller Company.
-//
-// Resale items resolve seller identity from the authoritative Order snapshot and
-// SalesReceivable.
-func (u *ItemRefundUsecase) RefundOpenedReturnOrderItem(ctx context.Context, in RefundOpenedReturnItemInput) (refunddom.Refund, error) {
-	if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
+// The operation is idempotent. ReturnRefundSelection is persisted in the
+// deterministic Refund aggregate and a retry must use exactly the same
+// selection.
+func (u *ItemRefundUsecase) RefundOrderItem(
+	ctx context.Context,
+	in RefundOrderItemInput,
+) (refunddom.Refund, error) {
+	if err := refunddom.ValidateReturnRefundSelection(in.Selection); err != nil {
 		return refunddom.Refund{}, err
 	}
 
-	return u.refundOrderItem(ctx, itemRefundRequest{
-		InquiryID: in.InquiryID,
-		OrderID:   in.OrderID,
-		ItemIndex: in.ItemIndex,
-		CompanyID: in.CompanyID,
-		Policy:    in.Policy,
-	})
+	return u.refundOrderItem(
+		ctx,
+		itemRefundRequest{
+			InquiryID: in.InquiryID,
+			OrderID:   in.OrderID,
+			ItemIndex: in.ItemIndex,
+			CompanyID: in.CompanyID,
+			Selection: in.Selection,
+		},
+	)
 }

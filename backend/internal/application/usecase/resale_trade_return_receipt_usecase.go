@@ -45,9 +45,6 @@ var (
 	ErrResaleTradeReturnReceiptUnopenedStateInvalid = errors.New(
 		"resale trade return receipt: item is no longer unopened",
 	)
-	ErrResaleTradeReturnReceiptUnexpectedPolicy = errors.New(
-		"resale trade return receipt: refund policy must be empty for unopened return",
-	)
 	ErrResaleTradeReturnReceiptRefundMismatch = errors.New(
 		"resale trade return receipt: refund does not match return target",
 	)
@@ -73,18 +70,15 @@ type ResaleTradeReturnReceiptOrderService interface {
 // ResaleTradeReturnReceiptItemRefundService is the financial boundary used by
 // resale return receipt.
 //
-// ItemRefundUsecase already supports consumer resale items. Seller identity,
-// refund amounts, SalesReceivable, BrandFeeSettlement and Stripe operations are
-// resolved from authoritative persisted state rather than request values.
+// ItemRefundUsecase supports consumer resale items. Seller identity, refund
+// amounts, SalesReceivable, BrandFeeSettlement and payment-provider operations
+// are resolved from authoritative persisted state rather than request values.
+//
+// Both unopened and opened returns use the same ReturnRefundSelection.
 type ResaleTradeReturnReceiptItemRefundService interface {
 	RefundOrderItem(
 		ctx context.Context,
 		in RefundOrderItemInput,
-	) (refunddom.Refund, error)
-
-	RefundOpenedReturnOrderItem(
-		ctx context.Context,
-		in RefundOpenedReturnItemInput,
 	) (refunddom.Refund, error)
 }
 
@@ -131,18 +125,29 @@ func NewResaleTradeReturnReceiptUsecase(
 // SellerAvatarID must come from authenticated Mall AvatarContext and must never
 // be trusted from the request body.
 //
-// Policy is required only when the purchaser declared an opened return.
-// Monetary amounts are never accepted from the frontend.
+// Selection is required for both unopened and opened returns.
+//
+// MerchandiseRefundAmount is the tax-inclusive merchandise refund amount selected
+// through the return agreement.
+//
+// RefundOutboundShipping determines whether the purchaser's original outbound
+// shipping and its consumption tax are refunded.
+//
+// CoverReturnShipping determines whether the resale seller bears return shipping
+// and its consumption tax.
+//
+// Tax amounts and actual shipping monetary values must never be accepted from the
+// frontend.
 type ReceiveResaleTradeReturnInput struct {
 	TradeID        string
 	SellerAvatarID string
-	Policy         refunddom.OpenedReturnRefundPolicy
+	Selection      refunddom.ReturnRefundSelection
 }
 
 // ResaleTradeReturnReceiptResult represents one seller return-receipt attempt.
 //
-// FinanciallyCompleted becomes true only after the purchaser Stripe Refund and
-// every required resale seller/Brand financial operation have completed.
+// FinanciallyCompleted becomes true only after the purchaser refund and every
+// required resale seller/Brand financial operation have completed.
 //
 // OrderCompleted becomes true only after the target Order item has persisted
 // IsReturnCompleted=true.
@@ -173,15 +178,19 @@ type ResaleTradeReturnReceiptResult struct {
 //	-> Trade
 //	-> authoritative Order item
 //	-> deterministic return Inquiry
-//	-> unopened/opened ItemRefundUsecase
-//	-> Stripe purchaser Refund
+//	-> ReturnRefundSelection validation
+//	-> ItemRefundUsecase
+//	-> purchaser refund
 //	-> resale SalesReceivable / BrandFeeSettlement handling
 //	-> Order IsReturnCompleted
 //	-> refund completion notification
 //
+// Unopened and opened returns use the same financial refund mechanism. Their
+// difference is limited to authoritative physical-return state validation.
+//
 // The operation is designed to remain safe under retries. ItemRefundUsecase,
-// Refund aggregate IDs and Stripe idempotency keys are deterministic, and
-// CompleteReturnItem is idempotent for an already-completed return.
+// Refund aggregate IDs and payment-provider idempotency keys are deterministic,
+// and CompleteReturnItem is idempotent for an already-completed return.
 func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	ctx context.Context,
 	in ReceiveResaleTradeReturnInput,
@@ -199,6 +208,10 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	if sellerAvatarID == "" {
 		return ResaleTradeReturnReceiptResult{},
 			ErrResaleTradeReturnReceiptInvalidSeller
+	}
+
+	if err := refunddom.ValidateReturnRefundSelection(in.Selection); err != nil {
+		return ResaleTradeReturnReceiptResult{}, err
 	}
 
 	trade, err := uc.tradeRepo.GetByID(
@@ -293,104 +306,67 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 
 	alreadyCompleted := targetItem.IsReturnCompleted
 
-	var refund refunddom.Refund
-
 	switch targetItem.ReturnRequestKind {
 	case orderdom.ReturnRequestKindUnopened:
-		if in.Policy != "" {
-			return result, ErrResaleTradeReturnReceiptUnexpectedPolicy
-		}
-
 		if targetItem.Transferred ||
 			targetItem.TokenTransferVerifiedAt != nil {
 			return result, ErrResaleTradeReturnReceiptUnopenedStateInvalid
 		}
 
-		refund, err = uc.itemRefundService.RefundOrderItem(
-			ctx,
-			RefundOrderItemInput{
-				InquiryID: inquiry.ID,
-				OrderID:   order.ID,
-				ItemIndex: itemIndex,
-
-				// Consumer resale does not use CompanyID as seller identity.
-				// ItemRefundUsecase resolves the immutable Avatar/User/
-				// PayoutAccount seller from OrderItemSnapshot.SellerSnapshot.
-				CompanyID: "",
-			},
-		)
-		if err != nil {
-			result.Refund = refund
-			return result, err
-		}
-
-		if err := validateResaleTradeUnopenedReturnReceiptRefund(
-			inquiry,
-			order,
-			itemIndex,
-			refund,
-		); err != nil {
-			result.Refund = refund
-			return result, err
-		}
-
 	case orderdom.ReturnRequestKindOpened:
-		if err := refunddom.ValidateOpenedReturnRefundPolicy(
-			in.Policy,
-		); err != nil {
-			return result, err
-		}
-
-		refund, err = uc.itemRefundService.RefundOpenedReturnOrderItem(
-			ctx,
-			RefundOpenedReturnItemInput{
-				InquiryID: inquiry.ID,
-				OrderID:   order.ID,
-				ItemIndex: itemIndex,
-
-				// CompanyID is intentionally empty for consumer resale.
-				CompanyID: "",
-
-				Policy: in.Policy,
-			},
-		)
-		if err != nil {
-			result.Refund = refund
-			return result, err
-		}
-
-		if err := validateOpenedReturnReceiptRefund(
-			inquiry,
-			order,
-			itemIndex,
-			in.Policy,
-			refund,
-		); err != nil {
-			result.Refund = refund
-			return result, err
-		}
+		// Opened state is already represented authoritatively by
+		// ReturnRequestKindOpened and validated against Inquiry type below.
 
 	default:
 		return result, ErrResaleTradeReturnReceiptReturnKindMismatch
 	}
 
+	refund, err := uc.itemRefundService.RefundOrderItem(
+		ctx,
+		RefundOrderItemInput{
+			InquiryID: inquiry.ID,
+			OrderID:   order.ID,
+			ItemIndex: itemIndex,
+
+			// Consumer resale does not use CompanyID as seller identity.
+			// ItemRefundUsecase resolves immutable Avatar/User/PayoutAccount
+			// identity from OrderItemSnapshot.SellerSnapshot.
+			CompanyID: "",
+
+			Selection: in.Selection,
+		},
+	)
+	if err != nil {
+		result.Refund = refund
+		return result, err
+	}
+
+	if err := validateResaleTradeReturnReceiptRefund(
+		inquiry,
+		order,
+		itemIndex,
+		in.Selection,
+		refund,
+	); err != nil {
+		result.Refund = refund
+		return result, err
+	}
+
 	result.Refund = refund
-	result.FinanciallyCompleted =
-		refund.IsFinanciallyCompleted()
+	result.FinanciallyCompleted = refund.IsFinanciallyCompleted()
 
 	if !result.FinanciallyCompleted {
 		return result, nil
 	}
 
 	if !alreadyCompleted {
-		completedOrder, err :=
-			uc.orderService.CompleteReturnItem(
-				ctx,
-				CompleteReturnOrderItemInput{
-					ID:        order.ID,
-					ItemIndex: itemIndex,
-				},
-			)
+		completedOrder, err := uc.orderService.CompleteReturnItem(
+			ctx,
+			CompleteReturnOrderItemInput{
+				ID:        order.ID,
+				ItemIndex: itemIndex,
+			},
+		)
 		if err != nil {
 			return result, err
 		}
@@ -443,16 +419,16 @@ func (uc *ResaleTradeReturnReceiptUsecase) validateConfigured() error {
 	return nil
 }
 
-// validateResaleTradeUnopenedReturnReceiptRefund validates the legacy unopened
-// resale-return refund independently from validateReturnReceiptRefund.
+// validateResaleTradeReturnReceiptRefund validates that the Refund persisted by
+// ItemRefundUsecase represents exactly the same consumer-resale return,
+// ReturnRefundSelection and authoritative monetary calculation.
 //
-// Console return_unopened now supports an explicit refund policy, while this
-// seller-side consumer-resale flow intentionally keeps its existing unopened
-// semantics: full merchandise amount plus merchandise tax, without shipping.
-func validateResaleTradeUnopenedReturnReceiptRefund(
+// Both unopened and opened resale returns use this same financial validation.
+func validateResaleTradeReturnReceiptRefund(
 	inquiry inquirydom.Inquiry,
 	order orderdom.Order,
 	itemIndex int,
+	selection refunddom.ReturnRefundSelection,
 	refund refunddom.Refund,
 ) error {
 	if err := refund.Validate(); err != nil {
@@ -501,26 +477,42 @@ func validateResaleTradeUnopenedReturnReceiptRefund(
 		return ErrResaleTradeReturnReceiptRefundMismatch
 	}
 
-	if refund.Currency != refunddom.CurrencyJPY ||
-		refund.Policy != "" {
+	if refund.Currency != refunddom.CurrencyJPY {
 		return ErrResaleTradeReturnReceiptRefundMismatch
 	}
 
-	expectedAmount, err := refunddom.CalculateOrderItemRefundAmount(
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
+		return err
+	}
+
+	expectedAmount, err := refunddom.CalculateReturnRefundAmount(
 		order,
 		itemIndex,
+		selection,
 	)
 	if err != nil {
 		return err
 	}
 
-	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
+	if refund.RequestedMerchandiseRefundAmount != selection.MerchandiseRefundAmount ||
+		refund.RefundOutboundShipping != selection.RefundOutboundShipping ||
+		refund.CoverReturnShipping != selection.CoverReturnShipping ||
+		refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
 		refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount ||
-		refund.OutboundShippingAmount != 0 ||
-		refund.OutboundShippingTaxAmount != 0 ||
-		refund.ReturnShippingAmount != 0 ||
-		refund.ReturnShippingTaxAmount != 0 ||
-		refund.RefundAmount != expectedAmount.RefundAmount {
+		refund.OutboundShippingAmount != expectedAmount.OutboundShippingAmount ||
+		refund.OutboundShippingTaxAmount != expectedAmount.OutboundShippingTaxAmount ||
+		refund.ReturnShippingAmount != expectedAmount.ReturnShippingAmount ||
+		refund.ReturnShippingTaxAmount != expectedAmount.ReturnShippingTaxAmount ||
+		refund.RefundAmount != expectedAmount.StripeRefundAmount {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	totalSellerBurdenAmount, err := refund.TotalSellerBurdenAmount()
+	if err != nil {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	if totalSellerBurdenAmount != expectedAmount.TotalSellerBurdenAmount {
 		return ErrResaleTradeReturnReceiptRefundMismatch
 	}
 
@@ -605,14 +597,12 @@ func validateResaleTradeReturnInquiry(
 
 	switch targetItem.ReturnRequestKind {
 	case orderdom.ReturnRequestKindUnopened:
-		if inquiry.InquiryType !=
-			inquirydom.InquiryTypeReturnUnopened {
+		if inquiry.InquiryType != inquirydom.InquiryTypeReturnUnopened {
 			return ErrResaleTradeReturnReceiptReturnKindMismatch
 		}
 
 	case orderdom.ReturnRequestKindOpened:
-		if inquiry.InquiryType !=
-			inquirydom.InquiryTypeReturnOpened {
+		if inquiry.InquiryType != inquirydom.InquiryTypeReturnOpened {
 			return ErrResaleTradeReturnReceiptReturnKindMismatch
 		}
 

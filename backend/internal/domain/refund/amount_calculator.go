@@ -25,8 +25,8 @@ type OrderItemRefundAmountSummary struct {
 	RefundAmount         int
 }
 
-// CalculateOrderItemRefundAmount は Order item 単位の返品に対して、
-// Stripe Refund へ渡す正規の部分返金額を返します。
+// CalculateOrderItemRefundAmount は Order item 単位の商品代金全額返金に対して、
+// 商品本体価格と対象商品へ配賦された消費税を返します。
 //
 // 返金対象:
 //
@@ -66,7 +66,10 @@ type OrderItemRefundAmountSummary struct {
 //
 // これにより、全 item の MerchandiseTaxAmount と配送料税額を合計すると、
 // order.CalculatePaymentAmountSummary の ConsumptionTax と一致します。
-func CalculateOrderItemRefundAmount(order orderdom.Order, orderItemIndex int) (OrderItemRefundAmountSummary, error) {
+func CalculateOrderItemRefundAmount(
+	order orderdom.Order,
+	orderItemIndex int,
+) (OrderItemRefundAmountSummary, error) {
 	if orderItemIndex < 0 || orderItemIndex >= len(order.Items) {
 		return OrderItemRefundAmountSummary{}, ErrInvalidOrderItemRefund
 	}
@@ -81,7 +84,10 @@ func CalculateOrderItemRefundAmount(order orderdom.Order, orderItemIndex int) (O
 		return OrderItemRefundAmountSummary{}, ErrInvalidOrderItemRefund
 	}
 
-	merchandiseAmount, err := safeMultiplyPaymentAmount(targetItem.Price, targetItem.Qty)
+	merchandiseAmount, err := safeMultiplyPaymentAmount(
+		targetItem.Price,
+		targetItem.Qty,
+	)
 	if err != nil {
 		return OrderItemRefundAmountSummary{}, err
 	}
@@ -98,7 +104,10 @@ func CalculateOrderItemRefundAmount(order orderdom.Order, orderItemIndex int) (O
 
 	totalAllocatedTax := shippingTax
 	for _, taxAmount := range itemTaxes {
-		totalAllocatedTax, err = safeAddPaymentAmount(totalAllocatedTax, taxAmount)
+		totalAllocatedTax, err = safeAddPaymentAmount(
+			totalAllocatedTax,
+			taxAmount,
+		)
 		if err != nil {
 			return OrderItemRefundAmountSummary{}, err
 		}
@@ -108,10 +117,14 @@ func CalculateOrderItemRefundAmount(order orderdom.Order, orderItemIndex int) (O
 		return OrderItemRefundAmountSummary{}, ErrInvalidOrderItemRefund
 	}
 
-	refundAmount, err := safeAddPaymentAmount(merchandiseAmount, merchandiseTaxAmount)
+	refundAmount, err := safeAddPaymentAmount(
+		merchandiseAmount,
+		merchandiseTaxAmount,
+	)
 	if err != nil {
 		return OrderItemRefundAmountSummary{}, err
 	}
+
 	if refundAmount <= 0 {
 		return OrderItemRefundAmountSummary{}, ErrInvalidOrderItemRefund
 	}
@@ -124,28 +137,40 @@ func CalculateOrderItemRefundAmount(order orderdom.Order, orderItemIndex int) (O
 }
 
 // -------------------------------------------------------
-// Opened Return Refund Amount
+// Return Refund Amount
 // -------------------------------------------------------
 
-// OpenedReturnRefundAmountSummary represents the authoritative financial
-// amounts for one opened-return policy.
+// ReturnRefundAmountSummary represents the authoritative financial amounts for
+// one return refund selection.
 //
-// StripeRefundAmount is the amount that can be refunded against the original
-// purchaser Charge.
+// MerchandiseRefundAmount is the tax-inclusive merchandise refund amount
+// explicitly selected by the seller.
 //
-// TotalSellerBurdenAmount additionally includes return-shipping cost that is not
-// part of the original Charge.
+// MerchandiseAmount and MerchandiseTaxAmount are derived automatically from the
+// authoritative Order snapshot so that:
 //
-// Current return-shipping policy:
-//   - no separate return-shipping quote snapshot exists in Order yet
-//   - return shipping is therefore modeled using the same tax-exclusive amount
-//     as the target item's original outbound shipping
-//   - return shipping consumption tax is calculated at the standard 10% rate
+//	MerchandiseAmount + MerchandiseTaxAmount
+//	= MerchandiseRefundAmount
 //
-// Once an authoritative return-shipping quote is persisted, the application
-// layer should replace this modeled amount with that snapshot.
-type OpenedReturnRefundAmountSummary struct {
-	Policy OpenedReturnRefundPolicy
+// StripeRefundAmount is the amount refunded against the purchaser's original
+// Stripe Charge. It contains:
+//
+//	MerchandiseRefundAmount
+//	+ outbound shipping and tax when RefundOutboundShipping=true
+//
+// TotalSellerBurdenAmount additionally contains return-shipping cost when
+// CoverReturnShipping=true.
+//
+// Current return-shipping behavior:
+//   - Order does not yet persist a dedicated return-shipping quote
+//   - the target item's original outbound shipping amount is therefore used as
+//     the modeled return-shipping amount
+//   - return-shipping consumption tax is calculated at the standard 10% rate
+//
+// Once an authoritative return-shipping quote is persisted, the modeled
+// return-shipping calculation should be replaced with that snapshot.
+type ReturnRefundAmountSummary struct {
+	MerchandiseRefundAmount int
 
 	MerchandiseAmount    int
 	MerchandiseTaxAmount int
@@ -160,151 +185,260 @@ type OpenedReturnRefundAmountSummary struct {
 	TotalSellerBurdenAmount int
 }
 
-// CalculateOpenedReturnRefundAmount calculates one opened-return refund option
-// from the persisted Order snapshot.
+// CalculateReturnRefundAmount calculates the authoritative refund amounts from
+// the persisted Order snapshot and the seller's return refund selection.
 //
-// The frontend may select only policy. Monetary amounts are never accepted from
-// the frontend.
+// The frontend may specify only:
 //
-// Policies:
+//   - tax-inclusive merchandise refund amount
+//   - whether outbound shipping is refunded
+//   - whether return shipping is covered
 //
-// half_merchandise:
-//   - 50% of merchandise + proportional merchandise tax
-//   - shipping is excluded
+// The frontend must never provide:
 //
-// merchandise_only:
-//   - full merchandise + merchandise tax
-//   - shipping is excluded
+//   - merchandise tax amount
+//   - outbound shipping amount
+//   - outbound shipping tax
+//   - return shipping amount
+//   - return shipping tax
+//   - Stripe refund amount
+//   - total seller burden
 //
-// merchandise_round_trip_shipping:
-//   - Stripe Refund:
-//     merchandise + merchandise tax + outbound shipping + outbound shipping tax
-//   - Additional seller burden:
-//     modeled return shipping + return shipping tax
+// MerchandiseRefundAmount must satisfy:
 //
-// Half-refund rounding:
-// JPY cannot represent fractional yen, so the total purchaser refund is rounded
-// up to the nearest yen. Merchandise is also halved with the same rule and the
-// remaining amount is treated as merchandise tax.
-func CalculateOpenedReturnRefundAmount(
+//	1 <= MerchandiseRefundAmount <= original merchandise amount including tax
+//
+// Consumption tax is automatically derived proportionally from the original
+// merchandise/tax allocation. Integer rounding is deterministic and the tax
+// portion is always the remainder so that the tax-inclusive requested refund
+// amount is preserved exactly.
+func CalculateReturnRefundAmount(
 	order orderdom.Order,
 	orderItemIndex int,
-	policy OpenedReturnRefundPolicy,
-) (OpenedReturnRefundAmountSummary, error) {
-	if err := ValidateOpenedReturnRefundPolicy(policy); err != nil {
-		return OpenedReturnRefundAmountSummary{}, err
+	selection ReturnRefundSelection,
+) (ReturnRefundAmountSummary, error) {
+	if err := ValidateReturnRefundSelection(selection); err != nil {
+		return ReturnRefundAmountSummary{}, err
 	}
 
-	fullMerchandise, err := CalculateOrderItemRefundAmount(order, orderItemIndex)
+	fullMerchandise, err := CalculateOrderItemRefundAmount(
+		order,
+		orderItemIndex,
+	)
 	if err != nil {
-		return OpenedReturnRefundAmountSummary{}, err
+		return ReturnRefundAmountSummary{}, err
 	}
 
-	switch policy {
-	case OpenedReturnRefundHalfMerchandise:
-		stripeRefundAmount := halfPaymentAmountRoundedUp(fullMerchandise.RefundAmount)
-		merchandiseAmount := halfPaymentAmountRoundedUp(fullMerchandise.MerchandiseAmount)
-		merchandiseTaxAmount := stripeRefundAmount - merchandiseAmount
+	if selection.MerchandiseRefundAmount > fullMerchandise.RefundAmount {
+		return ReturnRefundAmountSummary{}, ErrInvalidReturnRefundAmount
+	}
 
-		if stripeRefundAmount <= 0 ||
-			merchandiseAmount < 0 ||
-			merchandiseTaxAmount < 0 ||
-			merchandiseAmount > fullMerchandise.MerchandiseAmount ||
-			merchandiseTaxAmount > fullMerchandise.MerchandiseTaxAmount {
-			return OpenedReturnRefundAmountSummary{}, ErrInvalidOrderItemRefund
-		}
+	merchandiseAmount, merchandiseTaxAmount, err :=
+		calculateProportionalMerchandiseRefund(
+			fullMerchandise,
+			selection.MerchandiseRefundAmount,
+		)
+	if err != nil {
+		return ReturnRefundAmountSummary{}, err
+	}
 
-		return OpenedReturnRefundAmountSummary{
-			Policy:                  policy,
-			MerchandiseAmount:       merchandiseAmount,
-			MerchandiseTaxAmount:    merchandiseTaxAmount,
-			StripeRefundAmount:      stripeRefundAmount,
-			TotalSellerBurdenAmount: stripeRefundAmount,
-		}, nil
+	result := ReturnRefundAmountSummary{
+		MerchandiseRefundAmount: selection.MerchandiseRefundAmount,
+		MerchandiseAmount:       merchandiseAmount,
+		MerchandiseTaxAmount:    merchandiseTaxAmount,
+		StripeRefundAmount:      selection.MerchandiseRefundAmount,
+		TotalSellerBurdenAmount: selection.MerchandiseRefundAmount,
+	}
 
-	case OpenedReturnRefundMerchandiseOnly:
-		return OpenedReturnRefundAmountSummary{
-			Policy:                  policy,
-			MerchandiseAmount:       fullMerchandise.MerchandiseAmount,
-			MerchandiseTaxAmount:    fullMerchandise.MerchandiseTaxAmount,
-			StripeRefundAmount:      fullMerchandise.RefundAmount,
-			TotalSellerBurdenAmount: fullMerchandise.RefundAmount,
-		}, nil
+	if !selection.RefundOutboundShipping &&
+		!selection.CoverReturnShipping {
+		return result, nil
+	}
 
-	case OpenedReturnRefundMerchandiseRoundTripShipping:
-		shippingAmounts, err := calculateOrderItemShippingAmounts(order)
+	shippingAmounts, err := calculateOrderItemShippingAmounts(order)
+	if err != nil {
+		return ReturnRefundAmountSummary{}, err
+	}
+
+	_, totalShippingTax, err := calculateOrderItemTaxAllocations(order)
+	if err != nil {
+		return ReturnRefundAmountSummary{}, err
+	}
+
+	shippingTaxes, err := allocateOpenedReturnShippingTaxToItems(
+		shippingAmounts,
+		totalShippingTax,
+	)
+	if err != nil {
+		return ReturnRefundAmountSummary{}, err
+	}
+
+	originalOutboundShippingAmount, ok :=
+		shippingAmounts[orderItemIndex]
+	if !ok || originalOutboundShippingAmount < 0 {
+		return ReturnRefundAmountSummary{}, ErrInvalidOrderItemRefund
+	}
+
+	originalOutboundShippingTaxAmount, ok :=
+		shippingTaxes[orderItemIndex]
+	if !ok || originalOutboundShippingTaxAmount < 0 {
+		return ReturnRefundAmountSummary{}, ErrInvalidOrderItemRefund
+	}
+
+	if selection.RefundOutboundShipping {
+		result.OutboundShippingAmount =
+			originalOutboundShippingAmount
+		result.OutboundShippingTaxAmount =
+			originalOutboundShippingTaxAmount
+
+		result.StripeRefundAmount, err = safeAddPaymentAmount(
+			result.StripeRefundAmount,
+			result.OutboundShippingAmount,
+		)
 		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
+			return ReturnRefundAmountSummary{}, err
 		}
 
-		_, totalShippingTax, err := calculateOrderItemTaxAllocations(order)
+		result.StripeRefundAmount, err = safeAddPaymentAmount(
+			result.StripeRefundAmount,
+			result.OutboundShippingTaxAmount,
+		)
 		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
+			return ReturnRefundAmountSummary{}, err
 		}
 
-		shippingTaxes, err := allocateOpenedReturnShippingTaxToItems(shippingAmounts, totalShippingTax)
-		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
-		}
+		result.TotalSellerBurdenAmount =
+			result.StripeRefundAmount
+	}
 
-		outboundShippingAmount, ok := shippingAmounts[orderItemIndex]
-		if !ok || outboundShippingAmount < 0 {
-			return OpenedReturnRefundAmountSummary{}, ErrInvalidOrderItemRefund
-		}
-
-		outboundShippingTaxAmount, ok := shippingTaxes[orderItemIndex]
-		if !ok || outboundShippingTaxAmount < 0 {
-			return OpenedReturnRefundAmountSummary{}, ErrInvalidOrderItemRefund
-		}
-
-		stripeRefundAmount, err := safeAddPaymentAmount(fullMerchandise.RefundAmount, outboundShippingAmount)
-		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
-		}
-
-		stripeRefundAmount, err = safeAddPaymentAmount(stripeRefundAmount, outboundShippingTaxAmount)
-		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
-		}
-
+	if selection.CoverReturnShipping {
 		// Until Order stores a dedicated return-shipping quote, use the
 		// target item's original outbound shipping amount as the modeled
 		// reverse-route shipping amount.
-		returnShippingAmount := outboundShippingAmount
+		result.ReturnShippingAmount =
+			originalOutboundShippingAmount
 
 		returnShippingTaxProduct, err := safeMultiplyPaymentAmount(
-			returnShippingAmount,
+			result.ReturnShippingAmount,
 			orderdom.ConsumptionTaxRateStandard,
 		)
 		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
+			return ReturnRefundAmountSummary{}, err
 		}
 
-		returnShippingTaxAmount := returnShippingTaxProduct / 100
+		result.ReturnShippingTaxAmount =
+			returnShippingTaxProduct / 100
 
-		totalSellerBurdenAmount, err := safeAddPaymentAmount(stripeRefundAmount, returnShippingAmount)
+		result.TotalSellerBurdenAmount, err = safeAddPaymentAmount(
+			result.StripeRefundAmount,
+			result.ReturnShippingAmount,
+		)
 		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
+			return ReturnRefundAmountSummary{}, err
 		}
 
-		totalSellerBurdenAmount, err = safeAddPaymentAmount(totalSellerBurdenAmount, returnShippingTaxAmount)
+		result.TotalSellerBurdenAmount, err = safeAddPaymentAmount(
+			result.TotalSellerBurdenAmount,
+			result.ReturnShippingTaxAmount,
+		)
 		if err != nil {
-			return OpenedReturnRefundAmountSummary{}, err
+			return ReturnRefundAmountSummary{}, err
 		}
-
-		return OpenedReturnRefundAmountSummary{
-			Policy:                    policy,
-			MerchandiseAmount:         fullMerchandise.MerchandiseAmount,
-			MerchandiseTaxAmount:      fullMerchandise.MerchandiseTaxAmount,
-			OutboundShippingAmount:    outboundShippingAmount,
-			OutboundShippingTaxAmount: outboundShippingTaxAmount,
-			ReturnShippingAmount:      returnShippingAmount,
-			ReturnShippingTaxAmount:   returnShippingTaxAmount,
-			StripeRefundAmount:        stripeRefundAmount,
-			TotalSellerBurdenAmount:   totalSellerBurdenAmount,
-		}, nil
-
-	default:
-		return OpenedReturnRefundAmountSummary{}, ErrInvalidOpenedReturnRefundPolicy
 	}
+
+	return result, nil
+}
+
+// calculateProportionalMerchandiseRefund splits one tax-inclusive merchandise
+// refund amount into merchandise and consumption-tax portions.
+//
+// The original Order allocation is authoritative. The frontend-selected amount
+// is therefore distributed using the ratio between the original merchandise
+// amount and the original tax-inclusive merchandise total.
+//
+// Example:
+//
+//	Original:
+//	  merchandise = 10,000
+//	  tax         = 1,000
+//	  total       = 11,000
+//
+//	Requested refund:
+//	  4,400
+//
+//	Result:
+//	  merchandise refund = 4,000
+//	  tax refund         =   400
+//
+// For amounts that cannot be divided exactly in whole yen, the merchandise
+// portion is rounded down and the remaining yen is assigned to consumption tax.
+// This guarantees:
+//
+//	merchandise refund + tax refund = requested tax-inclusive refund
+func calculateProportionalMerchandiseRefund(
+	full OrderItemRefundAmountSummary,
+	requestedRefundAmount int,
+) (int, int, error) {
+	if requestedRefundAmount <= 0 ||
+		full.MerchandiseAmount < 0 ||
+		full.MerchandiseTaxAmount < 0 ||
+		full.RefundAmount <= 0 ||
+		requestedRefundAmount > full.RefundAmount {
+		return 0, 0, ErrInvalidReturnRefundAmount
+	}
+
+	// A full refund must reuse the authoritative original allocation exactly.
+	if requestedRefundAmount == full.RefundAmount {
+		return full.MerchandiseAmount,
+			full.MerchandiseTaxAmount,
+			nil
+	}
+
+	// Resale merchandise is currently non-taxable. If the authoritative Order
+	// allocation contains no merchandise tax, the complete requested amount is
+	// merchandise.
+	if full.MerchandiseTaxAmount == 0 {
+		if requestedRefundAmount > full.MerchandiseAmount {
+			return 0, 0, ErrInvalidReturnRefundAmount
+		}
+
+		return requestedRefundAmount, 0, nil
+	}
+
+	weightedMerchandiseAmount, err := safeMultiplyPaymentAmount(
+		requestedRefundAmount,
+		full.MerchandiseAmount,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	merchandiseAmount :=
+		weightedMerchandiseAmount / full.RefundAmount
+
+	merchandiseTaxAmount :=
+		requestedRefundAmount - merchandiseAmount
+
+	if merchandiseAmount < 0 ||
+		merchandiseTaxAmount < 0 ||
+		merchandiseAmount > full.MerchandiseAmount ||
+		merchandiseTaxAmount > full.MerchandiseTaxAmount {
+		return 0, 0, ErrInvalidReturnRefundAmount
+	}
+
+	calculatedRefundAmount, err := safeAddPaymentAmount(
+		merchandiseAmount,
+		merchandiseTaxAmount,
+	)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	if calculatedRefundAmount != requestedRefundAmount {
+		return 0, 0, ErrInvalidReturnRefundAmount
+	}
+
+	return merchandiseAmount,
+		merchandiseTaxAmount,
+		nil
 }

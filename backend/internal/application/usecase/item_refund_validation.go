@@ -12,6 +12,18 @@ import (
 // Existing Refund Validation
 // ============================================================
 
+// validateExistingItemRefund validates that an existing deterministic Refund
+// represents exactly the same return-refund request and authoritative monetary
+// calculation as the current retry.
+//
+// A retry must not change:
+//
+//   - tax-inclusive merchandise refund amount
+//   - outbound shipping refund choice
+//   - return shipping coverage choice
+//
+// Merchandise tax and shipping monetary values are calculated by the backend
+// from the authoritative Order snapshot and must also match the persisted Refund.
 func validateExistingItemRefund(
 	refund refunddom.Refund,
 	in itemRefundRequest,
@@ -24,13 +36,21 @@ func validateExistingItemRefund(
 	if err := refund.Validate(); err != nil {
 		return err
 	}
+
 	if refund.InquiryID != in.InquiryID ||
 		refund.OrderID != order.ID ||
 		refund.PaymentID != order.ID ||
 		refund.OrderItemIndex != in.ItemIndex {
 		return ErrItemRefundExistingRefundMismatch
 	}
-	if refund.Policy != amountSummary.Policy ||
+
+	if amountSummary.Selection != in.Selection {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	if refund.RequestedMerchandiseRefundAmount != amountSummary.Selection.MerchandiseRefundAmount ||
+		refund.RefundOutboundShipping != amountSummary.Selection.RefundOutboundShipping ||
+		refund.CoverReturnShipping != amountSummary.Selection.CoverReturnShipping ||
 		refund.MerchandiseAmount != amountSummary.MerchandiseAmount ||
 		refund.MerchandiseTaxAmount != amountSummary.MerchandiseTaxAmount ||
 		refund.OutboundShippingAmount != amountSummary.OutboundShippingAmount ||
@@ -39,6 +59,15 @@ func validateExistingItemRefund(
 		refund.ReturnShippingTaxAmount != amountSummary.ReturnShippingTaxAmount ||
 		refund.RefundAmount != amountSummary.RefundAmount ||
 		refund.Currency != refunddom.CurrencyJPY {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	totalSellerBurdenAmount, err := refund.TotalSellerBurdenAmount()
+	if err != nil {
+		return ErrItemRefundExistingRefundMismatch
+	}
+
+	if totalSellerBurdenAmount != amountSummary.TotalSellerBurdenAmount {
 		return ErrItemRefundExistingRefundMismatch
 	}
 
@@ -76,6 +105,7 @@ func validateExistingListItemRefund(
 	if settlement == nil || salesReceivable != nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
+
 	if in.CompanyID == "" ||
 		targetItem.SellerSnapshot.CompanyID != in.CompanyID {
 		return ErrItemRefundExistingRefundMismatch
@@ -85,6 +115,7 @@ func validateExistingListItemRefund(
 	if err != nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
+
 	if targetSeller.Type != settlementdom.SellerTypeAccount {
 		return ErrItemRefundExistingRefundMismatch
 	}
@@ -93,6 +124,7 @@ func validateExistingListItemRefund(
 	if err := settlementSeller.Validate(); err != nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
+
 	if settlementSeller.Type != settlementdom.SellerTypeAccount ||
 		settlementSeller != targetSeller {
 		return ErrItemRefundExistingRefundMismatch
@@ -104,6 +136,7 @@ func validateExistingListItemRefund(
 		AccountID:       targetSeller.AccountID,
 		StripeAccountID: targetSeller.StripeAccountID,
 	}
+
 	if err := expectedRefundSeller.Validate(); err != nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
@@ -112,6 +145,7 @@ func validateExistingListItemRefund(
 	if err := refundSeller.Validate(); err != nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
+
 	if refundSeller != expectedRefundSeller {
 		return ErrItemRefundExistingRefundMismatch
 	}
@@ -149,6 +183,7 @@ func validateExistingResaleItemRefund(
 	if settlement != nil || salesReceivable == nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
+
 	if targetItem.Type != orderdom.OrderItemTypeResale ||
 		targetItem.ResaleID == "" ||
 		targetItem.Qty != 1 ||
@@ -165,6 +200,7 @@ func validateExistingResaleItemRefund(
 	if err := refundSeller.Validate(); err != nil {
 		return ErrItemRefundExistingRefundMismatch
 	}
+
 	if refundSeller != expectedRefundSeller ||
 		refund.SellerType != refunddom.SellerTypeResale {
 		return ErrItemRefundExistingRefundMismatch
@@ -183,6 +219,7 @@ func validateExistingResaleItemRefund(
 	}
 
 	snapshot := targetItem.SellerSnapshot
+
 	if salesReceivable.ID != expectedReceivableID ||
 		salesReceivable.OrderID != order.ID ||
 		salesReceivable.PaymentID != order.ID ||

@@ -4,7 +4,6 @@ package mallHandler
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -212,7 +211,9 @@ type dispatchTradeRequest struct {
 }
 
 type receiveTradeReturnRequest struct {
-	Policy refunddom.OpenedReturnRefundPolicy `json:"policy,omitempty"`
+	MerchandiseRefundAmount int  `json:"merchandiseRefundAmount"`
+	RefundOutboundShipping  bool `json:"refundOutboundShipping"`
+	CoverReturnShipping     bool `json:"coverReturnShipping"`
 }
 
 // GET /mall/me/trades
@@ -629,19 +630,22 @@ func (h *TradeHandler) dispatch(
 // SellerAvatarID is never accepted from the client. The authenticated Avatar
 // from AvatarContextMiddleware is authoritative.
 //
-// Unopened return:
-//
-//	Request body may be omitted or sent as {}.
-//
-// Opened return:
+// Request body for both unopened and opened returns:
 //
 //	{
-//	  "policy": "half_merchandise"
+//	  "merchandiseRefundAmount": 5000,
+//	  "refundOutboundShipping": true,
+//	  "coverReturnShipping": true
 //	}
 //
-// The usecase resolves Trade, Order, Order item and return Inquiry from
-// authoritative persisted state. Order ID, item index, Inquiry ID, refund amount
-// and seller identity are never accepted from the client.
+// MerchandiseRefundAmount is tax-inclusive and must not exceed the authoritative
+// merchandise amount including tax. Consumption tax is automatically allocated
+// by the backend from the persisted Order snapshot.
+//
+// The usecase resolves Trade, Order, Order item, return Inquiry, tax amounts and
+// shipping amounts from authoritative persisted state. Order ID, item index,
+// Inquiry ID, tax amount, shipping amount and seller identity are never accepted
+// from the client.
 func (h *TradeHandler) receiveReturn(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -658,20 +662,25 @@ func (h *TradeHandler) receiveReturn(
 	}
 
 	if h == nil || h.returnReceiptUC == nil {
-		internalError(
-			w,
-			"resale trade return receipt usecase is nil",
-		)
+		internalError(w, "resale trade return receipt usecase is nil")
 		return
 	}
 
 	var req receiveTradeReturnRequest
-
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+	if err := decoder.Decode(&req); err != nil {
 		badRequest(w, "invalid json")
+		return
+	}
+
+	selection := refunddom.ReturnRefundSelection{
+		MerchandiseRefundAmount: req.MerchandiseRefundAmount,
+		RefundOutboundShipping:  req.RefundOutboundShipping,
+		CoverReturnShipping:     req.CoverReturnShipping,
+	}
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
+		badRequest(w, err.Error())
 		return
 	}
 
@@ -680,7 +689,7 @@ func (h *TradeHandler) receiveReturn(
 		usecase.ReceiveResaleTradeReturnInput{
 			TradeID:        tradeID,
 			SellerAvatarID: avatarID,
-			Policy:         req.Policy,
+			Selection:      selection,
 		},
 	)
 	if err != nil {
@@ -792,8 +801,7 @@ func writeTradeReturnReceiptErr(
 			"error": "avatar context is required",
 		})
 
-	case errors.Is(err, refunddom.ErrInvalidOpenedReturnRefundPolicy),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptUnexpectedPolicy):
+	case errors.Is(err, refunddom.ErrInvalidReturnRefundAmount):
 		badRequest(w, err.Error())
 
 	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptOrderNotPaid),

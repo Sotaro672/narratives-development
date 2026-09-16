@@ -343,47 +343,32 @@ func (r *RefundRepositoryFS) Create(
 	if err := in.Seller.Validate(); err != nil {
 		return nil, err
 	}
-
-	var entity refunddom.Refund
-
-	if in.Policy == "" {
-		entity, err = refunddom.New(
-			in.RefundID,
-			in.InquiryID,
-			in.OrderID,
-			in.PaymentID,
-			in.OrderItemIndex,
-			in.Seller,
-			in.SettlementID,
-			in.SalesReceivableID,
-			in.MerchandiseAmount,
-			in.MerchandiseTaxAmount,
-			in.TransferReversalAmount,
-			in.Currency,
-			in.CreatedAt,
-		)
-	} else {
-		entity, err = refunddom.NewOpenedReturn(
-			in.RefundID,
-			in.InquiryID,
-			in.OrderID,
-			in.PaymentID,
-			in.OrderItemIndex,
-			in.Seller,
-			in.SettlementID,
-			in.SalesReceivableID,
-			in.Policy,
-			in.MerchandiseAmount,
-			in.MerchandiseTaxAmount,
-			in.OutboundShippingAmount,
-			in.OutboundShippingTaxAmount,
-			in.ReturnShippingAmount,
-			in.ReturnShippingTaxAmount,
-			in.TransferReversalAmount,
-			in.Currency,
-			in.CreatedAt,
-		)
+	if err := refunddom.ValidateReturnRefundSelection(in.Selection); err != nil {
+		return nil, err
 	}
+
+	entity, err := refunddom.New(
+		in.RefundID,
+		refunddom.NewRefundInput{
+			InquiryID:                 in.InquiryID,
+			OrderID:                   in.OrderID,
+			PaymentID:                 in.PaymentID,
+			OrderItemIndex:            in.OrderItemIndex,
+			Seller:                    in.Seller,
+			SettlementID:              in.SettlementID,
+			SalesReceivableID:         in.SalesReceivableID,
+			Selection:                 in.Selection,
+			MerchandiseAmount:         in.MerchandiseAmount,
+			MerchandiseTaxAmount:      in.MerchandiseTaxAmount,
+			OutboundShippingAmount:    in.OutboundShippingAmount,
+			OutboundShippingTaxAmount: in.OutboundShippingTaxAmount,
+			ReturnShippingAmount:      in.ReturnShippingAmount,
+			ReturnShippingTaxAmount:   in.ReturnShippingTaxAmount,
+			TransferReversalAmount:    in.TransferReversalAmount,
+			Currency:                  in.Currency,
+			CreatedAt:                 in.CreatedAt,
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -644,7 +629,9 @@ type refundDocument struct {
 	SettlementID      string `firestore:"settlementId,omitempty"`
 	SalesReceivableID string `firestore:"salesReceivableId,omitempty"`
 
-	Policy string `firestore:"policy,omitempty"`
+	RequestedMerchandiseRefundAmount int  `firestore:"requestedMerchandiseRefundAmount"`
+	RefundOutboundShipping           bool `firestore:"refundOutboundShipping"`
+	CoverReturnShipping              bool `firestore:"coverReturnShipping"`
 
 	MerchandiseAmount    int `firestore:"merchandiseAmount"`
 	MerchandiseTaxAmount int `firestore:"merchandiseTaxAmount"`
@@ -710,7 +697,9 @@ func refundToData(
 		SettlementID:      refund.SettlementID,
 		SalesReceivableID: refund.SalesReceivableID,
 
-		Policy: string(refund.Policy),
+		RequestedMerchandiseRefundAmount: refund.RequestedMerchandiseRefundAmount,
+		RefundOutboundShipping:           refund.RefundOutboundShipping,
+		CoverReturnShipping:              refund.CoverReturnShipping,
 
 		MerchandiseAmount:    refund.MerchandiseAmount,
 		MerchandiseTaxAmount: refund.MerchandiseTaxAmount,
@@ -782,7 +771,9 @@ func docToRefund(
 		SettlementID:      document.SettlementID,
 		SalesReceivableID: document.SalesReceivableID,
 
-		Policy: refunddom.OpenedReturnRefundPolicy(document.Policy),
+		RequestedMerchandiseRefundAmount: document.RequestedMerchandiseRefundAmount,
+		RefundOutboundShipping:           document.RefundOutboundShipping,
+		CoverReturnShipping:              document.CoverReturnShipping,
 
 		MerchandiseAmount:    document.MerchandiseAmount,
 		MerchandiseTaxAmount: document.MerchandiseTaxAmount,

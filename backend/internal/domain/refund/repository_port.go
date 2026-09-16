@@ -39,18 +39,41 @@ import (
 // Resale Refunds never execute a Stripe Transfer Reversal, therefore
 // TransferReversalAmount must be zero.
 //
-// Policy:
+// Selection records the seller's refund decision:
 //
-//	Policy == ""
+//	MerchandiseRefundAmount
+//	RefundOutboundShipping
+//	CoverReturnShipping
 //
-// represents the unopened-return flow.
+// MerchandiseRefundAmount is the tax-inclusive merchandise refund amount selected
+// by the seller.
 //
-// For an opened return, Policy must be one of the valid
-// OpenedReturnRefundPolicy values.
+// The application layer must validate MerchandiseRefundAmount against the
+// authoritative persisted Order snapshot:
 //
-// Monetary values must be calculated by the application / Order domain from
-// authoritative persisted snapshots. The frontend must never supply refund
-// amounts directly.
+//	1 <= MerchandiseRefundAmount <= original merchandise amount including tax
+//
+// The corresponding merchandise tax amount must be calculated automatically by
+// the backend from the original Order tax allocation.
+//
+// RefundOutboundShipping controls whether the purchaser's original outbound
+// shipping and its consumption tax are refunded.
+//
+// CoverReturnShipping controls whether return shipping and its consumption tax
+// are borne by the seller.
+//
+// The frontend must never provide calculated monetary values such as:
+//
+//	MerchandiseAmount
+//	MerchandiseTaxAmount
+//	OutboundShippingAmount
+//	OutboundShippingTaxAmount
+//	ReturnShippingAmount
+//	ReturnShippingTaxAmount
+//	TransferReversalAmount
+//
+// Those values must be calculated by the application / domain layer from
+// authoritative persisted snapshots before Create is called.
 //
 // RefundAmount itself is not accepted here because Refund derives it from:
 //
@@ -83,7 +106,7 @@ type CreateRefundInput struct {
 	SettlementID      string
 	SalesReceivableID string
 
-	Policy OpenedReturnRefundPolicy
+	Selection ReturnRefundSelection
 
 	MerchandiseAmount    int
 	MerchandiseTaxAmount int
@@ -140,7 +163,9 @@ var AllowedUpdateOperations = map[UpdateRefundOperation]struct{}{
 	UpdateOperationMarkTransferReversalFailed:          {},
 }
 
-func IsValidUpdateOperation(operation UpdateRefundOperation) bool {
+func IsValidUpdateOperation(
+	operation UpdateRefundOperation,
+) bool {
 	if operation == "" {
 		return false
 	}
@@ -241,12 +266,19 @@ type UpdateRefundInput struct {
 // Resale SalesReceivable cancellation is coordinated by the application layer.
 // It is deliberately not performed by this repository.
 //
-// For opened returns, Refund additionally records:
+// Refund additionally records the seller's original return-refund selection:
 //
-//   - selected refund Policy
-//   - outbound shipping refunded against the original Charge
+//   - tax-inclusive merchandise refund amount
+//   - whether outbound shipping is refunded
+//   - whether return shipping is borne by the seller
+//
+// It also records the authoritative monetary values derived from that selection:
+//
+//   - merchandise amount
+//   - merchandise consumption tax
+//   - outbound shipping amount
 //   - outbound shipping consumption tax
-//   - return shipping borne by the seller
+//   - return shipping amount
 //   - return shipping consumption tax
 //
 // Return shipping is additional seller-side burden and is not necessarily part
@@ -280,7 +312,7 @@ type RepositoryPort interface {
 
 	// GetByOrderItem returns the Refund belonging to one Order item.
 	//
-	// The current return policy allows at most one item-level Refund for one
+	// The current return flow allows at most one item-level Refund for one
 	// Order item.
 	//
 	// The deterministic Refund ID is generated from:
@@ -356,12 +388,16 @@ type RepositoryPort interface {
 	//   - require SettlementID for SellerTypeAccount
 	//   - require SalesReceivableID for SellerTypeResale
 	//   - require TransferReversalAmount == 0 for SellerTypeResale
-	//   - use Refund.New when Policy == ""
-	//   - use Refund.NewOpenedReturn when Policy is set
+	//   - construct the Refund through Refund.New
 	//   - persist the complete validated Refund
 	//
-	// Financial values must never be accepted directly from an untrusted
-	// frontend request. The application layer must calculate them from
+	// Selection.MerchandiseRefundAmount may originate from an authenticated
+	// seller request, but its upper bound must already have been validated against
+	// the authoritative Order snapshot before Create is called.
+	//
+	// Tax amounts, shipping amounts, TransferReversalAmount and every other
+	// calculated financial value must never be accepted directly from an
+	// untrusted frontend request. The application layer must calculate them from
 	// authoritative Order and seller-side financial state before calling Create.
 	//
 	// StripeRefundID and StripeTransferReversalID are not accepted during

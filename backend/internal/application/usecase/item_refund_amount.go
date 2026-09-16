@@ -14,35 +14,44 @@ import (
 // Amount Calculation
 // ============================================================
 
+// calculateItemRefundAmount calculates the authoritative item-level refund from
+// the persisted Order snapshot and the seller-selected ReturnRefundSelection.
+//
+// MerchandiseRefundAmount is tax-inclusive. The corresponding merchandise and
+// consumption-tax amounts are automatically allocated by the refund domain.
+//
+// Outbound shipping is included in the purchaser refund only when
+// RefundOutboundShipping is true.
+//
+// Return shipping is additional seller-side burden only when CoverReturnShipping
+// is true and is not included in RefundAmount because it was not part of the
+// purchaser's original payment.
+//
+// No calculated monetary amount is accepted from the frontend.
 func calculateItemRefundAmount(
 	order orderdom.Order,
 	itemIndex int,
-	policy refunddom.OpenedReturnRefundPolicy,
+	selection refunddom.ReturnRefundSelection,
 ) (itemRefundAmountSummary, error) {
-	if policy == "" {
-		summary, err := refunddom.CalculateOrderItemRefundAmount(order, itemIndex)
-		if err != nil {
-			return itemRefundAmountSummary{}, err
-		}
-
-		return itemRefundAmountSummary{
-			MerchandiseAmount:    summary.MerchandiseAmount,
-			MerchandiseTaxAmount: summary.MerchandiseTaxAmount,
-			RefundAmount:         summary.RefundAmount,
-		}, nil
-	}
-
-	if err := refunddom.ValidateOpenedReturnRefundPolicy(policy); err != nil {
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
 		return itemRefundAmountSummary{}, err
 	}
 
-	summary, err := refunddom.CalculateOpenedReturnRefundAmount(order, itemIndex, policy)
+	summary, err := refunddom.CalculateReturnRefundAmount(
+		order,
+		itemIndex,
+		selection,
+	)
 	if err != nil {
 		return itemRefundAmountSummary{}, err
 	}
 
+	if summary.StripeRefundAmount <= 0 {
+		return itemRefundAmountSummary{}, refunddom.ErrInvalidRefundAmount
+	}
+
 	return itemRefundAmountSummary{
-		Policy:                    summary.Policy,
+		Selection:                 selection,
 		MerchandiseAmount:         summary.MerchandiseAmount,
 		MerchandiseTaxAmount:      summary.MerchandiseTaxAmount,
 		OutboundShippingAmount:    summary.OutboundShippingAmount,
@@ -50,6 +59,7 @@ func calculateItemRefundAmount(
 		ReturnShippingAmount:      summary.ReturnShippingAmount,
 		ReturnShippingTaxAmount:   summary.ReturnShippingTaxAmount,
 		RefundAmount:              summary.StripeRefundAmount,
+		TotalSellerBurdenAmount:   summary.TotalSellerBurdenAmount,
 	}, nil
 }
 
@@ -58,6 +68,9 @@ func calculateItemRefundAmount(
 //
 // Consumer resale never reaches this function. Resale seller proceeds are
 // represented by SalesReceivable and TransferReversalAmount is always zero.
+//
+// Return shipping is intentionally excluded because it is not part of the
+// purchaser Stripe Refund or the original seller Transfer.
 func (u *ItemRefundUsecase) resolveTransferReversalAmount(
 	ctx context.Context,
 	settlement settlementdom.Settlement,
@@ -91,7 +104,11 @@ func (u *ItemRefundUsecase) resolveTransferReversalAmount(
 			return 0, ErrItemRefundSettlementMismatch
 		}
 
-		return u.calculateTransferReversalAmount(ctx, targetItem, amountSummary)
+		return u.calculateTransferReversalAmount(
+			ctx,
+			targetItem,
+			amountSummary,
+		)
 
 	case settlementdom.StatusFailed,
 		settlementdom.StatusCanceled:
@@ -126,6 +143,15 @@ func (u *ItemRefundUsecase) resolveTransferReversalAmount(
 // ReversalAmount:
 //
 //	RefundAmount - platform fee attributable to refunded components
+//
+// RefundAmount contains only amounts refunded against the purchaser's original
+// payment:
+//
+//	merchandise including tax
+//	+ optional outbound shipping including tax
+//
+// Return shipping is intentionally excluded because it is additional seller-side
+// burden rather than a reversal of the original purchaser payment.
 //
 // This calculation is intentionally unavailable for consumer resale.
 func (u *ItemRefundUsecase) calculateTransferReversalAmount(

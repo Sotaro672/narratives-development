@@ -116,16 +116,15 @@ type OpenedReturnReceiptInquiryResolver interface {
 // OpenedReturnReceiptItemRefundService executes or resumes the financial flow
 // for one opened return.
 //
-// RefundOpenedReturnOrderItem calculates every amount from the authoritative
-// Order snapshot. The caller supplies only identity fields and the selected
-// refund Policy.
+// RefundOrderItem calculates every authoritative amount from the persisted Order
+// snapshot. The caller supplies only identity fields and ReturnRefundSelection.
 //
 // For a primary List item, seller-side financial state is Settlement.
 // For a consumer resale item, seller-side financial state is SalesReceivable.
 type OpenedReturnReceiptItemRefundService interface {
-	RefundOpenedReturnOrderItem(
+	RefundOrderItem(
 		ctx context.Context,
-		in RefundOpenedReturnItemInput,
+		in RefundOrderItemInput,
 	) (refunddom.Refund, error)
 }
 
@@ -138,13 +137,19 @@ type OpenedReturnReceiptItemRefundService interface {
 //
 // CompanyID and MemberID must come from authenticated Console context.
 //
-// Policy is the only client-selected financial parameter. Monetary amounts must
-// never be accepted from the HTTP request.
+// Selection is the only client-selected financial parameter. It contains:
+//
+//   - tax-inclusive merchandise refund amount
+//   - whether outbound shipping is refunded
+//   - whether return shipping is covered
+//
+// Tax amounts and actual shipping monetary values must never be accepted from
+// the HTTP request.
 type ReceiveOpenedReturnInput struct {
 	InquiryID string
 	CompanyID string
 	MemberID  string
-	Policy    refunddom.OpenedReturnRefundPolicy
+	Selection refunddom.ReturnRefundSelection
 }
 
 // OpenedReturnReceiptResult represents one opened-return receipt attempt.
@@ -185,7 +190,7 @@ type OpenedReturnReceiptResult struct {
 //	Inquiry
 //	-> authoritative Order/item
 //	-> seller/item-type validation
-//	-> opened-return financial Refund
+//	-> item-level financial Refund
 //	-> seller-side financial completion
 //	-> Order IsReturnCompleted
 //	-> refund completion reply
@@ -245,14 +250,16 @@ func (uc *OpenedReturnReceiptUsecase) WithRefundCompletionNotifier(
 // ReceiveOpenedReturn receives one opened returned item.
 //
 // The frontend may submit only:
+//
 //   - Inquiry ID through the route
-//   - one OpenedReturnRefundPolicy
+//   - tax-inclusive merchandise refund amount
+//   - whether outbound shipping is refunded
+//   - whether return shipping is covered
 //
 // CompanyID and MemberID come from authenticated Console context.
 //
-// Refund amount, merchandise amount, tax amount, shipping amounts, Order item
-// index, seller identity, Settlement ID and SalesReceivable ID are never accepted
-// from the frontend.
+// Merchandise tax, shipping amounts, Order item index, seller identity,
+// Settlement ID and SalesReceivable ID are never accepted from the frontend.
 func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 	ctx context.Context,
 	in ReceiveOpenedReturnInput,
@@ -276,7 +283,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		return OpenedReturnReceiptResult{}, ErrOpenedReturnReceiptInvalidMemberID
 	}
 
-	if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
+	if err := refunddom.ValidateReturnRefundSelection(in.Selection); err != nil {
 		return OpenedReturnReceiptResult{}, err
 	}
 
@@ -373,7 +380,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 
 	// A resolved return_opened Inquiry is valid here only when the Order item has
 	// already completed. This prevents generic Inquiry resolution from bypassing
-	// the selected refund policy and financial workflow.
+	// the financial return workflow.
 	if inquiry.Status == inquirydom.InquiryStatusResolved &&
 		!targetItem.IsReturnCompleted {
 		return OpenedReturnReceiptResult{
@@ -382,14 +389,14 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		}, ErrOpenedReturnReceiptInquiryNotOpen
 	}
 
-	refund, err := uc.itemRefundService.RefundOpenedReturnOrderItem(
+	refund, err := uc.itemRefundService.RefundOrderItem(
 		ctx,
-		RefundOpenedReturnItemInput{
+		RefundOrderItemInput{
 			InquiryID: inquiry.ID,
 			OrderID:   order.ID,
 			ItemIndex: itemIndex,
 			CompanyID: companyID,
-			Policy:    in.Policy,
+			Selection: in.Selection,
 		},
 	)
 	if err != nil {
@@ -410,7 +417,7 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 		inquiry,
 		order,
 		itemIndex,
-		in.Policy,
+		in.Selection,
 		refund,
 	); err != nil {
 		return result, err
@@ -418,9 +425,6 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 
 	result.FinanciallyCompleted = refund.IsFinanciallyCompleted()
 	if !result.FinanciallyCompleted {
-		// Stripe may have accepted the purchaser Refund while still reporting
-		// pending / requires_action. Do not complete Order or Inquiry until the
-		// Refund aggregate confirms purchaser-side and seller-side completion.
 		return result, nil
 	}
 
@@ -451,15 +455,11 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 
 	result.OrderCompleted = true
 
-	// The reply contains only authoritative values persisted in Refund. Return
-	// shipping amounts are seller-side burden and are not part of the original
-	// purchaser Charge.
 	replyContent, err := buildRefundCompletionReplyContent(refund)
 	if err != nil {
 		return result, err
 	}
 
-	// The deterministic reply ID makes this operation idempotent.
 	_, err = uc.inquiryResolver.EnsureReplyByMember(
 		ctx,
 		refundCompletionReplyID(refund.ID),
@@ -498,8 +498,6 @@ func (uc *OpenedReturnReceiptUsecase) ReceiveOpenedReturn(
 
 	result.InquiryResolved = true
 
-	// Always ensure notification delivery, including an idempotent retry after
-	// financial, Order and Inquiry completion.
 	_, err = uc.refundCompletionNotifier.EnsureDelivery(
 		ctx,
 		EnsureRefundCompletionNotificationInput{
@@ -594,7 +592,7 @@ func validateOpenedReturnReceiptRefund(
 	inquiry inquirydom.Inquiry,
 	order orderdom.Order,
 	itemIndex int,
-	policy refunddom.OpenedReturnRefundPolicy,
+	selection refunddom.ReturnRefundSelection,
 	refund refunddom.Refund,
 ) error {
 	if err := refund.Validate(); err != nil {
@@ -661,26 +659,27 @@ func validateOpenedReturnReceiptRefund(
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	if refund.Policy != policy {
-		return ErrOpenedReturnReceiptRefundMismatch
-	}
-
 	if refund.Currency != refunddom.CurrencyJPY {
 		return ErrOpenedReturnReceiptRefundMismatch
 	}
 
-	// Recalculate every purchaser-refund and return-shipping amount from the
-	// authoritative Order snapshot. Policy is the only non-Order financial input.
-	expectedAmount, err := refunddom.CalculateOpenedReturnRefundAmount(
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
+		return err
+	}
+
+	expectedAmount, err := refunddom.CalculateReturnRefundAmount(
 		order,
 		itemIndex,
-		policy,
+		selection,
 	)
 	if err != nil {
 		return err
 	}
 
-	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
+	if refund.RequestedMerchandiseRefundAmount != selection.MerchandiseRefundAmount ||
+		refund.RefundOutboundShipping != selection.RefundOutboundShipping ||
+		refund.CoverReturnShipping != selection.CoverReturnShipping ||
+		refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
 		refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount ||
 		refund.OutboundShippingAmount != expectedAmount.OutboundShippingAmount ||
 		refund.OutboundShippingTaxAmount != expectedAmount.OutboundShippingTaxAmount ||

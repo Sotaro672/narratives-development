@@ -27,10 +27,8 @@ func (u *ItemRefundUsecase) refundOrderItem(
 	if in.OrderID == "" || in.ItemIndex < 0 {
 		return refunddom.Refund{}, ErrItemRefundOrderMismatch
 	}
-	if in.Policy != "" {
-		if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
-			return refunddom.Refund{}, err
-		}
+	if err := refunddom.ValidateReturnRefundSelection(in.Selection); err != nil {
+		return refunddom.Refund{}, err
 	}
 
 	order, err := u.orderReader.GetByID(ctx, in.OrderID)
@@ -42,7 +40,7 @@ func (u *ItemRefundUsecase) refundOrderItem(
 	}
 
 	targetItem := order.Items[in.ItemIndex]
-	amountSummary, err := calculateItemRefundAmount(order, in.ItemIndex, in.Policy)
+	amountSummary, err := calculateItemRefundAmount(order, in.ItemIndex, in.Selection)
 	if err != nil {
 		return refunddom.Refund{}, err
 	}
@@ -110,12 +108,7 @@ func (u *ItemRefundUsecase) refundOrderItem(
 			return refunddom.Refund{}, err
 		}
 
-		resolvedReceivable, err := u.resolveAndCancelResaleReceivable(
-			ctx,
-			*payment,
-			targetItem,
-			in.ItemIndex,
-		)
+		resolvedReceivable, err := u.resolveAndCancelResaleReceivable(ctx, *payment, targetItem, in.ItemIndex)
 		if err != nil {
 			return refunddom.Refund{}, err
 		}
@@ -201,7 +194,7 @@ func (u *ItemRefundUsecase) refundOrderItem(
 			Seller:                    refundSeller,
 			SettlementID:              settlementID,
 			SalesReceivableID:         salesReceivableID,
-			Policy:                    amountSummary.Policy,
+			Selection:                 amountSummary.Selection,
 			MerchandiseAmount:         amountSummary.MerchandiseAmount,
 			MerchandiseTaxAmount:      amountSummary.MerchandiseTaxAmount,
 			OutboundShippingAmount:    amountSummary.OutboundShippingAmount,
@@ -481,11 +474,20 @@ func (u *ItemRefundUsecase) prepareResaleBrandFeeSettlementRefund(
 		return ErrItemRefundNotConfigured
 	}
 
-	result, err := u.brandFeeSettlementRefundService.PrepareByPaymentAndOrderItem(ctx, payment.PaymentID, itemIndex)
+	result, err := u.brandFeeSettlementRefundService.PrepareByPaymentAndOrderItem(
+		ctx,
+		payment.PaymentID,
+		itemIndex,
+	)
 	if err != nil {
 		return err
 	}
-	if err := validateResaleBrandFeeSettlementRefundResult(result, payment, targetItem, itemIndex); err != nil {
+	if err := validateResaleBrandFeeSettlementRefundResult(
+		result,
+		payment,
+		targetItem,
+		itemIndex,
+	); err != nil {
 		return err
 	}
 
@@ -528,11 +530,20 @@ func (u *ItemRefundUsecase) completeResaleBrandFeeSettlementRefund(
 		return ErrItemRefundNotConfigured
 	}
 
-	result, err := u.brandFeeSettlementRefundService.CompleteByPaymentAndOrderItem(ctx, payment.PaymentID, itemIndex)
+	result, err := u.brandFeeSettlementRefundService.CompleteByPaymentAndOrderItem(
+		ctx,
+		payment.PaymentID,
+		itemIndex,
+	)
 	if err != nil {
 		return err
 	}
-	if err := validateResaleBrandFeeSettlementRefundResult(result, payment, targetItem, itemIndex); err != nil {
+	if err := validateResaleBrandFeeSettlementRefundResult(
+		result,
+		payment,
+		targetItem,
+		itemIndex,
+	); err != nil {
 		return err
 	}
 
@@ -632,8 +643,8 @@ func (u *ItemRefundUsecase) resumeRefund(
 
 	case refunddom.StatusPending,
 		refunddom.StatusRequiresAction:
-		// Stripe accepted the purchaser Refund, but completion has not yet been
-		// confirmed. Seller-side post-refund processing must not run yet.
+		// The payment provider accepted the purchaser Refund, but completion has
+		// not yet been confirmed. Seller-side post-refund processing must not run.
 		return refund, nil
 
 	case refunddom.StatusSucceeded:
