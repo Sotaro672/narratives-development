@@ -35,6 +35,22 @@ export default function InquiryDetail() {
     onToggleStatus,
   } = useInquiryDetailPage();
 
+  const inquiry = detail?.inquiry ?? null;
+  const orders = detail?.orders ?? [];
+
+  const isUnopenedReturn = inquiry?.inquiryType === "return_unopened";
+  const isOpenedReturn = inquiry?.inquiryType === "return_opened";
+  const isReturnInquiry = isUnopenedReturn || isOpenedReturn;
+
+  // Hook は常に同じ順序で呼び出す必要があるため、詳細取得前または
+  // 商品問い合わせの場合は return_opened を仮値として渡す。
+  // 実際に返品処理UIを表示・実行するのは return_unopened /
+  // return_opened の Inquiry のみ。
+  const returnInquiryType =
+    inquiry?.inquiryType === "return_unopened"
+      ? "return_unopened"
+      : "return_opened";
+
   const {
     replyModalOpen,
     replyContent,
@@ -64,12 +80,10 @@ export default function InquiryDetail() {
     onSubmit: onSubmitOpenedReturnRefund,
   } = useOpenedReturnRefund({
     inquiryId,
+    inquiryType: returnInquiryType,
     onReloadDetail: reloadDetail,
     onClearPageError: clearErrorMessage,
   });
-
-  const inquiry = detail?.inquiry ?? null;
-  const orders = detail?.orders ?? [];
 
   const title =
     inquiry?.inquiryType === "product"
@@ -77,8 +91,6 @@ export default function InquiryDetail() {
       : "";
 
   const status = getInquiryStatusLabel(inquiry?.status);
-  const isUnopenedReturn = inquiry?.inquiryType === "return_unopened";
-  const isOpenedReturn = inquiry?.inquiryType === "return_opened";
   const isResolved = inquiry?.status === "resolved";
   const isOpenOrInProgress =
     inquiry?.status === "open" ||
@@ -116,25 +128,20 @@ export default function InquiryDetail() {
 
   const hideStatusButton =
     isClosedStatus(inquiry?.status) ||
-    (isOpenedReturn && isOpenOrInProgress);
+    (isReturnInquiry && isOpenOrInProgress);
 
   const statusButtonLabel = hideStatusButton
     ? undefined
     : isResolved
       ? "再対応する"
-      : isUnopenedReturn && isOpenOrInProgress
-        ? "返品受領"
-        : isOpenOrInProgress
-          ? "対応済みにする"
-          : undefined;
+      : isOpenOrInProgress
+        ? "対応済みにする"
+        : undefined;
 
-  const statusButtonBusyLabel =
-    isUnopenedReturn && isOpenOrInProgress
-      ? "返品処理中"
-      : "更新中";
+  const statusButtonBusyLabel = "更新中";
 
-  const showOpenedReturnRefund =
-    isOpenedReturn &&
+  const showReturnRefund =
+    isReturnInquiry &&
     isOpenOrInProgress &&
     !isClosedStatus(inquiry?.status);
 
@@ -257,7 +264,7 @@ export default function InquiryDetail() {
             content={inquiry?.content}
             images={inquiry?.images}
             errorMessage={errorMessage}
-            showOpenedReturnRefund={showOpenedReturnRefund}
+            showOpenedReturnRefund={showReturnRefund}
             openedReturnPolicy={selectedPolicy}
             openedReturnSubmitting={openedReturnSubmitting}
             openedReturnPolicyLocked={openedReturnPolicyLocked}

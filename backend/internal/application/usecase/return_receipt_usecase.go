@@ -118,7 +118,7 @@ type ReturnReceiptInquiryResolver interface {
 // RefundOrderItemInput identifies the item-level financial refund belonging to
 // one return Inquiry.
 //
-// No amount is accepted from the HTTP/frontend layer.
+// No monetary amount is accepted from the HTTP/frontend layer.
 //
 // CompanyID represents the authenticated Console scope. For a primary List item,
 // ItemRefundUsecase also validates it against the seller Company. For a consumer
@@ -134,13 +134,18 @@ type RefundOrderItemInput struct {
 // ReturnReceiptItemRefundService is the item-level financial service required by
 // ReturnReceiptUsecase.
 //
-// RefundOrderItem must be idempotent. A deterministic Refund ID and deterministic
+// RefundOpenedReturnOrderItem already provides the policy-based amount calculation
+// required here. The method name reflects its original opened-return use case, but
+// the calculation itself is authoritative for any return flow that explicitly
+// selects one of the supported refund policies.
+//
+// The operation must be idempotent. A deterministic Refund ID and deterministic
 // Stripe idempotency keys prevent duplicate purchaser Refunds, seller Transfer
 // Reversals and Refund documents.
 type ReturnReceiptItemRefundService interface {
-	RefundOrderItem(
+	RefundOpenedReturnOrderItem(
 		ctx context.Context,
-		in RefundOrderItemInput,
+		in RefundOpenedReturnItemInput,
 	) (refunddom.Refund, error)
 }
 
@@ -161,10 +166,14 @@ type ReturnReceiptRefundCompletionNotifier interface {
 //
 // CompanyID and MemberID must come from authenticated Console context. They must
 // not be trusted from arbitrary request-body values.
+//
+// Policy is the only financial choice accepted from the Console. Actual monetary
+// amounts are always calculated from the authoritative Order snapshot.
 type ReceiveReturnInput struct {
 	InquiryID string
 	CompanyID string
 	MemberID  string
+	Policy    refunddom.OpenedReturnRefundPolicy
 }
 
 // ReturnReceiptResult represents the complete state of one return receipt
@@ -259,8 +268,9 @@ func (uc *ReturnReceiptUsecase) WithRefundCompletionNotifier(
 
 // ReceiveReturn receives one unopened return.
 //
-// The frontend sends only the Inquiry ID through the route. CompanyID and
-// MemberID come from authenticated Console context.
+// The frontend sends the Inquiry ID through the route and one supported refund
+// policy in the request body. CompanyID and MemberID come from authenticated
+// Console context.
 //
 // Refund amount, Order ID, item index, seller identity, Settlement ID,
 // SalesReceivable ID, tax rate and monetary amounts are never accepted from the
@@ -286,6 +296,10 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 	memberID := strings.TrimSpace(in.MemberID)
 	if memberID == "" {
 		return ReturnReceiptResult{}, ErrReturnReceiptInvalidMemberID
+	}
+
+	if err := refunddom.ValidateOpenedReturnRefundPolicy(in.Policy); err != nil {
+		return ReturnReceiptResult{}, err
 	}
 
 	inquiry, err := uc.inquiryRepo.GetByID(ctx, inquiryID)
@@ -396,13 +410,14 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		}, ErrReturnReceiptInquiryNotOpen
 	}
 
-	refund, err := uc.itemRefundService.RefundOrderItem(
+	refund, err := uc.itemRefundService.RefundOpenedReturnOrderItem(
 		ctx,
-		RefundOrderItemInput{
+		RefundOpenedReturnItemInput{
 			InquiryID: inquiry.ID,
 			OrderID:   order.ID,
 			ItemIndex: itemIndex,
 			CompanyID: companyID,
+			Policy:    in.Policy,
 		},
 	)
 	if err != nil {
@@ -423,6 +438,7 @@ func (uc *ReturnReceiptUsecase) ReceiveReturn(
 		inquiry,
 		order,
 		itemIndex,
+		in.Policy,
 		refund,
 	); err != nil {
 		return result, err
@@ -604,6 +620,7 @@ func validateReturnReceiptRefund(
 	inquiry inquirydom.Inquiry,
 	order orderdom.Order,
 	itemIndex int,
+	policy refunddom.OpenedReturnRefundPolicy,
 	refund refunddom.Refund,
 ) error {
 	if err := refund.Validate(); err != nil {
@@ -674,19 +691,27 @@ func validateReturnReceiptRefund(
 		return ErrReturnReceiptRefundMismatch
 	}
 
-	// Unopened return refunds merchandise and merchandise consumption tax only.
-	// Shipping and shipping consumption tax are intentionally excluded.
-	expectedAmount, err := refunddom.CalculateOrderItemRefundAmount(
+	if err := refunddom.ValidateOpenedReturnRefundPolicy(policy); err != nil {
+		return err
+	}
+
+	expectedAmount, err := refunddom.CalculateOpenedReturnRefundAmount(
 		order,
 		itemIndex,
+		policy,
 	)
 	if err != nil {
 		return err
 	}
 
-	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
+	if refund.Policy != expectedAmount.Policy ||
+		refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
 		refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount ||
-		refund.RefundAmount != expectedAmount.RefundAmount {
+		refund.OutboundShippingAmount != expectedAmount.OutboundShippingAmount ||
+		refund.OutboundShippingTaxAmount != expectedAmount.OutboundShippingTaxAmount ||
+		refund.ReturnShippingAmount != expectedAmount.ReturnShippingAmount ||
+		refund.ReturnShippingTaxAmount != expectedAmount.ReturnShippingTaxAmount ||
+		refund.RefundAmount != expectedAmount.StripeRefundAmount {
 		return ErrReturnReceiptRefundMismatch
 	}
 

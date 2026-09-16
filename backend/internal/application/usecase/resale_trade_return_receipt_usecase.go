@@ -4,11 +4,13 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	inquirydom "narratives/internal/domain/inquiry"
 	orderdom "narratives/internal/domain/order"
 	refunddom "narratives/internal/domain/refund"
+	salesreceivabledom "narratives/internal/domain/salesReceivable"
 	tradedom "narratives/internal/domain/trade"
 )
 
@@ -45,6 +47,9 @@ var (
 	)
 	ErrResaleTradeReturnReceiptUnexpectedPolicy = errors.New(
 		"resale trade return receipt: refund policy must be empty for unopened return",
+	)
+	ErrResaleTradeReturnReceiptRefundMismatch = errors.New(
+		"resale trade return receipt: refund does not match return target",
 	)
 	ErrResaleTradeReturnReceiptOrderCompletionMismatch = errors.New(
 		"resale trade return receipt: order return completion mismatch",
@@ -319,7 +324,7 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 			return result, err
 		}
 
-		if err := validateReturnReceiptRefund(
+		if err := validateResaleTradeUnopenedReturnReceiptRefund(
 			inquiry,
 			order,
 			itemIndex,
@@ -433,6 +438,90 @@ func (uc *ResaleTradeReturnReceiptUsecase) validateConfigured() error {
 		uc.itemRefundService == nil ||
 		uc.refundCompletionNotifier == nil {
 		return ErrResaleTradeReturnReceiptNotConfigured
+	}
+
+	return nil
+}
+
+// validateResaleTradeUnopenedReturnReceiptRefund validates the legacy unopened
+// resale-return refund independently from validateReturnReceiptRefund.
+//
+// Console return_unopened now supports an explicit refund policy, while this
+// seller-side consumer-resale flow intentionally keeps its existing unopened
+// semantics: full merchandise amount plus merchandise tax, without shipping.
+func validateResaleTradeUnopenedReturnReceiptRefund(
+	inquiry inquirydom.Inquiry,
+	order orderdom.Order,
+	itemIndex int,
+	refund refunddom.Refund,
+) error {
+	if err := refund.Validate(); err != nil {
+		return fmt.Errorf(
+			"%w: %v",
+			ErrResaleTradeReturnReceiptRefundMismatch,
+			err,
+		)
+	}
+
+	if refund.InquiryID != inquiry.ID ||
+		refund.OrderID != order.ID ||
+		refund.PaymentID != order.ID ||
+		refund.OrderItemIndex != itemIndex {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	if itemIndex < 0 || itemIndex >= len(order.Items) {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	targetItem := order.Items[itemIndex]
+	if targetItem.Type != orderdom.OrderItemTypeResale {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	seller := targetItem.SellerSnapshot
+
+	if refund.SellerType != refunddom.SellerTypeResale ||
+		refund.CompanyID != "" ||
+		refund.AccountID != "" ||
+		refund.StripeAccountID != "" ||
+		refund.AvatarID != seller.AvatarID ||
+		refund.UserID != seller.UserID ||
+		refund.PayoutAccountID != seller.PayoutAccountID ||
+		refund.SettlementID != "" {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	expectedSalesReceivableID, err := salesreceivabledom.NewID(
+		order.ID,
+		itemIndex,
+	)
+	if err != nil ||
+		refund.SalesReceivableID != expectedSalesReceivableID {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	if refund.Currency != refunddom.CurrencyJPY ||
+		refund.Policy != "" {
+		return ErrResaleTradeReturnReceiptRefundMismatch
+	}
+
+	expectedAmount, err := refunddom.CalculateOrderItemRefundAmount(
+		order,
+		itemIndex,
+	)
+	if err != nil {
+		return err
+	}
+
+	if refund.MerchandiseAmount != expectedAmount.MerchandiseAmount ||
+		refund.MerchandiseTaxAmount != expectedAmount.MerchandiseTaxAmount ||
+		refund.OutboundShippingAmount != 0 ||
+		refund.OutboundShippingTaxAmount != 0 ||
+		refund.ReturnShippingAmount != 0 ||
+		refund.ReturnShippingTaxAmount != 0 ||
+		refund.RefundAmount != expectedAmount.RefundAmount {
+		return ErrResaleTradeReturnReceiptRefundMismatch
 	}
 
 	return nil

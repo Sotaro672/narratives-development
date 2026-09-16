@@ -9,6 +9,7 @@ import {
 
 import {
   receiveOpenedReturnHTTP,
+  receiveReturnHTTP,
 } from "../../infrastructure/inquiryRepositoryHTTP";
 
 import {
@@ -16,12 +17,24 @@ import {
 } from "../../../../shared/types/inquiry";
 
 import type {
+  InquiryType,
   OpenedReturnRefundPolicy,
   ReceiveOpenedReturnResult,
+  ReceiveReturnResult,
 } from "../../../../shared/types/inquiry";
+
+type ReturnInquiryType = Extract<
+  InquiryType,
+  "return_unopened" | "return_opened"
+>;
+
+type ReturnRefundResult =
+  | ReceiveReturnResult
+  | ReceiveOpenedReturnResult;
 
 export type UseOpenedReturnRefundParams = {
   inquiryId: string;
+  inquiryType: ReturnInquiryType;
   onReloadDetail: () => Promise<unknown>;
   onClearPageError: () => void;
 };
@@ -30,13 +43,11 @@ export type UseOpenedReturnRefundResult = {
   selectedPolicy: OpenedReturnRefundPolicy | "";
   submitting: boolean;
   errorMessage: string | null;
-  result: ReceiveOpenedReturnResult | null;
-
+  result: ReturnRefundResult | null;
   policyLocked: boolean;
   canSubmit: boolean;
-
   onChangePolicy: (value: string) => void;
-  onSubmit: () => Promise<ReceiveOpenedReturnResult | null>;
+  onSubmit: () => Promise<ReturnRefundResult | null>;
   clearErrorMessage: () => void;
 };
 
@@ -57,6 +68,7 @@ function getErrorMessage(
 
 export function useOpenedReturnRefund({
   inquiryId,
+  inquiryType,
   onReloadDetail,
   onClearPageError,
 }: UseOpenedReturnRefundParams): UseOpenedReturnRefundResult {
@@ -70,7 +82,7 @@ export function useOpenedReturnRefund({
     useState<string | null>(null);
 
   const [result, setResult] =
-    useState<ReceiveOpenedReturnResult | null>(null);
+    useState<ReturnRefundResult | null>(null);
 
   const mountedRef = useRef(false);
   const submittingRef = useRef(false);
@@ -82,6 +94,17 @@ export function useOpenedReturnRefund({
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    setSelectedPolicy("");
+    setErrorMessage(null);
+    setResult(null);
+    submittingRef.current = false;
+    setSubmitting(false);
+  }, [
+    inquiryId,
+    inquiryType,
+  ]);
 
   const policyLocked =
     result !== null;
@@ -136,7 +159,7 @@ export function useOpenedReturnRefund({
 
   const onSubmit =
     useCallback(
-      async (): Promise<ReceiveOpenedReturnResult | null> => {
+      async (): Promise<ReturnRefundResult | null> => {
         if (submittingRef.current) {
           return null;
         }
@@ -159,6 +182,16 @@ export function useOpenedReturnRefund({
         }
 
         if (
+          inquiryType !== "return_unopened" &&
+          inquiryType !== "return_opened"
+        ) {
+          setErrorMessage(
+            "返品種別が不正です。",
+          );
+          return null;
+        }
+
+        if (
           result?.financiallyCompleted
         ) {
           return result;
@@ -175,12 +208,19 @@ export function useOpenedReturnRefund({
 
         try {
           const response =
-            await receiveOpenedReturnHTTP(
-              normalizedInquiryId,
-              {
-                policy: selectedPolicy,
-              },
-            );
+            inquiryType === "return_unopened"
+              ? await receiveReturnHTTP(
+                  normalizedInquiryId,
+                  {
+                    policy: selectedPolicy,
+                  },
+                )
+              : await receiveOpenedReturnHTTP(
+                  normalizedInquiryId,
+                  {
+                    policy: selectedPolicy,
+                  },
+                );
 
           if (!mountedRef.current) {
             return response;
@@ -228,7 +268,7 @@ export function useOpenedReturnRefund({
             setErrorMessage(
               getErrorMessage(
                 error,
-                "開封後返品の返金処理に失敗しました",
+                "返品の返金処理に失敗しました",
               ),
             );
           }
@@ -244,6 +284,7 @@ export function useOpenedReturnRefund({
       },
       [
         inquiryId,
+        inquiryType,
         onClearPageError,
         onReloadDetail,
         result,
@@ -256,10 +297,8 @@ export function useOpenedReturnRefund({
     submitting,
     errorMessage,
     result,
-
     policyLocked,
     canSubmit,
-
     onChangePolicy,
     onSubmit,
     clearErrorMessage,

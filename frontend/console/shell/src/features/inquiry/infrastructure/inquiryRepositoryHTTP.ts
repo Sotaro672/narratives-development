@@ -16,6 +16,7 @@ import type {
   ListInquiriesParams,
   ReceiveOpenedReturnParams,
   ReceiveOpenedReturnResult,
+  ReceiveReturnParams,
   ReceiveReturnResult,
   ReplyInquiryParams,
 } from "../../../shared/types/inquiry";
@@ -286,8 +287,13 @@ export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
 // POST: 未開封返品の商品受領
 //   backend: POST /inquiries/{id}/receive-return
 //
-//   orderId / orderItemIndex / refundAmount は frontend から送らない。
-//   backend は Inquiry と Order snapshot を正として返金対象を解決する。
+//   frontend から送信する financial parameter は policy のみ。
+//
+//   refundAmount / merchandiseAmount / tax / shipping / orderId /
+//   orderItemIndex / accountId / settlementId は送信しない。
+//
+//   backend は Inquiry、Order snapshot、選択された policy を正として
+//   purchaser refund と seller Transfer Reversal を算出する。
 //
 //   companyId / memberId は backend の認証 context を正とする。
 //
@@ -302,9 +308,10 @@ export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
 
 export async function receiveReturnHTTP(
   id: string,
+  params: ReceiveReturnParams,
 ): Promise<ReceiveReturnResult> {
   const inquiryId = assertID(id, "id");
-  const headers = await getAuthHeaders();
+  const authHeaders = await getAuthHeaders();
 
   const response = await fetch(
     `${API_BASE}/inquiries/${encodeURIComponent(
@@ -312,7 +319,13 @@ export async function receiveReturnHTTP(
     )}/receive-return`,
     {
       method: "POST",
-      headers,
+      headers: {
+        ...authHeaders,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        policy: params.policy,
+      }),
     },
   );
 
@@ -320,7 +333,7 @@ export async function receiveReturnHTTP(
     const detail = await readErrorDetail(response);
 
     throw new Error(
-      `返品受領処理に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
+      `未開封返品の受領処理に失敗しました（${response.status} ${response.statusText}）\n${detail}`,
     );
   }
 

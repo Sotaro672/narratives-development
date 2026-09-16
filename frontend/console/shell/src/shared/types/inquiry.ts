@@ -36,7 +36,7 @@ export function getInquiryTypeLabel(inquiryType: InquiryType): string {
 }
 
 // ============================================================
-// Opened Return Refund Policy
+// Return Refund Policy
 // ============================================================
 
 export const OPENED_RETURN_REFUND_POLICIES = [
@@ -244,9 +244,18 @@ export type ReplyInquiryParams = {
 // Return Receipt
 // ============================================================
 
+export type ReceiveReturnParams = {
+  policy: OpenedReturnRefundPolicy;
+};
+
 export type ReceiveReturnResult = {
   inquiry: Inquiry;
   refundId: string;
+  policy: OpenedReturnRefundPolicy;
+  refundAmount: number;
+  returnShippingAmount: number;
+  returnShippingTaxAmount: number;
+  totalSellerBurdenAmount: number;
   refundStatus: string;
   transferReversalStatus: string;
   financiallyCompleted: boolean;
