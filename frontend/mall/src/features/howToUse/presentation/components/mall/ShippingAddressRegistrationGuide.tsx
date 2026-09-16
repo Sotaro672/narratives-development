@@ -10,7 +10,7 @@ export default function ShippingAddressRegistrationGuide() {
     <>
       <HowToUseSection title="配送先住所の登録画面を開く">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo storagePath="mall/shipping-address/go-to-shippingAddress-registration.mp4" label="Mallから配送先住所の登録画面を開く手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/shipping-address/go-to-shipping-address-registration.mp4" label="Mallから配送先住所の登録画面を開く手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>ウォレットページへ移動してください。</HowToUseStep>

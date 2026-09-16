@@ -15,7 +15,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>商品設計一覧の「商品設計を作成」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/go-to-productBlueprint-registration.mp4" label="商品設計一覧を開き、商品設計を作成ボタンから商品設計画面へ移動する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/go-to-productBlueprint-registration.mp4" label="商品設計一覧を開き、商品設計を作成ボタンから商品設計画面へ移動する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="商品カテゴリの選択">
@@ -27,7 +27,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>カテゴリを選択すると、そのカテゴリに応じた入力項目が表示されます。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/select-category.mp4" label="ブランドと商品名を入力し、商品カテゴリを選択してカテゴリに応じた入力項目を表示する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/select-category.mp4" label="ブランドと商品名を入力し、商品カテゴリを選択してカテゴリに応じた入力項目を表示する手順" />
 
         <HowToUseNote title="商品カテゴリ">商品設計で入力する項目は選択した商品カテゴリによって変わります。商品に該当するカテゴリを選択してから、表示された項目を入力してください。</HowToUseNote>
       </HowToUseSection>
@@ -40,7 +40,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>品質保証に関する情報を入力してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/enter-category-field.mp4" label="商品の重さ、フィット、素材、品質保証の情報を入力する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/enter-category-field.mp4" label="商品の重さ、フィット、素材、品質保証の情報を入力する手順" />
 
         <HowToUseNote title="カテゴリ固有情報">重さ、フィット、素材、品質保証などの商品情報は、選択した商品カテゴリに応じて表示されます。実際の商品情報に合わせて入力してください。</HowToUseNote>
       </HowToUseSection>
@@ -52,7 +52,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>複数のカラーがある場合は、それぞれのカラーバリエーションを登録してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/enter-color.mp4" label="商品のカラーバリエーションを追加し、カラー情報を登録する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/enter-color.mp4" label="商品のカラーバリエーションを追加し、カラー情報を登録する手順" />
 
         <HowToUseNote title="カラーバリエーション">商品に複数のカラーがある場合は、それぞれを個別のカラーバリエーションとして登録してください。登録したカラーはサイズとの組み合わせによりモデルを構成します。</HowToUseNote>
       </HowToUseSection>
@@ -65,7 +65,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>複数のサイズがある場合は、それぞれのサイズと採寸情報を登録してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/enter-meaturement.mp4" label="商品のサイズバリエーションを追加し、サイズごとの採寸情報を入力する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/enter-meaturement.mp4" label="商品のサイズバリエーションを追加し、サイズごとの採寸情報を入力する手順" />
 
         <HowToUseNote title="サイズと採寸">採寸情報はサイズごとに登録してください。登録したサイズはカラーとの組み合わせによりモデルを構成します。</HowToUseNote>
       </HowToUseSection>
@@ -77,7 +77,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>複数のモデルがある場合は、それぞれに固有の型番を設定してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/enter-modelNumber.mp4" label="カラーとサイズの組み合わせごとに商品の型番を入力する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/enter-modelNumber.mp4" label="カラーとサイズの組み合わせごとに商品の型番を入力する手順" />
 
         <HowToUseNote title="型番">型番はカラーとサイズの組み合わせによって作成される各モデルを識別するために使用します。それぞれのモデルに対応する型番を登録してください。</HowToUseNote>
       </HowToUseSection>
@@ -89,7 +89,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>カラーとサイズごとに、実際の配送状態に合わせた梱包情報を確認してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/enter-shipping-package.mp4" label="カラーとサイズごとに配送時の重量と梱包後の横、縦、高さを入力する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/enter-shipping-package.mp4" label="カラーとサイズごとに配送時の重量と梱包後の横、縦、高さを入力する手順" />
 
         <HowToUseNote title="配送時の梱包情報">配送時の重量と梱包寸法は、配送料の計算に使用する情報です。商品単体の寸法ではなく、配送時に梱包した状態の重量と横、縦、高さを登録してください。</HowToUseNote>
       </HowToUseSection>
@@ -100,7 +100,7 @@ export default function ProductBlueprintGuide() {
           <HowToUseStep>画面上部の「保存」をクリックして商品設計を登録してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/product-blueprint/save-productBlueprint.mp4" label="商品設計の担当者と入力内容を確認し、保存ボタンをクリックして商品設計を登録する手順" />
+        <HowToUseVideo storagePath="console/product_blueprint/save-productBlueprint.mp4" label="商品設計の担当者と入力内容を確認し、保存ボタンをクリックして商品設計を登録する手順" />
 
         <HowToUseNote title="モデルと配送情報">アパレル商品のモデルはカラーとサイズの組み合わせによって構成されます。型番と配送時の梱包情報は、それぞれのモデルに対応する内容を登録してください。</HowToUseNote>
       </HowToUseSection>

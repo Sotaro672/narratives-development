@@ -16,7 +16,7 @@ export default function MemberInvitationGuide() {
           <HowToUseStep>メンバー管理画面右上にある「メンバー追加」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/member-invitation/go-to-member-registration.mp4" label="サイドバーから組織、メンバーを選択し、メンバー追加ボタンをクリックしてメンバー登録画面へ移動する手順" />
+        <HowToUseVideo storagePath="console/member/go-to-member-registration.mp4" label="サイドバーから組織、メンバーを選択し、メンバー追加ボタンをクリックしてメンバー登録画面へ移動する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="メンバー招待手順">
@@ -27,7 +27,7 @@ export default function MemberInvitationGuide() {
           <HowToUseStep>入力内容を確認し、招待を送信してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/member-invitation/send-invitation-mail.mp4" label="メンバーのメールアドレス、割り当てブランド、権限を設定して招待メールを送信する手順" />
+        <HowToUseVideo storagePath="console/member/send-invitation-mail.mp4" label="メンバーのメールアドレス、割り当てブランド、権限を設定して招待メールを送信する手順" />
 
         <HowToUseNote title="招待メール">招待されたメンバーは、届いた招待からConsoleへのアカウント登録を行います。招待するメールアドレスに誤りがないことを確認してください。</HowToUseNote>
 
@@ -44,7 +44,7 @@ export default function MemberInvitationGuide() {
           <HowToUseStep>入力内容を確認し、「サインイン」をクリックして登録を完了してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/member-invitation/accept-invitation.mp4" label="届いた招待から会社名と割り当てブランドを確認し、メールアドレス、氏名、パスワードを入力して招待を受諾する手順" />
+        <HowToUseVideo storagePath="console/member/accept-invitation.mp4" label="届いた招待から会社名と割り当てブランドを確認し、メールアドレス、氏名、パスワードを入力して招待を受諾する手順" />
 
         <HowToUseNote title="招待内容の確認">登録する前に、表示されている会社名と割り当てブランドが正しいことを確認してください。内容に誤りがある場合は登録を進めず、招待した管理者へ確認してください。</HowToUseNote>
       </HowToUseSection>
@@ -55,7 +55,7 @@ export default function MemberInvitationGuide() {
           <HowToUseStep>招待内容を確認し、招待を削除してください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/member-invitation/delete-invitation.mp4" label="送信済みのメンバー招待を選択し、招待を削除する手順" />
+        <HowToUseVideo storagePath="console/member/delete-invitation.mp4" label="送信済みのメンバー招待を選択し、招待を削除する手順" />
 
         <HowToUseNote title="招待の削除">誤ったメールアドレスやブランドへ招待を送信した場合は、対象の招待を削除してから正しい内容で再度招待してください。</HowToUseNote>
       </HowToUseSection>

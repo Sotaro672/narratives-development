@@ -16,7 +16,7 @@ export default function BrandRegistrationGuide() {
           <HowToUseStep>ブランド管理画面右上にある「ブランド追加」をクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/brand-registration/go-to-brand-registration.mp4" label="サイドバーから組織、ブランドを選択し、ブランド追加ボタンをクリックしてブランド登録画面へ移動する手順" />
+        <HowToUseVideo storagePath="console/brand/go-to-brand-registration.mp4" label="サイドバーから組織、ブランドを選択し、ブランド追加ボタンをクリックしてブランド登録画面へ移動する手順" />
       </HowToUseSection>
 
       <HowToUseSection title="ブランド登録手順">
@@ -29,7 +29,7 @@ export default function BrandRegistrationGuide() {
           <HowToUseStep>すべての入力が完了したら、画面右上にある「保存」ボタンをクリックしてください。</HowToUseStep>
         </HowToUseStepList>
 
-        <HowToUseVideo storagePath="console/brand-registration/registrate-brand.mp4" label="ブランド担当者、振込口座、ブランド画像、ブランド情報を入力し、ブランドを登録する手順" />
+        <HowToUseVideo storagePath="console/brand/registrate-brand.mp4" label="ブランド担当者、振込口座、ブランド画像、ブランド情報を入力し、ブランドを登録する手順" />
 
         <HowToUseNote title="ブランド専用ウォレット">ブランド登録と同時に、ブランド専用のブロックチェーンウォレットが開設されます。商品やトークン設計を登録する際にはブランド名義が必要です。</HowToUseNote>
 
