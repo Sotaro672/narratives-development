@@ -23,6 +23,8 @@ import SetTranspportationFee from "../features/howToUse/presentation/components/
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
 import AvatarCreateGuide from "../features/howToUse/presentation/components/mall/AvatarCreateGuide";
 import CancelOderGuide from "../features/howToUse/presentation/components/mall/CancelOderGuide";
+import PostCommentGuide from "../features/howToUse/presentation/components/mall/PostCommentGuide";
+import PostProductReviewGuide from "../features/howToUse/presentation/components/mall/PostProductReviewGuide";
 import PurchaseGuide from "../features/howToUse/presentation/components/mall/PurchaseGuide";
 import RequestRefundGuide from "../features/howToUse/presentation/components/mall/RequestRefundGuide";
 import ShippingAddressRegistrationGuide from "../features/howToUse/presentation/components/mall/ShippingAddressRegistrationGuide";
@@ -92,6 +94,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
     return <PurchaseGuide />;
   }
 
+  if (category === "mall" && slug === "comment") {
+    return <PostCommentGuide />;
+  }
+
   if (category === "mall" && slug === "cancel") {
     return <CancelOderGuide />;
   }
@@ -100,11 +106,18 @@ function renderGuide(category: HowToUseCategory, slug: string) {
     return <RequestRefundGuide />;
   }
 
+  if (category === "mall" && slug === "review") {
+    return <PostProductReviewGuide />;
+  }
+
   return null;
 }
 
 export default function HowToUseDetailPage() {
-  const { category, slug = "" } = useParams<{ category?: string; slug?: string }>();
+  const { category, slug = "" } = useParams<{
+    category?: string;
+    slug?: string;
+  }>();
 
   if (!isHowToUseCategory(category) || !slug) {
     return <Navigate to="/how-to-use" replace />;

@@ -117,6 +117,12 @@ export const mallItems: HowToUseItem[] = [
   },
   {
     category: "mall",
+    slug: "comment",
+    title: "コメント",
+    description: "所有しているトークンのコンテンツにコメントを投稿します。",
+  },
+  {
+    category: "mall",
     slug: "cancel",
     title: "キャンセル",
     description: "購入した商品の注文をキャンセルする手順を確認します。",
