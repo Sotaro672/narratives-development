@@ -22,6 +22,7 @@ import ReplyTokenCommentGuide from "../features/howToUse/presentation/components
 import SetLocationGuide from "../features/howToUse/presentation/components/console/SetLocationGuide";
 import SetTranspportationFee from "../features/howToUse/presentation/components/console/SetTranspportationFee";
 import TokenBlueprintGuide from "../features/howToUse/presentation/components/console/TokenBlueprintGuide";
+import ViewProductReviewGuide from "../features/howToUse/presentation/components/console/ViewProductReviewGuide";
 import AvatarCreateGuide from "../features/howToUse/presentation/components/mall/AvatarCreateGuide";
 import CancelOderGuide from "../features/howToUse/presentation/components/mall/CancelOderGuide";
 import PostCommentGuide from "../features/howToUse/presentation/components/mall/PostCommentGuide";
@@ -85,6 +86,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "console" && slug === "comment-reply") {
     return <ReplyTokenCommentGuide />;
+  }
+
+  if (category === "console" && slug === "reviews") {
+    return <ViewProductReviewGuide />;
   }
 
   if (category === "mall" && slug === "avatar-registration") {
