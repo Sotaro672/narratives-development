@@ -23,53 +23,13 @@ export function getInquiryTypeLabel(inquiryType: InquiryType): string {
   switch (inquiryType) {
     case "product":
       return "商品説明";
-
     case "return_unopened":
       return "未開封返品";
-
     case "return_opened":
       return "開封後返品";
-
     default:
       return inquiryType;
   }
-}
-
-// ============================================================
-// Return Refund Policy
-// ============================================================
-
-export const OPENED_RETURN_REFUND_POLICIES = [
-  "half_merchandise",
-  "merchandise_only",
-  "merchandise_round_trip_shipping",
-] as const;
-
-export type OpenedReturnRefundPolicy =
-  (typeof OPENED_RETURN_REFUND_POLICIES)[number];
-
-export function getOpenedReturnRefundPolicyLabel(
-  policy: OpenedReturnRefundPolicy,
-): string {
-  switch (policy) {
-    case "half_merchandise":
-      return "商品代金の半分";
-
-    case "merchandise_only":
-      return "商品代金のみ";
-
-    case "merchandise_round_trip_shipping":
-      return "商品代金＋往復配送料";
-
-    default:
-      return policy;
-  }
-}
-
-export function isOpenedReturnRefundPolicy(
-  value: string,
-): value is OpenedReturnRefundPolicy {
-  return (OPENED_RETURN_REFUND_POLICIES as readonly string[]).includes(value);
 }
 
 // ============================================================
@@ -152,6 +112,7 @@ export type InquiryOrderItemSummary = {
   brandId: string;
   qty: number;
   price: number;
+  merchandiseRefundMaxAmount: number;
   isCancelled: boolean;
   isDispatched: boolean;
   isReturnRequested: boolean;
@@ -241,20 +202,28 @@ export type ReplyInquiryParams = {
 };
 
 // ============================================================
-// Return Receipt
+// Return Refund
 // ============================================================
 
-export type ReceiveReturnParams = {
-  policy: OpenedReturnRefundPolicy;
+export type ReturnRefundParams = {
+  merchandiseRefundAmount: number;
+  refundOutboundShipping: boolean;
+  coverReturnShipping: boolean;
 };
 
-export type ReceiveReturnResult = {
+export type ReturnRefundResult = {
   inquiry: Inquiry;
   refundId: string;
-  policy: OpenedReturnRefundPolicy;
-  refundAmount: number;
+  merchandiseRefundAmount: number;
+  refundOutboundShipping: boolean;
+  coverReturnShipping: boolean;
+  merchandiseAmount: number;
+  merchandiseTaxAmount: number;
+  outboundShippingAmount: number;
+  outboundShippingTaxAmount: number;
   returnShippingAmount: number;
   returnShippingTaxAmount: number;
+  refundAmount: number;
   totalSellerBurdenAmount: number;
   refundStatus: string;
   transferReversalStatus: string;
@@ -263,27 +232,19 @@ export type ReceiveReturnResult = {
   inquiryResolved: boolean;
   alreadyCompleted: boolean;
 };
+
+// ============================================================
+// Unopened Return Receipt
+// ============================================================
+
+export type ReceiveReturnParams = ReturnRefundParams;
+
+export type ReceiveReturnResult = ReturnRefundResult;
 
 // ============================================================
 // Opened Return Receipt
 // ============================================================
 
-export type ReceiveOpenedReturnParams = {
-  policy: OpenedReturnRefundPolicy;
-};
+export type ReceiveOpenedReturnParams = ReturnRefundParams;
 
-export type ReceiveOpenedReturnResult = {
-  inquiry: Inquiry;
-  refundId: string;
-  policy: OpenedReturnRefundPolicy;
-  refundAmount: number;
-  returnShippingAmount: number;
-  returnShippingTaxAmount: number;
-  totalSellerBurdenAmount: number;
-  refundStatus: string;
-  transferReversalStatus: string;
-  financiallyCompleted: boolean;
-  orderCompleted: boolean;
-  inquiryResolved: boolean;
-  alreadyCompleted: boolean;
-};
+export type ReceiveOpenedReturnResult = ReturnRefundResult;

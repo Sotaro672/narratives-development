@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/types/trade.ts
+// frontend/mall/src/features/shared/types/trade.ts
 
 import type {
   ResaleColor,
@@ -6,9 +6,13 @@ import type {
   ResaleVolume,
 } from "./resale";
 
-export const TRADE_STATUSES = ["active", "closed"] as const;
+export const TRADE_STATUSES = [
+  "active",
+  "closed",
+] as const;
 
-export type TradeStatus = (typeof TRADE_STATUSES)[number];
+export type TradeStatus =
+  (typeof TRADE_STATUSES)[number];
 
 export const TRADE_MESSAGE_SENDER_SIDES = [
   "buyer",
@@ -40,6 +44,36 @@ export const TRADE_RETURN_REQUEST_KINDS = [
 export type TradeReturnRequestKind =
   (typeof TRADE_RETURN_REQUEST_KINDS)[number];
 
+// ============================================================
+// Return Refund
+// ============================================================
+
+export type ReturnRefundSelection = {
+  merchandiseRefundAmount: number;
+  refundOutboundShipping: boolean;
+  coverReturnShipping: boolean;
+};
+
+export type ReceiveTradeReturnParams =
+  ReturnRefundSelection & {
+    tradeId: string;
+  };
+
+export type ReceiveTradeReturnResult = {
+  FinanciallyCompleted: boolean;
+  OrderCompleted: boolean;
+  NotificationEnsured: boolean;
+  AlreadyCompleted: boolean;
+};
+
+export type ReceiveTradeReturnResponse = {
+  data: ReceiveTradeReturnResult;
+};
+
+// ============================================================
+// Resale
+// ============================================================
+
 export type TradeResaleImage = {
   id: string;
   url: string;
@@ -59,6 +93,10 @@ export type TradeResaleDetail = {
   volume?: ResaleVolume;
   images: TradeResaleImage[];
 };
+
+// ============================================================
+// Message
+// ============================================================
 
 export type TradeMessageImage = {
   fileName: string;
@@ -81,6 +119,10 @@ export type TradeMessage = {
   createdAt: string;
 };
 
+// ============================================================
+// Trade Detail
+// ============================================================
+
 export type TradeDetail = {
   id: string;
   orderId: string;
@@ -102,6 +144,7 @@ export type TradeDetail = {
   returnRequestedAt?: string;
   isReturnCompleted: boolean;
   returnCompletedAt?: string;
+  merchandiseRefundMaxAmount?: number;
   transferred: boolean;
   transferredAt?: string;
   messages: TradeMessage[];
@@ -129,6 +172,10 @@ export type TradeDetailResponse = {
   data: TradeDetail;
 };
 
+// ============================================================
+// Trade Message
+// ============================================================
+
 export type CreateTradeMessageParams = {
   tradeId: string;
   content: string;
@@ -141,6 +188,10 @@ export type CreateTradeMessageRequest = {
 export type CreateTradeMessageResponse = {
   data: TradeMessage;
 };
+
+// ============================================================
+// Read State
+// ============================================================
 
 export type MarkTradeMessagesReadParams = {
   tradeId: string;

@@ -16,6 +16,7 @@ import (
 	orderdom "narratives/internal/domain/order"
 	productdom "narratives/internal/domain/product"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
+	refunddom "narratives/internal/domain/refund"
 	tokendom "narratives/internal/domain/token"
 	tokenblueprintdom "narratives/internal/domain/tokenBlueprint"
 	transferdom "narratives/internal/domain/transfer"
@@ -133,30 +134,31 @@ type InquiryOrderSummary struct {
 
 // InquiryOrderItemSummary は Inquiry 詳細画面向けの注文 item read model です。
 type InquiryOrderItemSummary struct {
-	ItemIndex               int                    `json:"itemIndex"`
-	ItemType                orderdom.OrderItemType `json:"itemType"`
-	ModelID                 string                 `json:"modelId"`
-	InventoryID             string                 `json:"inventoryId"`
-	ListID                  string                 `json:"listId"`
-	ResaleID                string                 `json:"resaleId"`
-	ProductID               string                 `json:"productId"`
-	ProductBlueprintID      string                 `json:"productBlueprintId"`
-	TokenBlueprintID        string                 `json:"tokenBlueprintId"`
-	TokenName               string                 `json:"tokenName"`
-	TokenBrandID            string                 `json:"tokenBrandId"`
-	TokenBrandName          string                 `json:"tokenBrandName"`
-	BrandID                 string                 `json:"brandId"`
-	Qty                     int                    `json:"qty"`
-	Price                   int                    `json:"price"`
-	IsCancelled             bool                   `json:"isCancelled"`
-	IsDispatched            bool                   `json:"isDispatched"`
-	IsReturnRequested       bool                   `json:"isReturnRequested"`
-	ReturnRequestedAt       *time.Time             `json:"returnRequestedAt,omitempty"`
-	IsReturnCompleted       bool                   `json:"isReturnCompleted"`
-	ReturnCompletedAt       *time.Time             `json:"returnCompletedAt,omitempty"`
-	TokenTransferVerifiedAt *time.Time             `json:"tokenTransferVerifiedAt,omitempty"`
-	Transferred             bool                   `json:"transferred"`
-	TransferredAt           *time.Time             `json:"transferredAt,omitempty"`
+	ItemIndex                  int                    `json:"itemIndex"`
+	ItemType                   orderdom.OrderItemType `json:"itemType"`
+	ModelID                    string                 `json:"modelId"`
+	InventoryID                string                 `json:"inventoryId"`
+	ListID                     string                 `json:"listId"`
+	ResaleID                   string                 `json:"resaleId"`
+	ProductID                  string                 `json:"productId"`
+	ProductBlueprintID         string                 `json:"productBlueprintId"`
+	TokenBlueprintID           string                 `json:"tokenBlueprintId"`
+	TokenName                  string                 `json:"tokenName"`
+	TokenBrandID               string                 `json:"tokenBrandId"`
+	TokenBrandName             string                 `json:"tokenBrandName"`
+	BrandID                    string                 `json:"brandId"`
+	Qty                        int                    `json:"qty"`
+	Price                      int                    `json:"price"`
+	MerchandiseRefundMaxAmount int                    `json:"merchandiseRefundMaxAmount"`
+	IsCancelled                bool                   `json:"isCancelled"`
+	IsDispatched               bool                   `json:"isDispatched"`
+	IsReturnRequested          bool                   `json:"isReturnRequested"`
+	ReturnRequestedAt          *time.Time             `json:"returnRequestedAt,omitempty"`
+	IsReturnCompleted          bool                   `json:"isReturnCompleted"`
+	ReturnCompletedAt          *time.Time             `json:"returnCompletedAt,omitempty"`
+	TokenTransferVerifiedAt    *time.Time             `json:"tokenTransferVerifiedAt,omitempty"`
+	Transferred                bool                   `json:"transferred"`
+	TransferredAt              *time.Time             `json:"transferredAt,omitempty"`
 }
 
 // GetByID は Inquiry を返します。
@@ -510,6 +512,12 @@ func (q *InquiryDetailQuery) resolveReturnInquiryDetailRefs(
 	if err != nil {
 		return inquiryDetailResolvedRefs{}, err
 	}
+
+	refundAmountSummary, err := refunddom.CalculateOrderItemRefundAmount(order, itemIndex)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+	itemSummary.MerchandiseRefundMaxAmount = refundAmountSummary.RefundAmount
 
 	orders := []InquiryOrderSummary{
 		{

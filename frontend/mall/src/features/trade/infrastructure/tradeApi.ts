@@ -15,6 +15,9 @@ import type {
   GetTradeUnreadCountResponse,
   MarkTradeMessagesReadParams,
   MarkTradeMessagesReadResponse,
+  ReceiveTradeReturnParams,
+  ReceiveTradeReturnResponse,
+  ReceiveTradeReturnResult,
   TradeDetail,
   TradeDetailResponse,
   TradeMessage,
@@ -101,14 +104,24 @@ function requireOrderId(orderId: string): string {
 }
 
 function requireOrderItemIndex(orderItemIndex: number): number {
-  if (
-    !Number.isInteger(orderItemIndex) ||
-    orderItemIndex < 0
-  ) {
+  if (!Number.isInteger(orderItemIndex) || orderItemIndex < 0) {
     throw new Error("orderItemIndex must be a non-negative integer");
   }
 
   return orderItemIndex;
+}
+
+function requireMerchandiseRefundAmount(
+  merchandiseRefundAmount: number,
+): number {
+  if (
+    !Number.isInteger(merchandiseRefundAmount) ||
+    merchandiseRefundAmount <= 0
+  ) {
+    throw new Error("返金額は1円以上の整数で指定してください。");
+  }
+
+  return merchandiseRefundAmount;
 }
 
 function requireMessageContent(content: string): string {
@@ -149,7 +162,8 @@ async function fetchTradeWithAuth<T>(
     query,
     ...(json !== undefined ? { json } : {}),
     messages: {
-      requestErrorMessage: "取引チャットのAPIリクエストに失敗しました。",
+      requestErrorMessage:
+        "取引チャットのAPIリクエストに失敗しました。",
     },
   });
 }
@@ -175,16 +189,17 @@ export async function fetchTradeByOrderItem(
     params.orderItemIndex,
   );
 
-  const result = await fetchTradeWithAuth<TradeDetailResponse>(
-    `${TRADE_BASE_PATH}/order-items/${encodeURIComponent(
-      orderId,
-    )}/${orderItemIndex}`,
-    {
-      method: "GET",
-      signal: options.signal,
-      query: buildMessageQuery(params),
-    },
-  );
+  const result =
+    await fetchTradeWithAuth<TradeDetailResponse>(
+      `${TRADE_BASE_PATH}/order-items/${encodeURIComponent(
+        orderId,
+      )}/${orderItemIndex}`,
+      {
+        method: "GET",
+        signal: options.signal,
+        query: buildMessageQuery(params),
+      },
+    );
 
   return result.data;
 }
@@ -193,14 +208,15 @@ export async function fetchTradeById(
   params: GetTradeByIDParams,
   options: TradeRequestOptions = {},
 ): Promise<TradeDetail> {
-  const result = await fetchTradeWithAuth<TradeDetailResponse>(
-    buildTradePath(params.tradeId),
-    {
-      method: "GET",
-      signal: options.signal,
-      query: buildMessageQuery(params),
-    },
-  );
+  const result =
+    await fetchTradeWithAuth<TradeDetailResponse>(
+      buildTradePath(params.tradeId),
+      {
+        method: "GET",
+        signal: options.signal,
+        query: buildMessageQuery(params),
+      },
+    );
 
   return result.data;
 }
@@ -236,6 +252,33 @@ export async function dispatchTrade(
       },
     },
   );
+}
+
+export async function receiveTradeReturn(
+  params: ReceiveTradeReturnParams,
+): Promise<ReceiveTradeReturnResult> {
+  const tradeId = requireTradeId(params.tradeId);
+  const merchandiseRefundAmount =
+    requireMerchandiseRefundAmount(
+      params.merchandiseRefundAmount,
+    );
+
+  const response =
+    await fetchTradeWithAuth<ReceiveTradeReturnResponse>(
+      `${buildTradePath(tradeId)}/receive-return`,
+      {
+        method: "POST",
+        json: {
+          merchandiseRefundAmount,
+          refundOutboundShipping:
+            params.refundOutboundShipping,
+          coverReturnShipping:
+            params.coverReturnShipping,
+        },
+      },
+    );
+
+  return response.data;
 }
 
 export async function createTradeMessage(

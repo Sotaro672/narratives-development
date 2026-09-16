@@ -12,15 +12,9 @@ import {
   receiveReturnHTTP,
 } from "../../infrastructure/inquiryRepositoryHTTP";
 
-import {
-  isOpenedReturnRefundPolicy,
-} from "../../../../shared/types/inquiry";
-
 import type {
   InquiryType,
-  OpenedReturnRefundPolicy,
-  ReceiveOpenedReturnResult,
-  ReceiveReturnResult,
+  ReturnRefundResult,
 } from "../../../../shared/types/inquiry";
 
 type ReturnInquiryType = Extract<
@@ -28,25 +22,27 @@ type ReturnInquiryType = Extract<
   "return_unopened" | "return_opened"
 >;
 
-type ReturnRefundResult =
-  | ReceiveReturnResult
-  | ReceiveOpenedReturnResult;
-
 export type UseOpenedReturnRefundParams = {
   inquiryId: string;
   inquiryType: ReturnInquiryType;
+  merchandiseRefundMaxAmount: number;
   onReloadDetail: () => Promise<unknown>;
   onClearPageError: () => void;
 };
 
 export type UseOpenedReturnRefundResult = {
-  selectedPolicy: OpenedReturnRefundPolicy | "";
+  merchandiseRefundAmount: number | "";
+  refundOutboundShipping: boolean;
+  coverReturnShipping: boolean;
+  merchandiseRefundMaxAmount: number;
   submitting: boolean;
   errorMessage: string | null;
   result: ReturnRefundResult | null;
-  policyLocked: boolean;
+  selectionLocked: boolean;
   canSubmit: boolean;
-  onChangePolicy: (value: string) => void;
+  onChangeMerchandiseRefundAmount: (value: string | number) => void;
+  onChangeRefundOutboundShipping: (value: boolean) => void;
+  onChangeCoverReturnShipping: (value: boolean) => void;
   onSubmit: () => Promise<ReturnRefundResult | null>;
   clearErrorMessage: () => void;
 };
@@ -55,6 +51,22 @@ function normalizeID(
   value: string | null | undefined,
 ): string {
   return String(value ?? "").trim();
+}
+
+function normalizeRefundAmount(
+  value: string | number,
+): number | "" {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    const normalized = Number(trimmed);
+    return Number.isFinite(normalized) ? normalized : "";
+  }
+
+  return Number.isFinite(value) ? value : "";
 }
 
 function getErrorMessage(
@@ -66,21 +78,53 @@ function getErrorMessage(
     : fallbackMessage;
 }
 
+function validateMerchandiseRefundAmount(
+  amount: number | "",
+  maxAmount: number,
+): string | null {
+  if (amount === "") {
+    return "返金額を入力してください。";
+  }
+
+  if (!Number.isInteger(amount)) {
+    return "返金額は1円単位の整数で入力してください。";
+  }
+
+  if (amount <= 0) {
+    return "返金額は1円以上で入力してください。";
+  }
+
+  if (
+    !Number.isInteger(maxAmount) ||
+    maxAmount <= 0
+  ) {
+    return "返金可能額を取得できません。問い合わせ詳細を再読み込みしてください。";
+  }
+
+  if (amount > maxAmount) {
+    return `返金額は商品代金（税込）の上限 ${maxAmount.toLocaleString("ja-JP")}円 以下で入力してください。`;
+  }
+
+  return null;
+}
+
 export function useOpenedReturnRefund({
   inquiryId,
   inquiryType,
+  merchandiseRefundMaxAmount,
   onReloadDetail,
   onClearPageError,
 }: UseOpenedReturnRefundParams): UseOpenedReturnRefundResult {
-  const [selectedPolicy, setSelectedPolicy] =
-    useState<OpenedReturnRefundPolicy | "">("");
-
+  const [merchandiseRefundAmount, setMerchandiseRefundAmount] =
+    useState<number | "">("");
+  const [refundOutboundShipping, setRefundOutboundShipping] =
+    useState(false);
+  const [coverReturnShipping, setCoverReturnShipping] =
+    useState(false);
   const [submitting, setSubmitting] =
     useState(false);
-
   const [errorMessage, setErrorMessage] =
     useState<string | null>(null);
-
   const [result, setResult] =
     useState<ReturnRefundResult | null>(null);
 
@@ -96,7 +140,9 @@ export function useOpenedReturnRefund({
   }, []);
 
   useEffect(() => {
-    setSelectedPolicy("");
+    setMerchandiseRefundAmount("");
+    setRefundOutboundShipping(false);
+    setCoverReturnShipping(false);
     setErrorMessage(null);
     setResult(null);
     submittingRef.current = false;
@@ -106,12 +152,18 @@ export function useOpenedReturnRefund({
     inquiryType,
   ]);
 
-  const policyLocked =
+  const selectionLocked =
     result !== null;
+
+  const amountValidationError =
+    validateMerchandiseRefundAmount(
+      merchandiseRefundAmount,
+      merchandiseRefundMaxAmount,
+    );
 
   const canSubmit =
     normalizeID(inquiryId) !== "" &&
-    selectedPolicy !== "" &&
+    amountValidationError === null &&
     !submitting &&
     !result?.financiallyCompleted;
 
@@ -120,40 +172,79 @@ export function useOpenedReturnRefund({
       setErrorMessage(null);
     }, []);
 
-  const onChangePolicy =
+  const onChangeMerchandiseRefundAmount =
     useCallback(
       (
-        value: string,
+        value: string | number,
       ): void => {
         if (
           submittingRef.current ||
-          policyLocked
+          selectionLocked
         ) {
           return;
         }
 
-        if (!value) {
-          setSelectedPolicy("");
+        const normalized =
+          normalizeRefundAmount(value);
+
+        setMerchandiseRefundAmount(normalized);
+
+        if (normalized === "") {
           setErrorMessage(null);
           return;
         }
 
-        if (
-          !isOpenedReturnRefundPolicy(
-            value,
-          )
-        ) {
-          setErrorMessage(
-            "返金方法が不正です。",
+        const validationError =
+          validateMerchandiseRefundAmount(
+            normalized,
+            merchandiseRefundMaxAmount,
           );
+
+        setErrorMessage(validationError);
+      },
+      [
+        merchandiseRefundMaxAmount,
+        selectionLocked,
+      ],
+    );
+
+  const onChangeRefundOutboundShipping =
+    useCallback(
+      (
+        value: boolean,
+      ): void => {
+        if (
+          submittingRef.current ||
+          selectionLocked
+        ) {
           return;
         }
 
-        setSelectedPolicy(value);
+        setRefundOutboundShipping(value);
         setErrorMessage(null);
       },
       [
-        policyLocked,
+        selectionLocked,
+      ],
+    );
+
+  const onChangeCoverReturnShipping =
+    useCallback(
+      (
+        value: boolean,
+      ): void => {
+        if (
+          submittingRef.current ||
+          selectionLocked
+        ) {
+          return;
+        }
+
+        setCoverReturnShipping(value);
+        setErrorMessage(null);
+      },
+      [
+        selectionLocked,
       ],
     );
 
@@ -174,13 +265,6 @@ export function useOpenedReturnRefund({
           return null;
         }
 
-        if (!selectedPolicy) {
-          setErrorMessage(
-            "返金方法を選択してください。",
-          );
-          return null;
-        }
-
         if (
           inquiryType !== "return_unopened" &&
           inquiryType !== "return_opened"
@@ -191,11 +275,33 @@ export function useOpenedReturnRefund({
           return null;
         }
 
-        if (
-          result?.financiallyCompleted
-        ) {
+        if (merchandiseRefundAmount === "") {
+          setErrorMessage(
+            "返金額を入力してください。",
+          );
+          return null;
+        }
+
+        const validationError =
+          validateMerchandiseRefundAmount(
+            merchandiseRefundAmount,
+            merchandiseRefundMaxAmount,
+          );
+
+        if (validationError) {
+          setErrorMessage(validationError);
+          return null;
+        }
+
+        if (result?.financiallyCompleted) {
           return result;
         }
+
+        const selection = {
+          merchandiseRefundAmount,
+          refundOutboundShipping,
+          coverReturnShipping,
+        };
 
         submittingRef.current = true;
 
@@ -211,27 +317,29 @@ export function useOpenedReturnRefund({
             inquiryType === "return_unopened"
               ? await receiveReturnHTTP(
                   normalizedInquiryId,
-                  {
-                    policy: selectedPolicy,
-                  },
+                  selection,
                 )
               : await receiveOpenedReturnHTTP(
                   normalizedInquiryId,
-                  {
-                    policy: selectedPolicy,
-                  },
+                  selection,
                 );
 
           if (!mountedRef.current) {
             return response;
           }
 
-          // Backend が返した Policy を権威値として保持する。
+          // Backend が返した値を権威値として保持する。
           //
-          // 202 pending の場合も同じ Refund が既に作成されているため、
-          // 以降の再試行で別 Policy に変更できないようロックする。
-          setSelectedPolicy(
-            response.policy,
+          // 202 pending の場合でも Refund は既に同じ Selection で作成されているため、
+          // 以降の再試行で返金額・往路送料・復路送料を変更できないようロックする。
+          setMerchandiseRefundAmount(
+            response.merchandiseRefundAmount,
+          );
+          setRefundOutboundShipping(
+            response.refundOutboundShipping,
+          );
+          setCoverReturnShipping(
+            response.coverReturnShipping,
           );
           setResult(response);
 
@@ -250,9 +358,7 @@ export function useOpenedReturnRefund({
             }
           }
 
-          if (
-            response.inquiryResolved
-          ) {
+          if (response.inquiryResolved) {
             window.dispatchEvent(
               new Event(
                 "inquiry:status-changed",
@@ -283,23 +389,31 @@ export function useOpenedReturnRefund({
         }
       },
       [
+        coverReturnShipping,
         inquiryId,
         inquiryType,
+        merchandiseRefundAmount,
+        merchandiseRefundMaxAmount,
         onClearPageError,
         onReloadDetail,
+        refundOutboundShipping,
         result,
-        selectedPolicy,
       ],
     );
 
   return {
-    selectedPolicy,
+    merchandiseRefundAmount,
+    refundOutboundShipping,
+    coverReturnShipping,
+    merchandiseRefundMaxAmount,
     submitting,
     errorMessage,
     result,
-    policyLocked,
+    selectionLocked,
     canSubmit,
-    onChangePolicy,
+    onChangeMerchandiseRefundAmount,
+    onChangeRefundOutboundShipping,
+    onChangeCoverReturnShipping,
     onSubmit,
     clearErrorMessage,
   };

@@ -177,9 +177,9 @@
   min-height: 42px;
   margin-top: 12px;
   padding: 0 16px;
+  border: 1px solid rgba(148, 163, 184, 0.36);
   background: #ffffff;
   color: #0f172a;
-  border: 1px solid rgba(148, 163, 184, 0.36);
 }
 
 .inquiry-page__submit-button:not(:disabled):hover,
@@ -227,6 +227,187 @@
   color: #991b1b;
 }
 
+/* ============================================================
+ * Inquiry detail
+ * ============================================================ */
+
+.inq-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.inq-detail__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.inq-detail__label {
+  color: #0f172a;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.inq-detail__text {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.65;
+}
+
+.inq-detail__page-title {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 10px;
+}
+
+.inq-detail__page-title-text {
+  overflow: hidden;
+  color: #0f172a;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inq__chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.inq__empty {
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: 12px;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+/* ============================================================
+ * Return refund
+ * ============================================================ */
+
+.inq-detail__body input[type="number"] {
+  min-height: 42px;
+  box-sizing: border-box;
+  appearance: textfield;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.inq-detail__body input[type="number"]:focus {
+  border-color: rgba(15, 23, 42, 0.72);
+  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
+}
+
+.inq-detail__body input[type="number"]:disabled {
+  cursor: not-allowed;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.inq-detail__body input[type="number"]::-webkit-inner-spin-button,
+.inq-detail__body input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
+}
+
+.inq-detail__body label:has(input[type="checkbox"]) {
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.26);
+  border-radius: 14px;
+  background: #ffffff;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.inq-detail__body label:has(input[type="checkbox"]):hover {
+  border-color: rgba(100, 116, 139, 0.4);
+  background: #f8fafc;
+}
+
+.inq-detail__body label:has(input[type="checkbox"]:checked) {
+  border-color: rgba(15, 23, 42, 0.42);
+  background: #f8fafc;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.04);
+}
+
+.inq-detail__body label:has(input[type="checkbox"]:disabled) {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.inq-detail__body input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  accent-color: #0f172a;
+  cursor: pointer;
+}
+
+.inq-detail__body input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.inq-detail__body button[aria-busy="true"] {
+  cursor: wait;
+}
+
+/* ============================================================
+ * Status
+ * ============================================================ */
+
+.inq-status-tab {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.inq-status-tab--open {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.inq-status-tab--in_progress {
+  background: #fffbeb;
+  color: #a16207;
+}
+
+.inq-status-tab--resolved {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.inq-status-tab--closed {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
 @media (min-width: 768px) {
   .inquiry-page__container {
     padding: 44px 24px 96px;
@@ -253,5 +434,20 @@
 
   .inquiry-page__submit-button {
     display: none;
+  }
+
+  .inq-detail__page-title {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .inq-detail__page-title-text {
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  .inq-detail__body label:has(input[type="checkbox"]) {
+    padding: 12px;
   }
 }

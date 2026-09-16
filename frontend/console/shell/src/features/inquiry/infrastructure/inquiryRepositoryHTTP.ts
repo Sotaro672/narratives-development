@@ -287,23 +287,27 @@ export async function getInquiryHTTP(id: string): Promise<InquiryDetail> {
 // POST: 未開封返品の商品受領
 //   backend: POST /inquiries/{id}/receive-return
 //
-//   frontend から送信する financial parameter は policy のみ。
+// frontend から送信する financial parameter:
+//   merchandiseRefundAmount
+//   refundOutboundShipping
+//   coverReturnShipping
 //
-//   refundAmount / merchandiseAmount / tax / shipping / orderId /
-//   orderItemIndex / accountId / settlementId は送信しない。
+// merchandiseRefundAmount は税込の商品返金額。
+// tax / shipping amount / refundAmount / orderId / orderItemIndex /
+// accountId / settlementId は送信しない。
 //
-//   backend は Inquiry、Order snapshot、選択された policy を正として
-//   purchaser refund と seller Transfer Reversal を算出する。
+// backend は Inquiry、Order snapshot、ReturnRefundSelection を正として
+// 商品本体・消費税・送料・Stripe Refund・Transfer Reversal を算出する。
 //
-//   companyId / memberId は backend の認証 context を正とする。
+// companyId / memberId は backend の認証 context を正とする。
 //
-//   200:
-//     Refund + Transfer Reversal + Order completion +
-//     Inquiry resolve まで完了。
+// 200:
+//   Refund + Transfer Reversal + Order completion +
+//   Inquiry resolve まで完了。
 //
-//   202:
-//     Stripe refund 等の financial 処理が pending。
-//     Order / Inquiry は未完了のまま。
+// 202:
+//   Stripe refund 等の financial 処理が pending。
+//   Order / Inquiry は未完了のまま。
 // -----------------------------------------------------------
 
 export async function receiveReturnHTTP(
@@ -324,7 +328,9 @@ export async function receiveReturnHTTP(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        policy: params.policy,
+        merchandiseRefundAmount: params.merchandiseRefundAmount,
+        refundOutboundShipping: params.refundOutboundShipping,
+        coverReturnShipping: params.coverReturnShipping,
       }),
     },
   );
@@ -344,21 +350,27 @@ export async function receiveReturnHTTP(
 // POST: 開封後返品の商品受領
 //   backend: POST /inquiries/{id}/receive-opened-return
 //
-//   frontend から送信する financial parameter は policy のみ。
+// frontend から送信する financial parameter:
+//   merchandiseRefundAmount
+//   refundOutboundShipping
+//   coverReturnShipping
 //
-//   refundAmount / merchandiseAmount / tax / shipping / orderId /
-//   orderItemIndex / accountId / settlementId は送信しない。
+// merchandiseRefundAmount は税込の商品返金額。
+// tax / shipping amount / refundAmount / orderId / orderItemIndex /
+// accountId / settlementId は送信しない。
 //
-//   backend は Inquiry、Order snapshot、選択された policy を正として
-//   purchaser refund と seller Transfer Reversal を算出する。
+// backend は Inquiry、Order snapshot、ReturnRefundSelection を正として
+// 商品本体・消費税・送料・Stripe Refund・Transfer Reversal を算出する。
 //
-//   200:
-//     Refund + Transfer Reversal + Order completion +
-//     Inquiry resolve まで完了。
+// companyId / memberId は backend の認証 context を正とする。
 //
-//   202:
-//     Stripe refund 等の financial 処理が pending。
-//     Order / Inquiry は未完了のまま。
+// 200:
+//   Refund + Transfer Reversal + Order completion +
+//   Inquiry resolve まで完了。
+//
+// 202:
+//   Stripe refund 等の financial 処理が pending。
+//   Order / Inquiry は未完了のまま。
 // -----------------------------------------------------------
 
 export async function receiveOpenedReturnHTTP(
@@ -379,7 +391,9 @@ export async function receiveOpenedReturnHTTP(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        policy: params.policy,
+        merchandiseRefundAmount: params.merchandiseRefundAmount,
+        refundOutboundShipping: params.refundOutboundShipping,
+        coverReturnShipping: params.coverReturnShipping,
       }),
     },
   );
@@ -400,8 +414,8 @@ export async function receiveOpenedReturnHTTP(
 //   backend: POST /inquiries/{id}/resolve
 //   memberId は backend の認証 context を正とする。
 //
-//   return_unopened / return_opened はこのAPIを使用せず、
-//   それぞれ専用の返品受領APIを使用する。
+// return_unopened / return_opened はこのAPIを使用せず、
+// それぞれ専用の返品受領APIを使用する。
 // -----------------------------------------------------------
 
 export async function resolveInquiryHTTP(id: string): Promise<Inquiry> {

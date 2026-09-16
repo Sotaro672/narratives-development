@@ -38,9 +38,12 @@ export default function InquiryDetail() {
   const inquiry = detail?.inquiry ?? null;
   const orders = detail?.orders ?? [];
 
-  const isUnopenedReturn = inquiry?.inquiryType === "return_unopened";
-  const isOpenedReturn = inquiry?.inquiryType === "return_opened";
-  const isReturnInquiry = isUnopenedReturn || isOpenedReturn;
+  const isUnopenedReturn =
+    inquiry?.inquiryType === "return_unopened";
+  const isOpenedReturn =
+    inquiry?.inquiryType === "return_opened";
+  const isReturnInquiry =
+    isUnopenedReturn || isOpenedReturn;
 
   // Hook は常に同じ順序で呼び出す必要があるため、詳細取得前または
   // 商品問い合わせの場合は return_opened を仮値として渡す。
@@ -50,6 +53,27 @@ export default function InquiryDetail() {
     inquiry?.inquiryType === "return_unopened"
       ? "return_unopened"
       : "return_opened";
+
+  // Return Inquiry は Inquiry.OrderID + Inquiry.OrderItemIndex を正として
+  // 対象 Order item を特定する。
+  //
+  // merchandiseRefundMaxAmount は backend が Order snapshot と配賦済みの
+  // 消費税から算出した税込商品返金上限を正とする。
+  const returnOrder =
+    isReturnInquiry && inquiry?.orderId
+      ? orders.find((order) => order.id === inquiry.orderId) ?? null
+      : null;
+
+  const returnOrderItem =
+    returnOrder &&
+    typeof inquiry?.orderItemIndex === "number"
+      ? returnOrder.items.find(
+          (item) => item.itemIndex === inquiry.orderItemIndex,
+        ) ?? null
+      : null;
+
+  const merchandiseRefundMaxAmount =
+    returnOrderItem?.merchandiseRefundMaxAmount ?? 0;
 
   const {
     replyModalOpen,
@@ -71,16 +95,21 @@ export default function InquiryDetail() {
   });
 
   const {
-    selectedPolicy,
-    submitting: openedReturnSubmitting,
-    errorMessage: openedReturnErrorMessage,
-    policyLocked: openedReturnPolicyLocked,
-    canSubmit: openedReturnCanSubmit,
-    onChangePolicy: onChangeOpenedReturnPolicy,
-    onSubmit: onSubmitOpenedReturnRefund,
+    merchandiseRefundAmount,
+    refundOutboundShipping,
+    coverReturnShipping,
+    submitting: returnRefundSubmitting,
+    errorMessage: returnRefundErrorMessage,
+    selectionLocked: returnRefundSelectionLocked,
+    canSubmit: returnRefundCanSubmit,
+    onChangeMerchandiseRefundAmount,
+    onChangeRefundOutboundShipping,
+    onChangeCoverReturnShipping,
+    onSubmit: onSubmitReturnRefund,
   } = useOpenedReturnRefund({
     inquiryId,
     inquiryType: returnInquiryType,
+    merchandiseRefundMaxAmount,
     onReloadDetail: reloadDetail,
     onClearPageError: clearErrorMessage,
   });
@@ -90,8 +119,10 @@ export default function InquiryDetail() {
       ? textOrDash(inquiry.subject)
       : "";
 
-  const status = getInquiryStatusLabel(inquiry?.status);
-  const isResolved = inquiry?.status === "resolved";
+  const status =
+    getInquiryStatusLabel(inquiry?.status);
+  const isResolved =
+    inquiry?.status === "resolved";
   const isOpenOrInProgress =
     inquiry?.status === "open" ||
     inquiry?.status === "in_progress";
@@ -105,7 +136,9 @@ export default function InquiryDetail() {
       <span className="inq__chip">{inquiryType}</span>
 
       {title ? (
-        <span className="inq-detail__page-title-text">{title}</span>
+        <span className="inq-detail__page-title-text">
+          {title}
+        </span>
       ) : null}
     </div>
   );
@@ -114,7 +147,9 @@ export default function InquiryDetail() {
     <span
       className={[
         "inq-status-tab",
-        inquiry?.status ? `inq-status-tab--${inquiry.status}` : "",
+        inquiry?.status
+          ? `inq-status-tab--${inquiry.status}`
+          : "",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -138,7 +173,8 @@ export default function InquiryDetail() {
         ? "対応済みにする"
         : undefined;
 
-  const statusButtonBusyLabel = "更新中";
+  const statusButtonBusyLabel =
+    "更新中";
 
   const showReturnRefund =
     isReturnInquiry &&
@@ -208,7 +244,9 @@ export default function InquiryDetail() {
           </CardHeader>
 
           <CardContent>
-            <div className="inq__empty">{errorMessage}</div>
+            <div className="inq__empty">
+              {errorMessage}
+            </div>
           </CardContent>
         </Card>
 
@@ -252,7 +290,11 @@ export default function InquiryDetail() {
         statusButtonLabel={statusButtonLabel}
         statusButtonBusyLabel={statusButtonBusyLabel}
         statusButtonVariant={statusButtonVariant}
-        onStatusButtonClick={statusButtonLabel ? onToggleStatus : undefined}
+        onStatusButtonClick={
+          statusButtonLabel
+            ? onToggleStatus
+            : undefined
+        }
         isStatusButtonLoading={statusUpdating}
         statusButtonDisabled={
           !detail ||
@@ -264,14 +306,25 @@ export default function InquiryDetail() {
             content={inquiry?.content}
             images={inquiry?.images}
             errorMessage={errorMessage}
-            showOpenedReturnRefund={showReturnRefund}
-            openedReturnPolicy={selectedPolicy}
-            openedReturnSubmitting={openedReturnSubmitting}
-            openedReturnPolicyLocked={openedReturnPolicyLocked}
-            openedReturnCanSubmit={openedReturnCanSubmit}
-            openedReturnErrorMessage={openedReturnErrorMessage}
-            onChangeOpenedReturnPolicy={onChangeOpenedReturnPolicy}
-            onSubmitOpenedReturnRefund={onSubmitOpenedReturnRefund}
+            showReturnRefund={showReturnRefund}
+            merchandiseRefundAmount={merchandiseRefundAmount}
+            merchandiseRefundMaxAmount={merchandiseRefundMaxAmount}
+            refundOutboundShipping={refundOutboundShipping}
+            coverReturnShipping={coverReturnShipping}
+            returnRefundSubmitting={returnRefundSubmitting}
+            returnRefundSelectionLocked={returnRefundSelectionLocked}
+            returnRefundCanSubmit={returnRefundCanSubmit}
+            returnRefundErrorMessage={returnRefundErrorMessage}
+            onChangeMerchandiseRefundAmount={
+              onChangeMerchandiseRefundAmount
+            }
+            onChangeRefundOutboundShipping={
+              onChangeRefundOutboundShipping
+            }
+            onChangeCoverReturnShipping={
+              onChangeCoverReturnShipping
+            }
+            onSubmitReturnRefund={onSubmitReturnRefund}
           />
 
           <InquiryReplyListCard
