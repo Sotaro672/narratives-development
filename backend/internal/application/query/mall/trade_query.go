@@ -99,7 +99,7 @@ type TradeListItem struct {
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
-// TradeListResult is the Trade portion of the Mall chat list response.
+// TradeListResult is the Trade portion of the ChatListPage response.
 type TradeListResult struct {
 	Items []TradeListItem `json:"items"`
 }
@@ -451,12 +451,17 @@ func (q *TradeQuery) getTradeOrderItemState(
 		return tradeOrderItemState{}, ErrTradeQueryUnsupportedTrade
 	}
 
-	refundAmountSummary, err := refunddom.CalculateOrderItemRefundAmount(
-		order,
-		trade.OrderItemIndex,
-	)
-	if err != nil {
-		return tradeOrderItemState{}, err
+	merchandiseRefundMaxAmount := 0
+	if !item.IsCancelled {
+		refundAmountSummary, err := refunddom.CalculateOrderItemRefundAmount(
+			order,
+			trade.OrderItemIndex,
+		)
+		if err != nil {
+			return tradeOrderItemState{}, err
+		}
+
+		merchandiseRefundMaxAmount = refundAmountSummary.RefundAmount
 	}
 
 	return tradeOrderItemState{
@@ -467,7 +472,7 @@ func (q *TradeQuery) getTradeOrderItemState(
 		ReturnRequestedAt:          item.ReturnRequestedAt,
 		IsReturnCompleted:          item.IsReturnCompleted,
 		ReturnCompletedAt:          item.ReturnCompletedAt,
-		MerchandiseRefundMaxAmount: refundAmountSummary.RefundAmount,
+		MerchandiseRefundMaxAmount: merchandiseRefundMaxAmount,
 		Transferred:                item.Transferred,
 		TransferredAt:              item.TransferredAt,
 		ResaleID:                   item.ResaleID,
