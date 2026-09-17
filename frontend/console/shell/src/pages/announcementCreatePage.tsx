@@ -1,15 +1,14 @@
 // frontend/console/shell/src/pages/announcementCreatePage.tsx
 
 import { useCallback, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import InputCard from "../features/announcement/presentation/components/inputCard";
+import AnnouncementCreateProgressModal from "../features/announcement/presentation/components/announcementCreateProgressModal";
 
 import type { AnnouncementInputPayload } from "../features/announcement/application/announcement_input";
-
 import { useAnnouncementCreatePage } from "../features/announcement/presentation/hook/useAnnouncementCreatePage";
 
 const initialInputPayload: AnnouncementInputPayload = {
@@ -19,13 +18,10 @@ const initialInputPayload: AnnouncementInputPayload = {
 };
 
 export default function AnnouncementCreatePage() {
-  const navigate = useNavigate();
-  const { vm, handlers } = useAnnouncementCreatePage();
+  const { vm, state, handlers } = useAnnouncementCreatePage();
 
   const [inputPayload, setInputPayload] =
     useState<AnnouncementInputPayload>(initialInputPayload);
-  const [isSavingInput, setIsSavingInput] = useState(false);
-  const [isSendingInput, setIsSendingInput] = useState(false);
 
   const {
     sales,
@@ -37,9 +33,17 @@ export default function AnnouncementCreatePage() {
   } = vm;
 
   const {
+    isSaving,
+    isSending,
+    progress,
+    progressOpen,
+  } = state;
+
+  const {
     onBack,
     onSaveAnnouncement,
     onSendAnnouncement,
+    onCloseProgress,
   } = handlers;
 
   const targetAvatarIds = useMemo(
@@ -57,81 +61,49 @@ export default function AnnouncementCreatePage() {
   );
 
   const handleSave = useCallback(async () => {
-    if (isSavingInput || isSendingInput) {
+    if (isSaving || isSending) {
       return;
     }
-
-    setIsSavingInput(true);
 
     try {
       await onSaveAnnouncement({
         payload: inputPayload,
         targetAvatarIds,
       });
-
-      window.alert("告知を保存しました。");
-      navigate("/sales");
     } catch (error) {
       console.error(
         "[AnnouncementCreatePage] save announcement failed",
         error,
       );
-
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "告知の保存に失敗しました。",
-      );
-    } finally {
-      setIsSavingInput(false);
     }
   }, [
     inputPayload,
-    isSavingInput,
-    isSendingInput,
-    navigate,
+    isSaving,
+    isSending,
     onSaveAnnouncement,
     targetAvatarIds,
   ]);
 
   const handleSend = useCallback(async () => {
-    if (isSavingInput || isSendingInput) {
+    if (isSaving || isSending) {
       return;
     }
 
-    setIsSendingInput(true);
-
     try {
-      const announcementId = await onSendAnnouncement({
+      await onSendAnnouncement({
         payload: inputPayload,
         targetAvatarIds,
       });
-
-      window.alert("告知を送信しました。");
-
-      navigate(
-        `/sales/announcements/${encodeURIComponent(announcementId)}`,
-        { replace: true },
-      );
     } catch (error) {
       console.error(
         "[AnnouncementCreatePage] send announcement failed",
         error,
       );
-
-      window.alert(
-        error instanceof Error
-          ? error.message
-          : "告知の送信に失敗しました。",
-      );
-    } finally {
-      setIsSendingInput(false);
     }
   }, [
     inputPayload,
-    isSavingInput,
-    isSendingInput,
-    navigate,
+    isSaving,
+    isSending,
     onSendAnnouncement,
     targetAvatarIds,
   ]);
@@ -151,37 +123,51 @@ export default function AnnouncementCreatePage() {
   }
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title="告知を作成"
-      onBack={onBack}
-      onSave={handleSave}
-      isSaving={isSavingInput}
-      onSend={handleSend}
-      isSending={isSendingInput}
-    >
-      <div className="space-y-4">
-        <InputCard
-          title="入力"
-          saving={isSavingInput}
-          sending={isSendingInput}
-          onChange={handleInputChange}
-        />
-      </div>
+    <>
+      <PageStyle
+        layout="grid-2"
+        title="告知を作成"
+        onBack={onBack}
+        onSave={handleSave}
+        isSaving={isSaving}
+        onSend={handleSend}
+        isSending={isSending}
+      >
+        <div className="space-y-4">
+          <InputCard
+            title="入力"
+            saving={isSaving}
+            sending={isSending}
+            onChange={handleInputChange}
+          />
+        </div>
 
-      <div className="space-y-4">
-        <AdminCard
-          title="管理情報"
-          mode="view"
-          targetAvatarCount={targetAvatarCount}
-          createdByName={createdByName}
-          createdAt={createdAt}
-          updatedByName={updatedByName}
-          updatedAt={updatedAt}
-        />
+        <div className="space-y-4">
+          <AdminCard
+            title="管理情報"
+            mode="view"
+            targetAvatarCount={targetAvatarCount}
+            createdByName={createdByName}
+            createdAt={createdAt}
+            updatedByName={updatedByName}
+            updatedAt={updatedAt}
+          />
 
-        <LogCard title="更新ログ" />
-      </div>
-    </PageStyle>
+          <LogCard title="更新ログ" />
+        </div>
+      </PageStyle>
+
+      <AnnouncementCreateProgressModal
+        open={progressOpen}
+        progress={progress}
+        onClose={
+          isSaving ||
+          isSending ||
+          progress.isBlockingNavigation
+            ? undefined
+            : onCloseProgress
+        }
+      />
+    </>
   );
 }

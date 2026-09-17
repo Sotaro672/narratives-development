@@ -7,6 +7,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import InputCard from "../features/announcement/presentation/components/inputCard";
+import AnnouncementCreateProgressModal from "../features/announcement/presentation/components/announcementCreateProgressModal";
 
 import type {
   AnnouncementInputAttachment,
@@ -14,6 +15,17 @@ import type {
 } from "../features/announcement/application/announcement_input";
 
 import { uploadAnnouncementImages } from "../features/announcement/application/announcement_attachment_service";
+
+import {
+  createCompletedAnnouncementCreateProgress,
+  createFailedAnnouncementCreateProgress,
+  createInitialAnnouncementCreateProgress,
+  createPreparingAnnouncementCreateProgress,
+  createSavingAnnouncementCreateProgress,
+  createUploadingAnnouncementCreateProgress,
+  isAnnouncementCreateProgressVisible,
+  type AnnouncementCreateProgress,
+} from "../features/announcement/presentation/model/announcementCreateProgress";
 
 import {
   deleteAnnouncement,
@@ -34,6 +46,14 @@ const emptyInputPayload: AnnouncementInputPayload = {
   attachments: [],
 };
 
+type DraftUpdateResult = {
+  hadImageUpload: boolean;
+  transferredBytes: number;
+  totalBytes: number;
+  completedUploadCount: number;
+  expectedUploadCount: number;
+};
+
 function toInputAttachments(
   files: AnnouncementAttachmentFile[] | undefined,
 ): AnnouncementInputAttachment[] {
@@ -45,11 +65,18 @@ function toInputAttachments(
     }));
 }
 
+function hasNewImages(payload: AnnouncementInputPayload): boolean {
+  return payload.attachments.some(
+    (attachment) => attachment.type === "new",
+  );
+}
+
 export default function AnnouncementDetailPage() {
   const navigate = useNavigate();
   const { announcementId } = useParams<{ announcementId: string }>();
 
-  const [announcement, setAnnouncement] = useState<AnnouncementDetail | null>(null);
+  const [announcement, setAnnouncement] =
+    useState<AnnouncementDetail | null>(null);
   const [inputPayload, setInputPayload] =
     useState<AnnouncementInputPayload>(emptyInputPayload);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -58,11 +85,17 @@ export default function AnnouncementDetailPage() {
   const [isSendingInput, setIsSendingInput] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [progress, setProgress] = useState<AnnouncementCreateProgress>(
+    createInitialAnnouncementCreateProgress,
+  );
 
   const normalizedAnnouncementId = useMemo(
     () => String(announcementId ?? "").trim(),
     [announcementId],
   );
+
+  const progressOpen =
+    isAnnouncementCreateProgressVisible(progress);
 
   const resetFormFromAnnouncement = useCallback(
     (source: AnnouncementDetail) => {
@@ -129,6 +162,23 @@ export default function AnnouncementDetailPage() {
     }
   }, [announcement, resetFormFromAnnouncement]);
 
+  useEffect(() => {
+    if (!progress.isBlockingNavigation) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [progress.isBlockingNavigation]);
+
   const targetAvatarIds = useMemo(
     () => announcement?.targetAvatars ?? [],
     [announcement],
@@ -144,20 +194,43 @@ export default function AnnouncementDetailPage() {
   const pageTitle = announcement?.title || "告知詳細";
 
   const handleBack = useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
     navigate("/sales");
-  }, [navigate]);
+  }, [navigate, progress.isBlockingNavigation]);
 
   const handleEdit = useCallback(() => {
-    if (!announcement || announcement.published || isDeleting) {
+    if (
+      !announcement ||
+      announcement.published ||
+      isDeleting ||
+      isSavingInput ||
+      isSendingInput ||
+      progress.isBlockingNavigation
+    ) {
       return;
     }
 
     resetFormFromAnnouncement(announcement);
     setIsEditMode(true);
-  }, [announcement, isDeleting, resetFormFromAnnouncement]);
+  }, [
+    announcement,
+    isDeleting,
+    isSavingInput,
+    isSendingInput,
+    progress.isBlockingNavigation,
+    resetFormFromAnnouncement,
+  ]);
 
   const handleCancelEdit = useCallback(() => {
-    if (isDeleting) {
+    if (
+      isDeleting ||
+      isSavingInput ||
+      isSendingInput ||
+      progress.isBlockingNavigation
+    ) {
       return;
     }
 
@@ -166,7 +239,14 @@ export default function AnnouncementDetailPage() {
     }
 
     setIsEditMode(false);
-  }, [announcement, isDeleting, resetFormFromAnnouncement]);
+  }, [
+    announcement,
+    isDeleting,
+    isSavingInput,
+    isSendingInput,
+    progress.isBlockingNavigation,
+    resetFormFromAnnouncement,
+  ]);
 
   const handleDelete = useCallback(async () => {
     if (
@@ -175,7 +255,8 @@ export default function AnnouncementDetailPage() {
       !isEditMode ||
       isSavingInput ||
       isSendingInput ||
-      isDeleting
+      isDeleting ||
+      progress.isBlockingNavigation
     ) {
       return;
     }
@@ -192,7 +273,7 @@ export default function AnnouncementDetailPage() {
 
     try {
       await deleteAnnouncement(announcement.id);
-      window.alert("告知を削除しました.");
+      window.alert("告知を削除しました。");
       navigate("/sales");
     } catch (error) {
       console.error(
@@ -215,6 +296,7 @@ export default function AnnouncementDetailPage() {
     isSavingInput,
     isSendingInput,
     navigate,
+    progress.isBlockingNavigation,
   ]);
 
   const handleInputChange = useCallback(
@@ -238,9 +320,15 @@ export default function AnnouncementDetailPage() {
   }, [announcement]);
 
   const updateDraftAnnouncement = useCallback(
-    async (payload: AnnouncementInputPayload): Promise<void> => {
+    async (payload: AnnouncementInputPayload): Promise<DraftUpdateResult> => {
       if (!announcement || announcement.published) {
-        return;
+        return {
+          hadImageUpload: false,
+          transferredBytes: 0,
+          totalBytes: 0,
+          completedUploadCount: 0,
+          expectedUploadCount: 0,
+        };
       }
 
       const existingAttachments: AnnouncementAttachmentInput[] = [];
@@ -261,10 +349,57 @@ export default function AnnouncementDetailPage() {
         });
       }
 
-      const uploadedAttachments = await uploadAnnouncementImages({
-        announcementId: announcement.id,
-        images: newFiles,
-      });
+      const hadImageUpload = newFiles.length > 0;
+      let transferredBytes = 0;
+      let totalBytes = 0;
+      let completedUploadCount = 0;
+      let expectedUploadCount = 0;
+      let uploadedAttachments: AnnouncementAttachmentInput[] = [];
+
+      if (hadImageUpload) {
+        setProgress(
+          createPreparingAnnouncementCreateProgress({
+            title: "保存準備中",
+            message: "告知画像の転送準備をしています。",
+          }),
+        );
+
+        uploadedAttachments = await uploadAnnouncementImages({
+          announcementId: announcement.id,
+          images: newFiles,
+          onProgress: (uploadProgress) => {
+            transferredBytes = uploadProgress.transferredBytes;
+            totalBytes = uploadProgress.totalBytes;
+            completedUploadCount = uploadProgress.completedUploadCount;
+            expectedUploadCount = uploadProgress.expectedUploadCount;
+
+            setProgress(
+              createUploadingAnnouncementCreateProgress({
+                fileName: uploadProgress.fileName,
+                transferredBytes: uploadProgress.transferredBytes,
+                totalBytes: uploadProgress.totalBytes,
+                completedUploadCount: uploadProgress.completedUploadCount,
+                expectedUploadCount: uploadProgress.expectedUploadCount,
+                title: "画像を転送中",
+                message:
+                  "画像転送が完了するまで、この画面を閉じたり別のページへ移動したりしないでください。",
+              }),
+            );
+          },
+        });
+
+        setProgress(
+          createSavingAnnouncementCreateProgress({
+            transferredBytes,
+            totalBytes,
+            completedUploadCount,
+            expectedUploadCount,
+            title: "告知を保存中",
+            message:
+              "画像転送が完了しました。告知情報を保存しています。",
+          }),
+        );
+      }
 
       const attachments = [
         ...existingAttachments,
@@ -279,6 +414,14 @@ export default function AnnouncementDetailPage() {
         attachments,
         updatedBy: getUpdatedBy(),
       });
+
+      return {
+        hadImageUpload,
+        transferredBytes,
+        totalBytes,
+        completedUploadCount,
+        expectedUploadCount,
+      };
     },
     [announcement, getUpdatedBy, targetAvatarIds],
   );
@@ -289,31 +432,61 @@ export default function AnnouncementDetailPage() {
       announcement.published ||
       isSavingInput ||
       isSendingInput ||
-      isDeleting
+      isDeleting ||
+      progress.isBlockingNavigation
     ) {
       return;
     }
 
     const payload = buildSubmitPayload();
+    const includesNewImages = hasNewImages(payload);
+
     setIsSavingInput(true);
 
     try {
-      await updateDraftAnnouncement(payload);
+      const result = await updateDraftAnnouncement(payload);
       await reloadAnnouncement(announcement.id);
 
       setIsEditMode(false);
-      window.alert("告知を保存しました。");
+
+      if (result.hadImageUpload) {
+        setProgress(
+          createCompletedAnnouncementCreateProgress({
+            transferredBytes: result.transferredBytes,
+            totalBytes: result.totalBytes,
+            completedUploadCount: result.completedUploadCount,
+            expectedUploadCount: result.expectedUploadCount,
+            title: "保存が完了しました",
+            message: "告知の保存が完了しました。",
+          }),
+        );
+      } else {
+        window.alert("告知を保存しました。");
+      }
     } catch (error) {
       console.error(
         "[AnnouncementDetailPage] save announcement failed",
         error,
       );
 
-      window.alert(
+      const message =
         error instanceof Error
           ? error.message
-          : "告知の保存に失敗しました。",
-      );
+          : "告知の保存に失敗しました。";
+
+      if (includesNewImages) {
+        setProgress(
+          createFailedAnnouncementCreateProgress(
+            message,
+            {
+              title: "保存に失敗しました",
+              message: "告知の保存中にエラーが発生しました。",
+            },
+          ),
+        );
+      } else {
+        window.alert(message);
+      }
     } finally {
       setIsSavingInput(false);
     }
@@ -323,6 +496,7 @@ export default function AnnouncementDetailPage() {
     isDeleting,
     isSavingInput,
     isSendingInput,
+    progress.isBlockingNavigation,
     reloadAnnouncement,
     updateDraftAnnouncement,
   ]);
@@ -333,17 +507,37 @@ export default function AnnouncementDetailPage() {
       announcement.published ||
       isSavingInput ||
       isSendingInput ||
-      isDeleting
+      isDeleting ||
+      progress.isBlockingNavigation
     ) {
       return;
     }
 
     const payload = buildSubmitPayload();
+    const includesNewImages =
+      isEditMode && hasNewImages(payload);
+
     setIsSendingInput(true);
 
     try {
+      let updateResult: DraftUpdateResult | null = null;
+
       if (isEditMode) {
-        await updateDraftAnnouncement(payload);
+        updateResult = await updateDraftAnnouncement(payload);
+      }
+
+      if (updateResult?.hadImageUpload) {
+        setProgress(
+          createSavingAnnouncementCreateProgress({
+            transferredBytes: updateResult.transferredBytes,
+            totalBytes: updateResult.totalBytes,
+            completedUploadCount: updateResult.completedUploadCount,
+            expectedUploadCount: updateResult.expectedUploadCount,
+            title: "告知を送信中",
+            message:
+              "画像転送が完了しました。告知の送信処理を続けています。",
+          }),
+        );
       }
 
       await markAnnouncementPublished(announcement.id, {
@@ -351,20 +545,46 @@ export default function AnnouncementDetailPage() {
       });
 
       await reloadAnnouncement(announcement.id);
-
       setIsEditMode(false);
-      window.alert("告知を送信しました。");
+
+      if (updateResult?.hadImageUpload) {
+        setProgress(
+          createCompletedAnnouncementCreateProgress({
+            transferredBytes: updateResult.transferredBytes,
+            totalBytes: updateResult.totalBytes,
+            completedUploadCount: updateResult.completedUploadCount,
+            expectedUploadCount: updateResult.expectedUploadCount,
+            title: "送信が完了しました",
+            message: "告知の送信が完了しました。",
+          }),
+        );
+      } else {
+        window.alert("告知を送信しました。");
+      }
     } catch (error) {
       console.error(
         "[AnnouncementDetailPage] send announcement failed",
         error,
       );
 
-      window.alert(
+      const message =
         error instanceof Error
           ? error.message
-          : "告知の送信に失敗しました。",
-      );
+          : "告知の送信に失敗しました。";
+
+      if (includesNewImages) {
+        setProgress(
+          createFailedAnnouncementCreateProgress(
+            message,
+            {
+              title: "送信に失敗しました",
+              message: "告知の送信中にエラーが発生しました。",
+            },
+          ),
+        );
+      } else {
+        window.alert(message);
+      }
     } finally {
       setIsSendingInput(false);
     }
@@ -376,8 +596,27 @@ export default function AnnouncementDetailPage() {
     isEditMode,
     isSavingInput,
     isSendingInput,
+    progress.isBlockingNavigation,
     reloadAnnouncement,
     updateDraftAnnouncement,
+  ]);
+
+  const handleCloseProgress = useCallback(() => {
+    if (
+      isSavingInput ||
+      isSendingInput ||
+      progress.isBlockingNavigation
+    ) {
+      return;
+    }
+
+    setProgress(
+      createInitialAnnouncementCreateProgress(),
+    );
+  }, [
+    isSavingInput,
+    isSendingInput,
+    progress.isBlockingNavigation,
   ]);
 
   const createdByName = announcement?.createdByName ?? "";
@@ -386,16 +625,28 @@ export default function AnnouncementDetailPage() {
   const updatedAt = announcement?.updatedAt ?? "";
 
   const canEditOrSend = Boolean(
-    announcement && !announcement.published && !isDeleting,
+    announcement &&
+      !announcement.published &&
+      !isDeleting &&
+      !progress.isBlockingNavigation,
   );
 
   const canDelete = Boolean(
-    announcement && !announcement.published && isEditMode,
+    announcement &&
+      !announcement.published &&
+      isEditMode &&
+      !isSavingInput &&
+      !isSendingInput &&
+      !progress.isBlockingNavigation,
   );
 
   if (isLoading && !announcement) {
     return (
-      <PageStyle layout="single" title="告知詳細" onBack={handleBack}>
+      <PageStyle
+        layout="single"
+        title="告知詳細"
+        onBack={handleBack}
+      >
         <p className="p-4 text-sm text-muted-foreground">
           読み込み中です。
         </p>
@@ -405,7 +656,11 @@ export default function AnnouncementDetailPage() {
 
   if (errorMessage) {
     return (
-      <PageStyle layout="single" title="告知詳細" onBack={handleBack}>
+      <PageStyle
+        layout="single"
+        title="告知詳細"
+        onBack={handleBack}
+      >
         <p className="p-4 text-sm text-red-600">
           {errorMessage}
         </p>
@@ -415,7 +670,11 @@ export default function AnnouncementDetailPage() {
 
   if (!announcement) {
     return (
-      <PageStyle layout="single" title="告知詳細" onBack={handleBack}>
+      <PageStyle
+        layout="single"
+        title="告知詳細"
+        onBack={handleBack}
+      >
         <p className="p-4 text-sm text-muted-foreground">
           表示可能な告知詳細がありません。
         </p>
@@ -424,44 +683,82 @@ export default function AnnouncementDetailPage() {
   }
 
   return (
-    <PageStyle
-      layout="grid-2"
-      title={pageTitle}
-      onBack={handleBack}
-      onEdit={canEditOrSend && !isEditMode ? handleEdit : undefined}
-      onDelete={canDelete ? handleDelete : undefined}
-      onCancel={canEditOrSend && isEditMode ? handleCancelEdit : undefined}
-      onSave={canEditOrSend && isEditMode ? handleSave : undefined}
-      isSaving={isSavingInput}
-      onSend={canEditOrSend ? handleSend : undefined}
-      isSending={isSendingInput}
-    >
-      <div className="space-y-4">
-        <InputCard
-          title="入力"
-          mode={isEditMode ? "edit" : "view"}
-          initialTitle={announcement.title}
-          initialText={announcement.content}
-          initialAttachments={initialAttachments}
-          saving={isSavingInput}
-          sending={isSendingInput}
-          onChange={isEditMode ? handleInputChange : undefined}
-        />
-      </div>
+    <>
+      <PageStyle
+        layout="grid-2"
+        title={pageTitle}
+        onBack={handleBack}
+        onEdit={
+          canEditOrSend && !isEditMode
+            ? handleEdit
+            : undefined
+        }
+        onDelete={
+          canDelete
+            ? handleDelete
+            : undefined
+        }
+        onCancel={
+          canEditOrSend && isEditMode
+            ? handleCancelEdit
+            : undefined
+        }
+        onSave={
+          canEditOrSend && isEditMode
+            ? handleSave
+            : undefined
+        }
+        isSaving={isSavingInput}
+        onSend={
+          canEditOrSend
+            ? handleSend
+            : undefined
+        }
+        isSending={isSendingInput}
+      >
+        <div className="space-y-4">
+          <InputCard
+            title="入力"
+            mode={isEditMode ? "edit" : "view"}
+            initialTitle={announcement.title}
+            initialText={announcement.content}
+            initialAttachments={initialAttachments}
+            saving={isSavingInput}
+            sending={isSendingInput}
+            onChange={
+              isEditMode
+                ? handleInputChange
+                : undefined
+            }
+          />
+        </div>
 
-      <div className="space-y-4">
-        <AdminCard
-          title="管理情報"
-          mode="view"
-          targetAvatarCount={targetAvatarCount}
-          createdByName={createdByName}
-          createdAt={createdAt}
-          updatedByName={updatedByName}
-          updatedAt={updatedAt}
-        />
+        <div className="space-y-4">
+          <AdminCard
+            title="管理情報"
+            mode="view"
+            targetAvatarCount={targetAvatarCount}
+            createdByName={createdByName}
+            createdAt={createdAt}
+            updatedByName={updatedByName}
+            updatedAt={updatedAt}
+          />
 
-        <LogCard title="更新ログ" />
-      </div>
-    </PageStyle>
+          <LogCard title="更新ログ" />
+        </div>
+      </PageStyle>
+
+      <AnnouncementCreateProgressModal
+        open={progressOpen}
+        progress={progress}
+        onClose={
+          isSavingInput ||
+          isSendingInput ||
+          progress.isBlockingNavigation
+            ? undefined
+            : handleCloseProgress
+        }
+      />
+    </>
   );
 }

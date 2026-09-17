@@ -4,22 +4,37 @@ import {
   getDownloadURL,
   getStorage,
   ref as storageRef,
-  uploadBytes,
+  uploadBytesResumable,
 } from "firebase/storage";
 
 import type {
   AnnouncementAttachmentInput,
 } from "../../../shared/types/announcements";
 
+export type AnnouncementImageUploadProgress = {
+  fileName: string;
+  transferredBytes: number;
+  totalBytes: number;
+  percentage: number;
+  completedUploadCount: number;
+  expectedUploadCount: number;
+};
+
+export type AnnouncementImageUploadProgressHandler = (
+  progress: AnnouncementImageUploadProgress,
+) => void;
+
 type UploadAnnouncementImageParams = {
   announcementId: string;
   file: File;
   index: number;
+  onProgress?: (transferredBytes: number, totalBytes: number) => void;
 };
 
 export type UploadAnnouncementImagesParams = {
   announcementId: string;
   images: File[];
+  onProgress?: AnnouncementImageUploadProgressHandler;
 };
 
 // ============================================================
@@ -43,15 +58,11 @@ export function createAnnouncementClientId(): string {
 // Validation
 // ============================================================
 
-function isImageFile(
-  value: unknown,
-): value is File {
+function isImageFile(value: unknown): value is File {
   return (
     typeof File !== "undefined" &&
     value instanceof File &&
-    value.type.startsWith(
-      "image/",
-    )
+    value.type.startsWith("image/")
   );
 }
 
@@ -59,51 +70,27 @@ function isImageFile(
 // Storage path
 // ============================================================
 
-function getFileExtension(
-  fileName: string,
-): string {
-  const normalizedFileName =
-    String(
-      fileName ?? "",
-    ).trim();
-
-  const extensionIndex =
-    normalizedFileName.lastIndexOf(
-      ".",
-    );
+function getFileExtension(fileName: string): string {
+  const normalizedFileName = String(fileName ?? "").trim();
+  const extensionIndex = normalizedFileName.lastIndexOf(".");
 
   if (
     extensionIndex < 0 ||
-    extensionIndex ===
-      normalizedFileName.length - 1
+    extensionIndex === normalizedFileName.length - 1
   ) {
     return "";
   }
 
-  return normalizedFileName.slice(
-    extensionIndex,
-  );
+  return normalizedFileName.slice(extensionIndex);
 }
 
 function buildAnnouncementAttachmentStorageFileName(
   file: File,
   index: number,
 ): string {
-  const extension =
-    getFileExtension(
-      file.name || "image",
-    );
-
-  const attachmentId =
-    createAnnouncementClientId();
-
-  const displayOrder =
-    String(
-      index + 1,
-    ).padStart(
-      2,
-      "0",
-    );
+  const extension = getFileExtension(file.name || "image");
+  const attachmentId = createAnnouncementClientId();
+  const displayOrder = String(index + 1).padStart(2, "0");
 
   return `${displayOrder}-${attachmentId}${extension}`;
 }
@@ -117,8 +104,27 @@ function buildAnnouncementAttachmentObjectPath(
     announcementId,
     "attachments",
     storageFileName,
-  ].join(
-    "/",
+  ].join("/");
+}
+
+// ============================================================
+// Progress
+// ============================================================
+
+function calculateUploadPercentage(
+  transferredBytes: number,
+  totalBytes: number,
+): number {
+  if (totalBytes <= 0) {
+    return 0;
+  }
+
+  return Math.min(
+    100,
+    Math.max(
+      0,
+      Math.round((transferredBytes / totalBytes) * 100),
+    ),
   );
 }
 
@@ -130,14 +136,10 @@ async function uploadAnnouncementImage({
   announcementId,
   file,
   index,
-}: UploadAnnouncementImageParams): Promise<
-  AnnouncementAttachmentInput
-> {
+  onProgress,
+}: UploadAnnouncementImageParams): Promise<AnnouncementAttachmentInput> {
   const storageFileName =
-    buildAnnouncementAttachmentStorageFileName(
-      file,
-      index,
-    );
+    buildAnnouncementAttachmentStorageFileName(file, index);
 
   const objectPath =
     buildAnnouncementAttachmentObjectPath(
@@ -149,50 +151,60 @@ async function uploadAnnouncementImage({
     file.type ||
     "application/octet-stream";
 
-  const storage =
-    getStorage();
+  const storage = getStorage();
+  const attachmentRef = storageRef(
+    storage,
+    objectPath,
+  );
 
-  const attachmentRef =
-    storageRef(
-      storage,
-      objectPath,
-    );
+  onProgress?.(0, file.size);
 
-  await uploadBytes(
+  const uploadTask = uploadBytesResumable(
     attachmentRef,
     file,
     {
-      contentType:
-        mimeType,
-
+      contentType: mimeType,
       customMetadata: {
         announcementId,
-
-        fileName:
-          storageFileName,
-
-        originalFileName:
-          file.name,
+        fileName: storageFileName,
+        originalFileName: file.name,
       },
     },
   );
 
-  const fileUrl =
-    await getDownloadURL(
-      attachmentRef,
+  await new Promise<void>((resolve, reject) => {
+    uploadTask.on(
+      "state_changed",
+      (snapshot) => {
+        onProgress?.(
+          snapshot.bytesTransferred,
+          snapshot.totalBytes,
+        );
+      },
+      (error) => {
+        reject(error);
+      },
+      () => {
+        const snapshot = uploadTask.snapshot;
+
+        onProgress?.(
+          snapshot.totalBytes,
+          snapshot.totalBytes,
+        );
+
+        resolve();
+      },
     );
+  });
+
+  const snapshot = uploadTask.snapshot;
+  const fileUrl = await getDownloadURL(snapshot.ref);
 
   return {
-    fileName:
-      storageFileName,
-
+    fileName: storageFileName,
     fileUrl,
-
-    fileSize:
-      file.size,
-
+    fileSize: file.size,
     mimeType,
-
     objectPath,
   };
 }
@@ -200,35 +212,85 @@ async function uploadAnnouncementImage({
 export async function uploadAnnouncementImages({
   announcementId,
   images,
+  onProgress,
 }: UploadAnnouncementImagesParams): Promise<
   AnnouncementAttachmentInput[]
 > {
-  const validImages =
-    Array.isArray(
-      images,
-    )
-      ? images.filter(
-          isImageFile,
-        )
-      : [];
+  const validImages = Array.isArray(images)
+    ? images.filter(isImageFile)
+    : [];
 
-  if (
-    validImages.length === 0
-  ) {
+  if (validImages.length === 0) {
     return [];
   }
 
-  return Promise.all(
-    validImages.map(
-      (
-        file,
-        index,
-      ) =>
-        uploadAnnouncementImage({
-          announcementId,
-          file,
-          index,
-        }),
-    ),
+  const totalBytes = validImages.reduce(
+    (total, file) => total + file.size,
+    0,
   );
+
+  const expectedUploadCount = validImages.length;
+  const attachments: AnnouncementAttachmentInput[] = [];
+
+  let completedBytes = 0;
+  let completedUploadCount = 0;
+
+  for (
+    let index = 0;
+    index < validImages.length;
+    index += 1
+  ) {
+    const file = validImages[index];
+
+    if (!file) {
+      continue;
+    }
+
+    const attachment = await uploadAnnouncementImage({
+      announcementId,
+      file,
+      index,
+      onProgress: (fileTransferredBytes) => {
+        const transferredBytes = Math.min(
+          totalBytes,
+          completedBytes + fileTransferredBytes,
+        );
+
+        onProgress?.({
+          fileName: file.name,
+          transferredBytes,
+          totalBytes,
+          percentage: calculateUploadPercentage(
+            transferredBytes,
+            totalBytes,
+          ),
+          completedUploadCount,
+          expectedUploadCount,
+        });
+      },
+    });
+
+    attachments.push(attachment);
+
+    completedBytes = Math.min(
+      totalBytes,
+      completedBytes + file.size,
+    );
+
+    completedUploadCount += 1;
+
+    onProgress?.({
+      fileName: file.name,
+      transferredBytes: completedBytes,
+      totalBytes,
+      percentage: calculateUploadPercentage(
+        completedBytes,
+        totalBytes,
+      ),
+      completedUploadCount,
+      expectedUploadCount,
+    });
+  }
+
+  return attachments;
 }

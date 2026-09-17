@@ -9,11 +9,13 @@ import {
   Trash2,
   X,
   Tag,
-  RefreshCw,
   Send,
   MessageSquareReply,
   Link2,
 } from "lucide-react";
+
+import RefreshButton from "../../shared/ui/refresh";
+
 import "./PageStyle.css";
 
 function cn(...classes: Array<string | undefined | false | null>) {
@@ -207,11 +209,7 @@ export default function PageStyle({
     } finally {
       setInternalIsConnecting(false);
     }
-  }, [
-    onConnect,
-    isConnecting,
-    connectDisabled,
-  ]);
+  }, [onConnect, isConnecting, connectDisabled]);
 
   const handleList = React.useCallback(async () => {
     if (!onList || isListing) return;
@@ -315,20 +313,12 @@ export default function PageStyle({
             )}
 
             {onRefresh && (
-              <button
-                type="button"
-                className="page-header__btn"
+              <RefreshButton
                 onClick={() => void handleRefresh()}
-                disabled={isRefreshing}
-                aria-busy={isRefreshing}
-              >
-                {isRefreshing ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <RefreshCw size={16} style={{ marginRight: 4 }} />
-                )}
-                {isRefreshing ? "更新中" : "更新"}
-              </button>
+                loading={isRefreshing}
+                title="リフレッシュ"
+                ariaLabel="リフレッシュ"
+              />
             )}
 
             {leadingActions}
@@ -429,10 +419,7 @@ export default function PageStyle({
                 type="button"
                 className="page-header__btn"
                 onClick={() => void handleConnect()}
-                disabled={
-                  isConnecting ||
-                  Boolean(connectDisabled)
-                }
+                disabled={isConnecting || Boolean(connectDisabled)}
                 aria-busy={isConnecting}
               >
                 {isConnecting ? (
@@ -440,9 +427,7 @@ export default function PageStyle({
                 ) : (
                   <Link2 size={16} style={{ marginRight: 4 }} />
                 )}
-                {isConnecting
-                  ? connectBusyLabel
-                  : connectLabel}
+                {isConnecting ? connectBusyLabel : connectLabel}
               </button>
             )}
 

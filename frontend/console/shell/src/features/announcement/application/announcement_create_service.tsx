@@ -12,6 +12,7 @@ import {
 import {
   createAnnouncementClientId,
   uploadAnnouncementImages,
+  type AnnouncementImageUploadProgress,
 } from "./announcement_attachment_service";
 
 import type { AnnouncementInputPayload } from "./announcement_input";
@@ -49,11 +50,29 @@ export type AnnouncementCreateLocationState = {
   owners?: AnnouncementCreateLocationOwner[];
 };
 
+export type AnnouncementSavingProgress = {
+  transferredBytes: number;
+  totalBytes: number;
+  completedUploadCount: number;
+  expectedUploadCount: number;
+};
+
+export type AnnouncementCreateProgressHandlers = {
+  onPreparing?: () => void;
+  onImageProgress?: (
+    progress: AnnouncementImageUploadProgress,
+  ) => void;
+  onSaving?: (
+    progress: AnnouncementSavingProgress,
+  ) => void;
+};
+
 type AnnouncementActionParams = {
   sales: AnnouncementEntity | null;
   payload: AnnouncementInputPayload;
   createdBy: string;
   targetAvatarIds: string[];
+  progressHandlers?: AnnouncementCreateProgressHandlers;
 };
 
 // ============================================================
@@ -85,7 +104,9 @@ function toOwnersFromState(
     .map((owner) => owner.avatarId)
     .filter((avatarId): avatarId is string => Boolean(avatarId));
 
-  return [...new Set(avatarIds)].map((avatarId) => ({ avatarId }));
+  return [...new Set(avatarIds)].map((avatarId) => ({
+    avatarId,
+  }));
 }
 
 // ============================================================
@@ -126,7 +147,10 @@ export async function fetchAnnouncementCreateVM(
 
   const blueprint = await fetchTokenBlueprintDetail(tokenBlueprintId);
 
-  return buildAnnouncementCreateVM(blueprint, locationState);
+  return buildAnnouncementCreateVM(
+    blueprint,
+    locationState,
+  );
 }
 
 // ============================================================
@@ -148,10 +172,16 @@ function validateAnnouncementPayload(
 function validateTargetAvatarIds(
   targetAvatarIds: string[],
 ): string[] {
-  const ids = [...new Set(targetAvatarIds.filter(Boolean))];
+  const ids = [
+    ...new Set(
+      targetAvatarIds.filter(Boolean),
+    ),
+  ];
 
   if (ids.length === 0) {
-    throw new Error("告知先のアバターを選択してください。");
+    throw new Error(
+      "告知先のアバターを選択してください。",
+    );
   }
 
   return ids;
@@ -175,9 +205,14 @@ function validateAnnouncementActionParams(
   validateAnnouncementPayload(params.payload);
 
   return {
-    tokenBlueprintId: params.sales.tokenBlueprintId,
-    createdBy: params.createdBy,
-    targetAvatarIds: validateTargetAvatarIds(params.targetAvatarIds),
+    tokenBlueprintId:
+      params.sales.tokenBlueprintId,
+    createdBy:
+      params.createdBy,
+    targetAvatarIds:
+      validateTargetAvatarIds(
+        params.targetAvatarIds,
+      ),
   };
 }
 
@@ -194,31 +229,77 @@ async function createDraftAnnouncement(
     targetAvatarIds,
   } = validateAnnouncementActionParams(params);
 
-  const announcementId = createAnnouncementClientId();
+  params.progressHandlers?.onPreparing?.();
+
+  const announcementId =
+    createAnnouncementClientId();
+
   const images: File[] = [];
 
-  for (const attachment of params.payload.attachments) {
+  for (
+    const attachment of
+      params.payload.attachments
+  ) {
     if (attachment.type === "new") {
       images.push(attachment.file);
     }
   }
 
-  const attachments = await uploadAnnouncementImages({
-    announcementId,
-    images,
+  let transferredBytes = 0;
+  let totalBytes = images.reduce(
+    (total, file) =>
+      total + file.size,
+    0,
+  );
+  let completedUploadCount = 0;
+  const expectedUploadCount =
+    images.length;
+
+  const attachments =
+    await uploadAnnouncementImages({
+      announcementId,
+      images,
+      onProgress: (progress) => {
+        transferredBytes =
+          progress.transferredBytes;
+        totalBytes =
+          progress.totalBytes;
+        completedUploadCount =
+          progress.completedUploadCount;
+
+        params.progressHandlers
+          ?.onImageProgress?.(
+            progress,
+          );
+      },
+    });
+
+  params.progressHandlers?.onSaving?.({
+    transferredBytes,
+    totalBytes,
+    completedUploadCount:
+      expectedUploadCount > 0
+        ? expectedUploadCount
+        : completedUploadCount,
+    expectedUploadCount,
   });
 
-  const announcement = await createAnnouncement({
-    id: announcementId,
-    title: params.payload.title.trim(),
-    content: params.payload.text.trim(),
-    targetToken: tokenBlueprintId,
-    targetAvatars: targetAvatarIds,
-    attachments,
-    published: false,
-    publishedAt: null,
-    createdBy,
-  });
+  const announcement =
+    await createAnnouncement({
+      id: announcementId,
+      title:
+        params.payload.title.trim(),
+      content:
+        params.payload.text.trim(),
+      targetToken:
+        tokenBlueprintId,
+      targetAvatars:
+        targetAvatarIds,
+      attachments,
+      published: false,
+      publishedAt: null,
+      createdBy,
+    });
 
   return {
     announcement,
@@ -229,7 +310,12 @@ async function createDraftAnnouncement(
 export async function saveAnnouncement(
   params: AnnouncementActionParams,
 ) {
-  const { announcement } = await createDraftAnnouncement(params);
+  const {
+    announcement,
+  } = await createDraftAnnouncement(
+    params,
+  );
+
   return announcement;
 }
 
@@ -239,11 +325,16 @@ export async function sendAnnouncement(
   const {
     announcement,
     createdBy,
-  } = await createDraftAnnouncement(params);
+  } = await createDraftAnnouncement(
+    params,
+  );
 
-  return markAnnouncementPublished(announcement.id, {
-    updatedBy: createdBy,
-  });
+  return markAnnouncementPublished(
+    announcement.id,
+    {
+      updatedBy: createdBy,
+    },
+  );
 }
 
 export function createEmptyAnnouncementCreateVM(): AnnouncementCreateVM {
