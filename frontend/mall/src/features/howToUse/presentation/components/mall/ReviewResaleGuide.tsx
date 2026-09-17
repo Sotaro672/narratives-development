@@ -26,7 +26,7 @@ export default function ReviewResaleGuide() {
         </div>
       </HowToUseSection>
 
-      <HowToUseSection title="値下げコメントを投稿する">
+      <HowToUseSection title="出品者とチャットする">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo
             storagePath="mall/market/post-review-on-resale.mp4"
@@ -35,11 +35,8 @@ export default function ReviewResaleGuide() {
           />
 
           <HowToUseStepList>
-            <HowToUseStep>マーケットから値下げを相談する商品を開いてください。</HowToUseStep>
-            <HowToUseStep>出品詳細画面からコメントを開いてください。</HowToUseStep>
-            <HowToUseStep>希望する価格や値下げについてのコメントを入力してください。</HowToUseStep>
-            <HowToUseStep>入力内容を確認してコメントを投稿してください。</HowToUseStep>
-            <HowToUseStep>投稿したコメントは出品商品のコメント欄に表示され、出品者が確認できます。</HowToUseStep>
+            <HowToUseStep>マーケット出品画面にあるメッセージアイコンを押してください。</HowToUseStep>
+            <HowToUseStep>出品者へ伝えるメッセージを投稿してください。</HowToUseStep>
           </HowToUseStepList>
         </div>
       </HowToUseSection>
