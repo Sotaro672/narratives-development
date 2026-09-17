@@ -147,6 +147,12 @@ export const mallItems: HowToUseItem[] = [
   },
   {
     category: "mall",
+    slug: "payout-account",
+    title: "売上受取口座",
+    description: "フリマの売上を受け取るための銀行口座を登録・管理します。",
+  },
+  {
+    category: "mall",
     slug: "resale",
     title: "フリマ",
     description: "所有しているトークンをフリマへ出品できます。",

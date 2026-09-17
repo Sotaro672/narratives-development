@@ -25,6 +25,7 @@ import TokenBlueprintGuide from "../features/howToUse/presentation/components/co
 import ViewProductReviewGuide from "../features/howToUse/presentation/components/console/ViewProductReviewGuide";
 import AvatarCreateGuide from "../features/howToUse/presentation/components/mall/AvatarCreateGuide";
 import CancelOderGuide from "../features/howToUse/presentation/components/mall/CancelOderGuide";
+import OpenPayoutAccountGuide from "../features/howToUse/presentation/components/mall/OpenPayoutAccountGuide";
 import PostCommentGuide from "../features/howToUse/presentation/components/mall/PostCommentGuide";
 import PostProductReviewGuide from "../features/howToUse/presentation/components/mall/PostProductReviewGuide";
 import PurchaseGuide from "../features/howToUse/presentation/components/mall/PurchaseGuide";
@@ -120,6 +121,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
     return <PostProductReviewGuide />;
   }
 
+  if (category === "mall" && slug === "payout-account") {
+    return <OpenPayoutAccountGuide />;
+  }
+
   return null;
 }
 
@@ -140,10 +145,20 @@ export default function HowToUseDetailPage() {
   }
 
   return (
-    <Layout title={item.title} titleClickable={false} mode="landing" showBackButton backTo="/how-to-use" hideAnnouncementButton hideSettingsButton>
+    <Layout
+      title={item.title}
+      titleClickable={false}
+      mode="landing"
+      showBackButton
+      backTo="/how-to-use"
+      hideAnnouncementButton
+      hideSettingsButton
+    >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
-          <HowToUseArticle description={item.description}>{renderGuide(category, slug)}</HowToUseArticle>
+          <HowToUseArticle description={item.description}>
+            {renderGuide(category, slug)}
+          </HowToUseArticle>
         </div>
       </main>
     </Layout>
