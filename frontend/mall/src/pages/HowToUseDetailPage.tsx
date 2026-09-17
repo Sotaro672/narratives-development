@@ -34,6 +34,7 @@ import PurchaseGuide from "../features/howToUse/presentation/components/mall/Pur
 import RequestRefundGuide from "../features/howToUse/presentation/components/mall/RequestRefundGuide";
 import ReviewResaleGuide from "../features/howToUse/presentation/components/mall/ReviewResaleGuide";
 import ShippingAddressRegistrationGuide from "../features/howToUse/presentation/components/mall/ShippingAddressRegistrationGuide";
+import TradeGuide from "../features/howToUse/presentation/components/mall/TradeGuide";
 
 import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
@@ -138,6 +139,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "mall" && slug === "market") {
     return <ReviewResaleGuide />;
+  }
+
+  if (category === "mall" && slug === "trade") {
+    return <TradeGuide />;
   }
 
   return null;

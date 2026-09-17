@@ -27,9 +27,10 @@ type openedReturnShippingTaxItem struct {
 // calculateOrderItemShippingAmounts allocates the persisted outbound shipping
 // quote to active Order items using the quote's unit amount and each item's Qty.
 //
-// List items must map to their persisted shipping key. Resale items must map to
-// a zero-yen resale shipping snapshot. The resulting allocation must reconcile
-// to ShippingQuoteSnapshot.Amount, and every active Order item receives exactly
+// List items must map to their persisted shipping key. Resale items may carry
+// seller-side shipping costs after dispatch, but those costs are not refundable
+// to the buyer. The persisted snapshot must still reconcile to
+// ShippingQuoteSnapshot.Amount, and every active Order item receives exactly
 // one shipping allocation entry.
 func calculateOrderItemShippingAmounts(order orderdom.Order) (map[int]int, error) {
 	snapshot := order.ShippingQuoteSnapshot
@@ -39,6 +40,7 @@ func calculateOrderItemShippingAmounts(order orderdom.Order) (map[int]int, error
 
 	quotes := make(map[refundShippingKey]openedReturnShippingQuote)
 	resaleQuotedQty := make(map[string]int)
+	resaleQuotedAmount := make(map[string]int)
 
 	for _, quoteItem := range snapshot.Items {
 		if quoteItem.Qty <= 0 || quoteItem.UnitAmount < 0 || quoteItem.Amount < 0 || quoteItem.Currency != orderdom.ShippingQuoteCurrencyJPY {
@@ -88,13 +90,21 @@ func calculateOrderItemShippingAmounts(order orderdom.Order) (map[int]int, error
 
 		case orderdom.OrderItemTypeResale:
 			if quoteItem.ResaleID == "" || quoteItem.ListID != "" || quoteItem.InventoryID != "" || quoteItem.ModelID != "" ||
-				quoteItem.Qty != 1 || quoteItem.UnitAmount != 0 || quoteItem.Amount != 0 {
+				quoteItem.Qty != 1 {
 				return nil, ErrInvalidOrderItemRefund
 			}
 
 			resaleQuotedQty[quoteItem.ResaleID], err = safeAddPaymentAmount(
 				resaleQuotedQty[quoteItem.ResaleID],
 				quoteItem.Qty,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			resaleQuotedAmount[quoteItem.ResaleID], err = safeAddPaymentAmount(
+				resaleQuotedAmount[quoteItem.ResaleID],
+				quoteItem.Amount,
 			)
 			if err != nil {
 				return nil, err
@@ -170,6 +180,14 @@ func calculateOrderItemShippingAmounts(order orderdom.Order) (map[int]int, error
 			}
 
 			result[index] = 0
+
+			totalAmount, err = safeAddPaymentAmount(
+				totalAmount,
+				resaleQuotedAmount[item.ResaleID],
+			)
+			if err != nil {
+				return nil, err
+			}
 
 		default:
 			return nil, ErrInvalidOrderItemRefund
@@ -528,7 +546,7 @@ func applyRefundShippingAmounts(
 
 		case orderdom.OrderItemTypeResale:
 			if item.ResaleID == "" || item.ListID != "" || item.InventoryID != "" || item.ModelID != "" ||
-				item.Qty != 1 || item.UnitAmount != 0 || item.Amount != 0 {
+				item.Qty != 1 {
 				return ErrInvalidOrderItemRefund
 			}
 			if resaleBindings[item.ResaleID] == 0 {
@@ -538,6 +556,14 @@ func applyRefundShippingAmounts(
 			quotedResaleQty[item.ResaleID], err = safeAddPaymentAmount(
 				quotedResaleQty[item.ResaleID],
 				item.Qty,
+			)
+			if err != nil {
+				return err
+			}
+
+			shippingTotal, err = safeAddPaymentAmount(
+				shippingTotal,
+				item.Amount,
 			)
 			if err != nil {
 				return err
