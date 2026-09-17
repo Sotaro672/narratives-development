@@ -40,6 +40,22 @@ export default function ReviewResaleGuide() {
           </HowToUseStepList>
         </div>
       </HowToUseSection>
+
+      <HowToUseSection title="出品者から返信">
+        <div className="how-to-use-mobile-guide">
+          <HowToUseVideo
+            storagePath="mall/market/chat-on-resale-review.mp4"
+            label="出品者から届いた返信を確認し、チャットを続ける手順"
+            variant="iphone-12-pro"
+          />
+
+          <HowToUseStepList>
+            <HowToUseStep>メッセージが届くとウォレットページのメッセージアイコンに未読数が更新されます。</HowToUseStep>
+            <HowToUseStep>メッセージアイコンを押すと取引チャットを見ることができます。</HowToUseStep>
+            <HowToUseStep>必要に応じてメッセージを入力し、返信してください。</HowToUseStep>
+          </HowToUseStepList>
+        </div>
+      </HowToUseSection>
     </>
   );
 }

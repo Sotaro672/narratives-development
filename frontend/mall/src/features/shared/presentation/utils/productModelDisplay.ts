@@ -1,4 +1,4 @@
-// frontend\amol\src\features\shared\presentation\utils\productModelDisplay.ts
+// frontend/mall/src/features/shared/presentation/utils/productModelDisplay.ts
 
 import { textOrEmpty } from "../../../../components/utils/textOrEmpty";
 
@@ -110,7 +110,10 @@ function formatMeasurements(
   }
 
   return entries
-    .map(([label, value]) => `${label}: ${Number(value).toLocaleString("ja-JP")}cm`)
+    .map(
+      ([label, value]) =>
+        `${label}: ${Number(value).toLocaleString("ja-JP")}mm`,
+    )
     .join(" / ");
 }
 
