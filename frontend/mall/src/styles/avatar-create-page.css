@@ -1,3 +1,5 @@
+/* frontend/mall/src/styles/avatar-create-page.css */
+
 .avatar-create-page-section {
   width: 100%;
   max-width: 560px;
@@ -74,6 +76,114 @@
   word-break: break-all;
 }
 
+/* ==============================
+   Avatar icon cropper
+   ============================== */
+
+.avatar-icon-cropper {
+  grid-area: preview;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 160px;
+  min-width: 0;
+}
+
+.avatar-icon-cropper__viewport {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+}
+
+.avatar-icon-cropper__viewport--dragging {
+  cursor: grabbing;
+}
+
+.avatar-icon-cropper__viewport--disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.avatar-icon-cropper__viewport:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: 3px;
+}
+
+.avatar-icon-cropper__image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: block;
+  max-width: none;
+  max-height: none;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-user-drag: none;
+  will-change: transform;
+}
+
+.avatar-icon-cropper__frame {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.16),
+    inset 0 0 18px rgba(15, 23, 42, 0.08);
+  pointer-events: none;
+}
+
+.avatar-icon-cropper__help {
+  width: 100%;
+  margin: 0;
+  color: rgba(71, 85, 105, 0.9);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.avatar-icon-cropper__zoom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.avatar-icon-cropper__zoom-label {
+  flex: 0 0 auto;
+  color: rgba(71, 85, 105, 0.9);
+  font-size: 0.75rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.avatar-icon-cropper__zoom-input {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  cursor: pointer;
+  accent-color: #111827;
+}
+
+.avatar-icon-cropper__zoom-input:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .avatar-create-message {
   width: 100%;
   padding: 12px;
@@ -95,6 +205,10 @@
 }
 
 @media (max-width: 420px) {
+  .avatar-create-page-section {
+    padding-inline: 16px;
+  }
+
   .avatar-create-icon-block {
     justify-content: start;
   }
@@ -102,5 +216,22 @@
   .avatar-create-icon-preview {
     width: 136px;
     height: 136px;
+  }
+
+  .avatar-icon-cropper {
+    width: 152px;
+  }
+
+  .avatar-icon-cropper__viewport {
+    width: 136px;
+    height: 136px;
+  }
+
+  .avatar-icon-cropper__help {
+    font-size: 0.72rem;
+  }
+
+  .avatar-icon-cropper__zoom {
+    width: 136px;
   }
 }

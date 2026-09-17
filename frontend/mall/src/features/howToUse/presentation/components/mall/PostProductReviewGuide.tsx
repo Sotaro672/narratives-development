@@ -20,7 +20,11 @@ export default function PostProductReviewGuide() {
           <HowToUseStep>トークンコンテンツ画面の商品名タブを押してスキャン画面へ移動してください。またはスキャン画面でQRコードをスキャンしてください。</HowToUseStep>
           <HowToUseStep>スキャン画面にて商品に対する感想を投稿してください。</HowToUseStep>
         </HowToUseStepList>
-
+  </div>
+        <HowToUseNote title="購入者のみレビュー投稿が可能">
+        商品レビューは、その商品を購入したユーザーのみ投稿できます。
+      </HowToUseNote>
+     <div className="how-to-use-mobile-guide">
         <HowToUseVideo
           storagePath="mall/review/view-review-on-catalog-page.mp4"
           label="カタログ詳細画面で商品のレビューを確認する手順"
@@ -32,10 +36,6 @@ export default function PostProductReviewGuide() {
           <HowToUseStep>画面下部のレビュー欄から、投稿された商品レビューを確認できます。</HowToUseStep>
         </HowToUseStepList>
       </div>
-
-      <HowToUseNote title="購入者のみレビュー投稿が可能">
-        商品レビューは、その商品を購入したユーザーのみ投稿できます。
-      </HowToUseNote>
     </HowToUseSection>
   );
 }

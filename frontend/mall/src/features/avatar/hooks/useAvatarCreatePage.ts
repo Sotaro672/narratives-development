@@ -1,4 +1,4 @@
-// frontend/amol/src/features/avatar/hooks/useAvatarCreatePage.ts
+// frontend/mall/src/features/avatar/hooks/useAvatarCreatePage.ts
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -13,7 +13,18 @@ import {
   createUploadingAvatarCreateProgress,
 } from "../models/avatarCreateProgress";
 import { AvatarCreateService } from "../services/avatarCreateService";
+import {
+  cropAvatarImage,
+  type AvatarCropPosition,
+} from "../utils/cropAvatarImage";
 import type { AvatarFormMode } from "../../shared/types/avatar";
+
+const INITIAL_ICON_POSITION: AvatarCropPosition = {
+  x: 0,
+  y: 0,
+};
+
+const INITIAL_ICON_SCALE = 1;
 
 function revokePreviewUrl(url: string | null) {
   if (url?.startsWith("blob:")) {
@@ -36,6 +47,11 @@ export function useAvatarCreatePage() {
   const [iconPreviewUrl, setIconPreviewUrl] = useState<string | null>(null);
   const [iconFileName, setIconFileName] = useState<string | null>(null);
   const [iconMimeType, setIconMimeType] = useState<string | null>(null);
+  const [iconPosition, setIconPosition] = useState<AvatarCropPosition>(
+    INITIAL_ICON_POSITION,
+  );
+  const [iconScale, setIconScale] = useState(INITIAL_ICON_SCALE);
+  const [iconViewportSize, setIconViewportSize] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -66,6 +82,12 @@ export function useAvatarCreatePage() {
   const saveButtonLabel =
     saving ? "保存中..." : mode === "edit" ? "保存する" : "作成する";
 
+  function resetIconCrop() {
+    setIconPosition(INITIAL_ICON_POSITION);
+    setIconScale(INITIAL_ICON_SCALE);
+    setIconViewportSize(0);
+  }
+
   useEffect(() => {
     let cancelled = false;
 
@@ -92,6 +114,7 @@ export function useAvatarCreatePage() {
           setIconPreviewUrl(null);
           setIconFileName(null);
           setIconMimeType(null);
+          resetIconCrop();
           return;
         }
 
@@ -104,6 +127,7 @@ export function useAvatarCreatePage() {
         setIconPreviewUrl(currentAvatar.avatarIcon ?? null);
         setIconFileName(null);
         setIconMimeType(null);
+        resetIconCrop();
       } catch (error) {
         if (cancelled) return;
 
@@ -153,6 +177,7 @@ export function useAvatarCreatePage() {
       setIconPreviewUrl(null);
       setIconFileName(null);
       setIconMimeType(null);
+      resetIconCrop();
       setMsg(result.error);
       return;
     }
@@ -161,6 +186,7 @@ export function useAvatarCreatePage() {
     setIconPreviewUrl(result.previewUrl);
     setIconFileName(result.fileName);
     setIconMimeType(result.mimeType);
+    resetIconCrop();
     setMsg("アイコン画像を選択しました。");
   }
 
@@ -170,6 +196,7 @@ export function useAvatarCreatePage() {
     setIconPreviewUrl(null);
     setIconFileName(null);
     setIconMimeType(null);
+    resetIconCrop();
   }
 
   function handleIconPreviewError() {
@@ -218,41 +245,58 @@ export function useAvatarCreatePage() {
       setProgressOpen(false);
     }
 
-    const handleUploadProgress = ({
-      transferredBytes,
-      totalBytes,
-    }: {
-      transferredBytes: number;
-      totalBytes: number;
-      percentage: number;
-    }) => {
-      if (!iconFile) {
-        return;
-      }
-
-      setProgress(
-        createUploadingAvatarCreateProgress({
-          fileName: iconFile.name,
-          transferredBytes,
-          totalBytes,
-        }),
-      );
-    };
-
-    const handleUploadCompleted = () => {
-      if (!iconFile) {
-        return;
-      }
-
-      setProgress(
-        createSavingAvatarCreateProgress({
-          transferredBytes: iconFile.size,
-          totalBytes: iconFile.size,
-        }),
-      );
-    };
-
     try {
+      let uploadIconFile: File | null = null;
+
+      if (iconFile) {
+        if (iconViewportSize <= 0) {
+          throw new Error(
+            "アイコン画像の切り抜き領域を取得できませんでした。画像を選択し直してください。",
+          );
+        }
+
+        uploadIconFile = await cropAvatarImage({
+          file: iconFile,
+          position: iconPosition,
+          scale: iconScale,
+          viewportSize: iconViewportSize,
+        });
+      }
+
+      const handleUploadProgress = ({
+        transferredBytes,
+        totalBytes,
+      }: {
+        transferredBytes: number;
+        totalBytes: number;
+        percentage: number;
+      }) => {
+        if (!uploadIconFile) {
+          return;
+        }
+
+        setProgress(
+          createUploadingAvatarCreateProgress({
+            fileName: uploadIconFile.name,
+            transferredBytes,
+            totalBytes,
+          }),
+        );
+      };
+
+      const handleUploadCompleted = () => {
+        if (!uploadIconFile) {
+          return;
+        }
+
+        setProgress(
+          createSavingAvatarCreateProgress({
+            transferredBytes: uploadIconFile.size,
+            totalBytes: uploadIconFile.size,
+          }),
+        );
+      };
+
       let savedAvatarId: string;
 
       if (mode === "edit" && avatarId) {
@@ -261,7 +305,7 @@ export function useAvatarCreatePage() {
           avatarNameRaw: avatarName,
           profileRaw: profile,
           externalLinkRaw: externalLink,
-          iconFile,
+          iconFile: uploadIconFile,
           onUploadProgress: handleUploadProgress,
           onUploadCompleted: handleUploadCompleted,
         });
@@ -269,7 +313,7 @@ export function useAvatarCreatePage() {
         setMsg(result.message);
 
         if (!result.ok) {
-          if (iconFile) {
+          if (uploadIconFile) {
             setProgress(
               createFailedAvatarCreateProgress(result.message),
             );
@@ -284,7 +328,7 @@ export function useAvatarCreatePage() {
           avatarNameRaw: avatarName,
           profileRaw: profile,
           externalLinkRaw: externalLink,
-          iconFile,
+          iconFile: uploadIconFile,
           onUploadProgress: handleUploadProgress,
           onUploadCompleted: handleUploadCompleted,
         });
@@ -292,7 +336,7 @@ export function useAvatarCreatePage() {
         setMsg(result.message);
 
         if (!result.ok) {
-          if (iconFile) {
+          if (uploadIconFile) {
             setProgress(
               createFailedAvatarCreateProgress(result.message),
             );
@@ -342,6 +386,12 @@ export function useAvatarCreatePage() {
     iconPreviewUrl,
     iconFileName,
     iconMimeType,
+    iconPosition,
+    setIconPosition,
+    iconScale,
+    setIconScale,
+    iconViewportSize,
+    setIconViewportSize,
     fileInputRef,
     loading,
     saving,

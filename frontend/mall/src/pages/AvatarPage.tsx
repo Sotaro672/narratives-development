@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/AvatarPage.tsx
+// frontend/mall/src/pages/AvatarPage.tsx
 
 import "../styles/page-layout.css";
 import "../styles/form.css";
@@ -9,6 +9,7 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Textbox from "../components/ui/Textbox";
 import AvatarCreateProgressModal from "../features/avatar/components/AvatarCreateProgressModal";
+import AvatarIconCropper from "../features/avatar/components/AvatarIconCropper";
 import { useAvatarCreatePage } from "../features/avatar/hooks/useAvatarCreatePage";
 
 export default function AvatarPage() {
@@ -24,6 +25,7 @@ export default function AvatarPage() {
 
   const isCreateMode = vm.mode === "create";
   const isEditMode = vm.mode === "edit";
+  const isIconEditing = Boolean(vm.iconFile && vm.iconPreviewUrl);
 
   return (
     <>
@@ -60,20 +62,33 @@ export default function AvatarPage() {
                 }}
               />
 
-              <div className="avatar-create-icon-preview">
-                {vm.iconPreviewUrl ? (
-                  <img
-                    src={vm.iconPreviewUrl}
-                    alt="選択したアバターアイコン"
-                    className="avatar-create-icon-image"
-                    onError={vm.handleIconPreviewError}
-                  />
-                ) : (
-                  <span className="avatar-create-icon-placeholder">
-                    アイコン未選択
-                  </span>
-                )}
-              </div>
+              {isIconEditing && vm.iconPreviewUrl ? (
+                <AvatarIconCropper
+                  src={vm.iconPreviewUrl}
+                  position={vm.iconPosition}
+                  scale={vm.iconScale}
+                  onPositionChange={vm.setIconPosition}
+                  onScaleChange={vm.setIconScale}
+                  onViewportSizeChange={vm.setIconViewportSize}
+                  alt="選択したアバターアイコン"
+                  disabled={vm.saving || vm.loading}
+                />
+              ) : (
+                <div className="avatar-create-icon-preview">
+                  {vm.iconPreviewUrl ? (
+                    <img
+                      src={vm.iconPreviewUrl}
+                      alt="アバターアイコン"
+                      className="avatar-create-icon-image"
+                      onError={vm.handleIconPreviewError}
+                    />
+                  ) : (
+                    <span className="avatar-create-icon-placeholder">
+                      アイコン未選択
+                    </span>
+                  )}
+                </div>
+              )}
 
               <div className="avatar-create-icon-actions">
                 <Button
@@ -81,7 +96,7 @@ export default function AvatarPage() {
                   onClick={vm.openIconPicker}
                   disabled={vm.saving || vm.loading}
                 >
-                  画像を選択
+                  {vm.iconPreviewUrl ? "画像を変更" : "画像を選択"}
                 </Button>
 
                 {vm.iconPreviewUrl || vm.iconFile ? (
