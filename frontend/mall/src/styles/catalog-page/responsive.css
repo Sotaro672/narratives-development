@@ -8,6 +8,7 @@
   .catalog-page-section {
     height: auto;
     min-height: auto;
+    padding-bottom: calc(var(--footer-action-height) + 24px);
     overflow: visible;
   }
 
@@ -50,7 +51,7 @@
   .catalog-page-detail {
     height: auto;
     min-height: auto;
-    padding: 24px 16px 120px;
+    padding: 24px 16px;
     overflow: visible;
   }
 
@@ -69,8 +70,12 @@
 }
 
 @media (max-width: 560px) {
+  .catalog-page-section {
+    padding-bottom: calc(var(--footer-action-height) + 20px);
+  }
+
   .catalog-page-detail {
-    padding: 20px 14px 120px;
+    padding: 20px 14px;
   }
 
   .catalog-page-card {
