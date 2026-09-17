@@ -32,6 +32,7 @@ import PostCommentGuide from "../features/howToUse/presentation/components/mall/
 import PostProductReviewGuide from "../features/howToUse/presentation/components/mall/PostProductReviewGuide";
 import PurchaseGuide from "../features/howToUse/presentation/components/mall/PurchaseGuide";
 import RequestRefundGuide from "../features/howToUse/presentation/components/mall/RequestRefundGuide";
+import ReviewResaleGuide from "../features/howToUse/presentation/components/mall/ReviewResaleGuide";
 import ShippingAddressRegistrationGuide from "../features/howToUse/presentation/components/mall/ShippingAddressRegistrationGuide";
 
 import "../styles/page-layout.css";
@@ -133,6 +134,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "mall" && slug === "resale") {
     return <ListMarketGuide />;
+  }
+
+  if (category === "mall" && slug === "market") {
+    return <ReviewResaleGuide />;
   }
 
   return null;

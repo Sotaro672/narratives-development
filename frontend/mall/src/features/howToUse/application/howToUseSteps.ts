@@ -159,6 +159,12 @@ export const mallItems: HowToUseItem[] = [
   },
   {
     category: "mall",
+    slug: "market",
+    title: "マーケット",
+    description: "フリマに出品されている商品を閲覧し、商品詳細を確認して購入できます。",
+  },
+  {
+    category: "mall",
     slug: "trade",
     title: "取引",
     description: "フリマで成立した取引の配送、受取確認、評価などの手順を確認します。",

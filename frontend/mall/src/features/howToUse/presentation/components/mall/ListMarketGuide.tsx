@@ -73,24 +73,6 @@ export default function ListMarketGuide() {
           売却済みになった出品は編集できません。
         </HowToUseNote>
       </HowToUseSection>
-
-      <HowToUseSection title="フリマを見る">
-        <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/resale/view-market.mp4"
-            label="Mallのフリマ一覧から出品商品を選択し、商品詳細を確認する手順"
-            variant="iphone-12-pro"
-          />
-
-          <HowToUseStepList>
-            <HowToUseStep>Mallのマーケットを開いてください。</HowToUseStep>
-            <HowToUseStep>フリマ一覧から確認する商品を選択してください。</HowToUseStep>
-            <HowToUseStep>商品状態の写真、販売価格、商品の状態、説明文などの出品内容を確認してください。</HowToUseStep>
-            <HowToUseStep>購入する場合は「カートに入れる」を押してください。以降は購入と同じです。</HowToUseStep>
-            <HowToUseStep>マーケット出品画面から出品者の他の出品商品を見ることができます。</HowToUseStep>
-          </HowToUseStepList>
-        </div>
-      </HowToUseSection>
     </>
   );
 }
