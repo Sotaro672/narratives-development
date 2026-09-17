@@ -26,6 +26,7 @@ import TokenBlueprintGuide from "../features/howToUse/presentation/components/co
 import ViewProductReviewGuide from "../features/howToUse/presentation/components/console/ViewProductReviewGuide";
 import AvatarCreateGuide from "../features/howToUse/presentation/components/mall/AvatarCreateGuide";
 import CancelOderGuide from "../features/howToUse/presentation/components/mall/CancelOderGuide";
+import ListMarketGuide from "../features/howToUse/presentation/components/mall/ListMarketGuide";
 import OpenPayoutAccountGuide from "../features/howToUse/presentation/components/mall/OpenPayoutAccountGuide";
 import PostCommentGuide from "../features/howToUse/presentation/components/mall/PostCommentGuide";
 import PostProductReviewGuide from "../features/howToUse/presentation/components/mall/PostProductReviewGuide";
@@ -128,6 +129,10 @@ function renderGuide(category: HowToUseCategory, slug: string) {
 
   if (category === "mall" && slug === "payout-account") {
     return <OpenPayoutAccountGuide />;
+  }
+
+  if (category === "mall" && slug === "resale") {
+    return <ListMarketGuide />;
   }
 
   return null;
