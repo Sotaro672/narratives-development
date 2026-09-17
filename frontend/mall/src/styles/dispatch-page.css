@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/dispatch-page.css */
+/* frontend/mall/src/styles/dispatch-page.css */
 
 .dispatch-page {
   width: 100%;
@@ -193,12 +193,17 @@
   line-height: 1.6;
 }
 
+@media (max-width: 1023px) {
+  .dispatch-page {
+    padding-bottom: 112px;
+  }
+}
+
 @media (max-width: 639px) {
   .dispatch-page {
     gap: 22px;
     padding-left: 16px;
     padding-right: 16px;
-    padding-bottom: 112px;
   }
 
   .dispatch-page .settings-item {
@@ -211,7 +216,7 @@
   }
 }
 
-@media (min-width: 960px) {
+@media (min-width: 1024px) {
   .dispatch-page {
     padding-top: 32px;
     padding-bottom: 48px;

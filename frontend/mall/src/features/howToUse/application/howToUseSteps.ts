@@ -157,6 +157,12 @@ export const mallItems: HowToUseItem[] = [
     title: "フリマ",
     description: "所有しているトークンをフリマへ出品できます。",
   },
+  {
+    category: "mall",
+    slug: "trade",
+    title: "取引",
+    description: "フリマで成立した取引の配送、受取確認、評価などの手順を確認します。",
+  },
 ];
 
 export const howToUseItems: HowToUseItem[] = [
