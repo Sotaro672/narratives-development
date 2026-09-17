@@ -167,6 +167,7 @@ export default function DispatchPage() {
       titleClickable={false}
       showBackButton
       onBackButtonClick={handleBack}
+      showFooter={false}
       mode="mypage"
       actionButtonLabel={
         isDesktop
@@ -227,10 +228,7 @@ export default function DispatchPage() {
 
                   <span aria-hidden="true">
                     {selected ? (
-                      <Check
-                        size={20}
-                        strokeWidth={2.5}
-                      />
+                      <Check size={20} strokeWidth={2.5} />
                     ) : null}
                   </span>
                 </button>
@@ -271,9 +269,7 @@ export default function DispatchPage() {
                   <span>
                     <strong>{size}サイズ</strong>
                     <br />
-                    <span>
-                      3辺合計 {size}cm以内
-                    </span>
+                    <span>3辺合計 {size}cm以内</span>
                   </span>
 
                   <span>
@@ -302,9 +298,7 @@ export default function DispatchPage() {
           <dl>
             <div>
               <dt>配送会社</dt>
-              <dd>
-                {selectedCarrier?.label ?? "未選択"}
-              </dd>
+              <dd>{selectedCarrier?.label ?? "未選択"}</dd>
             </div>
 
             <div>
