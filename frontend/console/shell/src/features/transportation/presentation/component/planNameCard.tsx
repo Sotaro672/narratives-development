@@ -5,6 +5,7 @@ import { Tag } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
+import { Label } from "../../../../shared/ui/label";
 
 export type PlanNameCardProps = {
   name: string;
@@ -37,9 +38,9 @@ const PlanNameCard: React.FC<PlanNameCardProps> = ({
 
       <CardContent>
         <div className="space-y-2">
-          <label htmlFor="transportation-plan-name" className="text-sm font-medium text-slate-700">
+          <Label htmlFor="transportation-plan-name">
             プラン名
-          </label>
+          </Label>
 
           <Input
             id="transportation-plan-name"

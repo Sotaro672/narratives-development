@@ -5,6 +5,7 @@ import { ChevronDown, MapPin } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
+import { Label } from "../../../../shared/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../../shared/ui/table";
 
 import type { TransportationRegionVM } from "../../application/transportationService";
@@ -65,12 +66,12 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <label
+            <Label
               htmlFor={`transportation-region-${region.region}`}
-              className="whitespace-nowrap text-sm font-medium text-slate-700"
+              className="whitespace-nowrap"
             >
               地方一括
-            </label>
+            </Label>
 
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500">¥</span>
@@ -98,7 +99,9 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
           aria-label={`${region.regionName}の都道府県一覧を${isOpen ? "閉じる" : "開く"}`}
           className="flex w-fit items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
         >
-          <span className="text-xs font-normal text-slate-400">{region.prefectures.length}都道府県</span>
+          <span className="text-xs font-normal text-slate-400">
+            {region.prefectures.length}都道府県
+          </span>
           <ChevronDown
             size={16}
             aria-hidden="true"
@@ -123,7 +126,9 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
                   <TableRow key={prefecture.prefectureCode}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <span className="font-medium text-slate-900">{prefecture.prefectureName}</span>
+                        <span className="font-medium text-slate-900">
+                          {prefecture.prefectureName}
+                        </span>
                       </div>
                     </TableCell>
 
@@ -141,7 +146,10 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
                           className="h-9 w-32 text-right"
                           aria-label={`${prefecture.prefectureName}の送料`}
                           onChange={(event) => {
-                            onChangePrefectureAmount(prefecture.prefectureCode, event.target.value);
+                            onChangePrefectureAmount(
+                              prefecture.prefectureCode,
+                              event.target.value,
+                            );
                           }}
                         />
                       </div>
@@ -151,7 +159,10 @@ const FeeEditCard: React.FC<FeeEditCardProps> = ({
 
                 {region.prefectures.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={2} className="py-8 text-center text-sm text-slate-500">
+                    <TableCell
+                      colSpan={2}
+                      className="py-8 text-center text-sm text-slate-500"
+                    >
                       都道府県データがありません。
                     </TableCell>
                   </TableRow>

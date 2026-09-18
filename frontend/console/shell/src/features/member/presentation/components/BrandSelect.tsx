@@ -11,6 +11,7 @@ import {
 import { Button } from "../../../../shared/ui/button";
 import { Checkbox } from "../../../../shared/ui/checkbox";
 import { Badge } from "../../../../shared/ui/badge";
+import { Label } from "../../../../shared/ui/label";
 
 type BrandSelectProps = {
   brandRows: BrandRow[];
@@ -30,9 +31,9 @@ export function BrandSelect({
 
   return (
     <div>
-      <label className="block text-sm text-slate-300 mb-1">
+      <Label className="mb-1 block">
         ブランド（任意・複数選択可）
-      </label>
+      </Label>
 
       <Popover>
         <PopoverTrigger>
@@ -55,10 +56,8 @@ export function BrandSelect({
           ) : (
             <div className="popover__list">
               {brandRows.map((brand) => {
-                const checked =
-                  selectedBrandIds.has(brand.id);
-                const inputId =
-                  `brand_${brand.id}`;
+                const checked = selectedBrandIds.has(brand.id);
+                const inputId = `brand_${brand.id}`;
 
                 return (
                   <label

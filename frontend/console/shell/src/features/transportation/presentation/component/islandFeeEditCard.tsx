@@ -5,6 +5,7 @@ import { ChevronDown, MapPin } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
+import { Label } from "../../../../shared/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../../shared/ui/table";
 
 import type { TransportationIslandRateVM } from "../../application/transportationService";
@@ -67,12 +68,12 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <label
+            <Label
               htmlFor="transportation-islands-bulk"
-              className="whitespace-nowrap text-sm font-medium text-slate-700"
+              className="whitespace-nowrap"
             >
               島嶼部一括
-            </label>
+            </Label>
 
             <div className="flex items-center gap-2">
               <span className="text-sm text-slate-500">¥</span>
@@ -100,7 +101,9 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
           aria-label={`島嶼部一覧を${isOpen ? "閉じる" : "開く"}`}
           className="flex w-fit items-center gap-2 text-sm font-medium text-slate-600 transition hover:text-slate-900"
         >
-          <span className="text-xs font-normal text-slate-400">{islands.length}島</span>
+          <span className="text-xs font-normal text-slate-400">
+            {islands.length}島
+          </span>
           <ChevronDown
             size={16}
             aria-hidden="true"
@@ -126,13 +129,17 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
                   <TableRow key={island.islandCode}>
                     <TableCell>
                       <div className="flex flex-col gap-1">
-                        <span className="font-medium text-slate-900">{island.islandName}</span>
+                        <span className="font-medium text-slate-900">
+                          {island.islandName}
+                        </span>
                       </div>
                     </TableCell>
 
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-slate-700">{island.prefectureName}</span>
+                        <span className="text-sm text-slate-700">
+                          {island.prefectureName}
+                        </span>
                       </div>
                     </TableCell>
 
@@ -150,7 +157,10 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
                           className="h-9 w-32 text-right"
                           aria-label={`${island.islandName}の送料`}
                           onChange={(event) => {
-                            onChangeAmount(island.islandCode, event.target.value);
+                            onChangeAmount(
+                              island.islandCode,
+                              event.target.value,
+                            );
                           }}
                         />
                       </div>
@@ -160,7 +170,10 @@ const IslandFeeEditCard: React.FC<IslandFeeEditCardProps> = ({
 
                 {islands.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={3} className="py-8 text-center text-sm text-slate-500">
+                    <TableCell
+                      colSpan={3}
+                      className="py-8 text-center text-sm text-slate-500"
+                    >
                       島嶼部データがありません。
                     </TableCell>
                   </TableRow>

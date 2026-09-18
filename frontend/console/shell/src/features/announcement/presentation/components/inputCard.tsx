@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Label } from "../../../../shared/ui/label";
 
 export type InputCardMode = "view" | "edit";
 
@@ -285,9 +286,9 @@ export default function InputCard({
         <div className="space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-3">
-              <label className="text-sm font-medium text-slate-700">
+              <Label>
                 画像アップロード
-              </label>
+              </Label>
 
               {isEditMode && hasImages && (
                 <Button
@@ -327,9 +328,11 @@ export default function InputCard({
                   <div className="mb-3 text-slate-400">
                     <ImageIcon />
                   </div>
+
                   <div className="text-sm font-semibold text-slate-800">
                     画像を追加
                   </div>
+
                   <div className="mt-1 text-xs text-slate-500">
                     クリックで選択（複数可） / ドロップでも追加できます
                   </div>
@@ -341,6 +344,7 @@ export default function InputCard({
                   <div className="mb-3 text-slate-400">
                     <ImageIcon />
                   </div>
+
                   <div className="text-sm font-semibold text-slate-800">
                     画像はありません
                   </div>
@@ -452,6 +456,7 @@ export default function InputCard({
                         <div className="mb-1">
                           <PlusIcon />
                         </div>
+
                         <div className="text-xs font-medium">
                           画像を追加
                         </div>
@@ -464,12 +469,9 @@ export default function InputCard({
           </div>
 
           <div className="space-y-2">
-            <label
-              htmlFor="sales-input-title"
-              className="text-sm font-medium text-slate-700"
-            >
+            <Label htmlFor="sales-input-title">
               タイトル
-            </label>
+            </Label>
 
             {isEditMode ? (
               <input
@@ -489,12 +491,9 @@ export default function InputCard({
           </div>
 
           <div className="space-y-2">
-            <label
-              htmlFor="sales-input-text"
-              className="text-sm font-medium text-slate-700"
-            >
+            <Label htmlFor="sales-input-text">
               文章
-            </label>
+            </Label>
 
             {isEditMode ? (
               <textarea

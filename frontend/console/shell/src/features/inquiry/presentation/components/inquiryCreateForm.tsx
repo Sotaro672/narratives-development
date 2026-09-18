@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Label } from "../../../../shared/ui/label";
 
 import type { InquiryCreateAttachment } from "../hooks/useInquiryCreate";
 
@@ -53,12 +54,12 @@ export default function InquiryCreateForm({
           ) : null}
 
           <div className="flex flex-col gap-2">
-            <label
+            <Label
               htmlFor="amol-inquiry-message"
-              className="text-sm font-semibold"
+              className="font-semibold"
             >
               本文
-            </label>
+            </Label>
 
             <textarea
               id="amol-inquiry-message"
@@ -68,9 +69,7 @@ export default function InquiryCreateForm({
               disabled={submitting}
               placeholder="AMOLへのお問い合わせ内容を入力してください"
               className="min-h-[240px] w-full resize-y rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-4 py-3 text-sm leading-7 text-[hsl(var(--foreground))] outline-none transition focus:border-[hsl(var(--ring))] focus:ring-2 focus:ring-[hsl(var(--ring)/0.2)] disabled:cursor-not-allowed disabled:opacity-60"
-              onChange={(event) =>
-                onChangeMessage(event.target.value)
-              }
+              onChange={(event) => onChangeMessage(event.target.value)}
             />
 
             <div className="text-right text-xs text-[hsl(var(--muted-foreground))]">

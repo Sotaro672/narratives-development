@@ -21,6 +21,7 @@ import {
 } from "../../../../shared/ui/card";
 import { Checkbox } from "../../../../shared/ui/checkbox";
 import { Badge } from "../../../../shared/ui/badge";
+import { Label } from "../../../../shared/ui/label";
 
 type PermissionCategoryView = {
   key: PermissionCategory;
@@ -41,7 +42,6 @@ export type PermissionSelectProps = {
 
 const categoryLabel = (c?: string) => c ?? "";
 
-// Popoverを閉じるためのユーティリティ
 const closePopover = () =>
   document.dispatchEvent(
     new KeyboardEvent("keydown", {
@@ -57,7 +57,6 @@ export function PermissionSelect({
   selectedPermIds,
   setSelectedPermIds,
 }: PermissionSelectProps) {
-  // ========= 権限カテゴリ ==========
   const selectedCategory = React.useMemo(
     () =>
       permissionCategories.find(
@@ -141,12 +140,12 @@ export function PermissionSelect({
   );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+    <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
       {/* 役割選択 */}
       <div>
-        <label className="block text-sm text-slate-300 mb-1">
+        <Label className="mb-1 block">
           役割（必須）
-        </label>
+        </Label>
 
         <Popover>
           <PopoverTrigger>
@@ -219,7 +218,7 @@ export function PermissionSelect({
                 この役割に紐づく権限はありません。
               </p>
             ) : (
-              <ul className="text-sm space-y-2">
+              <ul className="space-y-2 text-sm">
                 {currentPerms.map((perm: any) => {
                   const checked =
                     selectedPermIds.has(perm.id);
