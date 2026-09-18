@@ -175,6 +175,12 @@
     box-shadow 160ms ease;
 }
 
+.card__input--sm {
+  height: 36px;
+  font-size: 0.85rem;
+  line-height: 36px;
+}
+
 .card__input--large,
 .card__select--large {
   height: 42px;

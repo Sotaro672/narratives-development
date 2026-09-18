@@ -2,20 +2,25 @@
 
 import * as React from "react";
 import { Palette } from "lucide-react";
+
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardTitle,
 } from "../../../../shared/ui/card";
+
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../../../shared/ui/table";
+
 import { Input } from "../../../../shared/ui/input";
 import type { ProductionQuantityRow } from "../../../../shared/types/production";
 import { rgbIntToHex } from "../../../../shared/util/color";
@@ -73,6 +78,7 @@ function resolveProductBlueprintCategoryKind(args: {
 
 function getVolumeValueLabel(row: ProductionQuantityRow): string {
   const value = row.volumeValue;
+
   return typeof value === "number" && Number.isFinite(value)
     ? String(value)
     : "";
@@ -94,6 +100,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
 
   const sortedRows = React.useMemo(() => {
     const safeRows = Array.isArray(rows) ? rows : [];
+
     return [...safeRows].sort(
       (a, b) =>
         displayOrderRank(a.displayOrder) -
@@ -115,7 +122,8 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   const totalQuantity = React.useMemo(
     () =>
       sortedRows.reduce(
-        (sum, row) => sum + (Number.isFinite(row.quantity) ? row.quantity : 0),
+        (sum, row) =>
+          sum + (Number.isFinite(row.quantity) ? row.quantity : 0),
         0,
       ),
     [sortedRows],
@@ -147,15 +155,20 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
   );
 
   return (
-    <Card className={`mqc ${className ?? ""}`}>
-      <CardHeader className="mqc__header">
-        <div className="mqc__header-inner">
-          <Palette size={18} />
-          <CardTitle className="mqc__title">{title}</CardTitle>
-        </div>
+    <Card className={className}>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Palette className="card__header-icon-svg" />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
+            {title}
+          </CardTitle>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="mqc__body">
+      <CardContent>
         <Table className="mqc__table">
           <TableHeader>
             <TableRow>
@@ -187,6 +200,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                 typeof row.rgb === "number"
                   ? rgbIntToHex(row.rgb) ?? null
                   : null;
+
               const backgroundColor = rgbHex ?? "#ffffff";
               const modelNumber = row.modelNumber ?? "-";
 
@@ -199,6 +213,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                       <TableCell className="mqc__size">
                         {getVolumeValueLabel(row) || "-"}
                       </TableCell>
+
                       <TableCell className="mqc__size">
                         {getVolumeUnitLabel(row) || "-"}
                       </TableCell>
@@ -208,6 +223,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                       <TableCell className="mqc__size">
                         {row.size ?? "-"}
                       </TableCell>
+
                       <TableCell>
                         <span className="mqc__color">
                           <span
@@ -253,6 +269,7 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                 >
                   合計
                 </TableCell>
+
                 <TableCell className="mqc__footer-cell">
                   <span className="mqc__pill mqc__pill--total">
                     {totalQuantity}

@@ -210,7 +210,7 @@ export const CardLabel = React.forwardRef<HTMLLabelElement, CardLabelProps>(
 CardLabel.displayName = "CardLabel";
 
 export type CardInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
-  sizeVariant?: "default" | "large";
+  sizeVariant?: "sm" | "default" | "large";
 };
 
 export const CardInput = React.forwardRef<HTMLInputElement, CardInputProps>(
@@ -226,6 +226,7 @@ export const CardInput = React.forwardRef<HTMLInputElement, CardInputProps>(
       ref={ref}
       className={cn(
         "card__input",
+        sizeVariant === "sm" && "card__input--sm",
         sizeVariant === "large" && "card__input--large",
         className,
       )}
