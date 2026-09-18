@@ -1,10 +1,7 @@
 // frontend/console/shell/src/features/report/presentation/components/ReportModal.tsx
 
-import * as React from "react";
-import { createPortal } from "react-dom";
-import { X } from "lucide-react";
-
 import { Button } from "../../../../shared/ui/button";
+import Modal from "../../../../shared/ui/modal";
 import type {
   ReportReason,
   ReportResponse,
@@ -56,24 +53,6 @@ export default function ReportModal({
   onSubmit,
   onClose,
 }: ReportModalProps) {
-  React.useEffect(() => {
-    if (!open) return;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !submitting) {
-        onClose();
-      }
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open, submitting, onClose]);
-
-  if (!open) return null;
-
   const targetLabel = getTargetLabel(targetType);
   const requiresDetail = requiresReportDetail(reason);
   const normalizedDetail = detail.trim();
@@ -84,195 +63,152 @@ export default function ReportModal({
     !submitted &&
     (!requiresDetail || normalizedDetail !== "");
 
-  const handleBackdropMouseDown = (
-    event: React.MouseEvent<HTMLDivElement>,
-  ) => {
-    if (event.target === event.currentTarget && !submitting) {
-      onClose();
-    }
-  };
-
   const handleSubmit = () => {
     if (!canSubmit) return;
     void onSubmit();
   };
 
-  const modal = (
-    <div
-      className="report-modal"
-      role="presentation"
-      onMouseDown={handleBackdropMouseDown}
+  const description = submitted
+    ? alreadyReported
+      ? "同じブランドからの通報は重複して登録されません。"
+      : "Adminで内容を確認し、維持または削除の裁定を行います。通報した時点では投稿は削除されません。"
+    : `この${targetLabel}が不適切だと判断した理由を選択してください。ブランドから直接投稿を削除することはできません。`;
+
+  const footer = submitted ? (
+    <Button
+      type="button"
+      variant="default"
+      onClick={onClose}
     >
-      <div
-        className="report-modal__panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="report-modal-title"
-        aria-describedby="report-modal-description"
-        aria-busy={submitting}
+      閉じる
+    </Button>
+  ) : (
+    <>
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={submitting}
+        onClick={onClose}
       >
-        <div className="report-modal__header">
-          <div>
-            <span className="report-modal__eyebrow">
-              不適切な投稿の通報
-            </span>
+        キャンセル
+      </Button>
 
-            <h2
-              id="report-modal-title"
-              className="report-modal__title"
-            >
-              {targetLabel}を通報
-            </h2>
-          </div>
-
-          <Button
-            variant="outline"
-            size="icon"
-            disabled={submitting}
-            aria-label="通報モーダルを閉じる"
-            onClick={onClose}
-          >
-            <X aria-hidden="true" />
-          </Button>
-        </div>
-
-        {submitted ? (
-          <div className="report-modal__result">
-            <div
-              className="report-modal__result-icon"
-              aria-hidden="true"
-            >
-              ✓
-            </div>
-
-            <div className="report-modal__result-body">
-              <h3 className="report-modal__result-title">
-                {alreadyReported
-                  ? "この投稿はすでに通報済みです"
-                  : "通報を受け付けました"}
-              </h3>
-
-              <p
-                id="report-modal-description"
-                className="report-modal__description"
-              >
-                {alreadyReported
-                  ? "同じブランドからの通報は重複して登録されません。"
-                  : "Adminで内容を確認し、維持または削除の裁定を行います。通報した時点では投稿は削除されません。"}
-              </p>
-            </div>
-
-            <div className="report-modal__actions">
-              <Button
-                variant="default"
-                onClick={onClose}
-              >
-                閉じる
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <p
-              id="report-modal-description"
-              className="report-modal__description"
-            >
-              この{targetLabel}が不適切だと判断した理由を選択してください。ブランドから直接投稿を削除することはできません。
-            </p>
-
-            <div className="report-modal__body">
-              <fieldset
-                className="report-modal__reasons"
-                disabled={submitting}
-              >
-                <legend className="report-modal__label">
-                  通報理由
-                </legend>
-
-                <div className="report-modal__reason-list">
-                  {REPORT_REASONS.map((value) => (
-                    <label
-                      key={value}
-                      className={[
-                        "report-modal__reason",
-                        reason === value
-                          ? "report-modal__reason--selected"
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      <input
-                        type="radio"
-                        className="report-modal__reason-input"
-                        name="report-reason"
-                        value={value}
-                        checked={reason === value}
-                        onChange={() => onReasonChange(value)}
-                      />
-
-                      <span className="report-modal__reason-label">
-                        {getReportReasonLabel(value)}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-
-              {requiresDetail ? (
-                <label className="report-modal__detail-field">
-                  <span className="report-modal__label">
-                    詳細
-                    <span className="report-modal__required">
-                      必須
-                    </span>
-                  </span>
-
-                  <textarea
-                    className="report-modal__textarea"
-                    value={detail}
-                    rows={5}
-                    disabled={submitting}
-                    placeholder="通報する理由を具体的に入力してください。"
-                    onChange={(event) =>
-                      onDetailChange(event.target.value)
-                    }
-                  />
-                </label>
-              ) : null}
-
-              {errorMessage ? (
-                <p
-                  className="report-modal__error"
-                  role="alert"
-                >
-                  {errorMessage}
-                </p>
-              ) : null}
-            </div>
-
-            <div className="report-modal__actions">
-              <Button
-                variant="ghost"
-                disabled={submitting}
-                onClick={onClose}
-              >
-                キャンセル
-              </Button>
-
-              <Button
-                variant="destructive"
-                disabled={!canSubmit}
-                onClick={handleSubmit}
-              >
-                {submitting ? "送信中" : "通報する"}
-              </Button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+      <Button
+        type="button"
+        variant="destructive"
+        disabled={!canSubmit}
+        onClick={handleSubmit}
+      >
+        {submitting ? "送信中" : "通報する"}
+      </Button>
+    </>
   );
 
-  return createPortal(modal, document.body);
+  return (
+    <Modal
+      open={open}
+      title={`${targetLabel}を通報`}
+      eyebrow="不適切な投稿の通報"
+      description={description}
+      footer={footer}
+      onClose={onClose}
+      closeable={!submitting}
+      closeOnBackdrop
+      closeOnEscape
+      showCloseButton
+      closeLabel="通報モーダルを閉じる"
+      ariaBusy={submitting}
+      panelClassName="report-modal__panel"
+    >
+      {submitted ? (
+        <div className="report-modal__result">
+          <div
+            className="report-modal__result-icon"
+            aria-hidden="true"
+          >
+            ✓
+          </div>
+
+          <div className="report-modal__result-body">
+            <h3 className="report-modal__result-title">
+              {alreadyReported
+                ? "この投稿はすでに通報済みです"
+                : "通報を受け付けました"}
+            </h3>
+          </div>
+        </div>
+      ) : (
+        <div className="report-modal__content">
+          <fieldset
+            className="report-modal__reasons"
+            disabled={submitting}
+          >
+            <legend className="report-modal__label">
+              通報理由
+            </legend>
+
+            <div className="report-modal__reason-list">
+              {REPORT_REASONS.map((value) => (
+                <label
+                  key={value}
+                  className={[
+                    "report-modal__reason",
+                    reason === value
+                      ? "report-modal__reason--selected"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <input
+                    type="radio"
+                    className="report-modal__reason-input"
+                    name="report-reason"
+                    value={value}
+                    checked={reason === value}
+                    onChange={() => onReasonChange(value)}
+                  />
+
+                  <span className="report-modal__reason-label">
+                    {getReportReasonLabel(value)}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          {requiresDetail ? (
+            <label className="report-modal__detail-field">
+              <span className="report-modal__label">
+                詳細
+                <span className="report-modal__required">
+                  必須
+                </span>
+              </span>
+
+              <textarea
+                className="report-modal__textarea"
+                value={detail}
+                rows={5}
+                disabled={submitting}
+                placeholder="通報する理由を具体的に入力してください。"
+                onChange={(event) =>
+                  onDetailChange(event.target.value)
+                }
+              />
+            </label>
+          ) : null}
+
+          {errorMessage ? (
+            <p
+              className="report-modal__error"
+              role="alert"
+            >
+              {errorMessage}
+            </p>
+          ) : null}
+        </div>
+      )}
+    </Modal>
+  );
 }
