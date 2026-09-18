@@ -9,8 +9,11 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Label } from "../../../../shared/ui/label";
+import Textarea from "../../../../shared/ui/textarea";
 
 import type { InquiryCreateAttachment } from "../hooks/useInquiryCreate";
+
+import "./inquiryCreateForm.css";
 
 type InquiryCreateFormProps = {
   message: string;
@@ -46,98 +49,95 @@ export default function InquiryCreateForm({
       </CardHeader>
 
       <CardContent>
-        <div className="flex flex-col gap-6">
+        <div className="inquiry-create-form">
           {errorMessage ? (
-            <div className="inq__empty">
+            <div className="inquiry-create-form__error">
               {errorMessage}
             </div>
           ) : null}
 
-          <div className="flex flex-col gap-2">
+          <div className="inquiry-create-form__message">
             <Label
               htmlFor="amol-inquiry-message"
-              className="font-semibold"
+              className="inquiry-create-form__label"
             >
               本文
             </Label>
 
-            <textarea
+            <Textarea
               id="amol-inquiry-message"
+              size="large"
               value={message}
               rows={10}
               maxLength={maxMessageLength}
               disabled={submitting}
               placeholder="AMOLへのお問い合わせ内容を入力してください"
-              className="min-h-[240px] w-full resize-y rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-4 py-3 text-sm leading-7 text-[hsl(var(--foreground))] outline-none transition focus:border-[hsl(var(--ring))] focus:ring-2 focus:ring-[hsl(var(--ring)/0.2)] disabled:cursor-not-allowed disabled:opacity-60"
               onChange={(event) => onChangeMessage(event.target.value)}
             />
 
-            <div className="text-right text-xs text-[hsl(var(--muted-foreground))]">
+            <div className="inquiry-create-form__counter">
               {message.length.toLocaleString()} /{" "}
               {maxMessageLength.toLocaleString()}
             </div>
           </div>
 
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-4">
-              <span className="text-sm font-semibold">
+          <div className="inquiry-create-form__attachments">
+            <div className="inquiry-create-form__attachment-header">
+              <span className="inquiry-create-form__attachment-title">
                 添付ファイル
               </span>
 
-              <span className="text-xs text-[hsl(var(--muted-foreground))]">
+              <span className="inquiry-create-form__attachment-count">
                 {attachments.length} / {maxImages}
               </span>
             </div>
 
-            <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-[hsl(var(--border))] px-6 py-8 text-center transition hover:bg-[hsl(var(--muted)/0.5)]">
+            <label className="inquiry-create-form__file-picker">
               <input
                 type="file"
                 accept="image/*"
                 multiple
-                className="hidden"
-                disabled={
-                  submitting ||
-                  attachments.length >= maxImages
-                }
+                className="inquiry-create-form__file-input"
+                disabled={submitting || attachments.length >= maxImages}
                 onChange={onChangeFiles}
               />
 
-              <span className="text-sm font-semibold">
+              <span className="inquiry-create-form__file-picker-title">
                 画像を選択
               </span>
 
-              <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                JPG / PNG / WebP / GIF、1枚
-                {maxImageSizeMB}MBまで
+              <span className="inquiry-create-form__file-picker-help">
+                JPG / PNG / WebP / GIF、1枚 {maxImageSizeMB}MBまで
               </span>
             </label>
 
             {attachments.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              <div className="inquiry-create-form__attachment-grid">
                 {attachments.map((attachment) => (
                   <div
                     key={attachment.id}
-                    className="relative overflow-hidden rounded-lg border border-[hsl(var(--border))]"
+                    className="inquiry-create-form__attachment"
                   >
                     <img
                       src={attachment.previewUrl}
                       alt={attachment.file.name}
-                      className="aspect-square w-full object-cover"
+                      className="inquiry-create-form__attachment-image"
                     />
 
                     <button
                       type="button"
                       disabled={submitting}
-                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-sm text-white transition hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-50"
-                      onClick={() =>
-                        onRemoveAttachment(attachment.id)
-                      }
+                      className="inquiry-create-form__remove-button"
+                      onClick={() => onRemoveAttachment(attachment.id)}
                       aria-label={`${attachment.file.name}を削除`}
                     >
                       ×
                     </button>
 
-                    <div className="truncate px-2 py-2 text-xs">
+                    <div
+                      className="inquiry-create-form__attachment-name"
+                      title={attachment.file.name}
+                    >
                       {attachment.file.name}
                     </div>
                   </div>
@@ -147,20 +147,20 @@ export default function InquiryCreateForm({
           </div>
 
           {submitting && attachments.length > 0 ? (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-center justify-between text-xs text-[hsl(var(--muted-foreground))]">
+            <div className="inquiry-create-form__progress">
+              <div className="inquiry-create-form__progress-header">
                 <span>添付ファイルをアップロード中</span>
                 <span>{uploadProgress}%</span>
               </div>
 
-              <div className="h-2 overflow-hidden rounded-full bg-[hsl(var(--muted))]">
-                <div
-                  className="h-full bg-[hsl(var(--primary))] transition-[width]"
-                  style={{
-                    width: `${uploadProgress}%`,
-                  }}
-                />
-              </div>
+              <progress
+                className="inquiry-create-form__progress-bar"
+                value={uploadProgress}
+                max={100}
+                aria-label="添付ファイルのアップロード進捗"
+              >
+                {uploadProgress}%
+              </progress>
             </div>
           ) : null}
         </div>

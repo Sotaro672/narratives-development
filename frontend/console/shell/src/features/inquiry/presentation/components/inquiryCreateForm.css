@@ -1,0 +1,210 @@
+/* frontend/console/shell/src/features/inquiry/presentation/components/inquiryCreateForm.css */
+
+.inquiry-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.inquiry-create-form__error {
+  color: hsl(var(--destructive));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.inquiry-create-form__message {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inquiry-create-form__label {
+  font-weight: 600;
+}
+
+.inquiry-create-form__counter {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-align: right;
+}
+
+.inquiry-create-form__attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inquiry-create-form__attachment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.inquiry-create-form__attachment-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.inquiry-create-form__attachment-count {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.inquiry-create-form__file-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 2rem 1.5rem;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 0.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.inquiry-create-form__file-picker:hover {
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.inquiry-create-form__file-picker:has(
+  .inquiry-create-form__file-input:disabled
+) {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.inquiry-create-form__file-input {
+  display: none;
+}
+
+.inquiry-create-form__file-picker-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.25rem;
+}
+
+.inquiry-create-form__file-picker-help {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.inquiry-create-form__attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.inquiry-create-form__attachment {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+}
+
+.inquiry-create-form__attachment-image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+}
+
+.inquiry-create-form__remove-button {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 9999px;
+  background-color: rgb(0 0 0 / 0.65);
+  color: #ffffff;
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    opacity 150ms ease;
+}
+
+.inquiry-create-form__remove-button:hover:not(:disabled) {
+  background-color: rgb(0 0 0 / 0.8);
+}
+
+.inquiry-create-form__remove-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.inquiry-create-form__attachment-name {
+  overflow: hidden;
+  padding: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inquiry-create-form__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inquiry-create-form__progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.inquiry-create-form__progress-bar {
+  display: block;
+  width: 100%;
+  height: 0.5rem;
+  overflow: hidden;
+  border: 0;
+  border-radius: 9999px;
+  appearance: none;
+  background-color: hsl(var(--muted));
+}
+
+.inquiry-create-form__progress-bar::-webkit-progress-bar {
+  border-radius: 9999px;
+  background-color: hsl(var(--muted));
+}
+
+.inquiry-create-form__progress-bar::-webkit-progress-value {
+  border-radius: 9999px;
+  background-color: hsl(var(--primary));
+  transition: width 150ms ease;
+}
+
+.inquiry-create-form__progress-bar::-moz-progress-bar {
+  border-radius: 9999px;
+  background-color: hsl(var(--primary));
+}
+
+@media (min-width: 640px) {
+  .inquiry-create-form__attachment-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) {
+  .inquiry-create-form__attachment-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}

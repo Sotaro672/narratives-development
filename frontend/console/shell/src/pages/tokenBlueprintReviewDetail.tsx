@@ -1,19 +1,24 @@
 // frontend/console/shell/src/pages/tokenBlueprintReviewDetail.tsx
 
 import { useMemo, useRef, useState } from "react";
+
 import PageStyle from "../layout/PageStyle/PageStyle";
+
 import AdminCard from "../features/admin/presentation/components/AdminCard";
-import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
 import LogCard from "../features/log/presentation/LogCard";
 import ReportModal from "../features/report/presentation/components/ReportModal";
-import { safeDateTimeLabelJa } from "../shared/util/dateJa";
-import { Button } from "../shared/ui/button";
+import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
 import ReviewAggregateCard from "../features/tokenBlueprintReview/presentation/component/review_aggregate_card";
 import ReviewCard from "../features/tokenBlueprintReview/presentation/component/review_card";
 import { useTokenBlueprintReviewDetail } from "../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail";
-import type { Comment } from "../shared/types/tokenBlueprintReview";
+
+import { Button } from "../shared/ui/button";
+import Textarea from "../shared/ui/textarea";
 import type { ReportReason, ReportResponse } from "../shared/types/report";
 import { requiresReportDetail } from "../shared/types/report";
+import type { Comment } from "../shared/types/tokenBlueprintReview";
+import { safeDateTimeLabelJa } from "../shared/util/dateJa";
+
 import "../styles/tokenBlueprintReview.css";
 
 const DEFAULT_REPORT_REASON: ReportReason = "INAPPROPRIATE";
@@ -211,13 +216,12 @@ export default function TokenBlueprintReviewDetail() {
               コメントを投稿
             </div>
 
-            <textarea
+            <Textarea
               value={commentBody}
               onChange={(event) => {
                 setCommentBody(event.target.value);
               }}
               placeholder="コメントを入力してください"
-              className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
               disabled={submitting || reportSubmitting}
             />
 

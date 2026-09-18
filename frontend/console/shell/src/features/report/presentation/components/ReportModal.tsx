@@ -2,6 +2,7 @@
 
 import { Button } from "../../../../shared/ui/button";
 import Modal from "../../../../shared/ui/modal";
+import Textarea from "../../../../shared/ui/textarea";
 import type {
   ReportReason,
   ReportResponse,
@@ -178,25 +179,27 @@ export default function ReportModal({
           </fieldset>
 
           {requiresDetail ? (
-            <label className="report-modal__detail-field">
-              <span className="report-modal__label">
+            <div className="report-modal__detail-field">
+              <label
+                className="report-modal__label"
+                htmlFor="report-modal-detail"
+              >
                 詳細
                 <span className="report-modal__required">
                   必須
                 </span>
-              </span>
+              </label>
 
-              <textarea
-                className="report-modal__textarea"
+              <Textarea
+                id="report-modal-detail"
+                size="medium"
                 value={detail}
                 rows={5}
                 disabled={submitting}
                 placeholder="通報する理由を具体的に入力してください。"
-                onChange={(event) =>
-                  onDetailChange(event.target.value)
-                }
+                onChange={(event) => onDetailChange(event.target.value)}
               />
-            </label>
+            </div>
           ) : null}
 
           {errorMessage ? (

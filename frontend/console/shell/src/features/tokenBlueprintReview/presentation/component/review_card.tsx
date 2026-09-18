@@ -9,6 +9,9 @@ import type {
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { Badge } from "../../../../shared/ui/badge";
 import { Button } from "../../../../shared/ui/button";
+import Textarea from "../../../../shared/ui/textarea";
+
+import "./review_card.css";
 
 type ReviewCardProps = {
   item: Comment;
@@ -222,13 +225,13 @@ export default function ReviewCard({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl shadow-sm tbrd-review-item-card">
-      <div className="tbrd-author-row">
+    <div className="token-blueprint-review-card">
+      <div className="token-blueprint-review-card__author-row">
         {authorIcon ? (
           <img
             src={authorIcon}
             alt="author icon"
-            className="tbrd-author-icon"
+            className="token-blueprint-review-card__author-icon"
           />
         ) : null}
 
@@ -240,25 +243,24 @@ export default function ReviewCard({
           </Badge>
         ) : null}
 
-        <span className="tbrd-created-at">
+        <span>
           {createdAtLabel}
         </span>
       </div>
 
-      <div className="tbrd-body">
+      <div className="token-blueprint-review-card__body">
         {body || (
-          <span className="tbrd-body-empty">
+          <span className="token-blueprint-review-card__body-empty">
             （本文なし）
           </span>
         )}
       </div>
 
-      <div className="tbrd-meta-row">
+      <div className="token-blueprint-review-card__meta-row">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="tbrd-reaction-button"
           disabled={disabled}
           onClick={() => {
             void handleReaction("like");
@@ -271,7 +273,6 @@ export default function ReviewCard({
           type="button"
           variant="outline"
           size="sm"
-          className="tbrd-reaction-button"
           disabled={disabled}
           onClick={() => {
             void handleReaction("dislike");
@@ -284,7 +285,6 @@ export default function ReviewCard({
           type="button"
           variant="outline"
           size="sm"
-          className="tbrd-reply-button"
           disabled={disabled}
           onClick={toggleReplyForm}
         >
@@ -298,7 +298,6 @@ export default function ReviewCard({
             type="button"
             variant="outline"
             size="sm"
-            className="tbrd-reply-button"
             disabled={disabled}
             onClick={toggleRepliesAccordion}
           >
@@ -313,7 +312,7 @@ export default function ReviewCard({
             type="button"
             variant="outline"
             size="sm"
-            className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+            className="token-blueprint-review-card__danger-button"
             disabled={disabled}
             onClick={handleReport}
           >
@@ -326,7 +325,7 @@ export default function ReviewCard({
             type="button"
             variant="outline"
             size="sm"
-            className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+            className="token-blueprint-review-card__danger-button"
             disabled={disabled}
             onClick={() => {
               void handleDelete();
@@ -339,23 +338,22 @@ export default function ReviewCard({
         ) : null}
       </div>
 
-      <div className="tbrd-meta-row">
+      <div className="token-blueprint-review-card__meta-row">
         <span>返信数: {visibleReplyCount}</span>
       </div>
 
       {isReplyFormOpen ? (
-        <div className="mt-3 border-t border-slate-200 pt-3">
-          <textarea
+        <div className="token-blueprint-review-card__reply-form">
+          <Textarea
             value={replyBody}
             onChange={(event) => {
               setReplyBody(event.target.value);
             }}
             placeholder="返信を入力してください"
-            className="w-full min-h-[96px] rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
             disabled={disabled}
           />
 
-          <div className="mt-2 flex justify-end gap-2">
+          <div className="token-blueprint-review-card__reply-actions">
             <Button
               type="button"
               variant="outline"
@@ -386,12 +384,12 @@ export default function ReviewCard({
       ) : null}
 
       {isRepliesOpen && visibleReplyCount > 0 ? (
-        <div className="mt-3 border-t border-slate-200 pt-3">
-          <div className="flex flex-col gap-3">
+        <div className="token-blueprint-review-card__replies">
+          <div className="token-blueprint-review-card__reply-list">
             {sortedReplies.map((reply) => (
               <div
                 key={reply.commentId}
-                className="ml-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
+                className="token-blueprint-review-card__reply-item"
               >
                 <ReviewCard
                   item={reply}

@@ -4,6 +4,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 
 import { Card, CardContent } from "../shared/ui/card";
 import { Input } from "../shared/ui/input";
+import Textarea from "../shared/ui/textarea";
 
 import PriceCard from "../features/list/presentation/components/priceCard";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
@@ -18,23 +19,19 @@ export default function ListDetail() {
   const vm = useListDetail();
   const isEdit = vm.isEdit;
 
-  const headerTitle =
-    vm.readableId || "出品詳細";
+  const headerTitle = vm.readableId || "出品詳細";
 
-  const effectivePriceRows =
-    isEdit
-      ? vm.draftPriceRows
-      : vm.priceRows;
+  const effectivePriceRows = isEdit
+    ? vm.draftPriceRows
+    : vm.priceRows;
 
-  const effectiveAssigneeId =
-    isEdit
-      ? vm.draftAssigneeId
-      : vm.assigneeId;
+  const effectiveAssigneeId = isEdit
+    ? vm.draftAssigneeId
+    : vm.assigneeId;
 
-  const effectiveAssigneeName =
-    isEdit
-      ? vm.draftAssigneeName
-      : vm.assigneeName;
+  const effectiveAssigneeName = isEdit
+    ? vm.draftAssigneeName
+    : vm.assigneeName;
 
   const effectiveStatus =
     vm.status === "listing"
@@ -128,18 +125,14 @@ export default function ListDetail() {
                 : []
             }
             mainImageIndex={vm.mainImageIndex}
-            setMainImageIndex={
-              vm.setMainImageIndex
-            }
+            setMainImageIndex={vm.setMainImageIndex}
             onAddImages={(files) =>
               vm.onAddImages(files)
             }
             onRemoveImageAt={(idx) =>
               vm.onRemoveImageAt(idx)
             }
-            onClearImages={
-              vm.onClearImages
-            }
+            onClearImages={vm.onClearImages}
           />
 
           <Card>
@@ -156,9 +149,7 @@ export default function ListDetail() {
 
               {isEdit && (
                 <Input
-                  value={
-                    vm.draftListingTitle
-                  }
+                  value={vm.draftListingTitle}
                   placeholder="タイトルを入力"
                   onChange={(e) =>
                     vm.setDraftListingTitle(
@@ -187,17 +178,15 @@ export default function ListDetail() {
               )}
 
               {isEdit && (
-                <textarea
-                  value={
-                    vm.draftDescription
-                  }
+                <Textarea
+                  value={vm.draftDescription}
                   placeholder="説明を入力"
                   onChange={(e) =>
                     vm.setDraftDescription(
                       e.target.value,
                     )
                   }
-                  className="w-full min-h-[120px] rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+                  className="min-h-[120px]"
                   disabled={
                     vm.saving ||
                     vm.deleting
@@ -223,9 +212,7 @@ export default function ListDetail() {
             }
           />
 
-          {Array.isArray(
-            effectivePriceRows,
-          ) &&
+          {Array.isArray(effectivePriceRows) &&
             effectivePriceRows.length === 0 && (
               <div className="text-xs text-[hsl(var(--muted-foreground))]">
                 価格情報がありません。
@@ -245,27 +232,17 @@ export default function ListDetail() {
               effectiveAssigneeId ||
               undefined
             }
-            assigneeName={
-              effectiveAssigneeName
-            }
-            assigneeCandidates={
-              vm.assigneeCandidates
-            }
-            loadingMembers={
-              vm.loadingMembers
-            }
+            assigneeName={effectiveAssigneeName}
+            assigneeCandidates={vm.assigneeCandidates}
+            loadingMembers={vm.loadingMembers}
             onSelectAssignee={
               isEdit
                 ? vm.onSelectAssignee
                 : undefined
             }
-            createdByName={
-              vm.createdByName
-            }
+            createdByName={vm.createdByName}
             createdAt={vm.createdAt}
-            updatedByName={
-              vm.updatedByName
-            }
+            updatedByName={vm.updatedByName}
             updatedAt={vm.updatedAt}
           />
 
@@ -275,12 +252,8 @@ export default function ListDetail() {
           />
 
           <ListSalesSummaryCard
-            totalOrderCount={
-              vm.totalOrderCount
-            }
-            totalSalesAmount={
-              vm.totalSalesAmount
-            }
+            totalOrderCount={vm.totalOrderCount}
+            totalSalesAmount={vm.totalSalesAmount}
           />
         </div>
       </PageStyle>

@@ -17,6 +17,9 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Label } from "../../../../shared/ui/label";
+import Textarea from "../../../../shared/ui/textarea";
+
+import "./inputCard.css";
 
 export type InputCardMode = "view" | "edit";
 
@@ -99,10 +102,8 @@ export default function InputCard({
 }: Props) {
   const [inputTitle, setInputTitle] = useState(initialTitle);
   const [text, setText] = useState(initialText);
-  const [attachments, setAttachments] =
-    useState<AnnouncementInputAttachment[]>(initialAttachments);
+  const [attachments, setAttachments] = useState<AnnouncementInputAttachment[]>(initialAttachments);
   const [mainImageIndex, setMainImageIndex] = useState(0);
-
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
   const isEditMode = mode === "edit";
@@ -223,17 +224,13 @@ export default function InputCard({
     });
   };
 
-  const handleSelectImages = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleSelectImages = (event: React.ChangeEvent<HTMLInputElement>) => {
     const nextFiles = Array.from(event.target.files ?? []);
     addImages(nextFiles);
     event.target.value = "";
   };
 
-  const handleDropImages = (
-    event: React.DragEvent<HTMLDivElement>,
-  ) => {
+  const handleDropImages = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -243,9 +240,7 @@ export default function InputCard({
     addImages(nextFiles);
   };
 
-  const handleDragOverImages = (
-    event: React.DragEvent<HTMLDivElement>,
-  ) => {
+  const handleDragOverImages = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
   };
@@ -266,7 +261,6 @@ export default function InputCard({
 
   const handleClearImages = () => {
     if (!isEditMode || isBusy) return;
-
     setAttachments([]);
     setMainImageIndex(0);
   };
@@ -283,41 +277,39 @@ export default function InputCard({
       </CardHeader>
 
       <CardContent>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <Label>
-                画像アップロード
-              </Label>
+        <div className="announcement-input-card__content">
+          <div className="announcement-input-card__section">
+            <div className="announcement-input-card__section-header">
+              <Label>画像アップロード</Label>
 
-              {isEditMode && hasImages && (
+              {isEditMode && hasImages ? (
                 <Button
                   type="button"
                   variant="ghost"
-                  className="h-8"
+                  className="announcement-input-card__clear-button"
                   disabled={isDisabled}
                   onClick={handleClearImages}
                 >
                   クリア
                 </Button>
-              )}
+              ) : null}
             </div>
 
-            {isEditMode && (
+            {isEditMode ? (
               <input
                 ref={imageInputRef}
                 type="file"
                 accept="image/*"
                 multiple
-                style={{ display: "none" }}
+                className="announcement-input-card__file-input"
                 onChange={handleSelectImages}
               />
-            )}
+            ) : null}
 
-            <div className="rounded-xl border border-slate-300 bg-slate-50 p-4">
-              {!hasImages && isEditMode && (
+            <div className="announcement-input-card__image-panel">
+              {!hasImages && isEditMode ? (
                 <div
-                  className="flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center transition hover:bg-slate-50"
+                  className="announcement-input-card__empty-upload"
                   onClick={openPicker}
                   onDrop={handleDropImages}
                   onDragOver={handleDragOverImages}
@@ -325,60 +317,56 @@ export default function InputCard({
                   tabIndex={0}
                   title="クリックで画像を追加"
                 >
-                  <div className="mb-3 text-slate-400">
+                  <div className="announcement-input-card__empty-icon">
                     <ImageIcon />
                   </div>
-
-                  <div className="text-sm font-semibold text-slate-800">
+                  <div className="announcement-input-card__empty-title">
                     画像を追加
                   </div>
-
-                  <div className="mt-1 text-xs text-slate-500">
+                  <div className="announcement-input-card__empty-help">
                     クリックで選択（複数可） / ドロップでも追加できます
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {!hasImages && isViewMode && (
-                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-                  <div className="mb-3 text-slate-400">
+              {!hasImages && isViewMode ? (
+                <div className="announcement-input-card__empty-view">
+                  <div className="announcement-input-card__empty-icon">
                     <ImageIcon />
                   </div>
-
-                  <div className="text-sm font-semibold text-slate-800">
+                  <div className="announcement-input-card__empty-title">
                     画像はありません
                   </div>
                 </div>
-              )}
+              ) : null}
 
-              {hasImages && (
-                <div className="space-y-3">
+              {hasImages ? (
+                <div className="announcement-input-card__images">
                   <div
-                    className="relative overflow-visible"
+                    className="announcement-input-card__main-image-wrap"
                     onDrop={isEditMode ? handleDropImages : undefined}
                     onDragOver={isEditMode ? handleDragOverImages : undefined}
                     title={isEditMode ? "クリックで画像追加" : undefined}
                   >
                     <div
                       className={[
-                        "flex items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white",
-                        isEditMode ? "cursor-pointer" : "",
-                      ].join(" ")}
-                      style={{ minHeight: 260 }}
+                        "announcement-input-card__main-image-stage",
+                        isEditMode ? "announcement-input-card__main-image-stage--clickable" : "",
+                      ].filter(Boolean).join(" ")}
                       onClick={openPicker}
                       role={isEditMode ? "button" : undefined}
                       tabIndex={isEditMode ? 0 : undefined}
                     >
-                      {mainImage && (
+                      {mainImage ? (
                         <img
                           src={mainImage.url}
                           alt={mainImage.name}
-                          className="max-h-[360px] w-full object-contain"
+                          className="announcement-input-card__main-image"
                         />
-                      )}
+                      ) : null}
                     </div>
 
-                    {isEditMode && (
+                    {isEditMode ? (
                       <DeleteButton
                         size="md"
                         disabled={isDisabled}
@@ -388,9 +376,9 @@ export default function InputCard({
                           handleRemoveImageAt(mainImageIndex);
                         }}
                       />
-                    )}
+                    ) : null}
 
-                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                    <div className="announcement-input-card__image-meta">
                       <div>
                         {isEditMode
                           ? `${previewImages.length} 枚（×で削除 / クリックで追加）`
@@ -399,7 +387,7 @@ export default function InputCard({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="announcement-input-card__thumbnail-grid">
                     {thumbIndices.map((index) => {
                       const item = previewImages[index];
                       if (!item) return null;
@@ -408,27 +396,23 @@ export default function InputCard({
                         <div
                           key={item.key}
                           className={[
-                            "relative overflow-visible rounded-xl border border-slate-200 bg-white",
-                            isEditMode ? "cursor-pointer" : "",
-                          ].join(" ")}
+                            "announcement-input-card__thumbnail",
+                            isEditMode ? "announcement-input-card__thumbnail--clickable" : "",
+                          ].filter(Boolean).join(" ")}
                           onClick={() => handleSelectMainImage(index)}
                           role={isEditMode ? "button" : undefined}
                           tabIndex={isEditMode ? 0 : undefined}
-                          title={
-                            isEditMode
-                              ? "クリックでメインに設定"
-                              : undefined
-                          }
+                          title={isEditMode ? "クリックでメインに設定" : undefined}
                         >
-                          <div className="aspect-square overflow-hidden rounded-xl bg-slate-100">
+                          <div className="announcement-input-card__thumbnail-image-wrap">
                             <img
                               src={item.url}
                               alt={item.name}
-                              className="h-full w-full object-cover"
+                              className="announcement-input-card__thumbnail-image"
                             />
                           </div>
 
-                          {isEditMode && (
+                          {isEditMode ? (
                             <DeleteButton
                               size="sm"
                               disabled={isDisabled}
@@ -438,14 +422,14 @@ export default function InputCard({
                                 handleRemoveImageAt(index);
                               }}
                             />
-                          )}
+                          ) : null}
                         </div>
                       );
                     })}
 
-                    {isEditMode && (
+                    {isEditMode ? (
                       <div
-                        className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white text-slate-500 transition hover:bg-slate-50"
+                        className="announcement-input-card__add-image"
                         onClick={openPicker}
                         onDrop={handleDropImages}
                         onDragOver={handleDragOverImages}
@@ -453,25 +437,22 @@ export default function InputCard({
                         tabIndex={0}
                         title="クリックで画像を追加"
                       >
-                        <div className="mb-1">
+                        <div className="announcement-input-card__add-image-icon">
                           <PlusIcon />
                         </div>
-
-                        <div className="text-xs font-medium">
+                        <div className="announcement-input-card__add-image-label">
                           画像を追加
                         </div>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="sales-input-title">
-              タイトル
-            </Label>
+          <div className="announcement-input-card__section">
+            <Label htmlFor="sales-input-title">タイトル</Label>
 
             {isEditMode ? (
               <input
@@ -481,31 +462,29 @@ export default function InputCard({
                 onChange={(event) => setInputTitle(event.target.value)}
                 placeholder="タイトルを入力してください"
                 disabled={isDisabled}
-                className="w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50"
+                className="announcement-input-card__title-input"
               />
             ) : (
-              <div className="min-h-10 w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900">
+              <div className="announcement-input-card__title-view">
                 {formatViewText(inputTitle)}
               </div>
             )}
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="sales-input-text">
-              文章
-            </Label>
+          <div className="announcement-input-card__section">
+            <Label htmlFor="sales-input-text">文章</Label>
 
             {isEditMode ? (
-              <textarea
+              <Textarea
                 id="sales-input-text"
+                size="medium"
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 placeholder="文章を入力してください"
                 disabled={isDisabled}
-                className="min-h-[140px] w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50"
               />
             ) : (
-              <div className="min-h-[140px] w-full whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-900">
+              <div className="announcement-input-card__text-view">
                 {formatViewText(text)}
               </div>
             )}

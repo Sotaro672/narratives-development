@@ -3,6 +3,8 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 
+import Textarea from "../../../../shared/ui/textarea";
+
 import {
   MAX_REPLY_IMAGES,
   MAX_REPLY_IMAGE_SIZE_MB,
@@ -98,17 +100,15 @@ export default function ReplyModal({
             返信内容
           </label>
 
-          <textarea
+          <Textarea
             id="inquiry-reply-content"
-            className="inq-reply-modal__textarea"
+            size="medium"
             value={content}
             placeholder="返信内容を入力してください"
             rows={8}
             maxLength={2000}
             disabled={submitting}
-            onChange={(event) =>
-              onChangeContent(event.target.value)
-            }
+            onChange={(event) => onChangeContent(event.target.value)}
           />
 
           <div className="inq-reply-modal__counter">
@@ -132,10 +132,7 @@ export default function ReplyModal({
                 accept="image/*"
                 multiple
                 className="inq-reply-modal__upload-input"
-                disabled={
-                  submitting ||
-                  images.length >= MAX_REPLY_IMAGES
-                }
+                disabled={submitting || images.length >= MAX_REPLY_IMAGES}
                 onChange={onChangeImages}
               />
 
@@ -144,9 +141,7 @@ export default function ReplyModal({
               </span>
 
               <span className="inq-reply-modal__upload-sub">
-                JPG / PNG / WebP / GIF、1枚
-                {MAX_REPLY_IMAGE_SIZE_MB}
-                MBまで
+                JPG / PNG / WebP / GIF、1枚 {MAX_REPLY_IMAGE_SIZE_MB}MBまで
               </span>
             </label>
 
@@ -167,9 +162,7 @@ export default function ReplyModal({
                       type="button"
                       className="inq-reply-modal__preview-remove"
                       disabled={submitting}
-                      onClick={() =>
-                        onRemoveImage(image.id)
-                      }
+                      onClick={() => onRemoveImage(image.id)}
                       aria-label={`${image.file.name}を削除`}
                     >
                       ×
@@ -194,10 +187,7 @@ export default function ReplyModal({
           <button
             type="button"
             className="inq-reply-modal__button"
-            disabled={
-              submitting ||
-              !content.trim()
-            }
+            disabled={submitting || !content.trim()}
             onClick={onSubmit}
           >
             {submitting ? "送信中" : "送信"}
@@ -207,8 +197,5 @@ export default function ReplyModal({
     </div>
   );
 
-  return createPortal(
-    modal,
-    document.body,
-  );
+  return createPortal(modal, document.body);
 }

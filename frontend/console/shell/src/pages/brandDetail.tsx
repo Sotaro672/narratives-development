@@ -17,6 +17,7 @@ import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
 import { Media } from "../shared/ui/media";
+import Textarea from "../shared/ui/textarea";
 
 import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
 import { ManagerCard } from "../features/brand/presentation/components/ManagerCard";
@@ -349,7 +350,7 @@ export default function BrandDetail() {
                   {brand.description || "（未設定）"}
                 </div>
               ) : (
-                <textarea
+                <Textarea
                   id="brand-description"
                   value={draft.description}
                   placeholder="説明"

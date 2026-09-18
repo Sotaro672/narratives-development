@@ -121,6 +121,11 @@ export default function InventoryDetail() {
       iconUrl: tokenBlueprintPatch?.iconUrl ?? undefined,
       minted: false,
       iconFile: null,
+      iconCropPosition: {
+        x: 0,
+        y: 0,
+      },
+      iconCropScale: 1,
       isEditMode: false,
       brandOptions: [],
     };

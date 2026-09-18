@@ -14,6 +14,7 @@ import {
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Media } from "../shared/ui/media";
+import Textarea from "../shared/ui/textarea";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
@@ -286,11 +287,11 @@ export default function BrandCreate() {
             説明
           </CardLabel>
 
-          <textarea
+          <Textarea
             id="description"
-            className="w-full h-28 border rounded-lg px-3 py-2 text-sm mt-1"
-            placeholder="ブランドの説明を入力してください"
             value={description}
+            placeholder="ブランドの説明を入力してください"
+            className="mt-1 min-h-[112px]"
             onChange={(event) =>
               setDescription(event.target.value)
             }
