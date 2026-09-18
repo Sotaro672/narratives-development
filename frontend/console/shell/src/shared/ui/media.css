@@ -1,0 +1,247 @@
+/* frontend/console/shell/src/shared/ui/media.css */
+
+/* =========================================================
+ * Media
+ * ======================================================= */
+
+.ui-media {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--muted) / 0.4);
+  color: hsl(var(--foreground));
+}
+
+.ui-media--borderless {
+  border: 0;
+}
+
+/* =========================================================
+ * Variants
+ * ======================================================= */
+
+.ui-media--default {
+  min-height: 160px;
+}
+
+.ui-media--landscape {
+  aspect-ratio: 16 / 9;
+  border-radius: 16px;
+}
+
+.ui-media--square {
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+}
+
+.ui-media--viewer {
+  min-height: 310px;
+}
+
+.ui-media--cover {
+  height: 224px;
+  border-radius: 16px;
+}
+
+/* =========================================================
+ * Image / Video
+ * ======================================================= */
+
+.ui-media__image,
+.ui-media__video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  border: 0;
+}
+
+.ui-media__video {
+  background: #0f172a;
+}
+
+.ui-media__media--cover {
+  object-fit: cover;
+}
+
+.ui-media__media--contain {
+  object-fit: contain;
+}
+
+.ui-media--viewer .ui-media__image,
+.ui-media--viewer .ui-media__video {
+  height: 310px;
+  max-height: 60vh;
+}
+
+/* =========================================================
+ * Empty
+ * ======================================================= */
+
+.ui-media__empty {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: inherit;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: hsl(var(--muted-foreground));
+  text-align: center;
+  user-select: none;
+}
+
+.ui-media__empty-icon {
+  display: inline-flex;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid hsl(var(--border));
+  border-radius: 14px;
+  background: hsl(var(--card));
+  color: hsl(var(--muted-foreground));
+}
+
+.ui-media__empty-icon > svg {
+  width: 24px;
+  height: 24px;
+}
+
+.ui-media__empty-title {
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.ui-media__empty-description {
+  max-width: 100%;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/* =========================================================
+ * File
+ * ======================================================= */
+
+.ui-media__file-link {
+  display: inline-flex;
+  max-width: calc(100% - 48px);
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid hsl(var(--primary) / 0.24);
+  border-radius: 10px;
+  background: hsl(var(--primary) / 0.08);
+  padding: 10px 16px;
+  color: hsl(var(--primary));
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease;
+}
+
+.ui-media__file-link:hover {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  text-decoration: none;
+}
+
+.ui-media__file-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+}
+
+/* =========================================================
+ * Interactive
+ * ======================================================= */
+
+.ui-media--interactive {
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease;
+}
+
+.ui-media--interactive:hover:not(.ui-media--disabled) {
+  border-color: hsl(var(--primary) / 0.5);
+}
+
+.ui-media--interactive:focus-visible {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+}
+
+.ui-media--disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* =========================================================
+ * Responsive
+ * ======================================================= */
+
+@media (max-width: 900px) {
+  .ui-media--viewer {
+    min-height: 280px;
+  }
+
+  .ui-media--viewer .ui-media__image,
+  .ui-media--viewer .ui-media__video {
+    height: 280px;
+  }
+}
+
+@media (max-width: 767px) {
+  .ui-media--cover {
+    height: 180px;
+  }
+}
+
+@media (max-width: 640px) {
+  .ui-media--viewer {
+    min-height: 220px;
+  }
+
+  .ui-media--viewer .ui-media__image,
+  .ui-media--viewer .ui-media__video {
+    height: 220px;
+  }
+
+  .ui-media__empty {
+    padding: 18px;
+  }
+}
+
+/* =========================================================
+ * Reduced motion
+ * ======================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-media,
+  .ui-media__file-link {
+    transition: none;
+  }
+}

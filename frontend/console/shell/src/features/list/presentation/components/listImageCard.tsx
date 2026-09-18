@@ -1,5 +1,7 @@
 // frontend/console/list/src/presentation/components/listImageCard.tsx
-// 商品画像カード（style 要素のみ / ロジックは hook に移譲）
+// 商品画像カード（表示はshared/ui/media、ロジックはhookに委譲）
+
+import { Image as ImageIcon, Plus } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import { Button } from "../../../../shared/ui/button";
@@ -11,73 +13,17 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Media } from "../../../../shared/ui/media";
+
 import { useListImageCard } from "../hook/useListImageCard";
-
-type IconProps = {
-  className?: string;
-  size?: number;
-};
-
-function ImageIcon({
-  className = "ivc__icon",
-  size = 28,
-}: IconProps) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      className={className}
-    >
-      <path
-        d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M21 16l-5.5-5.5a2 2 0 0 0-2.8 0L5 18"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      className="ivc__icon"
-    >
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 export type ListImageCardProps = {
   isEdit: boolean;
   saving?: boolean;
-
   imageUrls: string[];
   mainImageIndex: number;
   setMainImageIndex: (idx: number) => void;
-
   onAddImages?: (files: FileList | null) => void;
-
   onRemoveImageAt?: (idx: number) => void;
   onClearImages?: () => void;
 };
@@ -88,9 +34,7 @@ export default function ListImageCard(props: ListImageCardProps) {
     imageUrls: props.imageUrls,
     mainImageIndex: props.mainImageIndex,
     setMainImageIndex: props.setMainImageIndex,
-
     onAddImages: props.onAddImages,
-
     onRemoveImageAt: props.onRemoveImageAt,
     onClearImages: props.onClearImages,
   });
@@ -100,10 +44,7 @@ export default function ListImageCard(props: ListImageCardProps) {
       <CardHeader>
         <CardHeaderLeft>
           <CardHeaderIcon>
-            <ImageIcon
-              size={18}
-              className="card__header-icon-svg"
-            />
+            <ImageIcon className="card__header-icon-svg" />
           </CardHeaderIcon>
 
           <CardTitle strong>
@@ -132,70 +73,45 @@ export default function ListImageCard(props: ListImageCardProps) {
           type="file"
           accept={IMAGE_STORAGE_ACCEPT}
           multiple
-          style={{ display: "none" }}
+          hidden
           onChange={vm.handleInputChange}
         />
 
         {!vm.hasImages && (
-          <div
-            className={[
-              "lic__empty",
-              props.isEdit ? "lic__empty--clickable" : "",
-            ].join(" ")}
-            onClick={vm.openPicker}
-            role="button"
-            tabIndex={0}
-            title={
+          <Media
+            variant="landscape"
+            fit="cover"
+            emptyIcon={<ImageIcon />}
+            emptyText="画像を追加"
+            emptyDescription={
               props.isEdit
-                ? "クリックで画像を追加"
+                ? "クリックで選択（複数可）"
+                : "編集モードで追加できます"
+            }
+            onActivate={
+              props.isEdit
+                ? vm.openPicker
                 : undefined
             }
-          >
-            <div className="lic__empty-icon">
-              <ImageIcon />
-            </div>
-
-            <div className="lic__empty-title">
-              画像を追加
-            </div>
-
-            <div className="lic__empty-sub">
-              {props.isEdit
-                ? "クリックで選択（複数可）"
-                : "編集モードで追加できます"}
-            </div>
-          </div>
+          />
         )}
 
         {vm.hasImages && (
           <>
-            <div
-              className="lic__main"
-              title={
-                props.isEdit
-                  ? "クリックで画像追加（複数可）"
-                  : undefined
-              }
-            >
-              <div
-                className={[
-                  "lic__main-media",
+            <div className="lic__main">
+              <Media
+                src={vm.mainUrl}
+                type="image"
+                alt="商品メイン画像"
+                variant="landscape"
+                fit="cover"
+                bordered={false}
+                onActivate={
                   props.isEdit
-                    ? "lic__main-media--clickable"
-                    : "",
-                ].join(" ")}
-                onClick={vm.openPicker}
-                role={props.isEdit ? "button" : undefined}
-                tabIndex={props.isEdit ? 0 : undefined}
-              >
-                {vm.mainUrl && (
-                  <img
-                    src={vm.mainUrl}
-                    alt="main"
-                    className="lic__img"
-                  />
-                )}
-              </div>
+                    ? vm.openPicker
+                    : undefined
+                }
+              />
 
               {props.isEdit && (
                 <button
@@ -207,7 +123,7 @@ export default function ListImageCard(props: ListImageCardProps) {
                       props.mainImageIndex,
                     );
                   }}
-                  aria-label="remove main image"
+                  aria-label="メイン画像を削除"
                   title="削除"
                   disabled={Boolean(props.saving)}
                 >
@@ -242,22 +158,18 @@ export default function ListImageCard(props: ListImageCardProps) {
                   <div
                     key={`${url}-${idx}`}
                     className="lic__thumb"
-                    onClick={() =>
-                      vm.handleSetMainIndex(idx)
-                    }
-                    role="button"
-                    tabIndex={0}
-                    title="クリックでメインに設定"
                   >
-                    <div className="lic__thumb-media">
-                      {url && (
-                        <img
-                          src={url}
-                          alt={`sub-${idx}`}
-                          className="lic__img"
-                        />
-                      )}
-                    </div>
+                    <Media
+                      src={url}
+                      type="image"
+                      alt={`商品画像 ${idx + 1}`}
+                      variant="square"
+                      fit="cover"
+                      bordered={false}
+                      onActivate={() =>
+                        vm.handleSetMainIndex(idx)
+                      }
+                    />
 
                     {props.isEdit && (
                       <button
@@ -267,7 +179,7 @@ export default function ListImageCard(props: ListImageCardProps) {
                           event.stopPropagation();
                           vm.handleRemoveAt(idx);
                         }}
-                        aria-label="remove image"
+                        aria-label={`商品画像 ${idx + 1} を削除`}
                         title="削除"
                         disabled={Boolean(props.saving)}
                       >
@@ -281,21 +193,12 @@ export default function ListImageCard(props: ListImageCardProps) {
               })}
 
               {props.isEdit && (
-                <div
-                  className="lic__add-tile"
-                  onClick={vm.openPicker}
-                  role="button"
-                  tabIndex={0}
-                  title="クリックで画像を追加（複数可）"
-                >
-                  <div className="lic__empty-icon">
-                    <PlusIcon />
-                  </div>
-
-                  <div className="lic__add-title">
-                    画像を追加
-                  </div>
-                </div>
+                <Media
+                  variant="square"
+                  emptyIcon={<Plus />}
+                  emptyText="画像を追加"
+                  onActivate={vm.openPicker}
+                />
               )}
             </div>
           </>

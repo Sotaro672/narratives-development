@@ -16,6 +16,7 @@ import {
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
+import { Media } from "../shared/ui/media";
 
 import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
 import { ManagerCard } from "../features/brand/presentation/components/ManagerCard";
@@ -86,6 +87,7 @@ export default function BrandDetail() {
   } = useBrandDetail();
 
   const canEditImage = isEditing && !saving;
+
   const isCroppingBrandIcon = Boolean(
     isEditing &&
     brandIconFile &&
@@ -93,7 +95,9 @@ export default function BrandDetail() {
   );
 
   const accountLabel =
-    accountCandidates.find((candidate) => candidate.id === brand.accountId)?.label ?? null;
+    accountCandidates.find(
+      (candidate) => candidate.id === brand.accountId,
+    )?.label ?? null;
 
   const displayBrandName = isEditing
     ? draft.name || "ブランド名未入力"
@@ -112,36 +116,41 @@ export default function BrandDetail() {
           </div>
         ) : (
           <div className="brand-hero">
-            <div className="brand-hero__cover">
-              {brandBackgroundPreviewUrl ? (
-                <img
-                  src={brandBackgroundPreviewUrl}
-                  alt="ブランド背景画像"
-                  className="brand-hero__cover-image"
-                  onClick={canEditImage ? handlePickBrandBackground : undefined}
-                  style={{ cursor: canEditImage ? "pointer" : "default" }}
-                />
-              ) : (
-                <div
-                  className={`brand-hero__cover-empty${canEditImage ? " is-clickable" : ""}`}
-                  onClick={canEditImage ? handlePickBrandBackground : undefined}
-                  style={{ cursor: canEditImage ? "pointer" : "default" }}
-                >
-                  {isEditing ? "背景画像を選択" : "背景画像未設定"}
-                </div>
-              )}
+            <Media
+              src={brandBackgroundPreviewUrl}
+              type="image"
+              alt="ブランド背景画像"
+              variant="cover"
+              fit="cover"
+              bordered={false}
+              emptyText={
+                isEditing
+                  ? "背景画像を選択"
+                  : "背景画像未設定"
+              }
+              emptyDescription={
+                canEditImage
+                  ? "クリックして背景画像を選択できます"
+                  : undefined
+              }
+              onActivate={
+                canEditImage
+                  ? handlePickBrandBackground
+                  : undefined
+              }
+              disabled={saving}
+            />
 
-              {isEditing && (
-                <input
-                  ref={brandBackgroundInputRef}
-                  type="file"
-                  accept={brandImageAccept}
-                  style={{ display: "none" }}
-                  onChange={handleBrandBackgroundChange}
-                  disabled={saving}
-                />
-              )}
-            </div>
+            {isEditing && (
+              <input
+                ref={brandBackgroundInputRef}
+                type="file"
+                accept={brandImageAccept}
+                hidden
+                onChange={handleBrandBackgroundChange}
+                disabled={saving}
+              />
+            )}
 
             {isEditing && (
               <>
@@ -199,8 +208,16 @@ export default function BrandDetail() {
                     className="brand-hero__avatar"
                     imageClassName="brand-hero__avatar-image"
                     fallbackClassName="brand-hero__avatar-empty"
-                    fallback={isEditing ? "アイコンを選択" : "アイコン未設定"}
-                    onClick={canEditImage ? handlePickBrandIcon : undefined}
+                    fallback={
+                      isEditing
+                        ? "アイコンを選択"
+                        : "アイコン未設定"
+                    }
+                    onClick={
+                      canEditImage
+                        ? handlePickBrandIcon
+                        : undefined
+                    }
                     disabled={saving}
                   />
                 )}
@@ -210,7 +227,7 @@ export default function BrandDetail() {
                     ref={brandIconInputRef}
                     type="file"
                     accept={brandImageAccept}
-                    style={{ display: "none" }}
+                    hidden
                     onChange={handleBrandIconChange}
                     disabled={saving}
                   />
@@ -281,7 +298,9 @@ export default function BrandDetail() {
 
       <Card>
         <CardHeader>
-          <CardTitle>基本情報</CardTitle>
+          <CardTitle>
+            基本情報
+          </CardTitle>
         </CardHeader>
 
         <CardContent>
@@ -378,14 +397,26 @@ export default function BrandDetail() {
   const right = (
     <div className="space-y-4">
       <ManagerCard
-        managerName={isEditing ? editingManagerName : brand.memberName ?? ""}
-        managerId={isEditing ? managerId : brand.managerId}
+        managerName={
+          isEditing
+            ? editingManagerName
+            : brand.memberName ?? ""
+        }
+        managerId={
+          isEditing
+            ? managerId
+            : brand.managerId
+        }
         managerCandidates={managerCandidates}
         loadingMembers={loadingMembers}
         onSelectManager={handleSelectManager}
         registeredAt={registeredAt}
         updatedAt={updatedAt}
-        mode={isEditing ? "edit" : "view"}
+        mode={
+          isEditing
+            ? "edit"
+            : "view"
+        }
       />
 
       <AccountSelectCard
@@ -403,10 +434,26 @@ export default function BrandDetail() {
         layout="grid-2"
         title={brand.name || "ブランド詳細"}
         onBack={handleBack}
-        onEdit={!isEditing && !loading ? handleEdit : undefined}
-        onSave={isEditing && !saving ? handleSave : undefined}
-        onCancel={isEditing && !saving ? handleCancelEdit : undefined}
-        className={isEditing ? "brand-detail is-edit" : "brand-detail is-view"}
+        onEdit={
+          !isEditing && !loading
+            ? handleEdit
+            : undefined
+        }
+        onSave={
+          isEditing && !saving
+            ? handleSave
+            : undefined
+        }
+        onCancel={
+          isEditing && !saving
+            ? handleCancelEdit
+            : undefined
+        }
+        className={
+          isEditing
+            ? "brand-detail is-edit"
+            : "brand-detail is-view"
+        }
       >
         {[left, right]}
       </PageStyle>
@@ -414,7 +461,11 @@ export default function BrandDetail() {
       <BrandCreateProgressModal
         open={progressOpen}
         progress={progress}
-        onClose={progress.isBlockingNavigation ? undefined : onCloseProgress}
+        onClose={
+          progress.isBlockingNavigation
+            ? undefined
+            : onCloseProgress
+        }
       />
     </>
   );

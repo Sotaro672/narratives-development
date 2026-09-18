@@ -20,6 +20,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Media } from "../../../../shared/ui/media";
 
 type Mode = "edit" | "view";
 
@@ -53,59 +54,79 @@ type TokenContentsCardProps = {
   onDelete?: (item: ContentFile, index: number) => void | Promise<void>;
 };
 
-function renderMain(item: ContentFile) {
-  switch (item.type) {
-    case "image":
-      return (
-        <img
-          src={item.url}
-          alt={item.name}
-          className="token-contents-card__image"
-          onError={(event) => {
-            event.currentTarget.style.display = "none";
-          }}
-        />
-      );
-
-    case "video":
-      return (
-        <video
-          className="token-contents-card__video"
-          controls
-          preload="metadata"
-          playsInline
-          controlsList="nodownload"
-          crossOrigin="anonymous"
-        >
-          <source src={item.url} type={item.contentType} />
-          お使いのブラウザは動画再生に対応していません。
-        </video>
-      );
-
-    case "pdf":
-      return (
-        <a
-          className="token-contents-card__file-link"
-          href={item.url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          PDFを開く: {item.name}
-        </a>
-      );
-
-    case "document":
-      return (
-        <a
-          className="token-contents-card__file-link"
-          href={item.url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          ファイルを開く: {item.name}
-        </a>
-      );
+function ContentMainMedia({
+  item,
+}: {
+  item?: ContentFile;
+}) {
+  if (!item) {
+    return (
+      <Media
+        variant="viewer"
+        fit="contain"
+        emptyIcon={<FileText />}
+        emptyText="コンテンツがまだ登録されていません"
+      />
+    );
   }
+
+  return (
+    <Media
+      src={item.url}
+      type={item.type}
+      name={item.name}
+      alt={item.name}
+      contentType={item.contentType}
+      variant="viewer"
+      fit="contain"
+      imageProps={{
+        onError: (event) => {
+          event.currentTarget.style.display = "none";
+        },
+      }}
+      videoProps={{
+        controls: true,
+        preload: "metadata",
+        playsInline: true,
+        controlsList: "nodownload",
+        crossOrigin: "anonymous",
+      }}
+    />
+  );
+}
+
+function ContentThumbnail({
+  item,
+  index,
+  onActivate,
+}: {
+  item: ContentFile;
+  index: number;
+  onActivate: () => void;
+}) {
+  if (item.type === "image") {
+    return (
+      <Media
+        src={item.url}
+        type="image"
+        alt={`コンテンツ サムネイル ${index + 1}`}
+        variant="square"
+        fit="cover"
+        bordered={false}
+        onActivate={onActivate}
+      />
+    );
+  }
+
+  return (
+    <Media
+      variant="square"
+      bordered={false}
+      emptyText={item.type.toUpperCase()}
+      emptyDescription={item.name}
+      onActivate={onActivate}
+    />
+  );
 }
 
 export default function TokenContentsCard({
@@ -119,6 +140,7 @@ export default function TokenContentsCard({
   const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   const hasItems = contents.length > 0;
+
   const safeIndex = React.useMemo(() => {
     if (contents.length === 0) {
       return 0;
@@ -231,13 +253,13 @@ export default function TokenContentsCard({
           type="file"
           accept={IMAGE_STORAGE_ACCEPT}
           multiple
-          style={{ display: "none" }}
+          hidden
           onChange={(event) => {
             void handleFilesChange(event);
           }}
         />
 
-        {isEditMode ? (
+        {isEditMode && (
           <CardButton
             variant="primary"
             onClick={handleUploadClick}
@@ -245,7 +267,7 @@ export default function TokenContentsCard({
             <Upload className="card__button-icon" />
             ファイル追加
           </CardButton>
-        ) : null}
+        )}
       </CardHeader>
 
       <CardContent size="large">
@@ -260,28 +282,20 @@ export default function TokenContentsCard({
             <ChevronLeft className="token-contents-card__nav-icon" />
           </button>
 
-          <div className="token-contents-card__image-slot">
-            {currentItem ? (
-              <div className="token-contents-card__image-main-wrap">
-                {renderMain(currentItem)}
+          <div className="token-contents-card__image-main-wrap">
+            <ContentMainMedia item={currentItem} />
 
-                {isEditMode ? (
-                  <button
-                    type="button"
-                    className="token-contents-card__delete-btn"
-                    onClick={() => {
-                      void handleDelete(safeIndex);
-                    }}
-                    aria-label="このコンテンツを削除"
-                  >
-                    <Trash2 className="token-contents-card__delete-icon" />
-                  </button>
-                ) : null}
-              </div>
-            ) : (
-              <div className="token-contents-card__placeholder">
-                コンテンツがまだ登録されていません
-              </div>
+            {currentItem && isEditMode && (
+              <button
+                type="button"
+                className="token-contents-card__delete-btn"
+                onClick={() => {
+                  void handleDelete(safeIndex);
+                }}
+                aria-label="このコンテンツを削除"
+              >
+                <Trash2 className="token-contents-card__delete-icon" />
+              </button>
             )}
           </div>
 
@@ -296,7 +310,7 @@ export default function TokenContentsCard({
           </button>
         </div>
 
-        {contents.length > 1 ? (
+        {contents.length > 1 && (
           <div className="token-contents-card__thumbs">
             {contents.map((item, itemIndex) => {
               const isActive =
@@ -305,30 +319,19 @@ export default function TokenContentsCard({
               return (
                 <div
                   key={`${item.id}-${itemIndex}`}
-                  className={`token-contents-card__thumb-wrap${isActive ? " is-active" : ""}`}
+                  className={`token-contents-card__thumb-wrap${
+                    isActive ? " is-active" : ""
+                  }`}
                 >
-                  <button
-                    type="button"
-                    className="token-contents-card__thumb-click"
-                    onClick={() => {
+                  <ContentThumbnail
+                    item={item}
+                    index={itemIndex}
+                    onActivate={() => {
                       setIndex(itemIndex);
                     }}
-                    aria-label={`コンテンツ ${itemIndex + 1}を表示`}
-                  >
-                    {item.type === "image" ? (
-                      <img
-                        src={item.url}
-                        alt={`コンテンツ サムネイル ${itemIndex + 1}`}
-                        className="token-contents-card__thumb-image"
-                      />
-                    ) : (
-                      <span className="token-contents-card__thumb-nonimage">
-                        {item.type.toUpperCase()}
-                      </span>
-                    )}
-                  </button>
+                  />
 
-                  {isEditMode ? (
+                  {isEditMode && (
                     <button
                       type="button"
                       className="token-contents-card__thumb-delete-btn"
@@ -339,12 +342,12 @@ export default function TokenContentsCard({
                     >
                       <Trash2 className="token-contents-card__thumb-delete-icon" />
                     </button>
-                  ) : null}
+                  )}
                 </div>
               );
             })}
           </div>
-        ) : null}
+        )}
       </CardContent>
     </Card>
   );

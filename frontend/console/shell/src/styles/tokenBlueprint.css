@@ -243,6 +243,7 @@
 
 /* =========================================================
  * TokenContentsCard
+ * メディア本体の表示はshared/ui/mediaを利用
  * =======================================================*/
 
 /* -------------------------
@@ -295,75 +296,10 @@
   height: 20px;
 }
 
-.token-contents-card__image-slot {
-  position: relative;
-  display: flex;
-  min-width: 0;
-  min-height: 310px;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 1px solid var(--token-blueprint-border);
-  border-radius: 14px;
-  background:
-    linear-gradient(
-      135deg,
-      rgba(79, 70, 229, 0.035),
-      rgba(79, 70, 229, 0)
-    ),
-    var(--token-blueprint-surface-subtle);
-}
-
 .token-contents-card__image-main-wrap {
   position: relative;
-  display: flex;
-  width: 100%;
-  min-height: 310px;
-  align-items: center;
-  justify-content: center;
+  min-width: 0;
   overflow: hidden;
-}
-
-.token-contents-card__image,
-.token-contents-card__video {
-  display: block;
-  width: 100%;
-  max-width: 100%;
-  height: 310px;
-  max-height: 60vh;
-  border: 0;
-  background: #0f172a;
-  object-fit: contain;
-}
-
-.token-contents-card__file-link {
-  display: inline-flex;
-  max-width: calc(100% - 48px);
-  min-height: 46px;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 1px solid var(--token-blueprint-primary-border);
-  border-radius: 10px;
-  background: var(--token-blueprint-primary-soft);
-  padding: 10px 16px;
-  color: var(--token-blueprint-primary);
-  font-size: 13px;
-  font-weight: 700;
-  text-align: center;
-  text-decoration: none;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease;
-}
-
-.token-contents-card__file-link:hover {
-  border-color: var(--token-blueprint-primary);
-  background: var(--token-blueprint-primary);
-  color: #ffffff;
 }
 
 .token-contents-card__delete-btn {
@@ -409,18 +345,6 @@
   height: 17px;
 }
 
-.token-contents-card__placeholder {
-  display: flex;
-  min-height: 310px;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  color: var(--token-blueprint-text-muted);
-  font-size: 13px;
-  line-height: 1.7;
-  text-align: center;
-}
-
 /* -------------------------
  * Thumbnails
  * ---------------------- */
@@ -454,45 +378,11 @@
   box-shadow: 0 0 0 2px var(--token-blueprint-focus-ring);
 }
 
-.token-contents-card__thumb-click {
-  display: flex;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 0;
-  border-radius: 8px;
-  background: var(--token-blueprint-surface-muted);
-  padding: 0;
-  cursor: pointer;
-}
-
-.token-contents-card__thumb-click:focus-visible {
-  outline: none;
-}
-
-.token-contents-card__thumb-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.token-contents-card__thumb-nonimage {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--token-blueprint-text-muted);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-}
-
 .token-contents-card__thumb-delete-btn {
   position: absolute;
   top: 4px;
   right: 4px;
+  z-index: 2;
   display: inline-flex;
   width: 25px;
   height: 25px;
@@ -556,7 +446,7 @@
   color: #b45309;
 }
 
-.token-blueprint-create-progress-modal__status--failed_fatal {
+.token-blueprint-create-progress-modal__status--failed-fatal {
   border-color: var(--token-blueprint-danger-border);
   background: var(--token-blueprint-danger-soft);
   color: var(--token-blueprint-danger);
@@ -734,17 +624,6 @@
     grid-template-columns: 140px minmax(0, 1fr);
     gap: 20px;
   }
-
-  .token-contents-card__image-slot,
-  .token-contents-card__image-main-wrap,
-  .token-contents-card__placeholder {
-    min-height: 280px;
-  }
-
-  .token-contents-card__image,
-  .token-contents-card__video {
-    height: 280px;
-  }
 }
 
 @media (max-width: 640px) {
@@ -775,17 +654,6 @@
   .token-contents-card__nav-icon {
     width: 17px;
     height: 17px;
-  }
-
-  .token-contents-card__image-slot,
-  .token-contents-card__image-main-wrap,
-  .token-contents-card__placeholder {
-    min-height: 220px;
-  }
-
-  .token-contents-card__image,
-  .token-contents-card__video {
-    height: 220px;
   }
 
   .token-contents-card__delete-btn {
@@ -823,10 +691,6 @@
 
   .token-contents-card__nav--right {
     right: 7px;
-  }
-
-  .token-contents-card__file-link {
-    max-width: calc(100% - 72px);
   }
 }
 

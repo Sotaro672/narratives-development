@@ -2,62 +2,13 @@
 
 /* =========================================================
  * ListImageCard
- * Cardの外枠・Header・Title・Contentはshared/ui/cardを利用
+ * Cardはshared/ui/card、画像表示はshared/ui/mediaを利用
  * ======================================================= */
-
-.ivc__icon {
-  color: var(--pbp-text-soft, rgba(15, 23, 42, 0.55));
-}
 
 .lic__actions {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-}
-
-/* =========================================================
- * アップロードエリア
- * ======================================================= */
-
-.lic__empty {
-  display: flex;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  border: 1px dashed rgba(203, 213, 225, 1);
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.3);
-  user-select: none;
-}
-
-.lic__empty--clickable {
-  cursor: pointer;
-}
-
-.lic__empty-icon {
-  display: flex;
-  width: 48px;
-  height: 48px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(226, 232, 240, 1);
-  border-radius: 14px;
-  background: #ffffff;
-}
-
-.lic__empty-title {
-  color: rgba(51, 65, 85, 1);
-  font-size: 0.9rem;
-}
-
-.lic__empty-sub {
-  padding: 0 12px;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.75rem;
-  text-align: center;
 }
 
 /* =========================================================
@@ -67,49 +18,43 @@
 .lic__main {
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 1);
+  border: 1px solid hsl(var(--border));
   border-radius: 16px;
-  background: #ffffff;
-}
-
-.lic__main-media {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  background: rgba(248, 250, 252, 1);
-}
-
-.lic__main-media--clickable {
-  cursor: pointer;
-}
-
-.lic__img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  background: hsl(var(--card));
 }
 
 .lic__remove-btn {
   position: absolute;
   top: 12px;
   right: 12px;
+  z-index: 2;
   display: flex;
   width: 32px;
   height: 32px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(226, 232, 240, 1);
+  border: 1px solid hsl(var(--border));
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
+  background: hsl(var(--card) / 0.9);
   cursor: pointer;
 }
 
-.lic__remove-btn:hover {
-  background: rgba(255, 255, 255, 1);
+.lic__remove-btn:hover:not(:disabled) {
+  background: hsl(var(--card));
+}
+
+.lic__remove-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+}
+
+.lic__remove-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .lic__remove-x {
-  color: rgba(71, 85, 105, 1);
+  color: hsl(var(--muted-foreground));
   line-height: 1;
 }
 
@@ -122,7 +67,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border-top: 1px solid rgba(226, 232, 240, 1);
+  border-top: 1px solid hsl(var(--border));
   padding: 8px 12px;
 }
 
@@ -132,7 +77,7 @@
 }
 
 .lic__footer-note {
-  color: rgba(148, 163, 184, 1);
+  color: hsl(var(--muted-foreground) / 0.72);
   font-size: 11px;
 }
 
@@ -144,63 +89,46 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  margin-top: 12px;
 }
 
 .lic__thumb {
   position: relative;
+  min-width: 0;
   overflow: hidden;
-  border: 1px solid rgba(226, 232, 240, 1);
+  border: 1px solid hsl(var(--border));
   border-radius: 16px;
-  background: #ffffff;
-  cursor: pointer;
-}
-
-.lic__thumb-media {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  background: rgba(248, 250, 252, 1);
+  background: hsl(var(--card));
 }
 
 .lic__thumb-remove {
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 2;
   display: flex;
   width: 28px;
   height: 28px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(226, 232, 240, 1);
+  border: 1px solid hsl(var(--border));
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.9);
+  background: hsl(var(--card) / 0.9);
   cursor: pointer;
 }
 
-.lic__thumb-remove:hover {
-  background: rgba(255, 255, 255, 1);
+.lic__thumb-remove:hover:not(:disabled) {
+  background: hsl(var(--card));
 }
 
-/* =========================================================
- * 画像追加タイル
- * ======================================================= */
-
-.lic__add-tile {
-  display: flex;
-  aspect-ratio: 1 / 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px dashed rgba(203, 213, 225, 1);
-  border-radius: 16px;
-  background: rgba(248, 250, 252, 0.3);
-  cursor: pointer;
-  user-select: none;
+.lic__thumb-remove:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
 }
 
-.lic__add-title {
-  color: rgba(51, 65, 85, 1);
-  font-size: 0.75rem;
+.lic__thumb-remove:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 /* =========================================================
@@ -228,5 +156,16 @@
 @media (min-width: 640px) {
   .lic__grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* =========================================================
+ * Reduced motion
+ * ======================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .lic__remove-btn,
+  .lic__thumb-remove {
+    transition: none;
   }
 }

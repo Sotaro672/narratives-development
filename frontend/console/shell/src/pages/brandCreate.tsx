@@ -13,6 +13,7 @@ import {
 } from "../shared/ui/card";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
+import { Media } from "../shared/ui/media";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
@@ -90,44 +91,48 @@ export default function BrandCreate() {
   } = useBrandCreate();
 
   const accountLabel =
-    accountCandidates.find((candidate) => candidate.id === accountId)?.label ?? null;
+    accountCandidates.find(
+      (candidate) => candidate.id === accountId,
+    )?.label ?? null;
 
-  const isCroppingBrandIcon = Boolean(brandIconFile && brandIconPreviewUrl);
+  const isCroppingBrandIcon = Boolean(
+    brandIconFile && brandIconPreviewUrl,
+  );
 
   const left = (
     <div className="space-y-4">
       <Card>
         <CardContent>
           <div className="brand-hero">
-            <div className="brand-hero__cover">
-              {brandBackgroundPreviewUrl ? (
-                <img
-                  src={brandBackgroundPreviewUrl}
-                  alt="ブランド背景画像"
-                  className="brand-hero__cover-image"
-                  onClick={saving ? undefined : handlePickBrandBackground}
-                  style={{ cursor: saving ? "default" : "pointer" }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  className="brand-hero__cover-empty is-clickable"
-                  onClick={handlePickBrandBackground}
-                  disabled={saving}
-                >
-                  背景画像を選択
-                </button>
-              )}
+            <Media
+              src={brandBackgroundPreviewUrl}
+              type="image"
+              alt="ブランド背景画像"
+              variant="cover"
+              fit="cover"
+              bordered={false}
+              emptyText="背景画像を選択"
+              emptyDescription={
+                saving
+                  ? undefined
+                  : "クリックして背景画像を選択できます"
+              }
+              onActivate={
+                saving
+                  ? undefined
+                  : handlePickBrandBackground
+              }
+              disabled={saving}
+            />
 
-              <input
-                ref={brandBackgroundInputRef}
-                type="file"
-                accept={brandImageAccept}
-                style={{ display: "none" }}
-                onChange={handleBrandBackgroundChange}
-                disabled={saving}
-              />
-            </div>
+            <input
+              ref={brandBackgroundInputRef}
+              type="file"
+              accept={brandImageAccept}
+              hidden
+              onChange={handleBrandBackgroundChange}
+              disabled={saving}
+            />
 
             <div className="brand-hero__toolbar brand-hero__toolbar--cover">
               <button
@@ -182,7 +187,11 @@ export default function BrandCreate() {
                     imageClassName="brand-hero__avatar-image"
                     fallbackClassName="brand-hero__avatar-empty"
                     fallback="アイコンを選択"
-                    onClick={saving ? undefined : handlePickBrandIcon}
+                    onClick={
+                      saving
+                        ? undefined
+                        : handlePickBrandIcon
+                    }
                     disabled={saving}
                   />
                 )}
@@ -191,7 +200,7 @@ export default function BrandCreate() {
                   ref={brandIconInputRef}
                   type="file"
                   accept={brandImageAccept}
-                  style={{ display: "none" }}
+                  hidden
                   onChange={handleBrandIconChange}
                   disabled={saving}
                 />
@@ -247,7 +256,9 @@ export default function BrandCreate() {
 
       <Card>
         <CardHeader>
-          <CardTitle>ブランド情報</CardTitle>
+          <CardTitle>
+            ブランド情報
+          </CardTitle>
         </CardHeader>
 
         <CardContent>
@@ -259,7 +270,9 @@ export default function BrandCreate() {
             id="name"
             placeholder="ブランド名"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) =>
+              setName(event.target.value)
+            }
             disabled={saving}
           />
 
@@ -278,7 +291,9 @@ export default function BrandCreate() {
             className="w-full h-28 border rounded-lg px-3 py-2 text-sm mt-1"
             placeholder="ブランドの説明を入力してください"
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
+            onChange={(event) =>
+              setDescription(event.target.value)
+            }
             disabled={saving}
           />
 
@@ -290,7 +305,9 @@ export default function BrandCreate() {
             id="websiteUrl"
             placeholder="https://example.com"
             value={websiteUrl}
-            onChange={(event) => setWebsiteUrl(event.target.value)}
+            onChange={(event) =>
+              setWebsiteUrl(event.target.value)
+            }
             disabled={saving}
           />
         </CardContent>
@@ -319,7 +336,9 @@ export default function BrandCreate() {
         accountLabel={accountLabel}
         accountCandidates={accountCandidates}
         loadingAccounts={loadingAccounts}
-        accountError={accountLoadError || accountIdError}
+        accountError={
+          accountLoadError || accountIdError
+        }
       />
     </div>
   );
@@ -339,7 +358,11 @@ export default function BrandCreate() {
       <BrandCreateProgressModal
         open={progressOpen}
         progress={progress}
-        onClose={progress.isBlockingNavigation ? undefined : onCloseProgress}
+        onClose={
+          progress.isBlockingNavigation
+            ? undefined
+            : onCloseProgress
+        }
       />
     </>
   );

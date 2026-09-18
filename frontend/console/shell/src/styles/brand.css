@@ -77,39 +77,6 @@
   gap: 16px;
 }
 
-.brand-hero__cover {
-  position: relative;
-  width: 100%;
-  height: 224px;
-  overflow: hidden;
-  border-radius: 16px;
-  background: #f1f5f9;
-}
-
-.brand-hero__cover-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.brand-hero__cover-empty {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  color: #94a3b8;
-  font-size: 14px;
-  text-align: center;
-}
-
-.brand-hero__cover-empty.is-clickable {
-  cursor: pointer;
-}
-
 .brand-hero__header {
   display: flex;
   align-items: flex-end;
@@ -225,10 +192,6 @@
 }
 
 @media (max-width: 767px) {
-  .brand-hero__cover {
-    height: 180px;
-  }
-
   .brand-hero__header {
     flex-direction: column;
     align-items: flex-start;
