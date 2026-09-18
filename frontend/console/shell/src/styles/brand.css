@@ -151,29 +151,6 @@
   margin-top: 12px;
 }
 
-.brand-hero__action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid rgba(15, 23, 42, 0.12);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 8px 12px;
-  color: #0f172a;
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.brand-hero__action-btn:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-.brand-hero__action-btn--plain {
-  background: #fff;
-}
-
 @media (max-width: 767px) {
   .brand-hero__header {
     flex-direction: column;

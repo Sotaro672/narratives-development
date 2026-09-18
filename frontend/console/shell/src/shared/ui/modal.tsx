@@ -4,6 +4,8 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
+import { Button, type ButtonProps } from "./button";
+
 import "./modal.css";
 
 function cn(...classes: Array<string | undefined | false | null>): string {
@@ -189,14 +191,14 @@ export function Modal({
           </div>
 
           {canClose && showCloseButton ? (
-            <button
-              type="button"
-              className="modal__close"
+            <Button
+              variant="outline"
+              size="icon"
               onClick={requestClose}
               aria-label={closeLabel}
             >
               <X className="modal__close-icon" aria-hidden="true" />
-            </button>
+            </Button>
           ) : null}
         </div>
 
@@ -223,30 +225,38 @@ export function Modal({
 }
 
 export type ModalButtonProps = Omit<
-  React.ButtonHTMLAttributes<HTMLButtonElement>,
-  "type"
+  ButtonProps,
+  "variant" | "size" | "type"
 > & {
   variant?: "primary" | "secondary";
 };
 
+function resolveModalButtonVariant(
+  variant: NonNullable<ModalButtonProps["variant"]>,
+): ButtonProps["variant"] {
+  switch (variant) {
+    case "primary":
+      return "default";
+    case "secondary":
+    default:
+      return "outline";
+  }
+}
+
 export function ModalButton({
   variant = "secondary",
-  className,
   children,
   ...props
 }: ModalButtonProps) {
   return (
-    <button
+    <Button
       type="button"
-      className={cn(
-        "modal__button",
-        `modal__button--${variant}`,
-        className,
-      )}
+      variant={resolveModalButtonVariant(variant)}
+      size="lg"
       {...props}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -256,14 +266,12 @@ export type ModalCloseButtonProps = Omit<
 >;
 
 export function ModalCloseButton({
-  className,
   children = "閉じる",
   ...props
 }: ModalCloseButtonProps) {
   return (
     <ModalButton
       variant="secondary"
-      className={className}
       {...props}
     >
       {children}

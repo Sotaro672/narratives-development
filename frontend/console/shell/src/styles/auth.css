@@ -48,19 +48,6 @@
 
 .icon-btn {
   position: relative;
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-}
-
-.icon-btn:hover {
-  background: #f6f6f6;
 }
 
 .icon-wrap {
@@ -176,7 +163,7 @@
   font-size: 0.8rem;
 }
 
-/* ボタン */
+/* ボタン配置 */
 
 .auth-actions {
   display: flex;
@@ -191,18 +178,6 @@
   color: #333;
   font-size: 0.85rem;
   text-align: center;
-}
-
-.auth-switch button {
-  border: none;
-  background: none;
-  color: #1a73e8;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.auth-switch button:hover {
-  text-decoration: underline;
 }
 
 /* ドロップダウン */
@@ -243,23 +218,14 @@
 
 .admin-dropdown-item {
   width: 100%;
-  border: none;
-  background: transparent;
-  padding: 10px 16px;
-  color: #1a1a22;
-  font-size: 14px;
+  justify-content: flex-start;
+  border-radius: 0;
+  padding-right: 16px;
+  padding-left: 16px;
   text-align: left;
-  cursor: pointer;
-}
-
-.admin-dropdown-item:hover {
-  background: #f7f7fb;
 }
 
 .admin-dropdown-item.logout {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   color: #dc2626;
 }
 
@@ -323,36 +289,4 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 16px;
-}
-
-.admin-modal-button {
-  border: none;
-  border-radius: 999px;
-  padding: 8px 14px;
-  font-size: 14px;
-  cursor: pointer;
-}
-
-.admin-modal-button.cancel {
-  background: #f3f4f6;
-  color: #374151;
-}
-
-.admin-modal-button.primary {
-  background: #111827;
-  color: #ffffff;
-}
-
-/* パスワード再設定 */
-
-.auth-forgot-link {
-  border: none;
-  background: none;
-  color: #1a73e8;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.auth-forgot-link:hover {
-  text-decoration: underline;
 }

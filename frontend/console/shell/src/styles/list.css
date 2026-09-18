@@ -118,17 +118,6 @@
   margin-top: 10px;
 }
 
-.primary-button {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 999px;
-  background-color: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 /* PriceCard */
 
 .prc__color-cell {

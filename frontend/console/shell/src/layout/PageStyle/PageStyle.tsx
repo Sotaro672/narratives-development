@@ -1,4 +1,5 @@
 // frontend/console/shell/src/layout/PageStyle/PageStyle.tsx
+
 import * as React from "react";
 import type { ReactNode } from "react";
 import {
@@ -14,6 +15,7 @@ import {
   Link2,
 } from "lucide-react";
 
+import { Button, type BtnVariant } from "../../shared/ui/button";
 import RefreshButton from "../../shared/ui/refresh";
 
 import "./PageStyle.css";
@@ -30,7 +32,6 @@ function SpinnerArrow({ size = 16 }: { size?: number }) {
       viewBox="0 0 24 24"
       fill="none"
       aria-hidden="true"
-      style={{ marginRight: 4, display: "inline-block", verticalAlign: "middle" }}
     >
       <g>
         <animateTransform
@@ -61,6 +62,20 @@ function SpinnerArrow({ size = 16 }: { size?: number }) {
 }
 
 type HeaderStatusButtonVariant = "default" | "danger" | "neutral";
+
+function resolveStatusButtonVariant(
+  variant: HeaderStatusButtonVariant,
+): BtnVariant {
+  switch (variant) {
+    case "danger":
+      return "destructive";
+    case "neutral":
+      return "ghost";
+    case "default":
+    default:
+      return "outline";
+  }
+}
 
 interface PageStyleProps {
   children: ReactNode | [ReactNode, ReactNode];
@@ -159,10 +174,12 @@ export default function PageStyle({
   const isConnecting = controlledIsConnecting ?? internalIsConnecting;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
   const isClosing = controlledIsClosing ?? internalIsClosing;
-  const isStatusButtonLoading = controlledIsStatusButtonLoading ?? internalIsStatusButtonLoading;
+  const isStatusButtonLoading =
+    controlledIsStatusButtonLoading ?? internalIsStatusButtonLoading;
 
   const handleCreate = React.useCallback(async () => {
     if (!onCreate || isCreating) return;
+
     try {
       setIsCreating(true);
       await onCreate();
@@ -173,6 +190,7 @@ export default function PageStyle({
 
   const handleSave = React.useCallback(async () => {
     if (!onSave || isSaving) return;
+
     try {
       setInternalIsSaving(true);
       await onSave();
@@ -183,6 +201,7 @@ export default function PageStyle({
 
   const handleSend = React.useCallback(async () => {
     if (!onSend || isSending) return;
+
     try {
       setInternalIsSending(true);
       await onSend();
@@ -193,6 +212,7 @@ export default function PageStyle({
 
   const handleReply = React.useCallback(async () => {
     if (!onReply || isReplying) return;
+
     try {
       setInternalIsReplying(true);
       await onReply();
@@ -203,6 +223,7 @@ export default function PageStyle({
 
   const handleConnect = React.useCallback(async () => {
     if (!onConnect || isConnecting || connectDisabled) return;
+
     try {
       setInternalIsConnecting(true);
       await onConnect();
@@ -213,6 +234,7 @@ export default function PageStyle({
 
   const handleList = React.useCallback(async () => {
     if (!onList || isListing) return;
+
     try {
       setIsListing(true);
       await onList();
@@ -223,6 +245,7 @@ export default function PageStyle({
 
   const handleRefresh = React.useCallback(async () => {
     if (!onRefresh || isRefreshing) return;
+
     try {
       setInternalIsRefreshing(true);
       await onRefresh();
@@ -233,6 +256,7 @@ export default function PageStyle({
 
   const handleClose = React.useCallback(async () => {
     if (!onClose || isClosing) return;
+
     try {
       setInternalIsClosing(true);
       await onClose();
@@ -242,20 +266,25 @@ export default function PageStyle({
   }, [onClose, isClosing]);
 
   const handleStatusButtonClick = React.useCallback(async () => {
-    if (!onStatusButtonClick || isStatusButtonLoading || statusButtonDisabled) return;
+    if (
+      !onStatusButtonClick ||
+      isStatusButtonLoading ||
+      statusButtonDisabled
+    ) {
+      return;
+    }
+
     try {
       setInternalIsStatusButtonLoading(true);
       await onStatusButtonClick();
     } finally {
       setInternalIsStatusButtonLoading(false);
     }
-  }, [onStatusButtonClick, isStatusButtonLoading, statusButtonDisabled]);
-
-  const statusButtonClassName = cn(
-    "page-header__btn",
-    statusButtonVariant === "danger" && "page-header__btn--danger",
-    statusButtonVariant === "neutral" && "page-header__btn--ghost",
-  );
+  }, [
+    onStatusButtonClick,
+    isStatusButtonLoading,
+    statusButtonDisabled,
+  ]);
 
   const header = (
     <header className="page-header">
@@ -263,14 +292,14 @@ export default function PageStyle({
         <div className="flex items-center justify-between">
           <div className="page-header__left">
             {hasBack && (
-              <button
-                type="button"
-                className="page-header__back"
-                onClick={handleBack}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => void handleBack()}
                 aria-label="戻る"
               >
-                <ArrowLeft size={16} />
-              </button>
+                <ArrowLeft />
+              </Button>
             )}
 
             <div className="flex items-center gap-2">
@@ -281,35 +310,34 @@ export default function PageStyle({
 
           <div className="page-header__actions">
             {onStatusButtonClick && statusButtonLabel && (
-              <button
-                type="button"
-                className={statusButtonClassName}
+              <Button
+                variant={resolveStatusButtonVariant(statusButtonVariant)}
+                size="sm"
                 onClick={() => void handleStatusButtonClick()}
-                disabled={isStatusButtonLoading || Boolean(statusButtonDisabled)}
+                disabled={
+                  isStatusButtonLoading ||
+                  Boolean(statusButtonDisabled)
+                }
                 aria-busy={isStatusButtonLoading}
               >
-                {isStatusButtonLoading && <SpinnerArrow size={16} />}
+                {isStatusButtonLoading && <SpinnerArrow />}
                 {isStatusButtonLoading
                   ? statusButtonBusyLabel ?? "更新中"
                   : statusButtonLabel}
-              </button>
+              </Button>
             )}
 
             {onReply && (
-              <button
-                type="button"
-                className="page-header__btn"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleReply()}
                 disabled={isReplying}
                 aria-busy={isReplying}
               >
-                {isReplying ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <MessageSquareReply size={16} style={{ marginRight: 4 }} />
-                )}
+                {isReplying ? <SpinnerArrow /> : <MessageSquareReply />}
                 {isReplying ? "準備中" : "返信"}
-              </button>
+              </Button>
             )}
 
             {onRefresh && (
@@ -324,145 +352,128 @@ export default function PageStyle({
             {leadingActions}
 
             {onEdit && (
-              <button type="button" className="page-header__btn" onClick={onEdit}>
-                <Pencil size={16} style={{ marginRight: 4 }} />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void onEdit()}
+              >
+                <Pencil />
                 編集
-              </button>
+              </Button>
             )}
 
             {onDelete && (
-              <button
-                type="button"
-                className="page-header__btn page-header__btn--danger"
-                onClick={onDelete}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => void onDelete()}
               >
-                <Trash2 size={16} style={{ marginRight: 4 }} />
+                <Trash2 />
                 削除
-              </button>
+              </Button>
             )}
 
             {onPurge && (
-              <button
-                type="button"
-                className="page-header__btn page-header__btn--danger"
-                onClick={onPurge}
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => void onPurge()}
               >
-                <Trash2 size={16} style={{ marginRight: 4 }} />
+                <Trash2 />
                 削除
-              </button>
+              </Button>
             )}
 
             {onCancel && (
-              <button
-                type="button"
-                className="page-header__btn page-header__btn--ghost"
-                onClick={onCancel}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void onCancel()}
               >
-                <X size={16} style={{ marginRight: 4 }} />
+                <X />
                 キャンセル
-              </button>
+              </Button>
             )}
 
             {onClose && (
-              <button
-                type="button"
-                className="page-header__btn page-header__btn--ghost"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => void handleClose()}
                 disabled={isClosing}
                 aria-busy={isClosing}
               >
-                {isClosing ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <X size={16} style={{ marginRight: 4 }} />
-                )}
+                {isClosing ? <SpinnerArrow /> : <X />}
                 {isClosing ? "クローズ中" : "クローズ"}
-              </button>
+              </Button>
             )}
 
             {onList && (
-              <button
-                type="button"
-                className="page-header__btn"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleList()}
                 disabled={isListing}
                 aria-busy={isListing}
               >
-                {isListing ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <Tag size={16} style={{ marginRight: 4 }} />
-                )}
+                {isListing ? <SpinnerArrow /> : <Tag />}
                 {isListing ? "出品中" : "出品"}
-              </button>
+              </Button>
             )}
 
             {onCreate && (
-              <button
-                type="button"
-                className="page-header__btn"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleCreate()}
                 disabled={isCreating}
                 aria-busy={isCreating}
               >
-                {isCreating ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <Plus size={16} style={{ marginRight: 4 }} />
-                )}
+                {isCreating ? <SpinnerArrow /> : <Plus />}
                 {isCreating ? "作成中" : "作成"}
-              </button>
+              </Button>
             )}
 
             {onConnect && (
-              <button
-                type="button"
-                className="page-header__btn"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleConnect()}
-                disabled={isConnecting || Boolean(connectDisabled)}
+                disabled={
+                  isConnecting ||
+                  Boolean(connectDisabled)
+                }
                 aria-busy={isConnecting}
               >
-                {isConnecting ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <Link2 size={16} style={{ marginRight: 4 }} />
-                )}
+                {isConnecting ? <SpinnerArrow /> : <Link2 />}
                 {isConnecting ? connectBusyLabel : connectLabel}
-              </button>
+              </Button>
             )}
 
             {onSave && (
-              <button
-                type="button"
-                className="page-header__btn"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleSave()}
                 disabled={isSaving}
                 aria-busy={isSaving}
               >
-                {isSaving ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <Save size={16} style={{ marginRight: 4 }} />
-                )}
+                {isSaving ? <SpinnerArrow /> : <Save />}
                 {isSaving ? "保存中" : "保存"}
-              </button>
+              </Button>
             )}
 
             {onSend && (
-              <button
-                type="button"
-                className="page-header__btn"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => void handleSend()}
                 disabled={isSending}
                 aria-busy={isSending}
               >
-                {isSending ? (
-                  <SpinnerArrow size={16} />
-                ) : (
-                  <Send size={16} style={{ marginRight: 4 }} />
-                )}
+                {isSending ? <SpinnerArrow /> : <Send />}
                 {isSending ? "送信中" : "送信"}
-              </button>
+              </Button>
             )}
 
             {actions}
@@ -473,7 +484,9 @@ export default function PageStyle({
   );
 
   if (layout === "grid-2") {
-    const [left, right] = Array.isArray(children) ? children : [children, null];
+    const [left, right] = Array.isArray(children)
+      ? children
+      : [children, null];
 
     return (
       <div className={rootClass}>

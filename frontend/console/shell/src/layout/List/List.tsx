@@ -1,36 +1,36 @@
 // frontend/console/shell/src/layout/List/List.tsx
+
 import { Children, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Plus, Trash2, X } from "lucide-react";
+
+import { Button } from "../../shared/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/card";
 import Pagination from "../../shared/ui/pagination";
 import RefreshButton from "../../shared/ui/refresh";
-import { Card, CardHeader, CardTitle, CardContent } from "../../shared/ui/card";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCaption,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../shared/ui/table";
+
 import "./List.css";
 
 interface ListProps {
   title?: string;
   headerCells?: ReactNode[];
   children?: ReactNode;
-
   showCreateButton?: boolean;
   createLabel?: string;
   onCreate?: () => void;
-
   showResetButton?: boolean;
   onReset?: () => void;
   isResetting?: boolean;
-
   showTrashButton?: boolean;
   onTrash?: () => void;
-
   showCancelButton?: boolean;
   onCancel?: () => void;
 }
@@ -41,22 +41,19 @@ export default function List({
   title = "",
   headerCells = [],
   children,
-
   showCreateButton = false,
   createLabel = "新規作成",
   onCreate,
-
   showResetButton = true,
   onReset,
   isResetting = false,
-
   showTrashButton = false,
   onTrash,
-
   showCancelButton = false,
   onCancel,
 }: ListProps) {
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     setLoading(false);
@@ -65,8 +62,6 @@ export default function List({
   const rows = useMemo(() => Children.toArray(children), [children]);
   const totalItems = rows.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / ITEMS_PER_PAGE));
-
-  const [page, setPage] = useState(1);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -86,15 +81,12 @@ export default function List({
   const colSpan = Math.max(1, headerCells.length);
   const isBusy = loading || isResetting;
   const hasTitle = Boolean(title);
-
   const hasHeaderActions =
     showCreateButton ||
     showCancelButton ||
     showResetButton ||
     showTrashButton;
-
   const shouldShowHeader = hasTitle || hasHeaderActions;
-
   const tableLabel = title ? `${title} 一覧` : "一覧";
 
   return (
@@ -107,21 +99,26 @@ export default function List({
 
           <div className="list-actions-right">
             {showCreateButton && (
-              <button className="lp-btn lp-btn-primary" onClick={onCreate}>
-                <Plus className="lp-btn-icon" aria-hidden />
+              <Button
+                variant="default"
+                size="sm"
+                onClick={onCreate}
+              >
+                <Plus aria-hidden="true" />
                 <span>{createLabel}</span>
-              </button>
+              </Button>
             )}
 
             {showCancelButton && (
-              <button
-                className="lp-btn lp-btn-secondary"
+              <Button
+                variant="outline"
+                size="icon"
                 onClick={onCancel}
                 title="キャンセル"
                 aria-label="キャンセル"
               >
-                <X className="lp-btn-icon" aria-hidden />
-              </button>
+                <X aria-hidden="true" />
+              </Button>
             )}
 
             {showResetButton && (
@@ -134,14 +131,15 @@ export default function List({
             )}
 
             {showTrashButton && (
-              <button
-                className="lp-btn lp-btn-danger"
+              <Button
+                variant="destructive"
+                size="icon"
                 onClick={onTrash}
                 title="ゴミ箱"
                 aria-label="ゴミ箱"
               >
-                <Trash2 className="lp-btn-icon" aria-hidden />
-              </button>
+                <Trash2 aria-hidden="true" />
+              </Button>
             )}
           </div>
         </div>

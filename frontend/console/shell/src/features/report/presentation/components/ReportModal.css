@@ -48,41 +48,6 @@
   line-height: 1.4;
 }
 
-.report-modal__close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #6b7280;
-  appearance: none;
-  font: inherit;
-  font-size: 26px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.report-modal__close:hover:not(:disabled) {
-  background: #f3f4f6;
-  color: #111827;
-}
-
-.report-modal__close:focus-visible {
-  outline: 2px solid #111827;
-  outline-offset: 2px;
-}
-
-.report-modal__close:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
 .report-modal__description {
   margin: 0;
   padding: 0 24px 20px;
@@ -249,67 +214,6 @@
   border-top: 1px solid #f3f4f6;
 }
 
-.report-modal__button {
-  min-height: 40px;
-  margin: 0;
-  padding: 0 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: #111827;
-  color: #fff;
-  appearance: none;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
-.report-modal__button:hover:not(:disabled) {
-  background: #1f2937;
-}
-
-.report-modal__button:focus-visible {
-  outline: 2px solid #111827;
-  outline-offset: 2px;
-}
-
-.report-modal__button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.report-modal__button--ghost {
-  border-color: #d1d5db;
-  background: #fff;
-  color: #374151;
-}
-
-.report-modal__button--ghost:hover:not(:disabled) {
-  background: #f9fafb;
-}
-
-.report-modal__button--primary {
-  border-color: #111827;
-  background: #111827;
-  color: #fff;
-}
-
-.report-modal__button--primary:hover:not(:disabled) {
-  background: #1f2937;
-}
-
-.report-modal__button--danger {
-  border-color: #dc2626;
-  background: #dc2626;
-  color: #fff;
-}
-
-.report-modal__button--danger:hover:not(:disabled) {
-  border-color: #b91c1c;
-  background: #b91c1c;
-}
-
 .report-modal__result {
   display: grid;
   justify-items: center;
@@ -389,7 +293,7 @@
     padding: 16px 20px 20px;
   }
 
-  .report-modal__button {
+  .report-modal__actions > .button {
     width: 100%;
   }
 

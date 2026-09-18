@@ -376,82 +376,6 @@
 }
 
 /* =========================================================
- * Buttons
- * ======================================================= */
-
-.card__button {
-  display: inline-flex;
-  min-height: 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 10px;
-  background: hsl(var(--card));
-  padding: 0 12px;
-  color: hsl(var(--foreground));
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
-}
-
-.card__button:hover:not(:disabled) {
-  background: hsl(var(--muted));
-}
-
-.card__button:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
-}
-
-.card__button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.card__button--primary {
-  border-color: hsl(var(--primary));
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  font-weight: 700;
-}
-
-.card__button--primary:hover:not(:disabled) {
-  border-color: hsl(var(--primary) / 0.9);
-  background: hsl(var(--primary) / 0.9);
-}
-
-.card__button--secondary {
-  border-color: hsl(var(--border));
-  background: hsl(var(--card));
-  color: hsl(var(--foreground));
-}
-
-.card__button--danger {
-  border-color: hsl(var(--destructive));
-  background: hsl(var(--destructive));
-  color: hsl(var(--destructive-foreground, 0 0% 100%));
-  font-weight: 700;
-}
-
-.card__button--danger:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.card__button-icon {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-}
-
-/* =========================================================
  * Field layout helpers
  * ======================================================= */
 
@@ -471,14 +395,6 @@
 
 .card__field--full {
   grid-column: 1 / -1;
-}
-
-/* =========================================================
- * Disabled
- * ======================================================= */
-
-.card button:disabled {
-  pointer-events: none;
 }
 
 /* =========================================================

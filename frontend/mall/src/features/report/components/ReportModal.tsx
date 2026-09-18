@@ -2,7 +2,9 @@
 
 import { type MouseEvent, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
+import Button from "../../../components/ui/Button";
 import type {
   ReportReason,
   ReportResponse,
@@ -59,29 +61,21 @@ function getDescription(targetType?: ReportTargetType): string {
   switch (targetType) {
     case "LIST":
       return "この出品内容が不適切だと思う理由を選択してください。通報しただけでは出品は自動的に停止されません。";
-
     case "RESALE":
       return "この再販出品が不適切だと思う理由を選択してください。通報しただけでは出品は自動的に停止されません。";
-
     case "TOKEN_BLUEPRINT":
       return "このトークンのコンテンツが不適切だと思う理由を選択してください。通報しただけではコンテンツは自動的に非表示になりません。";
-
     case "AVATAR":
       return "このアバターが不適切だと思う理由を選択してください。通報しただけでは再販サービスの利用が自動的に停止されることはありません。";
-
     case "BRAND":
       return "このブランドが不適切だと思う理由を選択してください。通報しただけではブランドは自動的に非表示になりません。";
-
     case "TRADE_MESSAGE":
       return "この取引コメントが不適切だと思う理由を選択してください。通報しただけでは取引コメントは自動的に非表示になりません。";
-
     case "ANNOUNCEMENT":
       return "このお知らせが不適切だと思う理由を選択してください。通報しただけではお知らせは自動的に削除されません。";
-
     case "PRODUCT_BLUEPRINT_REVIEW":
     case "TOKEN_BLUEPRINT_COMMENT":
       return `この${getTargetLabel(targetType)}が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。`;
-
     default:
       return "この投稿が不適切だと思う理由を選択してください。通報しただけでは投稿は自動的に削除されません。";
   }
@@ -102,15 +96,10 @@ export default function ReportModal({
   onClose,
 }: ReportModalProps) {
   useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || submitting) {
-        return;
-      }
-
+      if (event.key !== "Escape" || submitting) return;
       onClose();
     };
 
@@ -121,9 +110,7 @@ export default function ReportModal({
     };
   }, [open, submitting, onClose]);
 
-  if (!open) {
-    return null;
-  }
+  if (!open) return null;
 
   const targetLabel = getTargetLabel(targetType);
   const description = getDescription(targetType);
@@ -131,18 +118,12 @@ export default function ReportModal({
   const alreadyReported = result !== null && !result.reportCreated;
 
   const handleBackdropClick = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget || submitting) {
-      return;
-    }
-
+    if (event.target !== event.currentTarget || submitting) return;
     onClose();
   };
 
   const handleSubmit = () => {
-    if (!canSubmit || submitting || submitted) {
-      return;
-    }
-
+    if (!canSubmit || submitting || submitted) return;
     void onSubmit();
   };
 
@@ -171,15 +152,16 @@ export default function ReportModal({
             </h2>
           </div>
 
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             className="report-modal__close"
             aria-label="通報画面を閉じる"
             disabled={submitting}
             onClick={onClose}
           >
-            ×
-          </button>
+            <X size={18} aria-hidden="true" />
+          </Button>
         </div>
 
         {submitted ? (
@@ -209,13 +191,13 @@ export default function ReportModal({
             </div>
 
             <div className="report-modal__actions">
-              <button
-                type="button"
-                className="report-modal__button report-modal__button--primary"
+              <Button
+                variant="primary"
+                size="md"
                 onClick={onClose}
               >
                 閉じる
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -257,6 +239,7 @@ export default function ReportModal({
                         checked={reason === value}
                         onChange={() => onReasonChange(value)}
                       />
+
                       <span className="report-modal__reason-label">
                         {getReportReasonLabel(value)}
                       </span>
@@ -269,7 +252,9 @@ export default function ReportModal({
                 <label className="report-modal__detail-field">
                   <span className="report-modal__label">
                     詳細
-                    <span className="report-modal__required">必須</span>
+                    <span className="report-modal__required">
+                      必須
+                    </span>
                   </span>
 
                   <textarea
@@ -278,36 +263,41 @@ export default function ReportModal({
                     rows={5}
                     disabled={submitting}
                     placeholder="通報する理由を具体的に入力してください。"
-                    onChange={(event) => onDetailChange(event.target.value)}
+                    onChange={(event) =>
+                      onDetailChange(event.target.value)
+                    }
                   />
                 </label>
               ) : null}
 
               {error ? (
-                <p className="report-modal__error" role="alert">
+                <p
+                  className="report-modal__error"
+                  role="alert"
+                >
                   {error}
                 </p>
               ) : null}
             </div>
 
             <div className="report-modal__actions">
-              <button
-                type="button"
-                className="report-modal__button"
+              <Button
+                variant="secondary"
+                size="md"
                 disabled={submitting}
                 onClick={onClose}
               >
                 キャンセル
-              </button>
+              </Button>
 
-              <button
-                type="button"
-                className="report-modal__button report-modal__button--danger"
+              <Button
+                variant="primary"
+                size="md"
                 disabled={!canSubmit || submitting}
                 onClick={handleSubmit}
               >
                 {submitting ? "送信中..." : "通報する"}
-              </button>
+              </Button>
             </div>
           </>
         )}

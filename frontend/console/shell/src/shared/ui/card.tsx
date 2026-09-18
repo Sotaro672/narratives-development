@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { Button, type ButtonProps } from "./button";
+
 import "./card.css";
 
 function cn(...classes: Array<string | undefined | false | null>): string {
@@ -14,15 +16,7 @@ export type CardProps = React.HTMLAttributes<HTMLDivElement> & {
 };
 
 export const Card = React.forwardRef<HTMLDivElement, CardProps>(
-  (
-    {
-      className,
-      elevated = false,
-      largeRadius = false,
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, elevated = false, largeRadius = false, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -68,14 +62,7 @@ export type CardHeaderIconProps = React.HTMLAttributes<HTMLDivElement> & {
 };
 
 export const CardHeaderIcon = React.forwardRef<HTMLDivElement, CardHeaderIconProps>(
-  (
-    {
-      className,
-      variant = "default",
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, variant = "default", ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -95,15 +82,7 @@ export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement> & {
 };
 
 export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
-  (
-    {
-      className,
-      strong = false,
-      truncate = false,
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, strong = false, truncate = false, ...props }, ref) => (
     <h3
       ref={ref}
       className={cn(
@@ -123,14 +102,7 @@ export type CardBadgeProps = React.HTMLAttributes<HTMLSpanElement> & {
 };
 
 export const CardBadge = React.forwardRef<HTMLSpanElement, CardBadgeProps>(
-  (
-    {
-      className,
-      variant = "default",
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, variant = "default", ...props }, ref) => (
     <span
       ref={ref}
       className={cn(
@@ -149,14 +121,7 @@ export type CardContentProps = React.HTMLAttributes<HTMLDivElement> & {
 };
 
 export const CardContent = React.forwardRef<HTMLDivElement, CardContentProps>(
-  (
-    {
-      className,
-      size = "default",
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, size = "default", ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -188,14 +153,7 @@ export type CardLabelProps = React.LabelHTMLAttributes<HTMLLabelElement> & {
 };
 
 export const CardLabel = React.forwardRef<HTMLLabelElement, CardLabelProps>(
-  (
-    {
-      className,
-      strong = false,
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, strong = false, ...props }, ref) => (
     <label
       ref={ref}
       className={cn(
@@ -214,14 +172,7 @@ export type CardInputProps = React.InputHTMLAttributes<HTMLInputElement> & {
 };
 
 export const CardInput = React.forwardRef<HTMLInputElement, CardInputProps>(
-  (
-    {
-      className,
-      sizeVariant = "default",
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, sizeVariant = "default", ...props }, ref) => (
     <input
       ref={ref}
       className={cn(
@@ -241,14 +192,7 @@ export type CardSelectProps = React.SelectHTMLAttributes<HTMLSelectElement> & {
 };
 
 export const CardSelect = React.forwardRef<HTMLSelectElement, CardSelectProps>(
-  (
-    {
-      className,
-      sizeVariant = "default",
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, sizeVariant = "default", ...props }, ref) => (
     <select
       ref={ref}
       className={cn(
@@ -281,15 +225,7 @@ export type CardReadonlyProps = React.HTMLAttributes<HTMLDivElement> & {
 };
 
 export const CardReadonly = React.forwardRef<HTMLDivElement, CardReadonlyProps>(
-  (
-    {
-      className,
-      inputLike = false,
-      size = "default",
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, inputLike = false, size = "default", ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
@@ -369,28 +305,36 @@ export const CardChip = React.forwardRef<HTMLDivElement, CardChipProps>(
 );
 CardChip.displayName = "CardChip";
 
-export type CardButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "default" | "primary" | "secondary" | "danger";
+export type CardButtonVariant =
+  | "default"
+  | "primary"
+  | "secondary"
+  | "danger";
+
+export type CardButtonProps = Omit<ButtonProps, "variant"> & {
+  variant?: CardButtonVariant;
 };
 
+function resolveCardButtonVariant(
+  variant: CardButtonVariant,
+): ButtonProps["variant"] {
+  switch (variant) {
+    case "primary":
+      return "default";
+    case "danger":
+      return "destructive";
+    case "secondary":
+    case "default":
+    default:
+      return "outline";
+  }
+}
+
 export const CardButton = React.forwardRef<HTMLButtonElement, CardButtonProps>(
-  (
-    {
-      className,
-      variant = "default",
-      type = "button",
-      ...props
-    },
-    ref,
-  ) => (
-    <button
+  ({ variant = "default", ...props }, ref) => (
+    <Button
       ref={ref}
-      type={type}
-      className={cn(
-        "card__button",
-        variant !== "default" && `card__button--${variant}`,
-        className,
-      )}
+      variant={resolveCardButtonVariant(variant)}
       {...props}
     />
   ),
@@ -402,14 +346,7 @@ export type CardFieldProps = React.HTMLAttributes<HTMLDivElement> & {
 };
 
 export const CardField = React.forwardRef<HTMLDivElement, CardFieldProps>(
-  (
-    {
-      className,
-      full = false,
-      ...props
-    },
-    ref,
-  ) => (
+  ({ className, full = false, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(

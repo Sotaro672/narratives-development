@@ -1,8 +1,9 @@
-/* frontend/console/inquiry/presentation/style/inquiry-page.css */
+/* frontend/console/shell/src/styles/inquiry-page.css */
 
 /* =========================================================
    Inquiry detail common
 ========================================================= */
+
 .inq-detail {
   display: flex;
   flex-direction: column;
@@ -78,11 +79,11 @@
   width: fit-content;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
+  border-radius: 999px;
   background: hsl(var(--muted, 210 40% 96.1%));
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
   padding: 4px 10px;
+  color: hsl(var(--foreground, 222.2 84% 4.9%));
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.4;
@@ -92,6 +93,7 @@
 /* =========================================================
    Inquiry status tab
 ========================================================= */
+
 .inq-status-tab {
   display: inline-flex;
   height: 28px;
@@ -100,8 +102,8 @@
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
   border-radius: 6px 6px 0 0;
   background: hsl(var(--muted, 210 40% 96.1%));
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
   padding: 0 10px;
+  color: hsl(var(--foreground, 222.2 84% 4.9%));
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1;
@@ -133,8 +135,8 @@
 .inq__empty {
   border-radius: 12px;
   background: hsl(var(--muted, 210 40% 96.1%));
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
   padding: 14px 16px;
+  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
   font-size: 0.9rem;
   line-height: 1.7;
   white-space: pre-wrap;
@@ -144,6 +146,7 @@
 /* =========================================================
    Inquiry images
 ========================================================= */
+
 .inq-detail__image-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -154,11 +157,14 @@
 .inq-detail__image-link {
   display: block;
   overflow: hidden;
-  border-radius: 14px;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
+  border-radius: 14px;
   background: hsl(var(--muted, 210 40% 96.1%));
   text-decoration: none;
-  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease,
+    border-color 140ms ease;
 }
 
 .inq-detail__image-link:hover {
@@ -177,11 +183,12 @@
 /* =========================================================
    Reply list
 ========================================================= */
+
 .inq-reply-list {
   display: flex;
+  width: 100%;
   flex-direction: column;
   gap: 18px;
-  width: 100%;
   padding: 4px 0;
 }
 
@@ -257,8 +264,8 @@
   width: fit-content;
   max-width: 100%;
   margin: 0;
-  padding: 10px 14px;
   border-radius: 18px;
+  padding: 10px 14px;
   font-size: 0.92rem;
   font-weight: 500;
   line-height: 1.65;
@@ -271,7 +278,9 @@
   border-top-left-radius: 5px;
   background: #ffffff;
   color: #0f172a;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 3px 10px rgba(15, 23, 42, 0.04);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 3px 10px rgba(15, 23, 42, 0.04);
 }
 
 .inq-reply-item--self .inq-reply-item__content {
@@ -281,24 +290,24 @@
 }
 
 .inq-reply-item--other .inq-reply-item__content::before {
-  content: "";
   position: absolute;
   top: 0;
   left: -7px;
   width: 12px;
   height: 12px;
   background: #ffffff;
+  content: "";
   clip-path: polygon(100% 0, 100% 100%, 0 0);
 }
 
 .inq-reply-item--self .inq-reply-item__content::after {
-  content: "";
   position: absolute;
   top: 0;
   right: -7px;
   width: 12px;
   height: 12px;
   background: #8de055;
+  content: "";
   clip-path: polygon(0 0, 100% 0, 0 100%);
 }
 
@@ -336,18 +345,19 @@
 /* =========================================================
    Reply modal
 ========================================================= */
+
 .inq-reply-modal {
   position: fixed;
   inset: 0;
   z-index: 2147483647;
   display: flex;
-  align-items: center;
-  justify-content: center;
   width: 100vw;
   height: 100vh;
   min-height: 100dvh;
-  padding: 24px;
+  align-items: center;
+  justify-content: center;
   background: rgba(15, 23, 42, 0.48);
+  padding: 24px;
   backdrop-filter: blur(4px);
 }
 
@@ -355,10 +365,12 @@
   width: min(640px, 100%);
   max-height: min(760px, calc(100vh - 48px));
   overflow: auto;
-  border-radius: 20px;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
+  border-radius: 20px;
   background: hsl(var(--background, 0 0% 100%));
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.22), 0 8px 24px rgba(15, 23, 42, 0.12);
+  box-shadow:
+    0 24px 64px rgba(15, 23, 42, 0.22),
+    0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
 .inq-reply-modal__header {
@@ -385,34 +397,6 @@
   line-height: 1.7;
 }
 
-.inq-reply-modal__close {
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  border-radius: 999px;
-  background: hsl(var(--background, 0 0% 100%));
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  cursor: pointer;
-  font-size: 1.25rem;
-  line-height: 1;
-  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
-}
-
-.inq-reply-modal__close:hover:not(:disabled) {
-  border-color: hsl(var(--ring, 215 20.2% 65.1%));
-  background: hsl(var(--muted, 210 40% 96.1%));
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-}
-
-.inq-reply-modal__close:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .inq-reply-modal__body {
   display: flex;
   flex-direction: column;
@@ -433,14 +417,16 @@
   resize: vertical;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
   border-radius: 14px;
+  outline: none;
   background: hsl(var(--background, 0 0% 100%));
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
   padding: 12px 14px;
+  color: hsl(var(--foreground, 222.2 84% 4.9%));
   font: inherit;
   font-size: 0.95rem;
   line-height: 1.8;
-  outline: none;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .inq-reply-modal__textarea:focus {
@@ -468,46 +454,10 @@
   padding: 16px 22px 20px;
 }
 
-.inq-reply-modal__button {
-  display: inline-flex;
-  min-width: 96px;
-  height: 38px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid hsl(var(--primary, 222.2 47.4% 11.2%));
-  border-radius: 999px;
-  background: hsl(var(--primary, 222.2 47.4% 11.2%));
-  color: hsl(var(--primary-foreground, 210 40% 98%));
-  padding: 0 16px;
-  cursor: pointer;
-  font-size: 0.88rem;
-  font-weight: 800;
-  line-height: 1;
-  transition: opacity 140ms ease, transform 140ms ease, background 140ms ease, border-color 140ms ease;
-}
-
-.inq-reply-modal__button:hover:not(:disabled) {
-  transform: translateY(-1px);
-}
-
-.inq-reply-modal__button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
-.inq-reply-modal__button--ghost {
-  border-color: hsl(var(--border, 214.3 31.8% 91.4%));
-  background: hsl(var(--background, 0 0% 100%));
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-}
-
-.inq-reply-modal__button--ghost:hover:not(:disabled) {
-  background: hsl(var(--muted, 210 40% 96.1%));
-}
-
 /* =========================================================
    Reply modal upload
 ========================================================= */
+
 .inq-reply-modal__upload {
   display: flex;
   flex-direction: column;
@@ -538,10 +488,12 @@
   border: 1px dashed hsl(var(--border, 214.3 31.8% 91.4%));
   border-radius: 14px;
   background: hsl(var(--muted, 210 40% 96.1%));
-  cursor: pointer;
   padding: 16px;
   text-align: center;
-  transition: background 140ms ease, border-color 140ms ease;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
 }
 
 .inq-reply-modal__upload-box:hover {
@@ -575,8 +527,8 @@
 .inq-reply-modal__preview-item {
   position: relative;
   overflow: hidden;
-  border-radius: 12px;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
+  border-radius: 12px;
   background: hsl(var(--muted, 210 40% 96.1%));
 }
 
@@ -591,24 +543,10 @@
   position: absolute;
   top: 6px;
   right: 6px;
-  display: inline-flex;
   width: 24px;
   height: 24px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid rgba(15, 23, 42, 0.18);
+  min-height: 24px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  color: rgba(15, 23, 42, 0.86);
-  cursor: pointer;
-  font-size: 1rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.inq-reply-modal__preview-remove:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
 }
 
 @media (max-width: 640px) {

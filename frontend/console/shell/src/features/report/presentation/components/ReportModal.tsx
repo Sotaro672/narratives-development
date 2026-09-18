@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 
+import { Button } from "../../../../shared/ui/button";
 import type {
   ReportReason,
   ReportResponse,
@@ -55,9 +57,7 @@ export default function ReportModal({
   onClose,
 }: ReportModalProps) {
   React.useEffect(() => {
-    if (!open) {
-      return;
-    }
+    if (!open) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !submitting) {
@@ -72,9 +72,7 @@ export default function ReportModal({
     };
   }, [open, submitting, onClose]);
 
-  if (!open) {
-    return null;
-  }
+  if (!open) return null;
 
   const targetLabel = getTargetLabel(targetType);
   const requiresDetail = requiresReportDetail(reason);
@@ -95,10 +93,7 @@ export default function ReportModal({
   };
 
   const handleSubmit = () => {
-    if (!canSubmit) {
-      return;
-    }
-
+    if (!canSubmit) return;
     void onSubmit();
   };
 
@@ -130,15 +125,15 @@ export default function ReportModal({
             </h2>
           </div>
 
-          <button
-            type="button"
-            className="report-modal__close"
+          <Button
+            variant="outline"
+            size="icon"
             disabled={submitting}
             aria-label="通報モーダルを閉じる"
             onClick={onClose}
           >
-            ×
-          </button>
+            <X aria-hidden="true" />
+          </Button>
         </div>
 
         {submitted ? (
@@ -168,13 +163,12 @@ export default function ReportModal({
             </div>
 
             <div className="report-modal__actions">
-              <button
-                type="button"
-                className="report-modal__button report-modal__button--primary"
+              <Button
+                variant="default"
                 onClick={onClose}
               >
                 閉じる
-              </button>
+              </Button>
             </div>
           </div>
         ) : (
@@ -258,23 +252,21 @@ export default function ReportModal({
             </div>
 
             <div className="report-modal__actions">
-              <button
-                type="button"
-                className="report-modal__button report-modal__button--ghost"
+              <Button
+                variant="ghost"
                 disabled={submitting}
                 onClick={onClose}
               >
                 キャンセル
-              </button>
+              </Button>
 
-              <button
-                type="button"
-                className="report-modal__button report-modal__button--danger"
+              <Button
+                variant="destructive"
                 disabled={!canSubmit}
                 onClick={handleSubmit}
               >
                 {submitting ? "送信中" : "通報する"}
-              </button>
+              </Button>
             </div>
           </>
         )}
