@@ -1,12 +1,12 @@
-/* frontend\console\shell\src\styles\brand.css */
+/* frontend/console/shell/src/styles/brand.css */
 
 .brand-status-badge {
   display: inline-block;
-  font-size: 0.75rem;
-  font-weight: 700;
   padding: 0.3rem 0.6rem;
   border-radius: 9999px;
   color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .brand-status-badge.is-active {
@@ -39,18 +39,18 @@
   resize: none;
   border: 1px solid hsl(var(--border));
   border-radius: 12px;
+  background: hsl(var(--background));
   padding: 10px 12px;
+  color: hsl(var(--foreground));
   font-size: 14px;
   line-height: 1.4;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
 }
 
 .brand-detail.is-view .brand-detail__desc-box {
   border: none;
   border-radius: 0;
-  padding: 0;
   background: transparent;
+  padding: 0;
   color: hsl(var(--foreground));
   font-size: 14px;
   line-height: 1.6;
@@ -65,9 +65,9 @@
 }
 
 .brand-view-plain {
+  color: hsl(var(--foreground));
   font-size: 14px;
   line-height: 1.6;
-  color: hsl(var(--foreground));
   word-break: break-word;
 }
 
@@ -87,20 +87,20 @@
 }
 
 .brand-hero__cover-image {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
 
 .brand-hero__cover-empty {
+  display: flex;
   width: 100%;
   height: 100%;
-  border: none;
-  background: transparent;
-  display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
+  background: transparent;
   color: #94a3b8;
   font-size: 14px;
   text-align: center;
@@ -112,8 +112,8 @@
 
 .brand-hero__header {
   display: flex;
-  gap: 20px;
   align-items: flex-end;
+  gap: 20px;
 }
 
 .brand-hero__avatar-wrap {
@@ -125,36 +125,61 @@
 .brand-hero__avatar {
   width: 112px;
   height: 112px;
-  border-radius: 9999px;
   overflow: hidden;
   border: 4px solid #fff;
+  border-radius: 9999px;
   background: #f1f5f9;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .brand-hero__avatar-image {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
 
 .brand-hero__avatar-empty {
+  display: flex;
   width: 100%;
   height: 100%;
-  border: none;
-  background: transparent;
-  display: flex;
   align-items: center;
   justify-content: center;
+  border: none;
+  background: transparent;
+  padding: 8px;
   color: #94a3b8;
   font-size: 12px;
   text-align: center;
-  padding: 8px;
 }
 
 .brand-hero__avatar-empty.is-clickable {
   cursor: pointer;
+}
+
+/* BrandIcon用IconCropper */
+.brand-hero__avatar-wrap .icon-cropper {
+  width: 160px;
+  align-items: flex-start;
+}
+
+.brand-hero__avatar-wrap .icon-cropper__viewport {
+  width: 112px;
+  height: 112px;
+  flex: 0 0 112px;
+  aspect-ratio: 1 / 1;
+  border: 4px solid #fff;
+  background: #f1f5f9;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.brand-hero__avatar-wrap .icon-cropper__help {
+  width: 160px;
+  text-align: left;
+}
+
+.brand-hero__avatar-wrap .icon-cropper__zoom {
+  width: 160px;
 }
 
 .brand-hero__meta {
@@ -164,25 +189,25 @@
 }
 
 .brand-hero__title {
-  font-size: 1.75rem;
-  line-height: 1.2;
-  font-weight: 700;
   color: hsl(var(--foreground));
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
   word-break: break-word;
 }
 
 .brand-hero__sub {
   margin-top: 6px;
+  color: #64748b;
   font-size: 14px;
   line-height: 1.5;
-  color: #64748b;
   word-break: break-word;
 }
 
 .brand-hero__toolbar {
   display: flex;
-  gap: 8px;
   flex-wrap: wrap;
+  gap: 8px;
 }
 
 .brand-hero__toolbar--cover {
@@ -199,12 +224,17 @@
   gap: 8px;
   border: 1px solid rgba(15, 23, 42, 0.12);
   border-radius: 10px;
-  padding: 8px 12px;
   background: rgba(255, 255, 255, 0.92);
+  padding: 8px 12px;
   color: #0f172a;
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
+}
+
+.brand-hero__action-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .brand-hero__action-btn--plain {
@@ -232,9 +262,24 @@
     height: 96px;
   }
 
+  .brand-hero__avatar-wrap .icon-cropper {
+    width: 150px;
+  }
+
+  .brand-hero__avatar-wrap .icon-cropper__viewport {
+    width: 96px;
+    height: 96px;
+    flex-basis: 96px;
+  }
+
+  .brand-hero__avatar-wrap .icon-cropper__help,
+  .brand-hero__avatar-wrap .icon-cropper__zoom {
+    width: 150px;
+  }
+
   .brand-hero__meta {
-    padding-left: 12px;
     padding-right: 12px;
+    padding-left: 12px;
   }
 
   .brand-hero__title {

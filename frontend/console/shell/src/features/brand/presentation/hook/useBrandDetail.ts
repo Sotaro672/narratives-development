@@ -16,8 +16,10 @@ import {
   type ImageStorageTarget,
 } from "../../../../shared/storage/imageStoragePolicy";
 import type { Account } from "../../../../shared/types/account";
-import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import type { Brand, BrandPatch } from "../../../../shared/types/brand";
+import type { IconCropPosition } from "../../../../shared/types/iconCrop";
+import { cropIconImage } from "../../../../shared/util/cropIconImage";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 import { accountRepositoryHTTP } from "../../../account/infrastructure/http/accountRepositoryHTTP";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
@@ -62,6 +64,13 @@ type UploadBrandAssetsResult = {
   completedUploadCount: number;
   expectedUploadCount: number;
 };
+
+const INITIAL_BRAND_ICON_CROP_POSITION: IconCropPosition = {
+  x: 0,
+  y: 0,
+};
+
+const INITIAL_BRAND_ICON_CROP_SCALE = 1;
 
 function createEmptyBrand(brandId: string): Brand {
   return {
@@ -131,14 +140,12 @@ export function useBrandDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-
   const [progress, setProgress] = useState<BrandCreateProgress>(
     createInitialBrandCreateProgress,
   );
 
   const [accountId, setAccountId] = useState("");
-  const [accountCandidates, setAccountCandidates] =
-    useState<BrandAccountCandidate[]>([]);
+  const [accountCandidates, setAccountCandidates] = useState<BrandAccountCandidate[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
 
@@ -163,15 +170,24 @@ export function useBrandDetail() {
   const brandBackgroundInputRef = useRef<HTMLInputElement | null>(null);
 
   const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
-  const [brandBackgroundFile, setBrandBackgroundFile] =
-    useState<File | null>(null);
+  const [brandBackgroundFile, setBrandBackgroundFile] = useState<File | null>(null);
+  const [brandIconCropPosition, setBrandIconCropPosition] =
+    useState<IconCropPosition>(INITIAL_BRAND_ICON_CROP_POSITION);
+  const [brandIconCropScale, setBrandIconCropScale] =
+    useState(INITIAL_BRAND_ICON_CROP_SCALE);
+  const [brandIconCropViewportSize, setBrandIconCropViewportSize] = useState(0);
 
   const [brandIconPreviewUrl, setBrandIconPreviewUrl] = useState("");
-  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] =
-    useState("");
+  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] = useState("");
 
   const isUploading = progress.phase === "uploading" && saving;
   const progressOpen = isBrandCreateProgressVisible(progress);
+
+  const resetBrandIconCrop = useCallback(() => {
+    setBrandIconCropPosition(INITIAL_BRAND_ICON_CROP_POSITION);
+    setBrandIconCropScale(INITIAL_BRAND_ICON_CROP_SCALE);
+    setBrandIconCropViewportSize(0);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,9 +199,7 @@ export function useBrandDetail() {
         setLoading(true);
         setError(null);
 
-        const response =
-          await brandRepositoryHTTP.getById(resolvedBrandId);
-
+        const response = await brandRepositoryHTTP.getById(resolvedBrandId);
         if (cancelled) return;
 
         setBrand(response);
@@ -195,6 +209,7 @@ export function useBrandDetail() {
         setBrandBackgroundFile(null);
         setBrandIconError(null);
         setBrandBackgroundImageError(null);
+        resetBrandIconCrop();
       } catch (error: unknown) {
         if (!cancelled) {
           setError(
@@ -213,7 +228,7 @@ export function useBrandDetail() {
     return () => {
       cancelled = true;
     };
-  }, [resolvedBrandId]);
+  }, [resolvedBrandId, resetBrandIconCrop]);
 
   useEffect(() => {
     let cancelled = false;
@@ -224,7 +239,6 @@ export function useBrandDetail() {
         setAccountError(null);
 
         const accounts = await accountRepositoryHTTP.list();
-
         if (cancelled) return;
 
         const candidates = accounts
@@ -288,9 +302,7 @@ export function useBrandDetail() {
       return;
     }
 
-    const objectUrl =
-      URL.createObjectURL(brandBackgroundFile);
-
+    const objectUrl = URL.createObjectURL(brandBackgroundFile);
     setBrandBackgroundPreviewUrl(objectUrl);
 
     return () => {
@@ -306,84 +318,56 @@ export function useBrandDetail() {
   useEffect(() => {
     if (!isUploading) return;
 
-    const handleBeforeUnload = (
-      event: BeforeUnloadEvent,
-    ) => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
 
-    window.addEventListener(
-      "beforeunload",
-      handleBeforeUnload,
-    );
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
-      window.removeEventListener(
-        "beforeunload",
-        handleBeforeUnload,
-      );
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [isUploading]);
 
   const registeredAt = useMemo(
-    () =>
-      safeDateTimeLabelJa(
-        brand.createdAt,
-        "",
-      ),
+    () => safeDateTimeLabelJa(brand.createdAt, ""),
     [brand.createdAt],
   );
 
   const updatedAt = useMemo(
-    () =>
-      safeDateTimeLabelJa(
-        brand.updatedAt ?? "",
-        "",
-      ),
+    () => safeDateTimeLabelJa(brand.updatedAt ?? "", ""),
     [brand.updatedAt],
   );
 
-  const statusLabel = brand.isActive
-    ? "アクティブ"
-    : "停止";
+  const statusLabel = brand.isActive ? "アクティブ" : "停止";
 
   const handleBack = useCallback(() => {
     if (saving) return;
     navigate("/brand");
   }, [navigate, saving]);
 
-  const handleOpenAccountConnect =
-    useCallback(() => {
-      if (saving) return;
-      navigate("/account/connect");
-    }, [navigate, saving]);
+  const handleOpenAccountConnect = useCallback(() => {
+    if (saving) return;
+    navigate("/account/connect");
+  }, [navigate, saving]);
 
-  const handleSelectAccount = useCallback(
-    (id: string) => {
-      setAccountId(id);
-
-      if (id) {
-        setAccountError(null);
-      }
-    },
-    [],
-  );
+  const handleSelectAccount = useCallback((id: string) => {
+    setAccountId(id);
+    if (id) setAccountError(null);
+  }, []);
 
   const handleEdit = useCallback(() => {
     setDraft(createDraft(brand));
-    setAccountId(
-      String(brand.accountId ?? ""),
-    );
+    setAccountId(String(brand.accountId ?? ""));
     setBrandIconFile(null);
     setBrandBackgroundFile(null);
     setBrandIconError(null);
     setBrandBackgroundImageError(null);
     setAccountError(null);
     setError(null);
-    setProgress(
-      createInitialBrandCreateProgress(),
-    );
+    resetBrandIconCrop();
+    setProgress(createInitialBrandCreateProgress());
 
     if (brandIconInputRef.current) {
       brandIconInputRef.current.value = "";
@@ -394,26 +378,417 @@ export function useBrandDetail() {
     }
 
     setIsEditing(true);
-  }, [brand]);
+  }, [brand, resetBrandIconCrop]);
 
-  const handleCancelEdit =
-    useCallback(() => {
-      if (saving) return;
+  const handleCancelEdit = useCallback(() => {
+    if (saving) return;
 
-      setDraft(createDraft(brand));
-      setAccountId(
-        String(brand.accountId ?? ""),
+    setDraft(createDraft(brand));
+    setAccountId(String(brand.accountId ?? ""));
+    resetAssignee();
+    setBrandIconFile(null);
+    setBrandBackgroundFile(null);
+    setBrandIconError(null);
+    setBrandBackgroundImageError(null);
+    setAccountError(null);
+    setError(null);
+    resetBrandIconCrop();
+    setProgress(createInitialBrandCreateProgress());
+
+    if (brandIconInputRef.current) {
+      brandIconInputRef.current.value = "";
+    }
+
+    if (brandBackgroundInputRef.current) {
+      brandBackgroundInputRef.current.value = "";
+    }
+
+    setIsEditing(false);
+  }, [
+    brand,
+    resetAssignee,
+    saving,
+    resetBrandIconCrop,
+  ]);
+
+  const handlePickBrandIcon = useCallback(() => {
+    if (!isEditing || saving) return;
+    brandIconInputRef.current?.click();
+  }, [isEditing, saving]);
+
+  const handlePickBrandBackground = useCallback(() => {
+    if (!isEditing || saving) return;
+    brandBackgroundInputRef.current?.click();
+  }, [isEditing, saving]);
+
+  const validateSelectedImage = useCallback(
+    (
+      file: File,
+      target: BrandImageTarget,
+    ): string | null => {
+      const validation = validateImageForStorage(file, target);
+      return validation.valid ? null : validation.reason;
+    },
+    [],
+  );
+
+  const handleBrandIconChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0] ?? null;
+      event.currentTarget.value = "";
+
+      if (!file) return;
+
+      const validationError = validateSelectedImage(file, "brandIcon");
+
+      if (validationError) {
+        setBrandIconFile(null);
+        setBrandIconError(validationError);
+        resetBrandIconCrop();
+        alert(validationError);
+        return;
+      }
+
+      setBrandIconFile(file);
+      setBrandIconError(null);
+      resetBrandIconCrop();
+    },
+    [
+      validateSelectedImage,
+      resetBrandIconCrop,
+    ],
+  );
+
+  const handleBrandBackgroundChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.currentTarget.files?.[0] ?? null;
+
+      if (!file) return;
+
+      const validationError = validateSelectedImage(
+        file,
+        "brandBackgroundImage",
       );
-      resetAssignee();
+
+      if (validationError) {
+        setBrandBackgroundFile(null);
+        setBrandBackgroundImageError(validationError);
+        event.currentTarget.value = "";
+        alert(validationError);
+        return;
+      }
+
+      setBrandBackgroundFile(file);
+      setBrandBackgroundImageError(null);
+    },
+    [validateSelectedImage],
+  );
+
+  const handleClearBrandIcon = useCallback(() => {
+    setBrandIconFile(null);
+    setBrandIconError(null);
+    resetBrandIconCrop();
+
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      brandIcon: "",
+    }));
+
+    if (brandIconInputRef.current) {
+      brandIconInputRef.current.value = "";
+    }
+  }, [resetBrandIconCrop]);
+
+  const handleClearBrandBackground = useCallback(() => {
+    setBrandBackgroundFile(null);
+    setBrandBackgroundImageError(null);
+
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      brandBackgroundImage: "",
+    }));
+
+    if (brandBackgroundInputRef.current) {
+      brandBackgroundInputRef.current.value = "";
+    }
+  }, []);
+
+  const validateSelectedImagesBeforeSave = useCallback((): boolean => {
+    if (brandIconFile) {
+      const validationError = validateSelectedImage(
+        brandIconFile,
+        "brandIcon",
+      );
+
+      if (validationError) {
+        setBrandIconError(validationError);
+        alert(validationError);
+        return false;
+      }
+    }
+
+    if (brandBackgroundFile) {
+      const validationError = validateSelectedImage(
+        brandBackgroundFile,
+        "brandBackgroundImage",
+      );
+
+      if (validationError) {
+        setBrandBackgroundImageError(validationError);
+        alert(validationError);
+        return false;
+      }
+    }
+
+    setBrandIconError(null);
+    setBrandBackgroundImageError(null);
+    return true;
+  }, [
+    brandIconFile,
+    brandBackgroundFile,
+    validateSelectedImage,
+  ]);
+
+  const buildBrandIconFileForUpload = useCallback(
+    async (): Promise<File | null> => {
+      if (!brandIconFile) {
+        return null;
+      }
+
+      if (brandIconCropViewportSize <= 0) {
+        throw new Error(
+          "ブランドアイコンの切り抜き領域を取得できませんでした。画像を選択し直してください。",
+        );
+      }
+
+      const croppedFile = await cropIconImage({
+        file: brandIconFile,
+        position: brandIconCropPosition,
+        scale: brandIconCropScale,
+        viewportSize: brandIconCropViewportSize,
+      });
+
+      const validation = validateImageForStorage(
+        croppedFile,
+        "brandIcon",
+      );
+
+      if (!validation.valid) {
+        throw new Error(validation.reason);
+      }
+
+      return croppedFile;
+    },
+    [
+      brandIconFile,
+      brandIconCropPosition,
+      brandIconCropScale,
+      brandIconCropViewportSize,
+    ],
+  );
+
+  const uploadBrandAssets = useCallback(
+    async (
+      croppedBrandIconFile: File | null,
+    ): Promise<UploadBrandAssetsResult> => {
+      if (!resolvedBrandId) {
+        throw new Error("brandId が取得できません。");
+      }
+
+      if (!brand.companyId) {
+        throw new Error("companyId が取得できません。");
+      }
+
+      let uploadedBrandIcon = draft.brandIcon;
+      let uploadedBrandBackgroundImage = draft.brandBackgroundImage;
+      let completedBytes = 0;
+      let completedUploadCount = 0;
+
+      const totalBytes =
+        (croppedBrandIconFile?.size ?? 0) +
+        (brandBackgroundFile?.size ?? 0);
+
+      const expectedUploadCount =
+        (croppedBrandIconFile ? 1 : 0) +
+        (brandBackgroundFile ? 1 : 0);
+
+      if (croppedBrandIconFile) {
+        const currentFile = croppedBrandIconFile;
+
+        const uploaded = await uploadBrandAssetToFirebaseStorage({
+          companyId: brand.companyId,
+          brandId: resolvedBrandId,
+          target: "brandIcon",
+          file: currentFile,
+          onProgress: (uploadProgress) => {
+            setProgress(
+              createUploadingBrandCreateProgress({
+                fileName: currentFile.name,
+                transferredBytes:
+                  completedBytes +
+                  uploadProgress.transferredBytes,
+                totalBytes,
+                completedUploadCount,
+                expectedUploadCount,
+                title: "ブランド画像を転送中",
+                message:
+                  "ブランド画像をアップロードしています。画像転送が完了するまで、この画面を閉じたり移動したりしないでください。",
+              }),
+            );
+          },
+        });
+
+        uploadedBrandIcon = uploaded.downloadUrl;
+        completedBytes += currentFile.size;
+        completedUploadCount += 1;
+      }
+
+      if (brandBackgroundFile) {
+        const currentFile = brandBackgroundFile;
+
+        const uploaded = await uploadBrandAssetToFirebaseStorage({
+          companyId: brand.companyId,
+          brandId: resolvedBrandId,
+          target: "brandBackgroundImage",
+          file: currentFile,
+          onProgress: (uploadProgress) => {
+            setProgress(
+              createUploadingBrandCreateProgress({
+                fileName: currentFile.name,
+                transferredBytes:
+                  completedBytes +
+                  uploadProgress.transferredBytes,
+                totalBytes,
+                completedUploadCount,
+                expectedUploadCount,
+                title: "ブランド画像を転送中",
+                message:
+                  "ブランド画像をアップロードしています。画像転送が完了するまで、この画面を閉じたり移動したりしないでください。",
+              }),
+            );
+          },
+        });
+
+        uploadedBrandBackgroundImage = uploaded.downloadUrl;
+        completedBytes += currentFile.size;
+        completedUploadCount += 1;
+      }
+
+      return {
+        uploadedBrandIcon,
+        uploadedBrandBackgroundImage,
+        transferredBytes: completedBytes,
+        totalBytes,
+        completedUploadCount,
+        expectedUploadCount,
+      };
+    },
+    [
+      resolvedBrandId,
+      brand.companyId,
+      draft.brandIcon,
+      draft.brandBackgroundImage,
+      brandBackgroundFile,
+    ],
+  );
+
+  const handleSave = useCallback(async () => {
+    if (!resolvedBrandId || saving) {
+      return;
+    }
+
+    if (!draft.name) {
+      setError(
+        new Error("ブランド名は必須です。"),
+      );
+      return;
+    }
+
+    if (!managerId) {
+      setError(
+        new Error("ブランド責任者は必須です。"),
+      );
+      return;
+    }
+
+    if (!accountId) {
+      setAccountError("売上受取口座は必須です。");
+      setError(
+        new Error("売上受取口座は必須です。"),
+      );
+      return;
+    }
+
+    if (!validateSelectedImagesBeforeSave()) {
+      return;
+    }
+
+    try {
+      setSaving(true);
+      setError(null);
+      setAccountError(null);
+
+      setProgress(
+        createCreatingBrandCreateProgress({
+          title: "ブランド情報を更新中",
+          message: "ブランド情報の更新準備をしています。",
+        }),
+      );
+
+      const croppedBrandIconFile =
+        await buildBrandIconFileForUpload();
+
+      const {
+        uploadedBrandIcon,
+        uploadedBrandBackgroundImage,
+        transferredBytes,
+        totalBytes,
+        completedUploadCount,
+        expectedUploadCount,
+      } = await uploadBrandAssets(croppedBrandIconFile);
+
+      setProgress(
+        createSavingBrandCreateProgress({
+          transferredBytes,
+          totalBytes,
+          completedUploadCount,
+          expectedUploadCount,
+          title: "ブランド情報を保存中",
+          message:
+            expectedUploadCount > 0
+              ? "画像転送が完了しました。ブランド情報を保存しています。"
+              : "ブランド情報を保存しています。",
+        }),
+      );
+
+      const patch: BrandPatch = {
+        accountId,
+        name: draft.name,
+        description: draft.description,
+        websiteUrl: draft.websiteUrl,
+        brandIcon: uploadedBrandIcon,
+        brandBackgroundImage:
+          uploadedBrandBackgroundImage,
+        isActive: draft.isActive,
+        managerId,
+      };
+
+      const savedBrand = await brandRepositoryHTTP.update(
+        resolvedBrandId,
+        patch,
+      );
+
+      setBrand(savedBrand);
+      setDraft(createDraft(savedBrand));
+      setAccountId(
+        String(savedBrand.accountId ?? ""),
+      );
       setBrandIconFile(null);
       setBrandBackgroundFile(null);
       setBrandIconError(null);
       setBrandBackgroundImageError(null);
       setAccountError(null);
-      setError(null);
-      setProgress(
-        createInitialBrandCreateProgress(),
-      );
+      resetBrandIconCrop();
 
       if (brandIconInputRef.current) {
         brandIconInputRef.current.value = "";
@@ -424,553 +799,67 @@ export function useBrandDetail() {
       }
 
       setIsEditing(false);
-    }, [
-      brand,
-      resetAssignee,
-      saving,
-    ]);
 
-  const handlePickBrandIcon =
-    useCallback(() => {
-      if (!isEditing || saving) return;
-
-      brandIconInputRef.current?.click();
-    }, [
-      isEditing,
-      saving,
-    ]);
-
-  const handlePickBrandBackground =
-    useCallback(() => {
-      if (!isEditing || saving) return;
-
-      brandBackgroundInputRef.current?.click();
-    }, [
-      isEditing,
-      saving,
-    ]);
-
-  const validateSelectedImage =
-    useCallback(
-      (
-        file: File,
-        target: BrandImageTarget,
-      ): string | null => {
-        const validation =
-          validateImageForStorage(
-            file,
-            target,
-          );
-
-        if (!validation.valid) {
-          return validation.reason;
-        }
-
-        return null;
-      },
-      [],
-    );
-
-  const handleBrandIconChange =
-    useCallback(
-      (
-        event: ChangeEvent<HTMLInputElement>,
-      ) => {
-        const file =
-          event.currentTarget.files?.[0] ??
-          null;
-
-        if (!file) return;
-
-        const validationError =
-          validateSelectedImage(
-            file,
-            "brandIcon",
-          );
-
-        if (validationError) {
-          setBrandIconFile(null);
-          setBrandIconError(
-            validationError,
-          );
-          event.currentTarget.value = "";
-          alert(validationError);
-          return;
-        }
-
-        setBrandIconFile(file);
-        setBrandIconError(null);
-      },
-      [validateSelectedImage],
-    );
-
-  const handleBrandBackgroundChange =
-    useCallback(
-      (
-        event: ChangeEvent<HTMLInputElement>,
-      ) => {
-        const file =
-          event.currentTarget.files?.[0] ??
-          null;
-
-        if (!file) return;
-
-        const validationError =
-          validateSelectedImage(
-            file,
-            "brandBackgroundImage",
-          );
-
-        if (validationError) {
-          setBrandBackgroundFile(null);
-          setBrandBackgroundImageError(
-            validationError,
-          );
-          event.currentTarget.value = "";
-          alert(validationError);
-          return;
-        }
-
-        setBrandBackgroundFile(file);
-        setBrandBackgroundImageError(null);
-      },
-      [validateSelectedImage],
-    );
-
-  const handleClearBrandIcon =
-    useCallback(() => {
-      setBrandIconFile(null);
-      setBrandIconError(null);
-
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        brandIcon: "",
-      }));
-
-      if (brandIconInputRef.current) {
-        brandIconInputRef.current.value = "";
-      }
-    }, []);
-
-  const handleClearBrandBackground =
-    useCallback(() => {
-      setBrandBackgroundFile(null);
-      setBrandBackgroundImageError(null);
-
-      setDraft((currentDraft) => ({
-        ...currentDraft,
-        brandBackgroundImage: "",
-      }));
-
-      if (
-        brandBackgroundInputRef.current
-      ) {
-        brandBackgroundInputRef.current.value =
-          "";
-      }
-    }, []);
-
-  const validateSelectedImagesBeforeSave =
-    useCallback((): boolean => {
-      if (brandIconFile) {
-        const validationError =
-          validateSelectedImage(
-            brandIconFile,
-            "brandIcon",
-          );
-
-        if (validationError) {
-          setBrandIconError(
-            validationError,
-          );
-          alert(validationError);
-          return false;
-        }
-      }
-
-      if (brandBackgroundFile) {
-        const validationError =
-          validateSelectedImage(
-            brandBackgroundFile,
-            "brandBackgroundImage",
-          );
-
-        if (validationError) {
-          setBrandBackgroundImageError(
-            validationError,
-          );
-          alert(validationError);
-          return false;
-        }
-      }
-
-      setBrandIconError(null);
-      setBrandBackgroundImageError(null);
-
-      return true;
-    }, [
-      brandIconFile,
-      brandBackgroundFile,
-      validateSelectedImage,
-    ]);
-
-  const uploadBrandAssets =
-    useCallback(
-      async (): Promise<UploadBrandAssetsResult> => {
-        if (!resolvedBrandId) {
-          throw new Error(
-            "brandId が取得できません。",
-          );
-        }
-
-        if (!brand.companyId) {
-          throw new Error(
-            "companyId が取得できません。",
-          );
-        }
-
-        let uploadedBrandIcon =
-          draft.brandIcon;
-
-        let uploadedBrandBackgroundImage =
-          draft.brandBackgroundImage;
-
-        let completedBytes = 0;
-        let completedUploadCount = 0;
-
-        const totalBytes =
-          (brandIconFile?.size ?? 0) +
-          (brandBackgroundFile?.size ?? 0);
-
-        const expectedUploadCount =
-          (brandIconFile ? 1 : 0) +
-          (brandBackgroundFile ? 1 : 0);
-
-        if (brandIconFile) {
-          const currentFile =
-            brandIconFile;
-
-          const uploaded =
-            await uploadBrandAssetToFirebaseStorage(
-              {
-                companyId:
-                  brand.companyId,
-                brandId:
-                  resolvedBrandId,
-                target:
-                  "brandIcon",
-                file: currentFile,
-                onProgress: (
-                  uploadProgress,
-                ) => {
-                  setProgress(
-                    createUploadingBrandCreateProgress(
-                      {
-                        fileName:
-                          currentFile.name,
-                        transferredBytes:
-                          completedBytes +
-                          uploadProgress.transferredBytes,
-                        totalBytes,
-                        completedUploadCount,
-                        expectedUploadCount,
-                        title:
-                          "ブランド画像を転送中",
-                        message:
-                          "ブランド画像をアップロードしています。画像転送が完了するまで、この画面を閉じたり移動したりしないでください。",
-                      },
-                    ),
-                  );
-                },
-              },
-            );
-
-          uploadedBrandIcon =
-            uploaded.downloadUrl;
-
-          completedBytes +=
-            currentFile.size;
-
-          completedUploadCount += 1;
-        }
-
-        if (brandBackgroundFile) {
-          const currentFile =
-            brandBackgroundFile;
-
-          const uploaded =
-            await uploadBrandAssetToFirebaseStorage(
-              {
-                companyId:
-                  brand.companyId,
-                brandId:
-                  resolvedBrandId,
-                target:
-                  "brandBackgroundImage",
-                file: currentFile,
-                onProgress: (
-                  uploadProgress,
-                ) => {
-                  setProgress(
-                    createUploadingBrandCreateProgress(
-                      {
-                        fileName:
-                          currentFile.name,
-                        transferredBytes:
-                          completedBytes +
-                          uploadProgress.transferredBytes,
-                        totalBytes,
-                        completedUploadCount,
-                        expectedUploadCount,
-                        title:
-                          "ブランド画像を転送中",
-                        message:
-                          "ブランド画像をアップロードしています。画像転送が完了するまで、この画面を閉じたり移動したりしないでください。",
-                      },
-                    ),
-                  );
-                },
-              },
-            );
-
-          uploadedBrandBackgroundImage =
-            uploaded.downloadUrl;
-
-          completedBytes +=
-            currentFile.size;
-
-          completedUploadCount += 1;
-        }
-
-        return {
-          uploadedBrandIcon,
-          uploadedBrandBackgroundImage,
-          transferredBytes:
-            completedBytes,
-          totalBytes,
-          completedUploadCount,
-          expectedUploadCount,
-        };
-      },
-      [
-        resolvedBrandId,
-        brand.companyId,
-        draft.brandIcon,
-        draft.brandBackgroundImage,
-        brandIconFile,
-        brandBackgroundFile,
-      ],
-    );
-
-  const handleSave =
-    useCallback(async () => {
-      if (
-        !resolvedBrandId ||
-        saving
-      ) {
-        return;
-      }
-
-      if (!draft.name) {
-        setError(
-          new Error(
-            "ブランド名は必須です。",
-          ),
-        );
-        return;
-      }
-
-      if (!managerId) {
-        setError(
-          new Error(
-            "ブランド責任者は必須です。",
-          ),
-        );
-        return;
-      }
-
-      if (!accountId) {
-        setAccountError(
-          "売上受取口座は必須です。",
-        );
-        setError(
-          new Error(
-            "売上受取口座は必須です。",
-          ),
-        );
-        return;
-      }
-
-      if (
-        !validateSelectedImagesBeforeSave()
-      ) {
-        return;
-      }
-
-      try {
-        setSaving(true);
-        setError(null);
-        setAccountError(null);
-
-        setProgress(
-          createCreatingBrandCreateProgress(
-            {
-              title:
-                "ブランド情報を更新中",
-              message:
-                "ブランド情報の更新準備をしています。",
-            },
-          ),
-        );
-
-        const {
-          uploadedBrandIcon,
-          uploadedBrandBackgroundImage,
+      setProgress(
+        createCompletedBrandCreateProgress({
           transferredBytes,
           totalBytes,
           completedUploadCount,
           expectedUploadCount,
-        } = await uploadBrandAssets();
+          title: "更新が完了しました",
+          message: "ブランド情報の更新が完了しました。",
+        }),
+      );
+    } catch (error: unknown) {
+      const message = getErrorMessage(error);
 
-        setProgress(
-          createSavingBrandCreateProgress({
-            transferredBytes,
-            totalBytes,
-            completedUploadCount,
-            expectedUploadCount,
-            title:
-              "ブランド情報を保存中",
-            message:
-              expectedUploadCount > 0
-                ? "画像転送が完了しました。ブランド情報を保存しています。"
-                : "ブランド情報を保存しています。",
-          }),
-        );
+      setError(new Error(message));
 
-        const patch: BrandPatch = {
-          accountId,
-          name: draft.name,
-          description:
-            draft.description,
-          websiteUrl:
-            draft.websiteUrl,
-          brandIcon:
-            uploadedBrandIcon,
-          brandBackgroundImage:
-            uploadedBrandBackgroundImage,
-          isActive:
-            draft.isActive,
-          managerId,
-        };
-
-        const savedBrand =
-          await brandRepositoryHTTP.update(
-            resolvedBrandId,
-            patch,
-          );
-
-        setBrand(savedBrand);
-        setDraft(
-          createDraft(savedBrand),
-        );
-        setAccountId(
-          String(
-            savedBrand.accountId ?? "",
-          ),
-        );
-        setBrandIconFile(null);
-        setBrandBackgroundFile(null);
-        setBrandIconError(null);
-        setBrandBackgroundImageError(
-          null,
-        );
-        setAccountError(null);
-
-        if (
-          brandIconInputRef.current
-        ) {
-          brandIconInputRef.current.value =
-            "";
-        }
-
-        if (
-          brandBackgroundInputRef.current
-        ) {
-          brandBackgroundInputRef.current.value =
-            "";
-        }
-
-        setIsEditing(false);
-
-        setProgress(
-          createCompletedBrandCreateProgress(
-            {
-              transferredBytes,
-              totalBytes,
-              completedUploadCount,
-              expectedUploadCount,
-              title:
-                "更新が完了しました",
-              message:
-                "ブランド情報の更新が完了しました。",
-            },
-          ),
-        );
-      } catch (error: unknown) {
-        const message =
-          getErrorMessage(error);
-
-        setError(
-          new Error(message),
-        );
-
-        setProgress(
-          createFailedBrandCreateProgress(
-            message,
-            {
-              title:
-                "ブランド更新に失敗しました",
-              message:
-                "ブランド情報または画像の保存中にエラーが発生しました。",
-            },
-          ),
-        );
-      } finally {
-        setSaving(false);
-      }
-    }, [
-      resolvedBrandId,
-      saving,
-      draft,
-      managerId,
-      accountId,
-      uploadBrandAssets,
-      validateSelectedImagesBeforeSave,
-    ]);
-
-  const onCloseProgress =
-    useCallback(() => {
-      if (
-        progress.isBlockingNavigation
-      ) {
-        return;
+      if (brandIconFile) {
+        setBrandIconError(message);
       }
 
       setProgress(
-        createInitialBrandCreateProgress(),
+        createFailedBrandCreateProgress(
+          message,
+          {
+            title: "ブランド更新に失敗しました",
+            message:
+              "ブランド情報または画像の保存中にエラーが発生しました。",
+          },
+        ),
       );
-    }, [
-      progress.isBlockingNavigation,
-    ]);
+    } finally {
+      setSaving(false);
+    }
+  }, [
+    resolvedBrandId,
+    saving,
+    draft,
+    managerId,
+    accountId,
+    brandIconFile,
+    uploadBrandAssets,
+    buildBrandIconFileForUpload,
+    validateSelectedImagesBeforeSave,
+    resetBrandIconCrop,
+  ]);
 
-  const statusBadgeClass =
-    useMemo(
-      () =>
-        brand.isActive
-          ? "inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold"
-          : "inline-flex items-center px-2 py-1 rounded-full bg-slate-50 text-slate-500 text-xs font-semibold",
-      [brand.isActive],
-    );
+  const onCloseProgress = useCallback(() => {
+    if (progress.isBlockingNavigation) {
+      return;
+    }
+
+    setProgress(createInitialBrandCreateProgress());
+  }, [progress.isBlockingNavigation]);
+
+  const statusBadgeClass = useMemo(
+    () =>
+      brand.isActive
+        ? "inline-flex items-center px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold"
+        : "inline-flex items-center px-2 py-1 rounded-full bg-slate-50 text-slate-500 text-xs font-semibold",
+    [brand.isActive],
+  );
 
   return {
     brand,
@@ -1008,14 +897,23 @@ export function useBrandDetail() {
     handleSelectAccount,
     handleOpenAccountConnect,
 
-    brandImageAccept:
-      IMAGE_STORAGE_ACCEPT,
+    brandImageAccept: IMAGE_STORAGE_ACCEPT,
     brandIconInputRef,
     brandBackgroundInputRef,
     brandIconFile,
     brandBackgroundFile,
     brandIconPreviewUrl,
     brandBackgroundPreviewUrl,
+
+    brandIconCropPosition,
+    brandIconCropScale,
+    handleBrandIconCropPositionChange:
+      setBrandIconCropPosition,
+    handleBrandIconCropScaleChange:
+      setBrandIconCropScale,
+    handleBrandIconCropViewportSizeChange:
+      setBrandIconCropViewportSize,
+
     brandIconError,
     brandBackgroundImageError,
     handlePickBrandIcon,

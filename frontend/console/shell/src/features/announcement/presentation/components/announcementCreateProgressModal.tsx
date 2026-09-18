@@ -1,11 +1,7 @@
 // frontend/console/shell/src/features/announcement/presentation/components/announcementCreateProgressModal.tsx
 
-import * as React from "react";
-import { createPortal } from "react-dom";
-
-import type {
-  AnnouncementCreateProgress,
-} from "../model/announcementCreateProgress";
+import { Modal, ModalCloseButton } from "../../../../shared/ui/modal";
+import type { AnnouncementCreateProgress } from "../model/announcementCreateProgress";
 
 import "../../../../styles/listProgress.css";
 
@@ -29,19 +25,11 @@ function formatBytes(bytes: number): string {
     unitIndex += 1;
   }
 
-  const digits =
-    unitIndex === 0
-      ? 0
-      : value >= 10
-        ? 1
-        : 2;
-
+  const digits = unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
   return `${value.toFixed(digits)} ${units[unitIndex]}`;
 }
 
-function phaseStatusLabel(
-  progress: AnnouncementCreateProgress,
-): string {
+function phaseStatusLabel(progress: AnnouncementCreateProgress): string {
   switch (progress.phase) {
     case "idle":
       return "";
@@ -58,24 +46,18 @@ function phaseStatusLabel(
   }
 }
 
-function statusClassName(
-  progress: AnnouncementCreateProgress,
-): string {
+function statusClassName(progress: AnnouncementCreateProgress): string {
   return `list-progress-modal__status--${progress.phase}`;
 }
 
-function shouldShowIndeterminate(
-  progress: AnnouncementCreateProgress,
-): boolean {
+function shouldShowIndeterminate(progress: AnnouncementCreateProgress): boolean {
   return (
     progress.phase === "preparing" ||
     (progress.phase === "saving" && progress.totalBytes <= 0)
   );
 }
 
-function shouldShowProgressBar(
-  progress: AnnouncementCreateProgress,
-): boolean {
+function shouldShowProgressBar(progress: AnnouncementCreateProgress): boolean {
   if (progress.totalBytes <= 0) {
     return false;
   }
@@ -87,9 +69,7 @@ function shouldShowProgressBar(
   );
 }
 
-function shouldShowUploadCount(
-  progress: AnnouncementCreateProgress,
-): boolean {
+function shouldShowUploadCount(progress: AnnouncementCreateProgress): boolean {
   return (
     progress.expectedUploadCount > 0 &&
     (
@@ -109,227 +89,153 @@ export default function AnnouncementCreateProgressModal({
     !progress.isBlockingNavigation &&
     Boolean(onClose);
 
-  React.useEffect(() => {
-    if (!open || !canClose) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-
-      event.preventDefault();
-      onClose?.();
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open, canClose, onClose]);
-
-  if (!open) {
-    return null;
-  }
-
   const statusLabel = phaseStatusLabel(progress);
-
   const progressPercentage = Math.min(
     100,
     Math.max(0, progress.percentage),
   );
 
-  const modal = (
-    <div
-      className="list-progress-modal"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (
-          event.target === event.currentTarget &&
-          canClose
-        ) {
-          onClose?.();
-        }
-      }}
-    >
-      <div
-        className="list-progress-modal__panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="announcement-create-progress-modal-title"
-        aria-describedby="announcement-create-progress-modal-description"
-        aria-busy={
-          progress.phase === "preparing" ||
-          progress.phase === "uploading" ||
-          progress.phase === "saving"
-        }
-      >
-        <div className="list-progress-modal__header">
-          <div className="list-progress-modal__heading">
-            {statusLabel ? (
-              <span
-                className={[
-                  "list-progress-modal__status",
-                  statusClassName(progress),
-                ].join(" ")}
-              >
-                {statusLabel}
-              </span>
-            ) : null}
+  const ariaBusy =
+    progress.phase === "preparing" ||
+    progress.phase === "uploading" ||
+    progress.phase === "saving";
 
-            <h2
-              id="announcement-create-progress-modal-title"
-              className="list-progress-modal__title"
-            >
-              {progress.title}
-            </h2>
-          </div>
+  const showFooter =
+    canClose &&
+    (
+      progress.phase === "completed" ||
+      progress.phase === "failed"
+    );
 
-          {canClose ? (
-            <button
-              type="button"
-              className="list-progress-modal__close"
-              onClick={onClose}
-              aria-label="進捗画面を閉じる"
-            >
-              ×
-            </button>
-          ) : null}
-        </div>
-
-        <div className="list-progress-modal__body">
-          <p
-            id="announcement-create-progress-modal-description"
-            className="list-progress-modal__description"
+  return (
+    <Modal
+      open={open}
+      title={progress.title}
+      description={progress.message}
+      eyebrow={
+        statusLabel ? (
+          <span
+            className={[
+              "list-progress-modal__status",
+              statusClassName(progress),
+            ].join(" ")}
           >
-            {progress.message}
-          </p>
-
-          {shouldShowIndeterminate(progress) ? (
-            <div
-              className="list-progress-modal__indeterminate"
-              aria-label={
-                progress.phase === "saving"
-                  ? "告知保存中"
-                  : "処理準備中"
-              }
-            >
-              <div className="list-progress-modal__indeterminate-bar" />
-            </div>
-          ) : null}
-
-          {shouldShowProgressBar(progress) ? (
-            <div className="list-progress-modal__progress-section">
-              <div className="list-progress-modal__progress-header">
-                <span className="list-progress-modal__progress-label">
-                  画像転送
-                </span>
-
-                <span className="list-progress-modal__progress-percentage">
-                  {progressPercentage}%
-                </span>
-              </div>
-
-              <div
-                className="list-progress-modal__progress"
-                role="progressbar"
-                aria-label="告知画像転送進捗"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressPercentage}
-              >
-                <div
-                  className="list-progress-modal__progress-bar"
-                  style={{
-                    width: `${progressPercentage}%`,
-                  }}
-                />
-              </div>
-
-              <div className="list-progress-modal__bytes">
-                {formatBytes(progress.transferredBytes)}
-                {" / "}
-                {formatBytes(progress.totalBytes)}
-              </div>
-            </div>
-          ) : null}
-
-          {progress.phase === "uploading" &&
-          progress.currentFileName ? (
-            <div className="list-progress-modal__current">
-              <span className="list-progress-modal__current-label">
-                画像
-              </span>
-
-              <span
-                className="list-progress-modal__current-file"
-                title={progress.currentFileName}
-              >
-                {progress.currentFileName}
-              </span>
-            </div>
-          ) : null}
-
-          {shouldShowUploadCount(progress) ? (
-            <div className="list-progress-modal__count">
-              <span>転送済み画像</span>
-
-              <strong>
-                {progress.completedUploadCount}
-                {" / "}
-                {progress.expectedUploadCount}
-              </strong>
-            </div>
-          ) : null}
-
-          {progress.phase === "uploading" &&
-          progress.isBrowserDependent ? (
-            <div
-              className="list-progress-modal__warning"
-              role="alert"
-            >
-              画像転送が完了するまで、この画面を閉じたり別のページへ移動したりしないでください。
-            </div>
-          ) : null}
-
-          {progress.phase === "saving" ? (
-            <div className="list-progress-modal__notice">
-              画像転送は完了しています。告知情報の保存処理を続けています。
-            </div>
-          ) : null}
-
-          {progress.errorMessage ? (
-            <div
-              className="list-progress-modal__error"
-              role="alert"
-            >
-              {progress.errorMessage}
-            </div>
-          ) : null}
+            {statusLabel}
+          </span>
+        ) : undefined
+      }
+      onClose={canClose ? onClose : undefined}
+      closeable={canClose}
+      closeOnBackdrop={canClose}
+      closeOnEscape={canClose}
+      showCloseButton={canClose}
+      closeLabel="進捗画面を閉じる"
+      ariaBusy={ariaBusy}
+      footer={
+        showFooter ? (
+          <ModalCloseButton onClick={onClose}>
+            閉じる
+          </ModalCloseButton>
+        ) : undefined
+      }
+    >
+      {shouldShowIndeterminate(progress) ? (
+        <div
+          className="list-progress-modal__indeterminate"
+          aria-label={
+            progress.phase === "saving"
+              ? "告知保存中"
+              : "処理準備中"
+          }
+        >
+          <div className="list-progress-modal__indeterminate-bar" />
         </div>
+      ) : null}
 
-        {progress.phase === "completed" ||
-        progress.phase === "failed" ? (
-          <div className="list-progress-modal__actions">
-            {canClose ? (
-              <button
-                type="button"
-                className="list-progress-modal__button list-progress-modal__button--secondary"
-                onClick={onClose}
-              >
-                閉じる
-              </button>
-            ) : null}
+      {shouldShowProgressBar(progress) ? (
+        <div className="list-progress-modal__progress-section">
+          <div className="list-progress-modal__progress-header">
+            <span className="list-progress-modal__progress-label">
+              画像転送
+            </span>
+
+            <span className="list-progress-modal__progress-percentage">
+              {progressPercentage}%
+            </span>
           </div>
-        ) : null}
-      </div>
-    </div>
-  );
 
-  return createPortal(
-    modal,
-    document.body,
+          <div
+            className="list-progress-modal__progress"
+            role="progressbar"
+            aria-label="告知画像転送進捗"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={progressPercentage}
+          >
+            <div
+              className="list-progress-modal__progress-bar"
+              style={{ width: `${progressPercentage}%` }}
+            />
+          </div>
+
+          <div className="list-progress-modal__bytes">
+            {formatBytes(progress.transferredBytes)}
+            {" / "}
+            {formatBytes(progress.totalBytes)}
+          </div>
+        </div>
+      ) : null}
+
+      {progress.phase === "uploading" && progress.currentFileName ? (
+        <div className="list-progress-modal__current">
+          <span className="list-progress-modal__current-label">
+            画像
+          </span>
+
+          <span
+            className="list-progress-modal__current-file"
+            title={progress.currentFileName}
+          >
+            {progress.currentFileName}
+          </span>
+        </div>
+      ) : null}
+
+      {shouldShowUploadCount(progress) ? (
+        <div className="list-progress-modal__count">
+          <span>転送済み画像</span>
+
+          <strong>
+            {progress.completedUploadCount}
+            {" / "}
+            {progress.expectedUploadCount}
+          </strong>
+        </div>
+      ) : null}
+
+      {progress.phase === "uploading" && progress.isBrowserDependent ? (
+        <div
+          className="list-progress-modal__warning"
+          role="alert"
+        >
+          画像転送が完了するまで、この画面を閉じたり別のページへ移動したりしないでください。
+        </div>
+      ) : null}
+
+      {progress.phase === "saving" ? (
+        <div className="list-progress-modal__notice">
+          画像転送は完了しています。告知情報の保存処理を続けています。
+        </div>
+      ) : null}
+
+      {progress.errorMessage ? (
+        <div
+          className="list-progress-modal__error"
+          role="alert"
+        >
+          {progress.errorMessage}
+        </div>
+      ) : null}
+    </Modal>
   );
 }

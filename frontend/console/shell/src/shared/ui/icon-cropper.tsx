@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 
 import type { IconCropPosition } from "../types/iconCrop";
 
+import "./icon-cropper.css";
+
 export type IconCropperProps = {
   src: string;
   position: IconCropPosition;
@@ -113,13 +115,18 @@ export function IconCropper({
 
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", updateViewportSize);
-      return () => window.removeEventListener("resize", updateViewportSize);
+
+      return () => {
+        window.removeEventListener("resize", updateViewportSize);
+      };
     }
 
     const observer = new ResizeObserver(updateViewportSize);
     observer.observe(viewport);
 
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+    };
   }, [updateViewportSize]);
 
   useEffect(() => {

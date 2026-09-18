@@ -52,7 +52,11 @@ export default function TokenBlueprintCreate() {
     initialEditMode,
   } = useTokenBlueprintCreate();
 
-  const { vm, handlers, selectedIconFile } = useTokenBlueprintCard({
+  const {
+    vm,
+    handlers,
+    buildIconFileForUpload,
+  } = useTokenBlueprintCard({
     initialTokenBlueprint,
     initialBurnAt: "",
     initialIconUrl: undefined,
@@ -169,13 +173,15 @@ export default function TokenBlueprintCreate() {
     }
 
     try {
+      const iconFile = await buildIconFileForUpload();
+
       await onSave({
         name: vm.name,
         symbol: vm.symbol,
         brandId: vm.brandId,
         description: vm.description,
         assigneeId,
-        iconFile: selectedIconFile ?? null,
+        iconFile,
         contents: pending.map((item) => ({
           id: item.id,
           file: item.file,
@@ -199,9 +205,9 @@ export default function TokenBlueprintCreate() {
     vm.symbol,
     vm.brandId,
     vm.description,
-    selectedIconFile,
     pending,
     onSave,
+    buildIconFileForUpload,
   ]);
 
   const progressCanClose =

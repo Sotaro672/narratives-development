@@ -3,7 +3,6 @@
 import { Upload, X } from "lucide-react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-
 import {
   Card,
   CardHeader,
@@ -12,11 +11,14 @@ import {
   CardLabel,
   CardInput,
 } from "../shared/ui/card";
+import IconCropper from "../shared/ui/icon-cropper";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
 import BrandCreateProgressModal from "../features/brand/presentation/components/brandCreateProgressModal";
 import { useBrandCreate } from "../features/brand/presentation/hook/useBrandCreate";
+
+import "../styles/brand.css";
 
 export default function BrandCreate() {
   const {
@@ -54,8 +56,15 @@ export default function BrandCreate() {
     brandIconInputRef,
     brandBackgroundInputRef,
 
+    brandIconFile,
     brandIconPreviewUrl,
     brandBackgroundPreviewUrl,
+
+    brandIconCropPosition,
+    brandIconCropScale,
+    handleBrandIconCropPositionChange,
+    handleBrandIconCropScaleChange,
+    handleBrandIconCropViewportSizeChange,
 
     brandIconError,
     brandBackgroundImageError,
@@ -80,9 +89,9 @@ export default function BrandCreate() {
   } = useBrandCreate();
 
   const accountLabel =
-    accountCandidates.find(
-      (candidate) => candidate.id === accountId,
-    )?.label ?? null;
+    accountCandidates.find((candidate) => candidate.id === accountId)?.label ?? null;
+
+  const isCroppingBrandIcon = Boolean(brandIconFile && brandIconPreviewUrl);
 
   const left = (
     <div className="space-y-4">
@@ -95,16 +104,8 @@ export default function BrandCreate() {
                   src={brandBackgroundPreviewUrl}
                   alt="ブランド背景画像"
                   className="brand-hero__cover-image"
-                  onClick={
-                    saving
-                      ? undefined
-                      : handlePickBrandBackground
-                  }
-                  style={{
-                    cursor: saving
-                      ? "default"
-                      : "pointer",
-                  }}
+                  onClick={saving ? undefined : handlePickBrandBackground}
+                  style={{ cursor: saving ? "default" : "pointer" }}
                 />
               ) : (
                 <button
@@ -159,43 +160,48 @@ export default function BrandCreate() {
 
             <div className="brand-hero__header">
               <div className="brand-hero__avatar-wrap">
-                <div className="brand-hero__avatar">
-                  {brandIconPreviewUrl ? (
-                    <img
-                      src={brandIconPreviewUrl}
-                      alt="ブランドアイコン"
-                      className="brand-hero__avatar-image"
-                      onClick={
-                        saving
-                          ? undefined
-                          : handlePickBrandIcon
-                      }
-                      style={{
-                        cursor: saving
-                          ? "default"
-                          : "pointer",
-                      }}
-                    />
-                  ) : (
-                    <button
-                      type="button"
-                      className="brand-hero__avatar-empty is-clickable"
-                      onClick={handlePickBrandIcon}
-                      disabled={saving}
-                    >
-                      アイコンを選択
-                    </button>
-                  )}
-
-                  <input
-                    ref={brandIconInputRef}
-                    type="file"
-                    accept={brandImageAccept}
-                    style={{ display: "none" }}
-                    onChange={handleBrandIconChange}
+                {isCroppingBrandIcon ? (
+                  <IconCropper
+                    src={brandIconPreviewUrl}
+                    position={brandIconCropPosition}
+                    scale={brandIconCropScale}
+                    onPositionChange={handleBrandIconCropPositionChange}
+                    onScaleChange={handleBrandIconCropScaleChange}
+                    onViewportSizeChange={handleBrandIconCropViewportSizeChange}
+                    alt="ブランドアイコンの切り抜きプレビュー"
                     disabled={saving}
                   />
-                </div>
+                ) : (
+                  <div className="brand-hero__avatar">
+                    {brandIconPreviewUrl ? (
+                      <img
+                        src={brandIconPreviewUrl}
+                        alt="ブランドアイコン"
+                        className="brand-hero__avatar-image"
+                        onClick={saving ? undefined : handlePickBrandIcon}
+                        style={{ cursor: saving ? "default" : "pointer" }}
+                      />
+                    ) : (
+                      <button
+                        type="button"
+                        className="brand-hero__avatar-empty is-clickable"
+                        onClick={handlePickBrandIcon}
+                        disabled={saving}
+                      >
+                        アイコンを選択
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <input
+                  ref={brandIconInputRef}
+                  type="file"
+                  accept={brandImageAccept}
+                  style={{ display: "none" }}
+                  onChange={handleBrandIconChange}
+                  disabled={saving}
+                />
 
                 <div className="brand-hero__toolbar brand-hero__toolbar--avatar">
                   <button
@@ -279,9 +285,7 @@ export default function BrandCreate() {
             className="w-full h-28 border rounded-lg px-3 py-2 text-sm mt-1"
             placeholder="ブランドの説明を入力してください"
             value={description}
-            onChange={(event) =>
-              setDescription(event.target.value)
-            }
+            onChange={(event) => setDescription(event.target.value)}
             disabled={saving}
           />
 
@@ -293,9 +297,7 @@ export default function BrandCreate() {
             id="websiteUrl"
             placeholder="https://example.com"
             value={websiteUrl}
-            onChange={(event) =>
-              setWebsiteUrl(event.target.value)
-            }
+            onChange={(event) => setWebsiteUrl(event.target.value)}
             disabled={saving}
           />
         </CardContent>
@@ -324,10 +326,7 @@ export default function BrandCreate() {
         accountLabel={accountLabel}
         accountCandidates={accountCandidates}
         loadingAccounts={loadingAccounts}
-        accountError={
-          accountLoadError ||
-          accountIdError
-        }
+        accountError={accountLoadError || accountIdError}
       />
     </div>
   );
@@ -347,11 +346,7 @@ export default function BrandCreate() {
       <BrandCreateProgressModal
         open={progressOpen}
         progress={progress}
-        onClose={
-          progress.isBlockingNavigation
-            ? undefined
-            : onCloseProgress
-        }
+        onClose={progress.isBlockingNavigation ? undefined : onCloseProgress}
       />
     </>
   );

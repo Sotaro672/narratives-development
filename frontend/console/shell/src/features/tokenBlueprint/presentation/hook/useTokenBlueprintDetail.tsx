@@ -85,9 +85,7 @@ type ExistingTokenBlueprintContentsProgressHandlers = {
   }) => void;
 };
 
-function errorMessageFromUnknown(
-  error: unknown,
-): string {
+function errorMessageFromUnknown(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -104,10 +102,7 @@ async function uploadAndAppendExistingTokenBlueprintContents(params: {
   progressHandlers?: ExistingTokenBlueprintContentsProgressHandlers;
 }): Promise<TokenBlueprint> {
   for (const file of params.files) {
-    const validation = validateImageForStorage(
-      file,
-      "tokenBlueprintContentImage",
-    );
+    const validation = validateImageForStorage(file, "tokenBlueprintContentImage");
 
     if (!validation.valid) {
       throw new Error(validation.reason);
@@ -136,9 +131,7 @@ async function uploadAndAppendExistingTokenBlueprintContents(params: {
         params.progressHandlers?.onUploadProgress?.({
           target: "content",
           fileName: file.name,
-          transferredBytes:
-            completedBytes +
-            progress.transferredBytes,
+          transferredBytes: completedBytes + progress.transferredBytes,
           totalBytes,
           completedUploadCount: index,
           expectedUploadCount: params.files.length,
@@ -260,23 +253,15 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       return;
     }
 
-    const handleBeforeUnload = (
-      event: BeforeUnloadEvent,
-    ) => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
     };
 
-    window.addEventListener(
-      "beforeunload",
-      handleBeforeUnload,
-    );
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
-      window.removeEventListener(
-        "beforeunload",
-        handleBeforeUnload,
-      );
+      window.removeEventListener("beforeunload", handleBeforeUnload);
     };
   }, [progress.isBlockingNavigation]);
 
@@ -288,7 +273,11 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
   const initialIconUrl = blueprint?.iconUrl ?? undefined;
   const tokenContents: ContentFile[] = blueprint?.contentFiles ?? [];
 
-  const { vm: cardVm, handlers: cardHandlers } = useTokenBlueprintCard({
+  const {
+    vm: cardVm,
+    handlers: cardHandlers,
+    buildIconFileForUpload,
+  } = useTokenBlueprintCard({
     initialTokenBlueprint: blueprint ?? undefined,
     initialBurnAt: "",
     initialIconUrl,
@@ -336,9 +325,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       return;
     }
 
-    setProgress(
-      createInitialTokenBlueprintProgress(),
-    );
+    setProgress(createInitialTokenBlueprintProgress());
   }, [progress.isBlockingNavigation]);
 
   const handleSave = useCallback(async (): Promise<void> => {
@@ -355,8 +342,6 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
       return;
     }
 
-    const iconFile = cardVm.iconFile ?? null;
-    const totalBytes = iconFile?.size ?? 0;
     let transferredBytes = 0;
 
     try {
@@ -369,6 +354,9 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         }),
       );
 
+      const iconFile = await buildIconFileForUpload();
+      const totalBytes = iconFile?.size ?? 0;
+
       const sourceBlueprint: TokenBlueprint = {
         ...blueprint,
         assigneeId,
@@ -377,7 +365,10 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
       const updated = await updateTokenBlueprintFromCard(
         sourceBlueprint,
-        cardVm,
+        {
+          ...cardVm,
+          iconFile,
+        },
         {
           onSaving: () => {
             setProgress(
@@ -390,26 +381,20 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
                   transferredBytes >= totalBytes
                     ? 1
                     : 0,
-                expectedUploadCount:
-                  iconFile
-                    ? 1
-                    : 0,
+                expectedUploadCount: iconFile ? 1 : 0,
               }),
             );
           },
 
           onIconProgress: (uploadProgress) => {
-            transferredBytes =
-              uploadProgress.transferredBytes;
+            transferredBytes = uploadProgress.transferredBytes;
 
             setProgress(
               createUploadingTokenBlueprintProgress({
                 target: "icon",
                 fileName: iconFile?.name ?? "",
-                transferredBytes:
-                  uploadProgress.transferredBytes,
-                totalBytes:
-                  uploadProgress.totalBytes,
+                transferredBytes: uploadProgress.transferredBytes,
+                totalBytes: uploadProgress.totalBytes,
                 completedUploadCount:
                   uploadProgress.percentage >= 100
                     ? 1
@@ -428,14 +413,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         createCompletedTokenBlueprintProgress({
           transferredBytes: totalBytes,
           totalBytes,
-          completedUploadCount:
-            iconFile
-              ? 1
-              : 0,
-          expectedUploadCount:
-            iconFile
-              ? 1
-              : 0,
+          completedUploadCount: iconFile ? 1 : 0,
+          expectedUploadCount: iconFile ? 1 : 0,
         }),
       );
     } catch (error) {
@@ -455,6 +434,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
     assigneeName,
     cardVm,
     cardHandlers,
+    buildIconFileForUpload,
   ]);
 
   const handleDelete = useCallback(async (): Promise<void> => {

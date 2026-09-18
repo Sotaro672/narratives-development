@@ -17,6 +17,8 @@ import {
   type ImageStorageTarget,
 } from "../../../../shared/storage/imageStoragePolicy";
 import type { Account } from "../../../../shared/types/account";
+import type { IconCropPosition } from "../../../../shared/types/iconCrop";
+import { cropIconImage } from "../../../../shared/util/cropIconImage";
 import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { accountRepositoryHTTP } from "../../../account/infrastructure/http/accountRepositoryHTTP";
 import {
@@ -54,6 +56,13 @@ type UploadBrandAssetsResult = {
   completedUploadCount: number;
   expectedUploadCount: number;
 };
+
+const INITIAL_BRAND_ICON_CROP_POSITION: IconCropPosition = {
+  x: 0,
+  y: 0,
+};
+
+const INITIAL_BRAND_ICON_CROP_SCALE = 1;
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -105,8 +114,7 @@ export function useBrandCreate() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [managerIdError, setManagerIdError] = useState<string | null>(null);
   const [brandIconError, setBrandIconError] = useState<string | null>(null);
-  const [brandBackgroundImageError, setBrandBackgroundImageError] =
-    useState<string | null>(null);
+  const [brandBackgroundImageError, setBrandBackgroundImageError] = useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [progress, setProgress] = useState<BrandCreateProgress>(
@@ -119,6 +127,11 @@ export function useBrandCreate() {
 
   const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
   const [brandBackgroundFile, setBrandBackgroundFile] = useState<File | null>(null);
+  const [brandIconCropPosition, setBrandIconCropPosition] = useState<IconCropPosition>(
+    INITIAL_BRAND_ICON_CROP_POSITION,
+  );
+  const [brandIconCropScale, setBrandIconCropScale] = useState(INITIAL_BRAND_ICON_CROP_SCALE);
+  const [brandIconCropViewportSize, setBrandIconCropViewportSize] = useState(0);
 
   const [brandIconPreviewUrl, setBrandIconPreviewUrl] = useState("");
   const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] = useState("");
@@ -126,6 +139,12 @@ export function useBrandCreate() {
   const isActive = true;
   const isUploading = progress.phase === "uploading" && saving;
   const progressOpen = isBrandCreateProgressVisible(progress);
+
+  const resetBrandIconCrop = useCallback(() => {
+    setBrandIconCropPosition(INITIAL_BRAND_ICON_CROP_POSITION);
+    setBrandIconCropScale(INITIAL_BRAND_ICON_CROP_SCALE);
+    setBrandIconCropViewportSize(0);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,10 +292,9 @@ export function useBrandCreate() {
   const handleBrandIconChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.currentTarget.files?.[0] ?? null;
+      event.currentTarget.value = "";
 
       if (!file) {
-        setBrandIconFile(null);
-        setBrandIconError(null);
         return;
       }
 
@@ -286,7 +304,7 @@ export function useBrandCreate() {
         setBrandIconFile(null);
         setBrandIcon("");
         setBrandIconError(validationError);
-        event.currentTarget.value = "";
+        resetBrandIconCrop();
         alert(validationError);
         return;
       }
@@ -294,8 +312,9 @@ export function useBrandCreate() {
       setBrandIconFile(file);
       setBrandIcon("");
       setBrandIconError(null);
+      resetBrandIconCrop();
     },
-    [validateSelectedImage],
+    [validateSelectedImage, resetBrandIconCrop],
   );
 
   const handleBrandBackgroundChange = useCallback(
@@ -308,10 +327,7 @@ export function useBrandCreate() {
         return;
       }
 
-      const validationError = validateSelectedImage(
-        file,
-        "brandBackgroundImage",
-      );
+      const validationError = validateSelectedImage(file, "brandBackgroundImage");
 
       if (validationError) {
         setBrandBackgroundFile(null);
@@ -333,11 +349,12 @@ export function useBrandCreate() {
     setBrandIconFile(null);
     setBrandIcon("");
     setBrandIconError(null);
+    resetBrandIconCrop();
 
     if (brandIconInputRef.current) {
       brandIconInputRef.current.value = "";
     }
-  }, []);
+  }, [resetBrandIconCrop]);
 
   const handleClearBrandBackground = useCallback(() => {
     setBrandBackgroundFile(null);
@@ -351,10 +368,7 @@ export function useBrandCreate() {
 
   const validateSelectedImagesBeforeSave = useCallback((): boolean => {
     if (brandIconFile) {
-      const validationError = validateSelectedImage(
-        brandIconFile,
-        "brandIcon",
-      );
+      const validationError = validateSelectedImage(brandIconFile, "brandIcon");
 
       if (validationError) {
         setBrandIconError(validationError);
@@ -385,23 +399,58 @@ export function useBrandCreate() {
     validateSelectedImage,
   ]);
 
+  const buildBrandIconFileForUpload = useCallback(async (): Promise<File | null> => {
+    if (!brandIconFile) {
+      return null;
+    }
+
+    if (brandIconCropViewportSize <= 0) {
+      throw new Error(
+        "ブランドアイコンの切り抜き領域を取得できませんでした。画像を選択し直してください。",
+      );
+    }
+
+    const croppedFile = await cropIconImage({
+      file: brandIconFile,
+      position: brandIconCropPosition,
+      scale: brandIconCropScale,
+      viewportSize: brandIconCropViewportSize,
+    });
+
+    const validation = validateImageForStorage(croppedFile, "brandIcon");
+
+    if (!validation.valid) {
+      throw new Error(validation.reason);
+    }
+
+    return croppedFile;
+  }, [
+    brandIconFile,
+    brandIconCropPosition,
+    brandIconCropScale,
+    brandIconCropViewportSize,
+  ]);
+
   const uploadBrandAssets = useCallback(
-    async (brandId: string): Promise<UploadBrandAssetsResult> => {
+    async (
+      brandId: string,
+      croppedBrandIconFile: File | null,
+    ): Promise<UploadBrandAssetsResult> => {
       let uploadedBrandIcon = brandIcon;
       let uploadedBrandBackgroundImage = brandBackgroundImage;
       let completedBytes = 0;
       let completedUploadCount = 0;
 
       const totalBytes =
-        (brandIconFile?.size ?? 0) +
+        (croppedBrandIconFile?.size ?? 0) +
         (brandBackgroundFile?.size ?? 0);
 
       const expectedUploadCount =
-        (brandIconFile ? 1 : 0) +
+        (croppedBrandIconFile ? 1 : 0) +
         (brandBackgroundFile ? 1 : 0);
 
-      if (brandIconFile) {
-        const currentFile = brandIconFile;
+      if (croppedBrandIconFile) {
+        const currentFile = croppedBrandIconFile;
 
         const uploaded = await uploadBrandAssetToFirebaseStorage({
           companyId,
@@ -412,8 +461,7 @@ export function useBrandCreate() {
             setProgress(
               createUploadingBrandCreateProgress({
                 fileName: currentFile.name,
-                transferredBytes:
-                  completedBytes + uploadProgress.transferredBytes,
+                transferredBytes: completedBytes + uploadProgress.transferredBytes,
                 totalBytes,
                 completedUploadCount,
                 expectedUploadCount,
@@ -439,8 +487,7 @@ export function useBrandCreate() {
             setProgress(
               createUploadingBrandCreateProgress({
                 fileName: currentFile.name,
-                transferredBytes:
-                  completedBytes + uploadProgress.transferredBytes,
+                transferredBytes: completedBytes + uploadProgress.transferredBytes,
                 totalBytes,
                 completedUploadCount,
                 expectedUploadCount,
@@ -467,7 +514,6 @@ export function useBrandCreate() {
       companyId,
       brandIcon,
       brandBackgroundImage,
-      brandIconFile,
       brandBackgroundFile,
     ],
   );
@@ -525,9 +571,7 @@ export function useBrandCreate() {
     }
 
     if (hasError) {
-      alert(
-        "受取口座、ブランド名、ブランド責任者を入力してください。",
-      );
+      alert("受取口座、ブランド名、ブランド責任者を入力してください。");
       return;
     }
 
@@ -541,6 +585,8 @@ export function useBrandCreate() {
     let localCreatedBrandId = "";
 
     try {
+      const croppedBrandIconFile = await buildBrandIconFileForUpload();
+
       setSaving(true);
       setCreatedBrandId("");
       setProgress(
@@ -578,7 +624,10 @@ export function useBrandCreate() {
         totalBytes,
         completedUploadCount,
         expectedUploadCount,
-      } = await uploadBrandAssets(localCreatedBrandId);
+      } = await uploadBrandAssets(
+        localCreatedBrandId,
+        croppedBrandIconFile,
+      );
 
       if (uploadedBrandIcon || uploadedBrandBackgroundImage) {
         setProgress(
@@ -588,18 +637,14 @@ export function useBrandCreate() {
             completedUploadCount,
             expectedUploadCount,
             title: "ブランド情報を保存中",
-            message:
-              "画像転送が完了しました。ブランド情報を更新しています。",
+            message: "画像転送が完了しました。ブランド情報を更新しています。",
           }),
         );
 
-        await brandRepositoryHTTP.update(
-          localCreatedBrandId,
-          {
-            brandIcon: uploadedBrandIcon,
-            brandBackgroundImage: uploadedBrandBackgroundImage,
-          },
-        );
+        await brandRepositoryHTTP.update(localCreatedBrandId, {
+          brandIcon: uploadedBrandIcon,
+          brandBackgroundImage: uploadedBrandBackgroundImage,
+        });
       }
 
       setProgress(
@@ -628,13 +673,18 @@ export function useBrandCreate() {
           ),
         );
       } else {
+        setBrandIconError(
+          brandIconFile
+            ? message
+            : null,
+        );
+
         setProgress(
           createFailedBrandCreateProgress(
             message,
             {
               title: "ブランド登録に失敗しました",
-              message:
-                "ブランド情報の登録中にエラーが発生しました。",
+              message: "ブランド情報の登録中にエラーが発生しました。",
             },
           ),
         );
@@ -651,7 +701,9 @@ export function useBrandCreate() {
     description,
     websiteUrl,
     currentMember?.id,
+    brandIconFile,
     uploadBrandAssets,
+    buildBrandIconFileForUpload,
     validateSelectedImagesBeforeSave,
   ]);
 
@@ -705,6 +757,12 @@ export function useBrandCreate() {
 
     brandIconPreviewUrl,
     brandBackgroundPreviewUrl,
+
+    brandIconCropPosition,
+    brandIconCropScale,
+    handleBrandIconCropPositionChange: setBrandIconCropPosition,
+    handleBrandIconCropScaleChange: setBrandIconCropScale,
+    handleBrandIconCropViewportSizeChange: setBrandIconCropViewportSize,
 
     brandIconError,
     brandBackgroundImageError,
