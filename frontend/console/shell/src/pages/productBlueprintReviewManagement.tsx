@@ -6,6 +6,8 @@ import List, {
 
 import { useProductBlueprintReviewManagement } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement";
 
+import "../styles/productBlueprintReview.css";
+
 type FilterOption = {
   value: string;
   label: string;
@@ -76,17 +78,15 @@ export default function ProductBlueprintReviewManagement() {
       {Rows.map((Row) => (
         <tr
           key={Row.ID || Row.ProductBlueprintID}
-          className="cursor-pointer transition hover:bg-[rgba(0,0,0,0.03)]"
+          className="pbrm-row"
           onClick={() => HandleRowClick(Row)}
         >
           <td>{Row.ProductName}</td>
-
           <td>{Row.Rating1Count}</td>
           <td>{Row.Rating2Count}</td>
           <td>{Row.Rating3Count}</td>
           <td>{Row.Rating4Count}</td>
           <td>{Row.Rating5Count}</td>
-
           <td>{Row.BrandName}</td>
           <td>{Row.AssigneeName}</td>
         </tr>

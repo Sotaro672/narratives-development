@@ -15,6 +15,8 @@ import ListTargetProductCard from "../features/list/presentation/components/List
 import ListSalesSummaryCard from "../features/list/presentation/components/ListSalesSummaryCard";
 import { useListDetail } from "../features/list/presentation/hook/useListDetail";
 
+import "../styles/list.css";
+
 export default function ListDetail() {
   const vm = useListDetail();
   const isEdit = vm.isEdit;
@@ -85,33 +87,33 @@ export default function ListDetail() {
         isSaving={vm.saving}
         onCreate={undefined}
       >
-        <div className="space-y-4">
+        <div className="list-detail__column">
           {vm.loading && (
-            <div className="text-sm text-[hsl(var(--muted-foreground))]">
+            <div className="list-detail__status list-detail__status--muted">
               読み込み中...
             </div>
           )}
 
           {vm.error && (
-            <div className="text-sm text-red-600">
+            <div className="list-detail__status list-detail__status--error">
               読み込みに失敗しました: {vm.error}
             </div>
           )}
 
           {isEdit && vm.deleteError && (
-            <div className="text-sm text-red-600">
+            <div className="list-detail__status list-detail__status--error">
               削除に失敗しました: {vm.deleteError}
             </div>
           )}
 
           {isEdit && vm.deleting && (
-            <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            <div className="list-detail__message list-detail__message--muted">
               削除中...
             </div>
           )}
 
           {vm.saveError && (
-            <div className="text-sm text-red-600">
+            <div className="list-detail__status list-detail__status--error">
               保存に失敗しました: {vm.saveError}
             </div>
           )}
@@ -136,13 +138,13 @@ export default function ListDetail() {
           />
 
           <Card>
-            <CardContent className="p-4 space-y-2">
-              <div className="text-sm font-medium">
+            <CardContent className="list-detail__card-content">
+              <div className="list-detail__label">
                 タイトル
               </div>
 
               {!isEdit && (
-                <div className="text-sm text-slate-800 break-words">
+                <div className="list-detail__text">
                   {vm.listingTitle || "未設定"}
                 </div>
               )}
@@ -166,13 +168,13 @@ export default function ListDetail() {
           </Card>
 
           <Card>
-            <CardContent className="p-4 space-y-2">
-              <div className="text-sm font-medium">
+            <CardContent className="list-detail__card-content">
+              <div className="list-detail__label">
                 説明
               </div>
 
               {!isEdit && (
-                <div className="text-sm text-slate-800 whitespace-pre-wrap break-words">
+                <div className="list-detail__text list-detail__text--description">
                   {vm.description || "未設定"}
                 </div>
               )}
@@ -186,7 +188,7 @@ export default function ListDetail() {
                       e.target.value,
                     )
                   }
-                  className="min-h-[120px]"
+                  className="list-detail__description-input"
                   disabled={
                     vm.saving ||
                     vm.deleting
@@ -214,13 +216,13 @@ export default function ListDetail() {
 
           {Array.isArray(effectivePriceRows) &&
             effectivePriceRows.length === 0 && (
-              <div className="text-xs text-[hsl(var(--muted-foreground))]">
+              <div className="list-detail__message list-detail__message--muted">
                 価格情報がありません。
               </div>
             )}
         </div>
 
-        <div className="space-y-4">
+        <div className="list-detail__column">
           <AdminCard
             title="担当者"
             mode={

@@ -1,5 +1,18 @@
 /* frontend/console/shell/src/styles/productBlueprintReview.css */
 
+/* Review Management */
+
+.pbrm-row {
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.pbrm-row:hover {
+  background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Review Detail */
+
 /* wrapper spacing like tokenBlueprintReview */
 
 .pbrd-reviewcard-wrapper {
@@ -31,10 +44,28 @@
   flex-wrap: wrap;
 }
 
+.pbrd-status-select {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.25rem;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+/* error */
+
+.pbrd-error {
+  margin-bottom: 0.75rem;
+}
+
 /* card */
 
 .pbrd-review-item-card {
   padding: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background-color: #ffffff;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
 /* review item parts */
@@ -62,4 +93,28 @@
 
 .pbrd-datetime {
   margin-top: 6px;
+}
+
+/* report */
+
+.pbrd-report-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
+
+.pbrd-report-button {
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.pbrd-report-button:hover {
+  background-color: #fef2f2;
+  color: #b91c1c;
+}
+
+/* log */
+
+.pbrd-log-section {
+  margin-top: 1rem;
 }

@@ -177,7 +177,7 @@ export default function ProductBlueprintReviewDetail() {
                     event.target.value as ReviewStatus,
                   )
                 }
-                className="border rounded px-2 py-1"
+                className="pbrd-status-select"
               >
                 <option value="PUBLISHED">
                   {statusLabelJa("PUBLISHED")}
@@ -225,7 +225,7 @@ export default function ProductBlueprintReviewDetail() {
             <Text
               as="div"
               tone="destructive"
-              className="mb-3"
+              className="pbrd-error"
               role="alert"
             >
               {ErrorMessage}
@@ -295,7 +295,7 @@ export default function ProductBlueprintReviewDetail() {
                   return (
                     <div
                       key={ReviewKey}
-                      className="pbrd-review-item-card rounded-xl border border-slate-200 bg-white shadow-sm"
+                      className="pbrd-review-item-card"
                     >
                       <div className="pbrd-author-row">
                         {AvatarIcon ? (
@@ -349,12 +349,12 @@ export default function ProductBlueprintReviewDetail() {
                       </Text>
 
                       {CanReport ? (
-                        <div className="mt-3 flex justify-end">
+                        <div className="pbrd-report-actions">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                            className="pbrd-report-button"
                             disabled={ReportSubmitting}
                             onClick={() => OpenReport(ReviewID)}
                           >
@@ -383,7 +383,7 @@ export default function ProductBlueprintReviewDetail() {
             mode="view"
           />
 
-          <div className="section-gap">
+          <div className="pbrd-log-section">
             <LogCard />
           </div>
         </div>

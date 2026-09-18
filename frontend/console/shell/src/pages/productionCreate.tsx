@@ -55,14 +55,14 @@ export default function ProductionCreate() {
       onBack={onBack}
       onSave={onSave}
     >
-      <div className="space-y-4">
+      <div className="production-create__column">
         {selectedProductBlueprint ? (
           <ProductBlueprintCard
             mode="view"
             productBlueprintPatch={selectedProductBlueprint}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-gray-500">
+          <div className="production-create__product-empty">
             商品設計を選択してください
           </div>
         )}
@@ -78,7 +78,7 @@ export default function ProductionCreate() {
         )}
       </div>
 
-      <div className="space-y-4">
+      <div className="production-create__column">
         <AdminCard
           mode="edit"
           title="管理情報"
@@ -129,7 +129,7 @@ export default function ProductionCreate() {
                   )}
 
                   {brandError && (
-                    <div className="pb-select__empty text-red-500">
+                    <div className="pb-select__empty pb-select__empty--error">
                       ブランド一覧の取得に失敗しました。
                     </div>
                   )}
@@ -145,7 +145,7 @@ export default function ProductionCreate() {
           </CardHeader>
 
           <CardContent>
-            <Table className="border rounded">
+            <Table className="production-create__product-table">
               <TableHeader>
                 <TableRow>
                   <TableHead>商品名</TableHead>
@@ -156,8 +156,8 @@ export default function ProductionCreate() {
                 {productRows.map((product) => (
                   <TableRow
                     key={product.id}
-                    className={`cursor-pointer hover:bg-blue-50${
-                      selectedProductId === product.id ? " bg-blue-100" : ""
+                    className={`production-create__product-row${
+                      selectedProductId === product.id ? " is-active" : ""
                     }`}
                     onClick={() => selectProductById(product.id)}
                   >
@@ -167,7 +167,7 @@ export default function ProductionCreate() {
 
                 {productRows.length === 0 && (
                   <TableRow>
-                    <TableCell className="text-center text-gray-500">
+                    <TableCell className="production-create__product-empty-cell">
                       対象の商品設計がありません
                     </TableCell>
                   </TableRow>

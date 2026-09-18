@@ -181,21 +181,21 @@ export default function ProductionDetail() {
           : undefined
       }
     >
-      <div className="space-y-4">
+      <div className="production-detail__column">
         {loading && (
-          <div className="flex h-full items-center justify-center text-gray-500">
+          <div className="production-detail__state">
             生産情報を読み込み中です…
           </div>
         )}
 
         {!loading && error && (
-          <div className="flex h-full items-center justify-center text-red-500">
+          <div className="production-detail__state production-detail__state--error">
             {error}
           </div>
         )}
 
         {!loading && !error && !production && (
-          <div className="flex h-full items-center justify-center text-gray-500">
+          <div className="production-detail__state">
             対象の生産情報が見つかりません。
           </div>
         )}
@@ -228,7 +228,7 @@ export default function ProductionDetail() {
         )}
       </div>
 
-      <div className="space-y-4">
+      <div className="production-detail__column">
         <AdminCard
           title="管理情報"
           assigneeId={assigneeId || undefined}

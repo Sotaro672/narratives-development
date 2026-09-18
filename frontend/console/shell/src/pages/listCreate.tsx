@@ -1,5 +1,4 @@
-// frontend/console/shell/src/pages/listCreate.tsx
-
+//frontend\console\shell\src\pages\listCreate.tsx
 import * as React from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
@@ -21,6 +20,8 @@ import InventoryListCard from "../features/inventory/presentation/components/Inv
 import {
   useListCreate,
 } from "../features/inventory/presentation/hook/useListCreate";
+
+import "../styles/list.css";
 
 export default function InventoryListCreate() {
   const {
@@ -120,7 +121,7 @@ export default function InventoryListCreate() {
         isSaving={saving}
       >
         {/* 左カラム */}
-        <div className="space-y-4">
+        <div className="list-create__column">
           <ListImageCard
             isEdit={true}
             saving={saving}
@@ -133,8 +134,8 @@ export default function InventoryListCreate() {
           />
 
           <Card>
-            <CardContent className="p-4 space-y-2">
-              <div className="text-sm font-medium">
+            <CardContent className="list-create__card-content list-create__card-content--stack">
+              <div className="list-create__label">
                 タイトル
               </div>
 
@@ -146,15 +147,15 @@ export default function InventoryListCreate() {
                   )
                 }
                 placeholder="例: Narratives シャツ1（赤 / S・M）"
-                className="w-full h-10 px-3 rounded-md border border-slate-200 bg-white text-sm outline-none focus:ring-2 focus:ring-slate-200"
+                className="list-create__title-input"
                 disabled={saving}
               />
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="p-4 space-y-2">
-              <div className="text-sm font-medium">
+            <CardContent className="list-create__card-content list-create__card-content--stack">
+              <div className="list-create__label">
                 説明
               </div>
 
@@ -181,40 +182,40 @@ export default function InventoryListCreate() {
           />
 
           {priceRows.length === 0 && (
-            <div className="text-xs text-[hsl(var(--muted-foreground))]">
+            <div className="list-create__message list-create__message--muted">
               価格行データは未取得です。
             </div>
           )}
 
           {missingModelIdCount > 0 && (
-            <div className="text-xs text-red-600">
+            <div className="list-create__message list-create__message--error">
               modelId が未設定の価格行があります: {missingModelIdCount} 件
             </div>
           )}
         </div>
 
         {/* 右カラム */}
-        <div className="space-y-4">
+        <div className="list-create__column">
           {loadingDTO && (
-            <div className="text-sm text-[hsl(var(--muted-foreground))]">
+            <div className="list-create__status list-create__status--muted">
               読み込み中...
             </div>
           )}
 
           {dtoError && (
-            <div className="text-sm text-red-600">
+            <div className="list-create__status list-create__status--error">
               読み込みに失敗しました: {dtoError}
             </div>
           )}
 
           <Card>
-            <CardContent className="p-4">
-              <div className="text-sm font-medium mb-2">
+            <CardContent className="list-create__card-content">
+              <div className="list-create__label list-create__label--spaced">
                 担当者
               </div>
 
               {loadingMembers ? (
-                <div className="text-xs text-slate-400">
+                <div className="list-create__assignee-message">
                   担当者を読み込み中です…
                 </div>
               ) : assigneeOptions.length > 0 ? (
@@ -226,7 +227,7 @@ export default function InventoryListCreate() {
                   disabled={saving}
                 />
               ) : (
-                <div className="text-xs text-slate-400">
+                <div className="list-create__assignee-message">
                   担当者候補がありません。
                 </div>
               )}

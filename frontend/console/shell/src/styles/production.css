@@ -1,4 +1,66 @@
-/* frontend/console/production/src/presentation/styles/production.css */
+/* frontend/console/shell/src/styles/production.css */
+
+/* =========================================================
+ * 生産計画作成
+ * ======================================================= */
+
+.production-create__column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.production-create__product-empty {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+}
+
+.production-create__product-table {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.25rem;
+}
+
+.production-create__product-row {
+  cursor: pointer;
+}
+
+.production-create__product-row:hover {
+  background-color: #eff6ff;
+}
+
+.production-create__product-row.is-active {
+  background-color: #dbeafe;
+}
+
+.production-create__product-empty-cell {
+  color: #6b7280;
+  text-align: center;
+}
+
+/* =========================================================
+ * 生産詳細
+ * ======================================================= */
+
+.production-detail__column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.production-detail__state {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: #6b7280;
+}
+
+.production-detail__state--error {
+  color: #ef4444;
+}
 
 /* =========================================================
  * 生産数テーブル
@@ -288,6 +350,10 @@
   padding: 10px 8px;
   color: var(--pbp-text-soft, rgba(0, 0, 0, 0.6));
   font-size: 0.78rem;
+}
+
+.pb-select__empty--error {
+  color: #ef4444;
 }
 
 /* =========================================================
