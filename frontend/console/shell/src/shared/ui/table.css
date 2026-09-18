@@ -1,0 +1,121 @@
+/* frontend/console/shell/src/shared/ui/table.css */
+
+/* =========================================================
+ * Container
+ * ======================================================= */
+
+.table__container {
+  position: relative;
+  width: 100%;
+  overflow-x: auto;
+}
+
+/* =========================================================
+ * Table
+ * ======================================================= */
+
+.table {
+  width: 100%;
+  caption-side: bottom;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+/* =========================================================
+ * Header
+ * ======================================================= */
+
+.table__header tr {
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+/* =========================================================
+ * Body
+ * ======================================================= */
+
+.table__body tr:last-child {
+  border-bottom: 0;
+}
+
+/* =========================================================
+ * Footer
+ * ======================================================= */
+
+.table__footer {
+  border-top: 1px solid hsl(var(--border));
+  background-color: hsl(var(--muted) / 0.5);
+  font-weight: 500;
+}
+
+.table__footer > tr:last-child {
+  border-bottom: 0;
+}
+
+/* =========================================================
+ * Row
+ * ======================================================= */
+
+.table__row {
+  border-bottom: 1px solid hsl(var(--border));
+  transition: background-color 0.15s ease;
+}
+
+.table__row:hover {
+  background-color: hsl(var(--muted) / 0.5);
+}
+
+.table__row[data-state="selected"] {
+  background-color: hsl(var(--muted));
+}
+
+/* =========================================================
+ * Head
+ * ======================================================= */
+
+.table__head {
+  height: 2.5rem;
+  padding-right: 0.5rem;
+  padding-left: 0.5rem;
+  color: hsl(var(--foreground));
+  font-weight: 500;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table__head:has([role="checkbox"]) {
+  padding-right: 0;
+}
+
+.table__head > [role="checkbox"] {
+  transform: translateY(2px);
+}
+
+/* =========================================================
+ * Cell
+ * ======================================================= */
+
+.table__cell {
+  padding: 0.5rem;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.table__cell:has([role="checkbox"]) {
+  padding-right: 0;
+}
+
+.table__cell > [role="checkbox"] {
+  transform: translateY(2px);
+}
+
+/* =========================================================
+ * Caption
+ * ======================================================= */
+
+.table__caption {
+  margin-top: 1rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}

@@ -11,7 +11,6 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
-
 import {
   Table,
   TableBody,
@@ -20,8 +19,8 @@ import {
   TableHeader,
   TableRow,
 } from "../../../../shared/ui/table";
-
 import { Input } from "../../../../shared/ui/input";
+
 import type { ProductionQuantityRow } from "../../../../shared/types/production";
 import { rgbIntToHex } from "../../../../shared/util/color";
 
@@ -30,6 +29,7 @@ type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 type ProductionQuantityCardProps = {
   title?: string;
   rows: ProductionQuantityRow[];
+
   /**
    * ProductBlueprintCategory.code を渡す想定。
    *
@@ -169,26 +169,36 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
       </CardHeader>
 
       <CardContent>
-        <Table className="mqc__table">
+        <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="mqc__th mqc__th--left">
+              <TableHead>
                 型番
               </TableHead>
 
               {isAlcoholCategory ? (
                 <>
-                  <TableHead className="mqc__th">容量</TableHead>
-                  <TableHead className="mqc__th">単位</TableHead>
+                  <TableHead>
+                    容量
+                  </TableHead>
+
+                  <TableHead>
+                    単位
+                  </TableHead>
                 </>
               ) : (
                 <>
-                  <TableHead className="mqc__th">サイズ</TableHead>
-                  <TableHead className="mqc__th">カラー</TableHead>
+                  <TableHead>
+                    サイズ
+                  </TableHead>
+
+                  <TableHead>
+                    カラー
+                  </TableHead>
                 </>
               )}
 
-              <TableHead className="mqc__th mqc__cell">
+              <TableHead className="mqc__quantity-cell">
                 生産数
               </TableHead>
             </TableRow>
@@ -206,21 +216,23 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
 
               return (
                 <TableRow key={row.modelId}>
-                  <TableCell>{modelNumber}</TableCell>
+                  <TableCell>
+                    {modelNumber}
+                  </TableCell>
 
                   {isAlcoholCategory ? (
                     <>
-                      <TableCell className="mqc__size">
+                      <TableCell>
                         {getVolumeValueLabel(row) || "-"}
                       </TableCell>
 
-                      <TableCell className="mqc__size">
+                      <TableCell>
                         {getVolumeUnitLabel(row) || "-"}
                       </TableCell>
                     </>
                   ) : (
                     <>
-                      <TableCell className="mqc__size">
+                      <TableCell>
                         {row.size ?? "-"}
                       </TableCell>
 
@@ -231,13 +243,15 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                             style={{ backgroundColor }}
                             title={rgbHex ?? ""}
                           />
-                          <span>{row.color ?? "-"}</span>
+                          <span>
+                            {row.color ?? "-"}
+                          </span>
                         </span>
                       </TableCell>
                     </>
                   )}
 
-                  <TableCell className="mqc__cell">
+                  <TableCell className="mqc__quantity-cell">
                     {isEditable ? (
                       <Input
                         type="number"
@@ -254,7 +268,9 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                         aria-label={`${modelNumber} の生産数`}
                       />
                     ) : (
-                      <span>{row.quantity}</span>
+                      <span>
+                        {row.quantity}
+                      </span>
                     )}
                   </TableCell>
                 </TableRow>
@@ -262,15 +278,15 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
             })}
 
             {sortedRows.length > 0 && (
-              <TableRow className="mqc__footer-row">
+              <TableRow className="mqc__total-row">
                 <TableCell
                   colSpan={3}
-                  className="mqc__footer-label"
+                  className="mqc__total-label"
                 >
                   合計
                 </TableCell>
 
-                <TableCell className="mqc__footer-cell">
+                <TableCell className="mqc__quantity-cell">
                   <span className="mqc__pill mqc__pill--total">
                     {totalQuantity}
                   </span>
