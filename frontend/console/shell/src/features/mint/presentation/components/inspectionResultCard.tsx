@@ -2,14 +2,22 @@
 
 import * as React from "react";
 import { Palette } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "../../../../shared/ui/card";
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardTitle,
+} from "../../../../shared/ui/card";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../../../shared/ui/table";
 import { rgbIntToHex } from "../../../../shared/util/color";
 import type { InspectionResultCardData } from "../../application/mapper/buildInspectionResultCardData";
@@ -35,34 +43,49 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
   const totalLabelColSpan = showVolumeColumn ? 2 : 3;
 
   return (
-    <Card className={`ivc ${className ?? ""}`}>
-      <CardHeader className="ivc__header">
-        <div className="ivc__header-inner">
-          <Palette className="ivc__icon" size={18} />
-          <CardTitle className="ivc__title">
+    <Card className={className}>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Palette className="card__header-icon-svg" />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
             {title || "モデル別検査結果"}
           </CardTitle>
-        </div>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="ivc__body">
+      <CardContent>
         <div className="ivc__table-wrap">
           <Table className="ivc__table">
             <TableHeader>
               <TableRow>
-                <TableHead className="ivc__th ivc__th--left">型番</TableHead>
+                <TableHead className="ivc__th ivc__th--left">
+                  型番
+                </TableHead>
 
                 {showVolumeColumn ? (
-                  <TableHead className="ivc__th">容量</TableHead>
+                  <TableHead className="ivc__th">
+                    容量
+                  </TableHead>
                 ) : (
                   <>
-                    <TableHead className="ivc__th">サイズ</TableHead>
-                    <TableHead className="ivc__th">カラー</TableHead>
+                    <TableHead className="ivc__th">
+                      サイズ
+                    </TableHead>
+                    <TableHead className="ivc__th">
+                      カラー
+                    </TableHead>
                   </>
                 )}
 
-                <TableHead className="ivc__th ivc__th--right">合格数</TableHead>
-                <TableHead className="ivc__th ivc__th--right">生産数</TableHead>
+                <TableHead className="ivc__th ivc__th--right">
+                  合格数
+                </TableHead>
+                <TableHead className="ivc__th ivc__th--right">
+                  生産数
+                </TableHead>
               </TableRow>
             </TableHeader>
 
@@ -95,7 +118,7 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
                             className="ivc__color-dot"
                             style={{
                               backgroundColor,
-                              boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                              boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.18)",
                             }}
                             title={rgbHex ?? ""}
                           />
@@ -123,7 +146,10 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
 
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={emptyColSpan} className="ivc__empty">
+                  <TableCell
+                    colSpan={emptyColSpan}
+                    className="ivc__empty"
+                  >
                     表示できる検査結果データがありません。
                   </TableCell>
                 </TableRow>

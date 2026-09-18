@@ -3,11 +3,33 @@
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import { Button } from "../../../../shared/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardTitle,
+} from "../../../../shared/ui/card";
 import { useListImageCard } from "../hook/useListImageCard";
 
-function ImageIcon() {
+type IconProps = {
+  className?: string;
+  size?: number;
+};
+
+function ImageIcon({
+  className = "ivc__icon",
+  size = 28,
+}: IconProps) {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" className="ivc__icon">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+    >
       <path
         d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2Z"
         stroke="currentColor"
@@ -29,8 +51,19 @@ function ImageIcon() {
 
 function PlusIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="ivc__icon">
-      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      className="ivc__icon"
+    >
+      <path
+        d="M12 5v14M5 12h14"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
@@ -63,33 +96,37 @@ export default function ListImageCard(props: ListImageCardProps) {
   });
 
   return (
-    <div className="ivc">
-      <div className="ivc__header">
-        <div className="lic__header">
-          <div className="lic__header-left">
-            <span className="lic__icon-wrap">
-              <ImageIcon />
-            </span>
-            <span className="ivc__title">商品画像</span>
+    <Card>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <ImageIcon
+              size={18}
+              className="card__header-icon-svg"
+            />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
+            商品画像
+          </CardTitle>
+        </CardHeaderLeft>
+
+        {props.isEdit && vm.effectiveImageUrls.length > 0 && (
+          <div className="lic__actions">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={vm.handleClear}
+              disabled={Boolean(props.saving)}
+            >
+              クリア
+            </Button>
           </div>
+        )}
+      </CardHeader>
 
-          {props.isEdit && vm.effectiveImageUrls.length > 0 && (
-            <div className="lic__actions">
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-8"
-                onClick={vm.handleClear}
-                disabled={Boolean(props.saving)}
-              >
-                クリア
-              </Button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="ivc__body">
+      <CardContent>
         <input
           ref={vm.imageInputRef as any}
           type="file"
@@ -101,16 +138,27 @@ export default function ListImageCard(props: ListImageCardProps) {
 
         {!vm.hasImages && (
           <div
-            className={["lic__empty", props.isEdit ? "lic__empty--clickable" : ""].join(" ")}
+            className={[
+              "lic__empty",
+              props.isEdit ? "lic__empty--clickable" : "",
+            ].join(" ")}
             onClick={vm.openPicker}
             role="button"
             tabIndex={0}
-            title={props.isEdit ? "クリックで画像を追加" : undefined}
+            title={
+              props.isEdit
+                ? "クリックで画像を追加"
+                : undefined
+            }
           >
             <div className="lic__empty-icon">
               <ImageIcon />
             </div>
-            <div className="lic__empty-title">画像を追加</div>
+
+            <div className="lic__empty-title">
+              画像を追加
+            </div>
+
             <div className="lic__empty-sub">
               {props.isEdit
                 ? "クリックで選択（複数可）"
@@ -123,76 +171,109 @@ export default function ListImageCard(props: ListImageCardProps) {
           <>
             <div
               className="lic__main"
-              title={props.isEdit ? "クリックで画像追加（複数可）" : undefined}
+              title={
+                props.isEdit
+                  ? "クリックで画像追加（複数可）"
+                  : undefined
+              }
             >
               <div
-                className={["lic__main-media", props.isEdit ? "lic__main-media--clickable" : ""].join(
-                  " ",
-                )}
+                className={[
+                  "lic__main-media",
+                  props.isEdit
+                    ? "lic__main-media--clickable"
+                    : "",
+                ].join(" ")}
                 onClick={vm.openPicker}
                 role={props.isEdit ? "button" : undefined}
                 tabIndex={props.isEdit ? 0 : undefined}
               >
-                {vm.mainUrl && <img src={vm.mainUrl} alt="main" className="lic__img" />}
+                {vm.mainUrl && (
+                  <img
+                    src={vm.mainUrl}
+                    alt="main"
+                    className="lic__img"
+                  />
+                )}
               </div>
 
               {props.isEdit && (
                 <button
                   type="button"
                   className="lic__remove-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    vm.handleRemoveAt(props.mainImageIndex);
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    vm.handleRemoveAt(
+                      props.mainImageIndex,
+                    );
                   }}
                   aria-label="remove main image"
                   title="削除"
                   disabled={Boolean(props.saving)}
                 >
-                  <span className="lic__remove-x">×</span>
+                  <span className="lic__remove-x">
+                    ×
+                  </span>
                 </button>
               )}
 
               <div className="lic__footer">
                 <div className="lic__footer-left">
                   {vm.effectiveImageUrls.length} 枚
-                  {props.isEdit ? "（×で削除 / クリックで追加）" : "（サムネでメイン切替）"}
+                  {props.isEdit
+                    ? "（×で削除 / クリックで追加）"
+                    : "（サムネでメイン切替）"}
                 </div>
+
                 {!props.isEdit && (
-                  <div className="lic__footer-note">※ 画像変更は編集モードで行えます</div>
+                  <div className="lic__footer-note">
+                    ※ 画像変更は編集モードで行えます
+                  </div>
                 )}
               </div>
             </div>
 
             <div className="lic__grid">
               {vm.thumbIndices.map((idx: number) => {
-                const url = vm.effectiveImageUrls[idx] ?? "";
+                const url =
+                  vm.effectiveImageUrls[idx] ?? "";
 
                 return (
                   <div
                     key={`${url}-${idx}`}
                     className="lic__thumb"
-                    onClick={() => vm.handleSetMainIndex(idx)}
+                    onClick={() =>
+                      vm.handleSetMainIndex(idx)
+                    }
                     role="button"
                     tabIndex={0}
                     title="クリックでメインに設定"
                   >
                     <div className="lic__thumb-media">
-                      {url && <img src={url} alt={`sub-${idx}`} className="lic__img" />}
+                      {url && (
+                        <img
+                          src={url}
+                          alt={`sub-${idx}`}
+                          className="lic__img"
+                        />
+                      )}
                     </div>
 
                     {props.isEdit && (
                       <button
                         type="button"
                         className="lic__thumb-remove"
-                        onClick={(e) => {
-                          e.stopPropagation();
+                        onClick={(event) => {
+                          event.stopPropagation();
                           vm.handleRemoveAt(idx);
                         }}
                         aria-label="remove image"
                         title="削除"
                         disabled={Boolean(props.saving)}
                       >
-                        <span className="lic__remove-x">×</span>
+                        <span className="lic__remove-x">
+                          ×
+                        </span>
                       </button>
                     )}
                   </div>
@@ -210,13 +291,16 @@ export default function ListImageCard(props: ListImageCardProps) {
                   <div className="lic__empty-icon">
                     <PlusIcon />
                   </div>
-                  <div className="lic__add-title">画像を追加</div>
+
+                  <div className="lic__add-title">
+                    画像を追加
+                  </div>
                 </div>
               )}
             </div>
           </>
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

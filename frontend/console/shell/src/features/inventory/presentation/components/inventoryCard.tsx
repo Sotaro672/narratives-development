@@ -5,17 +5,19 @@ import { Palette } from "lucide-react";
 
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardTitle,
 } from "../../../../shared/ui/card";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../../../shared/ui/table";
 import type { InventoryDetailRowDTO } from "../../../../shared/types/inventory";
 import { rgbIntToHex } from "../../../../shared/util/color";
@@ -84,7 +86,6 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
   rows,
   productBlueprintCategory,
   className,
-  mode = "view",
 }) => {
   const categoryKind = React.useMemo(
     () =>
@@ -105,24 +106,20 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
   const footerColSpan = 3;
 
   return (
-    <Card className={`ivc ${className ?? ""}`}>
-      <CardHeader className="ivc__header">
-        <div className="ivc__header-inner">
-          <Palette className="ivc__icon" size={18} />
+    <Card className={className}>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Palette className="card__header-icon-svg" />
+          </CardHeaderIcon>
 
-          <CardTitle className="ivc__title">
+          <CardTitle strong>
             {title}
-
-            {mode !== "view" && (
-              <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
-                （{mode}）
-              </span>
-            )}
           </CardTitle>
-        </div>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="ivc__body">
+      <CardContent>
         <div className="ivc__table-wrap">
           <Table className="ivc__table">
             <TableHeader>
@@ -160,7 +157,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
             <TableBody>
               {rows.map((row) => {
                 const rgbHex = rgbIntToHex(row.rgb) ?? null;
-                const bgColor = rgbHex ?? "#ffffff";
+                const backgroundColor = rgbHex ?? "#ffffff";
 
                 return (
                   <TableRow key={row.modelId} className="ivc__tr">
@@ -186,8 +183,8 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
                           <span
                             className="ivc__color-dot"
                             style={{
-                              backgroundColor: bgColor,
-                              boxShadow: "0 0 0 1px rgba(0,0,0,0.18)",
+                              backgroundColor,
+                              boxShadow: "0 0 0 1px rgba(0, 0, 0, 0.18)",
                             }}
                             title={rgbHex ?? ""}
                           />

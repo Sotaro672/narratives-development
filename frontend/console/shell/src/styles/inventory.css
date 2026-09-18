@@ -1,67 +1,12 @@
-/* frontend\console\inventory\src\presentation\styles\inventory.css
-/* モデル別在庫一覧カード */
-.ivc {
-  background-color: var(--pbp-surface, #ffffff);
-  border-radius: 18px;
-  border: 1px solid var(--pbp-border, rgba(15, 23, 42, 0.08));
-  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
-  padding: 0;
-  box-sizing: border-box;
-}
+/* frontend/console/inventory/src/presentation/styles/inventory.css */
 
-/* Header */
-.ivc__header {
-  padding: 16px 20px 10px;
-  border-bottom: none;
-}
-
-.ivc__header-inner {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
+/* =========================================================
+ * ListImageCard
+ * Cardの外枠・Header・Title・Contentはshared/ui/cardを利用
+ * ======================================================= */
 
 .ivc__icon {
   color: var(--pbp-text-soft, rgba(15, 23, 42, 0.55));
-}
-
-.ivc__title {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--pbp-text, #111827);
-}
-
-/* Body */
-.ivc__body {
-  padding: 0 20px 16px;
-}
-
-/* ============================================================
-   ListImageCard 専用（Tailwind から移譲）
-   ============================================================ */
-
-.lic__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.lic__header-left {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.lic__icon-wrap {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 10px;
-  background: rgba(248, 250, 252, 1);
-  border: 1px solid rgba(226, 232, 240, 1);
 }
 
 .lic__actions {
@@ -70,20 +15,21 @@
   gap: 8px;
 }
 
-/* アップロードエリア（empty） */
+/* =========================================================
+ * アップロードエリア
+ * ======================================================= */
+
 .lic__empty {
-  border-radius: 16px;
-  border: 1px dashed rgba(203, 213, 225, 1);
-  background: rgba(248, 250, 252, 0.3);
+  display: flex;
   width: 100%;
   aspect-ratio: 16 / 9;
-
-  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 12px;
-
+  border: 1px dashed rgba(203, 213, 225, 1);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.3);
   user-select: none;
 }
 
@@ -92,34 +38,37 @@
 }
 
 .lic__empty-icon {
+  display: flex;
   width: 48px;
   height: 48px;
-  border-radius: 14px;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 1);
-  display: flex;
   align-items: center;
   justify-content: center;
+  border: 1px solid rgba(226, 232, 240, 1);
+  border-radius: 14px;
+  background: #ffffff;
 }
 
 .lic__empty-title {
-  font-size: 0.9rem;
   color: rgba(51, 65, 85, 1);
+  font-size: 0.9rem;
 }
 
 .lic__empty-sub {
-  font-size: 0.75rem;
-  color: hsl(var(--muted-foreground));
-  text-align: center;
   padding: 0 12px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  text-align: center;
 }
 
-/* メイン（大） */
+/* =========================================================
+ * メイン画像
+ * ======================================================= */
+
 .lic__main {
   position: relative;
-  border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(226, 232, 240, 1);
+  border-radius: 16px;
   background: #ffffff;
 }
 
@@ -134,28 +83,24 @@
 }
 
 .lic__img {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  display: block;
 }
 
 .lic__remove-btn {
   position: absolute;
   top: 12px;
   right: 12px;
-
+  display: flex;
   width: 32px;
   height: 32px;
-  border-radius: 999px;
-
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(226, 232, 240, 1);
-
-  display: flex;
   align-items: center;
   justify-content: center;
-
+  border: 1px solid rgba(226, 232, 240, 1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
   cursor: pointer;
 }
 
@@ -168,45 +113,44 @@
   line-height: 1;
 }
 
-/* footer */
-.lic__footer {
-  padding: 8px 12px;
-  border-top: 1px solid rgba(226, 232, 240, 1);
+/* =========================================================
+ * メイン画像 Footer
+ * ======================================================= */
 
+.lic__footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  border-top: 1px solid rgba(226, 232, 240, 1);
+  padding: 8px 12px;
 }
 
 .lic__footer-left {
-  font-size: 0.75rem;
   color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
 }
 
 .lic__footer-note {
-  font-size: 11px;
   color: rgba(148, 163, 184, 1);
+  font-size: 11px;
 }
 
-/* サムネ grid */
+/* =========================================================
+ * サムネイル
+ * ======================================================= */
+
 .lic__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
-@media (min-width: 640px) {
-  .lic__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 .lic__thumb {
   position: relative;
-  border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(226, 232, 240, 1);
+  border-radius: 16px;
   background: #ffffff;
   cursor: pointer;
 }
@@ -221,18 +165,14 @@
   position: absolute;
   top: 8px;
   right: 8px;
-
+  display: flex;
   width: 28px;
   height: 28px;
-  border-radius: 999px;
-
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(226, 232, 240, 1);
-
-  display: flex;
   align-items: center;
   justify-content: center;
-
+  border: 1px solid rgba(226, 232, 240, 1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
   cursor: pointer;
 }
 
@@ -240,28 +180,33 @@
   background: rgba(255, 255, 255, 1);
 }
 
-/* 追加タイル（ボタン廃止の代替） */
-.lic__add-tile {
-  border-radius: 16px;
-  border: 1px dashed rgba(203, 213, 225, 1);
-  background: rgba(248, 250, 252, 0.3);
-  cursor: pointer;
+/* =========================================================
+ * 画像追加タイル
+ * ======================================================= */
 
+.lic__add-tile {
   display: flex;
+  aspect-ratio: 1 / 1;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 8px;
-
-  aspect-ratio: 1 / 1;
+  border: 1px dashed rgba(203, 213, 225, 1);
+  border-radius: 16px;
+  background: rgba(248, 250, 252, 0.3);
+  cursor: pointer;
   user-select: none;
 }
 
 .lic__add-title {
-  font-size: 0.75rem;
   color: rgba(51, 65, 85, 1);
+  font-size: 0.75rem;
 }
-/* color dot (InventoryCard / ProductionQuantityCard 共通想定) */
+
+/* =========================================================
+ * Inventory color
+ * ======================================================= */
+
 .ivc__color-cell {
   display: inline-flex;
   align-items: center;
@@ -272,6 +217,16 @@
   display: inline-block;
   width: 10px;
   height: 10px;
-  border-radius: 9999px;
   flex: 0 0 auto;
+  border-radius: 9999px;
+}
+
+/* =========================================================
+ * Responsive
+ * ======================================================= */
+
+@media (min-width: 640px) {
+  .lic__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
