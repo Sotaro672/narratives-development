@@ -7,6 +7,9 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardInput,
   CardTitle,
 } from "../../../../shared/ui/card";
 
@@ -18,8 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from "../../../../shared/ui/table";
-
-import { Input } from "../../../../shared/ui/input";
 
 import { usePriceCard } from "../hook/usePriceCard";
 
@@ -33,52 +34,33 @@ type ProductBlueprintCategoryKind =
   | "alcohol"
   | "unknown";
 
-function resolveProductBlueprintCategoryKind(
-  args: {
-    productBlueprintCategory?: string;
-    rows: PriceRowVM[];
-  },
-): ProductBlueprintCategoryKind {
-  const category =
-    String(
-      args.productBlueprintCategory ?? "",
-    )
-      .trim()
-      .toLowerCase();
+function resolveProductBlueprintCategoryKind(args: {
+  productBlueprintCategory?: string;
+  rows: PriceRowVM[];
+}): ProductBlueprintCategoryKind {
+  const category = String(args.productBlueprintCategory ?? "")
+    .trim()
+    .toLowerCase();
 
-  if (
-    category.startsWith(
-      "alcohol",
-    )
-  ) {
+  if (category.startsWith("alcohol")) {
     return "alcohol";
   }
 
-  if (
-    category.startsWith(
-      "apparel",
-    )
-  ) {
+  if (category.startsWith("apparel")) {
     return "apparel";
   }
 
-  const hasAlcoholRow =
-    args.rows.some(
-      (row) =>
-        row.kind ===
-        "alcohol",
-    );
+  const hasAlcoholRow = args.rows.some(
+    (row) => row.kind === "alcohol",
+  );
 
   if (hasAlcoholRow) {
     return "alcohol";
   }
 
-  const hasApparelRow =
-    args.rows.some(
-      (row) =>
-        row.kind ===
-        "apparel",
-    );
+  const hasApparelRow = args.rows.some(
+    (row) => row.kind === "apparel",
+  );
 
   if (hasApparelRow) {
     return "apparel";
@@ -87,15 +69,11 @@ function resolveProductBlueprintCategoryKind(
   return "unknown";
 }
 
-function getVolumeValueLabel(
-  row: PriceRowVM,
-): string {
-  const value =
-    row.volumeValue;
+function getVolumeValueLabel(row: PriceRowVM): string {
+  const value = row.volumeValue;
 
   if (
-    typeof value ===
-      "number" &&
+    typeof value === "number" &&
     Number.isFinite(value)
   ) {
     return String(value);
@@ -104,227 +82,189 @@ function getVolumeValueLabel(
   return "";
 }
 
-function getVolumeUnitLabel(
-  row: PriceRowVM,
-): string {
-  return String(
-    row.volumeUnit ?? "",
-  ).trim();
+function getVolumeUnitLabel(row: PriceRowVM): string {
+  return String(row.volumeUnit ?? "").trim();
 }
 
-const PriceCard:
-  React.FC<PriceCardProps> = (
-    props,
-  ) => {
-    const {
-      className,
+const PriceCard: React.FC<PriceCardProps> = (props) => {
+  const {
+    className,
+    productBlueprintCategory,
+  } = props;
+
+  const {
+    title,
+    mode,
+    isEdit,
+    showModeBadge,
+    currencySymbol,
+    rowsVM,
+    isEmpty,
+  } = usePriceCard(props);
+
+  const categoryKind = React.useMemo(
+    () =>
+      resolveProductBlueprintCategoryKind({
+        productBlueprintCategory,
+        rows: rowsVM,
+      }),
+    [
       productBlueprintCategory,
-    } = props;
-
-    const {
-      title,
-      mode,
-      isEdit,
-      showModeBadge,
-      currencySymbol,
       rowsVM,
-      isEmpty,
-    } =
-      usePriceCard(
-        props,
-      );
+    ],
+  );
 
-    const categoryKind =
-      React.useMemo(
-        () =>
-          resolveProductBlueprintCategoryKind({
-            productBlueprintCategory,
-            rows: rowsVM,
-          }),
-        [
-          productBlueprintCategory,
-          rowsVM,
-        ],
-      );
+  const isAlcoholCategory =
+    categoryKind === "alcohol";
 
-    const isAlcoholCategory =
-      categoryKind ===
-      "alcohol";
+  return (
+    <Card className={className}>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Tag className="card__header-icon-svg" />
+          </CardHeaderIcon>
 
-    return (
-      <Card
-        className={`prc ${className ?? ""}`}
-      >
-        <CardHeader className="prc__header">
-          <div className="prc__header-inner flex items-center gap-2">
-            <Tag size={18} />
+          <CardTitle strong>
+            {title}
 
-            <CardTitle className="prc__title">
-              {title}
+            {showModeBadge && (
+              <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
+                （{mode}）
+              </span>
+            )}
+          </CardTitle>
+        </CardHeaderLeft>
+      </CardHeader>
 
-              {showModeBadge && (
-                <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
-                  （{mode}）
-                </span>
-              )}
-            </CardTitle>
-          </div>
-        </CardHeader>
+      <CardContent>
+        <div className="prc__table-wrap">
+          <Table className="prc__table">
+            <TableHeader>
+              <TableRow>
+                {isAlcoholCategory ? (
+                  <>
+                    <TableHead className="prc__th">
+                      容量
+                    </TableHead>
 
-        <CardContent className="prc__body">
-          <div className="prc__table-wrap">
-            <Table className="prc__table">
-              <TableHeader>
-                <TableRow>
+                    <TableHead className="prc__th">
+                      単位
+                    </TableHead>
+                  </>
+                ) : (
+                  <>
+                    <TableHead className="prc__th">
+                      サイズ
+                    </TableHead>
+
+                    <TableHead className="prc__th">
+                      カラー
+                    </TableHead>
+                  </>
+                )}
+
+                <TableHead className="prc__th prc__th--right">
+                  在庫数
+                </TableHead>
+
+                <TableHead className="prc__th prc__th--right">
+                  価格
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+
+            <TableBody>
+              {rowsVM.map((row) => (
+                <TableRow
+                  key={row.modelId}
+                  className="prc__tr"
+                >
                   {isAlcoholCategory ? (
                     <>
-                      <TableHead className="prc__th">
-                        容量
-                      </TableHead>
+                      <TableCell className="prc__size">
+                        {getVolumeValueLabel(row) || "-"}
+                      </TableCell>
 
-                      <TableHead className="prc__th">
-                        単位
-                      </TableHead>
+                      <TableCell className="prc__size">
+                        {getVolumeUnitLabel(row) || "-"}
+                      </TableCell>
                     </>
                   ) : (
                     <>
-                      <TableHead className="prc__th">
-                        サイズ
-                      </TableHead>
+                      <TableCell className="prc__size">
+                        {row.size || "-"}
+                      </TableCell>
 
-                      <TableHead className="prc__th">
-                        カラー
-                      </TableHead>
+                      <TableCell className="prc__color-cell">
+                        <span
+                          className="prc__color-dot"
+                          style={{
+                            backgroundColor: row.bgColor,
+                          }}
+                          title={row.rgbTitle}
+                        />
+
+                        <span className="prc__color-label">
+                          {row.color || "-"}
+                        </span>
+                      </TableCell>
                     </>
                   )}
 
-                  <TableHead className="prc__th prc__th--right">
-                    在庫数
-                  </TableHead>
+                  <TableCell className="prc__stock text-left">
+                    <span className="prc__stock-number">
+                      {row.stock}
+                    </span>
+                  </TableCell>
 
-                  <TableHead className="prc__th prc__th--right">
-                    価格
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-
-              <TableBody>
-                {rowsVM.map(
-                  (row) => {
-                    return (
-                      <TableRow
-                        key={
-                          row.modelId
-                        }
-                        className="prc__tr"
-                      >
-                        {isAlcoholCategory ? (
-                          <>
-                            <TableCell className="prc__size">
-                              {getVolumeValueLabel(
-                                row,
-                              ) ||
-                                "-"}
-                            </TableCell>
-
-                            <TableCell className="prc__size">
-                              {getVolumeUnitLabel(
-                                row,
-                              ) ||
-                                "-"}
-                            </TableCell>
-                          </>
-                        ) : (
-                          <>
-                            <TableCell className="prc__size">
-                              {row.size ||
-                                "-"}
-                            </TableCell>
-
-                            <TableCell className="prc__color-cell">
-                              <span
-                                className="prc__color-dot"
-                                style={{
-                                  backgroundColor:
-                                    row.bgColor,
-                                }}
-                                title={
-                                  row.rgbTitle
-                                }
-                              />
-
-                              <span className="prc__color-label">
-                                {row.color ||
-                                  "-"}
-                              </span>
-                            </TableCell>
-                          </>
-                        )}
-
-                        <TableCell className="prc__stock text-left">
-                          <span className="prc__stock-number">
-                            {
-                              row.stock
-                            }
+                  <TableCell className="prc__price text-left">
+                    {isEdit ? (
+                      <div className="flex items-center justify-end gap-2">
+                        {currencySymbol ? (
+                          <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                            {currencySymbol}
                           </span>
-                        </TableCell>
+                        ) : null}
 
-                        <TableCell className="prc__price text-left">
-                          {isEdit ? (
-                            <div className="flex items-center justify-end gap-2">
-                              {currencySymbol ? (
-                                <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                                  {
-                                    currencySymbol
-                                  }
-                                </span>
-                              ) : null}
+                        <CardInput
+                          required
+                          inputMode="numeric"
+                          type="number"
+                          min={0}
+                          step={1}
+                          sizeVariant="sm"
+                          className="w-32 text-right"
+                          value={row.priceInputValue}
+                          placeholder="-"
+                          onChange={row.onChangePriceInput}
+                        />
+                      </div>
+                    ) : (
+                      <span className="prc__price-value">
+                        {row.priceDisplayText}
+                      </span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
 
-                              <Input
-                                required
-                                inputMode="numeric"
-                                type="number"
-                                min={0}
-                                step={1}
-                                className="h-8 w-32 text-right"
-                                value={
-                                  row.priceInputValue
-                                }
-                                placeholder="-"
-                                onChange={
-                                  row.onChangePriceInput
-                                }
-                              />
-                            </div>
-                          ) : (
-                            <span className="prc__price-value">
-                              {
-                                row.priceDisplayText
-                              }
-                            </span>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  },
-                )}
-
-                {isEmpty && (
-                  <TableRow>
-                    <TableCell
-                      colSpan={4}
-                      className="prc__empty"
-                    >
-                      表示できるデータがありません。
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
+              {isEmpty && (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="prc__empty"
+                  >
+                    表示できるデータがありません。
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 export default PriceCard;

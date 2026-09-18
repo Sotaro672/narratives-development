@@ -2,21 +2,24 @@
 
 import * as React from "react";
 import { Palette, Plus, X } from "lucide-react";
-import {
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-} from "../../../../shared/ui";
-import { Button } from "../../../../shared/ui/button";
 
 import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardInput,
+  CardTitle,
+} from "../../../../shared/ui";
+import { Button } from "../../../../shared/ui/button";
+import {
   Table,
-  TableHeader,
   TableBody,
-  TableRow,
-  TableHead,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../../../shared/ui/table";
 
 import { SketchPicker } from "react-color";
@@ -101,19 +104,25 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
 
   return (
     <Card className="vc">
-      <CardHeader className="box__header">
-        <Palette size={16} />
-        <CardTitle className="box__title">
-          カラーバリエーション
-          {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)] align-middle">
-              （閲覧）
-            </span>
-          )}
-        </CardTitle>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Palette className="card__header-icon-svg" />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
+            カラーバリエーション
+
+            {mode === "view" && (
+              <span className="ml-2 text-xs text-[var(--pbp-text-soft)] align-middle">
+                （閲覧）
+              </span>
+            )}
+          </CardTitle>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="box__body">
+      <CardContent>
         <div
           className="vc__layout"
           style={{
@@ -124,7 +133,6 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
             gap: 16,
           }}
         >
-          {/* 左カラム（edit のみ） */}
           <div className="vc__left">
             {isEdit && (
               <div className="flex flex-col gap-4">
@@ -139,17 +147,19 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                 </div>
 
                 <div className="vc__input-wrap flex items-center gap-2">
-                  <input
-                    className="input vc__input"
+                  <CardInput
+                    className="vc__input"
                     placeholder="例：White, Black, Navy..."
                     value={colorInput}
-                    onChange={(e) => onChangeColorInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") {
+                    onChange={(event) =>
+                      onChangeColorInput(event.target.value)
+                    }
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter") {
                         return;
                       }
 
-                      e.preventDefault();
+                      event.preventDefault();
                       handleAddColor();
                     }}
                   />
@@ -170,22 +180,26 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
             )}
           </div>
 
-          {/* 右カラム: 色一覧テーブル */}
           <div className="vc__right">
             <div className="vc__chips">
               {safeColors.length > 0 ? (
                 <Table className="vc__table">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[160px]">RGB(HEX)</TableHead>
+                      <TableHead className="w-[160px]">
+                        RGB(HEX)
+                      </TableHead>
                       <TableHead>色名</TableHead>
-                      {isEdit && <TableHead className="w-[40px]" />}
+                      {isEdit && (
+                        <TableHead className="w-[40px]" />
+                      )}
                     </TableRow>
                   </TableHeader>
 
                   <TableBody>
                     {safeColors.map((colorName) => {
-                      const hexFromMap = safeColorRgbMap[colorName];
+                      const hexFromMap =
+                        safeColorRgbMap[colorName];
                       const hex = normalizeHex(hexFromMap);
 
                       return (
@@ -194,32 +208,32 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                             <div className="flex items-center gap-2">
                               <span
                                 className="inline-block w-4 h-4 rounded border"
-                                style={{ backgroundColor: hex }}
+                                style={{
+                                  backgroundColor: hex,
+                                }}
                               />
                               {hexFromMap ? hex : "-"}
                             </div>
                           </TableCell>
 
-                          <TableCell>{colorName}</TableCell>
+                          <TableCell>
+                            {colorName}
+                          </TableCell>
 
                           {isEdit && (
                             <TableCell className="text-right">
-                              <button
+                              <Button
                                 type="button"
+                                variant="ghost"
+                                size="icon"
                                 className="vc__chip-close"
-                                onClick={() => onRemoveColor(colorName)}
+                                onClick={() =>
+                                  onRemoveColor(colorName)
+                                }
                                 aria-label={`${colorName} を削除`}
-                                style={{
-                                  background: "transparent",
-                                  border: "none",
-                                  cursor: "pointer",
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  padding: 0,
-                                }}
                               >
                                 <X size={12} />
-                              </button>
+                              </Button>
                             </TableCell>
                           )}
                         </TableRow>
@@ -230,7 +244,9 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
               ) : (
                 <span className="vc__empty">
                   まだカラーがありません。
-                  {isEdit ? " 左で色を選んで追加してください。" : "（データなし）"}
+                  {isEdit
+                    ? " 左で色を選んで追加してください。"
+                    : "（データなし）"}
                 </span>
               )}
             </div>
