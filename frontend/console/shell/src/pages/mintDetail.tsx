@@ -6,6 +6,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import { Button } from "../shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/popover";
+import Text from "../shared/ui/text";
 
 import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
 import InspectionResultCard from "../features/mint/presentation/components/inspectionResultCard";
@@ -39,61 +40,71 @@ function MintProgressCard({ progress }: { progress: MintTaskProgressDTO }) {
       </CardHeader>
 
       <CardContent>
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-4 text-sm">
-              <span className="text-gray-600">進捗</span>
-              <strong className="text-gray-900">{percentage}%</strong>
+        <div className="mint-progress">
+          <div className="mint-progress__progress">
+            <div className="mint-progress__row">
+              <Text tone="muted">進捗</Text>
+              <Text weight="semibold">{percentage}%</Text>
             </div>
 
-            <div
-              className="h-2 w-full overflow-hidden rounded-full bg-gray-200"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={percentage}
+            <progress
+              className="mint-progress__bar"
+              value={percentage}
+              max={100}
               aria-label="ミント進捗"
-            >
-              <div
-                className="h-full rounded-full bg-blue-600 transition-all duration-300"
-                style={{ width: `${percentage}%` }}
-              />
-            </div>
+            />
 
-            <div className="text-right text-xs text-gray-500">
-              <strong className="text-gray-900">{progress.minted}</strong> / {progress.total} 完了
-            </div>
+            <Text as="div" size="xs" tone="muted" className="mint-progress__summary">
+              <Text size="xs" weight="semibold">
+                {progress.minted}
+              </Text>{" "}
+              / {progress.total} 完了
+            </Text>
           </div>
 
-          <div className="border-t border-gray-200 pt-3">
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-600">待機中</span>
-                <strong className="text-gray-900">{progress.pending}</strong>
+          <div className="mint-progress__details">
+            <div className="mint-progress__rows">
+              <div className="mint-progress__row">
+                <Text tone="muted">待機中</Text>
+                <Text weight="semibold">{progress.pending}</Text>
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-600">ミント中</span>
-                <strong className="text-gray-900">{progress.minting}</strong>
+              <div className="mint-progress__row">
+                <Text tone="muted">ミント中</Text>
+                <Text weight="semibold">{progress.minting}</Text>
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-600">完了</span>
-                <strong className="text-gray-900">{progress.minted}</strong>
+              <div className="mint-progress__row">
+                <Text tone="muted">完了</Text>
+                <Text weight="semibold">{progress.minted}</Text>
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-600">再試行待ち</span>
-                <strong className={progress.failedRetryable > 0 ? "text-amber-600" : "text-gray-900"}>
+              <div className="mint-progress__row">
+                <Text tone="muted">再試行待ち</Text>
+                <Text
+                  weight="semibold"
+                  className={
+                    progress.failedRetryable > 0
+                      ? "mint-progress__value--warning"
+                      : undefined
+                  }
+                >
                   {progress.failedRetryable}
-                </strong>
+                </Text>
               </div>
 
-              <div className="flex items-center justify-between gap-4">
-                <span className="text-gray-600">失敗</span>
-                <strong className={progress.failedFatal > 0 ? "text-red-600" : "text-gray-900"}>
+              <div className="mint-progress__row">
+                <Text tone="muted">失敗</Text>
+                <Text
+                  weight="semibold"
+                  className={
+                    progress.failedFatal > 0
+                      ? "mint-progress__value--danger"
+                      : undefined
+                  }
+                >
                   {progress.failedFatal}
-                </strong>
+                </Text>
               </div>
             </div>
           </div>
@@ -165,17 +176,19 @@ export default function MintRequestDetail() {
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack}>
       {/* 左カラム */}
-      <div className="space-y-4 mt-4">
+      <div className="mint-detail__column">
         {productBlueprintLoading ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
-              プロダクト基本情報を読み込み中です…
+              <Text tone="muted">プロダクト基本情報を読み込み中です…</Text>
             </CardContent>
           </Card>
         ) : productBlueprintError ? (
           <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body text-red-600">
-              {productBlueprintError}
+            <CardContent className="mint-request-card__body">
+              <Text tone="destructive" role="alert">
+                {productBlueprintError}
+              </Text>
             </CardContent>
           </Card>
         ) : productBlueprintCardView ? (
@@ -190,7 +203,7 @@ export default function MintRequestDetail() {
         ) : (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
-              プロダクト基本情報を読み込み中です…
+              <Text tone="muted">プロダクト基本情報を読み込み中です…</Text>
             </CardContent>
           </Card>
         )}
@@ -198,13 +211,15 @@ export default function MintRequestDetail() {
         {loading ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
-              検査結果を読み込み中です…
+              <Text tone="muted">検査結果を読み込み中です…</Text>
             </CardContent>
           </Card>
         ) : error ? (
           <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body text-red-600">
-              {error}
+            <CardContent className="mint-request-card__body">
+              <Text tone="destructive" role="alert">
+                {error}
+              </Text>
             </CardContent>
           </Card>
         ) : (
@@ -214,15 +229,15 @@ export default function MintRequestDetail() {
             {showCompleteInspectionButton && (
               <Card className="mint-request-card">
                 <CardContent className="mint-request-card__body">
-                  <div className="space-y-3">
+                  <div className="mint-inspection-complete">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
+                      <Text as="div" weight="medium">
                         検品完了
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
+                      </Text>
+                      <Text as="p" size="xs" tone="muted" className="mint-inspection-complete__description">
                         除外対象がない場合でも、ここで検品完了を確定できます。
                         完了後、未入力の検品結果は合格として扱われます。
-                      </p>
+                      </Text>
                     </div>
 
                     <Button
@@ -249,98 +264,90 @@ export default function MintRequestDetail() {
             </CardHeader>
 
             <CardContent className="mint-request-card__body">
-              <div className="space-y-4">
+              <div className="mint-funding">
                 {!selectedTokenBlueprintId ? (
-                  <div className="text-sm text-gray-500">
+                  <Text as="div" tone="muted">
                     トークン設計を選択すると、ミントに必要なSOLを見積もります。
-                  </div>
+                  </Text>
                 ) : mintFundingEstimateLoading ? (
-                  <div
-                    className="flex items-center gap-3 text-sm text-gray-600"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    <div
-                      className="h-5 w-5 animate-spin rounded-full border-2 border-gray-200 border-t-blue-600"
-                      aria-hidden="true"
-                    />
-                    SOL見積を取得中です…
+                  <div className="mint-funding__loading" role="status" aria-live="polite">
+                    <div className="mint-funding__spinner" aria-hidden="true" />
+                    <Text tone="muted">SOL見積を取得中です…</Text>
                   </div>
                 ) : mintFundingEstimateError ? (
-                  <div className="text-sm text-red-600">
+                  <Text as="div" tone="destructive" role="alert">
                     {mintFundingEstimateError}
-                  </div>
+                  </Text>
                 ) : mintFundingEstimate ? (
-                  <div className="space-y-4">
-                    <div className="grid gap-2 text-sm">
-                      <div className="flex items-center justify-between gap-4">
-                        <span className="text-gray-600">Reserve Wallet残高</span>
-                        <strong className="text-gray-900">
+                  <div className="mint-funding__estimate">
+                    <div className="mint-funding__rows">
+                      <div className="mint-funding__row">
+                        <Text tone="muted">Reserve Wallet残高</Text>
+                        <Text weight="semibold">
                           {formatSol(mintFundingEstimate.reserve.balanceSol)} SOL
-                        </strong>
+                        </Text>
                       </div>
                     </div>
 
-                    <div className="border-t border-gray-200 pt-3">
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-gray-600">1件あたりMint手数料</span>
-                          <strong className="text-gray-900">
+                    <div className="mint-funding__section">
+                      <div className="mint-funding__rows">
+                        <div className="mint-funding__row">
+                          <Text tone="muted">1件あたりMint手数料</Text>
+                          <Text weight="semibold">
                             {formatSol(
                               mintFundingEstimate.estimate.mintTransactionFeePerItemSol,
                             )}{" "}
                             SOL
-                          </strong>
+                          </Text>
                         </div>
 
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-gray-600">Mint手数料合計</span>
-                          <strong className="text-gray-900">
+                        <div className="mint-funding__row">
+                          <Text tone="muted">Mint手数料合計</Text>
+                          <Text weight="semibold">
                             {formatSol(
                               mintFundingEstimate.estimate.mintTransactionFeeTotalSol,
                             )}{" "}
                             SOL
-                          </strong>
+                          </Text>
                         </div>
 
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-gray-600">初回作成費</span>
-                          <strong className="text-gray-900">
+                        <div className="mint-funding__row">
+                          <Text tone="muted">初回作成費</Text>
+                          <Text weight="semibold">
                             {formatSol(
                               mintFundingEstimate.estimate.initialCreationCostSol,
                             )}{" "}
                             SOL
-                          </strong>
+                          </Text>
                         </div>
                       </div>
                     </div>
 
-                    <div className="border-t border-gray-200 pt-3">
-                      <div className="flex items-center justify-between gap-4 text-sm">
-                        <span className="font-semibold text-gray-900">
-                          最終必要SOL合計
-                        </span>
-                        <strong className="text-gray-900">
+                    <div className="mint-funding__section">
+                      <div className="mint-funding__row">
+                        <Text weight="semibold">最終必要SOL合計</Text>
+                        <Text weight="semibold">
                           {formatSol(
                             mintFundingEstimate.estimate.totalRequiredSol,
                           )}{" "}
                           SOL
-                        </strong>
+                        </Text>
                       </div>
                     </div>
 
-                    <div
+                    <Text
+                      as="div"
+                      weight="medium"
                       className={
-                        "rounded-md px-3 py-2 text-sm font-medium " +
-                        (mintFundingEstimate.estimate.sufficient
-                          ? "bg-green-50 text-green-700"
-                          : "bg-red-50 text-red-700")
+                        mintFundingEstimate.estimate.sufficient
+                          ? "mint-funding__status mint-funding__status--sufficient"
+                          : "mint-funding__status mint-funding__status--insufficient"
                       }
                     >
                       {mintFundingEstimate.estimate.sufficient
                         ? "SOL残高はミント実行に必要な条件を満たしています。"
                         : "Reserve WalletのSOL残高が不足しています。"}
-                    </div>
+                    </Text>
                   </div>
                 ) : null}
 
@@ -361,7 +368,7 @@ export default function MintRequestDetail() {
       </div>
 
       {/* 右カラム */}
-      <div className="space-y-4 mt-4">
+      <div className="mint-detail__column">
         {hasMint && mintRequestRow && (
           <Card className="pb-select">
             <CardHeader>
@@ -369,27 +376,38 @@ export default function MintRequestDetail() {
             </CardHeader>
 
             <CardContent>
-              <div className="space-y-2 text-sm">
-                <div>
-                  生産数: <strong>{mintRequestRow.productionQuantity ?? 0}</strong>
-                </div>
+              <div className="mint-info">
+                <Text as="div">
+                  生産数:{" "}
+                  <Text weight="semibold">
+                    {mintRequestRow.productionQuantity ?? 0}
+                  </Text>
+                </Text>
 
-                <div>
-                  ミント数: <strong>{mintRequestRow.mintQuantity ?? 0}</strong>
-                </div>
+                <Text as="div">
+                  ミント数:{" "}
+                  <Text weight="semibold">
+                    {mintRequestRow.mintQuantity ?? 0}
+                  </Text>
+                </Text>
 
-                <div>
-                  ミント状態: <strong>{mintStatusLabel}</strong>
-                </div>
+                <Text as="div">
+                  ミント状態:{" "}
+                  <Text weight="semibold">
+                    {mintStatusLabel}
+                  </Text>
+                </Text>
 
-                <div>
+                <Text as="div">
                   リクエスト者:{" "}
                   {mintRequestRow.requestedByName ||
                     mintRequestRow.requestedBy ||
                     "（不明）"}
-                </div>
+                </Text>
 
-                <div>ミント日時: {mintMintedAtLabel}</div>
+                <Text as="div">
+                  ミント日時: {mintMintedAtLabel}
+                </Text>
               </div>
             </CardContent>
           </Card>

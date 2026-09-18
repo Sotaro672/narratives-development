@@ -11,9 +11,6 @@
   border: 1px solid #fecaca;
   border-radius: 8px;
   background: #fef2f2;
-  color: #991b1b;
-  font-size: 0.9rem;
-  line-height: 1.5;
 }
 
 .notification-page__row {
@@ -41,12 +38,4 @@
 .notification-page__title {
   display: block;
   min-width: 0;
-  color: #1f2937;
-  font-weight: 400;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
-.notification-page__title--unread {
-  font-weight: 600;
 }

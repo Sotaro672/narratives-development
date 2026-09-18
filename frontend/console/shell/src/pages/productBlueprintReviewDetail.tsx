@@ -12,6 +12,7 @@ import { Badge, type BadgeVariant } from "../shared/ui/badge";
 import { Button } from "../shared/ui/button";
 import Pagination from "../shared/ui/pagination";
 import RefreshButton from "../shared/ui/refresh";
+import Text from "../shared/ui/text";
 
 import {
   ratingToStars,
@@ -221,20 +222,35 @@ export default function ProductBlueprintReviewDetail() {
           </div>
 
           {ErrorMessage ? (
-            <div className="mb-3 text-sm text-red-600">
+            <Text
+              as="div"
+              tone="destructive"
+              className="mb-3"
+              role="alert"
+            >
               {ErrorMessage}
-            </div>
+            </Text>
           ) : null}
 
           <div className="pbrd-reviewcard-wrapper">
             {IsLoading ? (
-              <div className="pbrd-empty">
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                className="pbrd-empty"
+              >
                 読み込み中...
-              </div>
+              </Text>
             ) : SortedItems.length === 0 ? (
-              <div className="pbrd-empty">
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                className="pbrd-empty"
+              >
                 No reviews
-              </div>
+              </Text>
             ) : (
               <div className="pbrd-grid">
                 {SortedItems.map((review, index) => {
@@ -290,9 +306,13 @@ export default function ProductBlueprintReviewDetail() {
                           />
                         ) : null}
 
-                        <span className="pbrd-author-primary">
+                        <Text
+                          size="xs"
+                          weight="semibold"
+                          className="pbrd-author-primary"
+                        >
                           {AuthorName}
-                        </span>
+                        </Text>
 
                         <Badge
                           variant={getReviewStatusBadgeVariant(
@@ -307,17 +327,26 @@ export default function ProductBlueprintReviewDetail() {
                         </Badge>
                       </div>
 
-                      <div className="pbrd-body">
+                      <Text
+                        as="div"
+                        wrap="pre-wrap"
+                        className="pbrd-body"
+                      >
                         {Body || (
-                          <span className="pbrd-body-empty">
+                          <Text tone="muted">
                             （本文なし）
-                          </span>
+                          </Text>
                         )}
-                      </div>
+                      </Text>
 
-                      <div className="pbrd-datetime">
+                      <Text
+                        as="div"
+                        size="xs"
+                        tone="muted"
+                        className="pbrd-datetime"
+                      >
                         投稿日時: {ReviewedAt || "-"}
-                      </div>
+                      </Text>
 
                       {CanReport ? (
                         <div className="mt-3 flex justify-end">

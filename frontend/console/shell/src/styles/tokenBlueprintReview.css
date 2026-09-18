@@ -1,6 +1,7 @@
 /* frontend/console/shell/src/styles/tokenBlueprintReview.css */
 
 /* spacing blocks */
+
 .tbrd-section {
   margin-top: 16px;
 }
@@ -11,24 +12,22 @@
 }
 
 /* section header */
+
 .tbrd-section-title {
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 700;
 }
 
-.tbrd-empty {
-  color: #64748b;
-  font-size: 12px;
-}
-
 /* lists */
+
 .tbrd-grid {
   display: grid;
   gap: 10px;
 }
 
 /* Review Aggregate Card */
+
 .tbrd-aggregate-card {
   width: 100%;
 }

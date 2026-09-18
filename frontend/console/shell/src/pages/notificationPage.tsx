@@ -11,6 +11,7 @@ import {
 } from "../features/notification/presentation/model/reportDecisionNotification";
 import List from "../layout/List/List";
 import type { News } from "../shared/types/news";
+import Text from "../shared/ui/text";
 
 import "../styles/notification.css";
 
@@ -126,9 +127,14 @@ export default function NotificationPage() {
   return (
     <div className="notification-page">
       {error ? (
-        <div className="notification-page__error" role="alert">
+        <Text
+          as="div"
+          tone="destructive"
+          className="notification-page__error"
+          role="alert"
+        >
           {error}
-        </div>
+        </Text>
       ) : null}
 
       <List
@@ -173,16 +179,13 @@ export default function NotificationPage() {
                     />
                   ) : null}
 
-                  <span
-                    className={[
-                      "notification-page__title",
-                      isUnread ? "notification-page__title--unread" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
+                  <Text
+                    weight={isUnread ? "semibold" : "normal"}
+                    wrap="anywhere"
+                    className="notification-page__title"
                   >
                     {title}
-                  </span>
+                  </Text>
                 </div>
               </td>
             </tr>

@@ -1,6 +1,8 @@
 // frontend/console/shell/src/pages/orderDetail.tsx
+
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import Text from "../shared/ui/text";
 import { coerceRgbInt, rgbIntToHex } from "../shared/util/color";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { getOrderStatusLabel } from "../shared/types/order";
@@ -42,6 +44,7 @@ function formatDisplayValue(value: unknown, unit?: string): string {
 
 function formatVolume(item: OrderDetailItemDTO): string {
   if (item.volumeValue === undefined) return "-";
+
   const unit = item.volumeUnit?.trim();
   return unit ? `${item.volumeValue}${unit}` : String(item.volumeValue);
 }
@@ -73,38 +76,57 @@ export default function OrderDetail() {
     onDispatch,
   } = useOrderDetail();
 
-  const isCancelled = items.length > 0 && items.every((item) => item.isCancelled);
+  const isCancelled =
+    items.length > 0 &&
+    items.every((item) => item.isCancelled);
 
   const left = (
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>注文情報</CardTitle>
       </CardHeader>
+
       <CardContent>
         {dispatchError ? (
-          <div className="mb-4 text-sm text-red-600 whitespace-pre-wrap text-left">
+          <Text
+            as="div"
+            tone="destructive"
+            wrap="pre-wrap"
+            className="mb-4 text-left"
+            role="alert"
+          >
             発送処理に失敗しました: {dispatchError}
-          </div>
+          </Text>
         ) : null}
 
         {loading ? (
-          <div className="text-sm text-muted-foreground text-left">
+          <Text as="div" tone="muted" className="text-left">
             読み込み中...
-          </div>
+          </Text>
         ) : error ? (
-          <div className="text-sm text-red-600 whitespace-pre-wrap text-left">
+          <Text
+            as="div"
+            tone="destructive"
+            wrap="pre-wrap"
+            className="text-left"
+            role="alert"
+          >
             {error}
-          </div>
+          </Text>
         ) : !order ? (
-          <div className="text-sm text-muted-foreground text-left">
+          <Text as="div" tone="muted" className="text-left">
             データがありません。
-          </div>
+          </Text>
         ) : (
           <div className="space-y-8 text-left">
             <div>
-              <div className="text-sm font-semibold mb-2 text-left">
+              <Text
+                as="div"
+                weight="semibold"
+                className="mb-2 text-left"
+              >
                 基本情報
-              </div>
+              </Text>
 
               <table className="w-full text-sm text-left">
                 <tbody>
@@ -185,9 +207,13 @@ export default function OrderDetail() {
             </div>
 
             <div>
-              <div className="text-sm font-semibold mb-2 text-left">
+              <Text
+                as="div"
+                weight="semibold"
+                className="mb-2 text-left"
+              >
                 配送先
-              </div>
+              </Text>
 
               <table className="w-full text-sm text-left">
                 <tbody>
@@ -236,23 +262,33 @@ export default function OrderDetail() {
             </div>
 
             <div>
-              <div className="text-sm font-semibold mb-2 text-left">
+              <Text
+                as="div"
+                weight="semibold"
+                className="mb-2 text-left"
+              >
                 アイテム
-              </div>
+              </Text>
 
               {items.length === 0 ? (
-                <div className="text-sm text-muted-foreground text-left">
+                <Text as="div" tone="muted" className="text-left">
                   アイテムがありません。
-                </div>
+                </Text>
               ) : (
                 <div className="space-y-4">
                   {items.map((item, index) => {
-                    const transferredAt = safeDateTimeLabelJa(item.transferredAt, "-");
+                    const transferredAt = safeDateTimeLabelJa(
+                      item.transferredAt,
+                      "-",
+                    );
                     const alcohol = isAlcoholItem(item);
                     const vintage = getCategoryFieldValue(item, "vintage");
                     const region = getCategoryFieldValue(item, "region");
                     const material = getCategoryFieldValue(item, "material");
-                    const alcoholContent = getCategoryFieldValue(item, "alcoholContent");
+                    const alcoholContent = getCategoryFieldValue(
+                      item,
+                      "alcoholContent",
+                    );
 
                     return (
                       <Card key={index}>
@@ -433,17 +469,23 @@ export default function OrderDetail() {
 
         <CardContent>
           {loading ? (
-            <div className="text-sm text-muted-foreground text-left">
+            <Text as="div" tone="muted" className="text-left">
               読み込み中...
-            </div>
+            </Text>
           ) : error ? (
-            <div className="text-sm text-red-600 whitespace-pre-wrap text-left">
+            <Text
+              as="div"
+              tone="destructive"
+              wrap="pre-wrap"
+              className="text-left"
+              role="alert"
+            >
               {error}
-            </div>
+            </Text>
           ) : !order ? (
-            <div className="text-sm text-muted-foreground text-left">
+            <Text as="div" tone="muted" className="text-left">
               -
-            </div>
+            </Text>
           ) : (
             <table className="w-full text-sm text-left">
               <tbody>

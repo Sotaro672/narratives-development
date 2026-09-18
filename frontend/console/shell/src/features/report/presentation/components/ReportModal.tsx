@@ -2,6 +2,7 @@
 
 import { Button } from "../../../../shared/ui/button";
 import Modal from "../../../../shared/ui/modal";
+import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 import type {
   ReportReason,
@@ -203,12 +204,14 @@ export default function ReportModal({
           ) : null}
 
           {errorMessage ? (
-            <p
+            <Text
+              as="p"
+              tone="destructive"
               className="report-modal__error"
               role="alert"
             >
               {errorMessage}
-            </p>
+            </Text>
           ) : null}
         </div>
       )}

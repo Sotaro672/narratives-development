@@ -2,9 +2,10 @@
 
 import React from "react";
 
-import List from "../layout/List/List";
 import { useTransactionList } from "../features/transaction/presentation/hook/useTransactionList";
+import List from "../layout/List/List";
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
+import Text from "../shared/ui/text";
 
 function getTransactionTypeBadgeVariant(
   type: "receive" | "send",
@@ -41,15 +42,19 @@ export default function TransactionListPage() {
   if (loading) {
     return (
       <div className="p-4">
-        読み込み中...
+        <Text tone="muted">
+          読み込み中...
+        </Text>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 text-red-500">
-        データ取得エラー: {error.message}
+      <div className="p-4">
+        <Text tone="destructive">
+          データ取得エラー: {error.message}
+        </Text>
       </div>
     );
   }
@@ -76,8 +81,10 @@ export default function TransactionListPage() {
         {transactions.length === 0 ? (
           <tr>
             <td colSpan={6}>
-              <div className="py-4 text-center text-sm text-slate-500">
-                取引履歴はありません。
+              <div className="py-4 text-center">
+                <Text tone="muted">
+                  取引履歴はありません。
+                </Text>
               </div>
             </td>
           </tr>

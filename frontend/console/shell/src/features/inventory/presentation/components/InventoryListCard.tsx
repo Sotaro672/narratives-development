@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Text from "../../../../shared/ui/text";
 
 export type InventoryListCardItem = {
   id: string;
@@ -48,23 +49,23 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
 
       <CardContent>
         {loading ? (
-          <div className="text-sm text-slate-500">
+          <Text as="div" tone="muted">
             出品情報を読み込み中です...
-          </div>
+          </Text>
         ) : error ? (
-          <div className="text-sm text-red-600">
+          <Text as="div" tone="destructive" role="alert">
             出品情報の取得に失敗しました: {error}
-          </div>
+          </Text>
         ) : items.length === 0 ? (
-          <div className="text-sm text-slate-500">
+          <Text as="div" tone="muted">
             この在庫の出品はまだありません。
-          </div>
+          </Text>
         ) : (
           <div className="divide-y divide-slate-200 rounded-md border border-slate-200">
             {items.map((item) => (
               <div
                 key={item.id}
-                className="px-3 py-3 text-sm text-slate-700"
+                className="px-3 py-3"
               >
                 <Button
                   type="button"
@@ -74,19 +75,31 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
                   {item.readableId || item.id}
                 </Button>
 
-                <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                <div className="mt-2 grid grid-cols-2 gap-3">
                   <div>
-                    <div className="text-slate-500">累計注文数</div>
-                    <div className="mt-1 font-medium text-slate-900">
+                    <Text as="div" tone="muted">
+                      累計注文数
+                    </Text>
+                    <Text
+                      as="div"
+                      weight="medium"
+                      className="mt-1"
+                    >
                       {item.totalOrderCount.toLocaleString()}件
-                    </div>
+                    </Text>
                   </div>
 
                   <div>
-                    <div className="text-slate-500">累計売上</div>
-                    <div className="mt-1 font-medium text-slate-900">
+                    <Text as="div" tone="muted">
+                      累計売上
+                    </Text>
+                    <Text
+                      as="div"
+                      weight="medium"
+                      className="mt-1"
+                    >
                       ¥{item.totalSalesAmount.toLocaleString()}
-                    </div>
+                    </Text>
                   </div>
                 </div>
               </div>

@@ -41,12 +41,12 @@
   align-items: center;
   gap: 10px;
   min-height: 44px;
+  padding: 10px 12px;
   border: 1px solid #d1d5db;
   border-radius: 10px;
   background: #fff;
-  padding: 10px 12px;
-  cursor: pointer;
   box-sizing: border-box;
+  cursor: pointer;
   transition:
     border-color 120ms ease,
     background-color 120ms ease;
@@ -99,59 +99,19 @@
   display: inline-flex;
   min-height: 20px;
   align-items: center;
+  padding: 0 6px;
   border-radius: 4px;
   background: #fee2e2;
-  padding: 0 6px;
   color: #b91c1c;
   font-size: 11px;
   font-weight: 700;
 }
 
-.report-modal__textarea {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  background: #fff;
-  padding: 12px;
-  color: #111827;
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.6;
-  resize: vertical;
-  box-sizing: border-box;
-  transition:
-    border-color 120ms ease,
-    box-shadow 120ms ease;
-}
-
-.report-modal__textarea::placeholder {
-  color: #9ca3af;
-}
-
-.report-modal__textarea:hover:not(:disabled) {
-  border-color: #9ca3af;
-}
-
-.report-modal__textarea:focus {
-  border-color: #111827;
-  outline: 0;
-  box-shadow: 0 0 0 3px rgba(17, 24, 39, 0.1);
-}
-
-.report-modal__textarea:disabled {
-  background: #f9fafb;
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
 .report-modal__error {
-  margin: 0;
+  padding: 10px 12px;
   border: 1px solid #fecaca;
   border-radius: 8px;
   background: #fef2f2;
-  padding: 10px 12px;
-  color: #b91c1c;
   font-size: 13px;
   line-height: 1.6;
 }

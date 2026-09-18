@@ -4,6 +4,7 @@ import * as React from "react";
 import { Plus } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import Text from "../../../../shared/ui/text";
 import type { InventoryShippingAddressDTO } from "../../../../shared/types/inventory";
 
 export type InventoryShippingAddressCardProps = {
@@ -37,8 +38,10 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
   const handleChange = React.useCallback(
     (event: React.ChangeEvent<HTMLSelectElement>) => {
       if (disabled) return;
+
       const nextId = event.target.value;
       if (!nextId) return;
+
       onSelectShippingAddress(nextId);
     },
     [disabled, onSelectShippingAddress],
@@ -48,6 +51,7 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>在庫保管場所</CardTitle>
+
         <button
           type="button"
           className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -61,7 +65,14 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
 
       <CardContent className="space-y-4">
         <div>
-          <div className="mb-1 text-xs text-slate-500">保管場所</div>
+          <Text
+            as="div"
+            size="xs"
+            tone="muted"
+            className="mb-1"
+          >
+            保管場所
+          </Text>
 
           <select
             className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
@@ -86,9 +97,16 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
             ))}
           </select>
 
-          {!loading && !hasShippingAddressOptions && (
-            <p className="mt-3 text-xs text-slate-400">在庫保管場所が登録されていません。</p>
-          )}
+          {!loading && !hasShippingAddressOptions ? (
+            <Text
+              as="p"
+              size="xs"
+              tone="muted"
+              className="mt-3"
+            >
+              在庫保管場所が登録されていません。
+            </Text>
+          ) : null}
         </div>
       </CardContent>
     </Card>

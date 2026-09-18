@@ -1,4 +1,7 @@
-// frontend\console\features\tokenBlueprintReview\presentation\component\review_aggregate_card.tsx
+// frontend/console/shell/src/features/tokenBlueprintReview/presentation/component/review_aggregate_card.tsx
+
+import Text from "../../../../shared/ui/text";
+
 import "../../../../styles/tokenBlueprintReview.css";
 
 type ReviewAggregateCardProps = {
@@ -23,12 +26,19 @@ export default function ReviewAggregateCard({
   );
 }
 
-function Metric({ label, value }: { label: string; value: number }) {
+function Metric({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
   const v = Number.isFinite(value) ? value : 0;
+
   return (
     <div className="flex items-center gap-2 tbrd-aggregate-metric">
-      <span className="text-sm text-slate-600">{label}</span>
-      <span className="text-sm font-semibold text-slate-900">{v}</span>
+      <Text tone="muted">{label}</Text>
+      <Text weight="semibold">{v}</Text>
     </div>
   );
 }

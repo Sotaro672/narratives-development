@@ -13,3 +13,4 @@ export * from "./popover";
 export * from "./refresh";
 export * from "./separator";
 export * from "./sortable-table-header";
+export * from "./text";

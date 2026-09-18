@@ -13,6 +13,7 @@ import ReviewCard from "../features/tokenBlueprintReview/presentation/component/
 import { useTokenBlueprintReviewDetail } from "../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewDetail";
 
 import { Button } from "../shared/ui/button";
+import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 import type { ReportReason, ReportResponse } from "../shared/types/report";
 import { requiresReportDetail } from "../shared/types/report";
@@ -183,9 +184,9 @@ export default function TokenBlueprintReviewDetail() {
         title="トークンレビュー"
         onBack={onBack}
       >
-        <p className="p-4 text-sm text-muted-foreground">
+        <Text as="p" tone="muted" className="p-4">
           表示可能なトークン設計レビューがありません。
-        </p>
+        </Text>
       </PageStyle>
     );
   }
@@ -256,9 +257,9 @@ export default function TokenBlueprintReviewDetail() {
             </div>
 
             {reviewList.length === 0 ? (
-              <div className="tbrd-empty">
+              <Text as="div" size="xs" tone="muted">
                 comments はありません
-              </div>
+              </Text>
             ) : (
               <div className="tbrd-grid">
                 {reviewList.map((review) => (

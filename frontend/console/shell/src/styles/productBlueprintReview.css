@@ -44,8 +44,6 @@
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  color: #64748b;
-  font-size: 12px;
 }
 
 .pbrd-author-icon {
@@ -56,29 +54,12 @@
   object-fit: cover;
 }
 
-.pbrd-author-primary {
-  color: #475569;
-  font-weight: 600;
-}
-
 /* body */
 
 .pbrd-body {
   margin-top: 6px;
-  white-space: pre-wrap;
-}
-
-.pbrd-body-empty {
-  color: #94a3b8;
 }
 
 .pbrd-datetime {
   margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.pbrd-empty {
-  color: #64748b;
-  font-size: 12px;
 }
