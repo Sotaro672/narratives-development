@@ -1,15 +1,14 @@
 // frontend/console/model/src/presentation/components/ModelNumberCard.tsx
 
 import * as React from "react";
-import { Tags } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
+  CardReadonly,
   CardTitle,
 } from "../../../../shared/ui";
 import {
@@ -79,18 +78,8 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Tags className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>
             モデルナンバー
-
-            {mode === "view" && (
-              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-                （閲覧）
-              </span>
-            )}
           </CardTitle>
         </CardHeaderLeft>
       </CardHeader>
@@ -99,7 +88,9 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
         <Table className="mnc__table">
           <TableHeader>
             <TableRow>
-              <TableHead>サイズ / カラー</TableHead>
+              <TableHead>
+                サイズ / カラー
+              </TableHead>
 
               {colors.map((color) => (
                 <TableHead key={color}>
@@ -124,12 +115,17 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
                       {isEdit ? (
                         <CardInput
                           value={code}
-                          onChange={handleChange(size.sizeLabel, color)}
+                          onChange={handleChange(
+                            size.sizeLabel,
+                            color,
+                          )}
                           placeholder="例: LM-SB-S-WHT"
                           aria-label={`${size.sizeLabel} / ${color} のモデルナンバー`}
                         />
                       ) : (
-                        <span>{code}</span>
+                        <CardReadonly inputLike>
+                          {code || "-"}
+                        </CardReadonly>
                       )}
                     </TableCell>
                   );
@@ -140,7 +136,10 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
             {sizes.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={Math.max(1, colors.length + 1)}
+                  colSpan={Math.max(
+                    1,
+                    colors.length + 1,
+                  )}
                   className="mnc__empty"
                 >
                   登録されているサイズはありません。

@@ -1,15 +1,14 @@
 // frontend/console/model/presentation/components/AlcoholModelNumberCard.tsx
 
 import * as React from "react";
-import { Tags } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
+  CardReadonly,
   CardTitle,
 } from "../../../../shared/ui";
 import {
@@ -31,7 +30,10 @@ type AlcoholModelNumberCardProps = {
   modelNumbers: AlcoholModelNumber[];
   className?: string;
   mode?: "edit" | "view";
-  onChangeModelNumber?: (volumeLabel: string, nextCode: string) => void;
+  onChangeModelNumber?: (
+    volumeLabel: string,
+    nextCode: string,
+  ) => void;
 };
 
 function toVolumeLabel(
@@ -109,7 +111,10 @@ const AlcoholModelNumberCard: React.FC<AlcoholModelNumberCardProps> = ({
         return;
       }
 
-      onChangeModelNumber?.(volumeLabel, event.target.value);
+      onChangeModelNumber?.(
+        volumeLabel,
+        event.target.value,
+      );
     };
 
   return (
@@ -120,18 +125,8 @@ const AlcoholModelNumberCard: React.FC<AlcoholModelNumberCardProps> = ({
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Tags className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>
             容量別モデルナンバー
-
-            {mode === "view" && (
-              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-                （閲覧）
-              </span>
-            )}
           </CardTitle>
         </CardHeaderLeft>
       </CardHeader>
@@ -140,8 +135,12 @@ const AlcoholModelNumberCard: React.FC<AlcoholModelNumberCardProps> = ({
         <Table className="mnc__table">
           <TableHeader>
             <TableRow>
-              <TableHead>容量</TableHead>
-              <TableHead>モデルナンバー</TableHead>
+              <TableHead>
+                容量
+              </TableHead>
+              <TableHead>
+                モデルナンバー
+              </TableHead>
             </TableRow>
           </TableHeader>
 
@@ -162,12 +161,16 @@ const AlcoholModelNumberCard: React.FC<AlcoholModelNumberCardProps> = ({
                     {isEdit ? (
                       <CardInput
                         value={code}
-                        onChange={handleChange(volume.volumeLabel)}
+                        onChange={handleChange(
+                          volume.volumeLabel,
+                        )}
                         placeholder="例: SAKE-720"
                         aria-label={`${volume.volumeLabel} のモデルナンバー`}
                       />
                     ) : (
-                      <span>{code}</span>
+                      <CardReadonly inputLike>
+                        {code || "-"}
+                      </CardReadonly>
                     )}
                   </TableCell>
                 </TableRow>

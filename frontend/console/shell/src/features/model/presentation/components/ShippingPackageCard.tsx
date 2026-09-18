@@ -1,15 +1,14 @@
 // frontend/console/shell/src/features/model/presentation/components/ShippingPackageCard.tsx
 
 import * as React from "react";
-import { Package } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
+  CardReadonly,
   CardTitle,
 } from "../../../../shared/ui";
 import {
@@ -201,7 +200,11 @@ function ShippingPackageInput({
   const displayValue = toDisplayValue(value, field.unit);
 
   if (disabled) {
-    return <span>{displayValue > 0 ? displayValue : "-"}</span>;
+    return (
+      <CardReadonly inputLike>
+        {displayValue > 0 ? displayValue : "-"}
+      </CardReadonly>
+    );
   }
 
   const isDimension = field.unit === "cm";
@@ -381,18 +384,8 @@ const ShippingPackageCard: React.FC<ShippingPackageCardProps> = (props) => {
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Package className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>
             配送用梱包情報
-
-            {mode === "view" && (
-              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-                （閲覧）
-              </span>
-            )}
           </CardTitle>
         </CardHeaderLeft>
       </CardHeader>

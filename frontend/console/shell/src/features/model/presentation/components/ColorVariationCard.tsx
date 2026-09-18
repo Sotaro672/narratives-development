@@ -1,13 +1,12 @@
 // frontend/console/model/src/presentation/components/ColorVariationCard.tsx
 
 import * as React from "react";
-import { Palette, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
   CardTitle,
@@ -106,18 +105,8 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
     <Card className="vc">
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Palette className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>
             カラーバリエーション
-
-            {mode === "view" && (
-              <span className="ml-2 text-xs text-[var(--pbp-text-soft)] align-middle">
-                （閲覧）
-              </span>
-            )}
           </CardTitle>
         </CardHeaderLeft>
       </CardHeader>

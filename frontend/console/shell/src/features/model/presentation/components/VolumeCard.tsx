@@ -1,19 +1,18 @@
 // frontend/console/model/src/presentation/components/VolumeCard.tsx
 
 import * as React from "react";
-import { Beaker, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 import {
   Card,
+  CardButton,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
   CardReadonly,
   CardTitle,
 } from "../../../../shared/ui";
-import { Button } from "../../../../shared/ui/button";
 import {
   Table,
   TableBody,
@@ -95,32 +94,22 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Beaker className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>
             容量
-
-            {mode === "view" && (
-              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-                （閲覧）
-              </span>
-            )}
           </CardTitle>
         </CardHeaderLeft>
 
         {isEdit && (
-          <Button
+          <CardButton
             type="button"
-            variant="outline"
+            variant="default"
             size="sm"
             onClick={onAddVolume}
             aria-label="容量を追加"
           >
             <Plus size={14} />
             追加
-          </Button>
+          </CardButton>
         )}
       </CardHeader>
 
@@ -128,9 +117,17 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
         <Table className="svc__table">
           <TableHeader>
             <TableRow>
-              <TableHead>容量</TableHead>
-              <TableHead>単位</TableHead>
-              {isEdit && <TableHead>操作</TableHead>}
+              <TableHead>
+                容量
+              </TableHead>
+              <TableHead>
+                単位
+              </TableHead>
+              {isEdit && (
+                <TableHead>
+                  操作
+                </TableHead>
+              )}
             </TableRow>
           </TableHeader>
 
@@ -171,16 +168,16 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
 
                 {isEdit && (
                   <TableCell>
-                    <Button
+                    <CardButton
                       type="button"
-                      variant="ghost"
+                      variant="default"
                       size="icon"
                       className="svc__remove"
                       onClick={() => onRemoveVolume?.(volume.id)}
                       aria-label="容量を削除"
                     >
                       <Trash2 size={14} />
-                    </Button>
+                    </CardButton>
                   </TableCell>
                 )}
               </TableRow>

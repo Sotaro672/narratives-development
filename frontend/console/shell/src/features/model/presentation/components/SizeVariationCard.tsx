@@ -1,18 +1,17 @@
 // frontend/console/shell/src/features/model/presentation/components/SizeVariationCard.tsx
 
 import * as React from "react";
-import { Tags, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 import {
   Card,
+  CardButton,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
   CardTitle,
 } from "../../../../shared/ui";
-import { Button } from "../../../../shared/ui/button";
 import {
   Table,
   TableBody,
@@ -131,30 +130,20 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Tags className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>
             サイズバリエーション
-
-            {mode === "view" && (
-              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-                （閲覧）
-              </span>
-            )}
           </CardTitle>
         </CardHeaderLeft>
 
         {isEdit && (
-          <Button
+          <CardButton
             type="button"
+            variant="default"
             size="sm"
-            variant="outline"
             onClick={() => onAddSize?.()}
           >
             サイズを追加
-          </Button>
+          </CardButton>
         )}
       </CardHeader>
 
@@ -228,16 +217,16 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
 
                 {isEdit && (
                   <TableCell>
-                    <Button
+                    <CardButton
                       type="button"
-                      variant="ghost"
+                      variant="default"
                       size="icon"
                       onClick={() => onRemove(row.id)}
                       aria-label={`${row.sizeLabel} を削除`}
                       className="svc__remove"
                     >
                       <Trash2 size={16} />
-                    </Button>
+                    </CardButton>
                   </TableCell>
                 )}
               </TableRow>
