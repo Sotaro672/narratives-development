@@ -1,14 +1,11 @@
-//frontend\console\shell\src\pages\listCreate.tsx
+// frontend/console/shell/src/pages/listCreate.tsx
+
 import * as React from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import {
-  Card,
-  CardContent,
-} from "../shared/ui/card";
-import {
-  Select,
-} from "../shared/ui/select";
+import { Card, CardContent } from "../shared/ui/card";
+import { Select } from "../shared/ui/select";
+import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
 import PriceCard from "../features/list/presentation/components/priceCard";
@@ -17,9 +14,7 @@ import ListProgressModal from "../features/list/presentation/components/listProg
 import ListStatusHeaderActions from "../features/list/presentation/components/ListStatusHeaderActions";
 import InventoryListCard from "../features/inventory/presentation/components/InventoryListCard";
 
-import {
-  useListCreate,
-} from "../features/inventory/presentation/hook/useListCreate";
+import { useListCreate } from "../features/inventory/presentation/hook/useListCreate";
 
 import "../styles/list.css";
 
@@ -135,17 +130,13 @@ export default function InventoryListCreate() {
 
           <Card>
             <CardContent className="list-create__card-content list-create__card-content--stack">
-              <div className="list-create__label">
+              <Text as="div" size="sm" weight="medium">
                 タイトル
-              </div>
+              </Text>
 
               <input
                 value={listingTitle}
-                onChange={(event) =>
-                  setListingTitle(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setListingTitle(event.target.value)}
                 placeholder="例: Narratives シャツ1（赤 / S・M）"
                 className="list-create__title-input"
                 disabled={saving}
@@ -155,17 +146,13 @@ export default function InventoryListCreate() {
 
           <Card>
             <CardContent className="list-create__card-content list-create__card-content--stack">
-              <div className="list-create__label">
+              <Text as="div" size="sm" weight="medium">
                 説明
-              </div>
+              </Text>
 
               <Textarea
                 value={description}
-                onChange={(event) =>
-                  setDescription(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setDescription(event.target.value)}
                 placeholder="商品の状態、サイズ感、注意事項などを入力してください。"
                 rows={5}
                 disabled={saving}
@@ -182,42 +169,47 @@ export default function InventoryListCreate() {
           />
 
           {priceRows.length === 0 && (
-            <div className="list-create__message list-create__message--muted">
+            <Text as="div" size="xs" tone="muted">
               価格行データは未取得です。
-            </div>
+            </Text>
           )}
 
           {missingModelIdCount > 0 && (
-            <div className="list-create__message list-create__message--error">
+            <Text as="div" size="xs" tone="destructive">
               modelId が未設定の価格行があります: {missingModelIdCount} 件
-            </div>
+            </Text>
           )}
         </div>
 
         {/* 右カラム */}
         <div className="list-create__column">
           {loadingDTO && (
-            <div className="list-create__status list-create__status--muted">
+            <Text as="div" size="sm" tone="muted">
               読み込み中...
-            </div>
+            </Text>
           )}
 
           {dtoError && (
-            <div className="list-create__status list-create__status--error">
+            <Text as="div" size="sm" tone="destructive">
               読み込みに失敗しました: {dtoError}
-            </div>
+            </Text>
           )}
 
           <Card>
             <CardContent className="list-create__card-content">
-              <div className="list-create__label list-create__label--spaced">
+              <Text
+                as="div"
+                size="sm"
+                weight="medium"
+                className="list-create__label--spaced"
+              >
                 担当者
-              </div>
+              </Text>
 
               {loadingMembers ? (
-                <div className="list-create__assignee-message">
+                <Text as="div" size="xs" tone="muted">
                   担当者を読み込み中です…
-                </div>
+                </Text>
               ) : assigneeOptions.length > 0 ? (
                 <Select
                   options={assigneeOptions}
@@ -227,9 +219,9 @@ export default function InventoryListCreate() {
                   disabled={saving}
                 />
               ) : (
-                <div className="list-create__assignee-message">
+                <Text as="div" size="xs" tone="muted">
                   担当者候補がありません。
-                </div>
+                </Text>
               )}
             </CardContent>
           </Card>

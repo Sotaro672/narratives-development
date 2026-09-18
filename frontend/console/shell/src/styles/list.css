@@ -4,10 +4,6 @@
  * PriceCard
  * ======================================================= */
 
-.prc__color-cell {
-  white-space: nowrap;
-}
-
 .prc__color-dot {
   display: inline-block;
   width: 12px;
@@ -42,12 +38,6 @@
   gap: 0.5rem;
 }
 
-.list-create__label {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  font-weight: 500;
-}
-
 .list-create__label--spaced {
   margin-bottom: 0.5rem;
 }
@@ -73,38 +63,6 @@
   opacity: 0.5;
 }
 
-.list-create__message {
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-.list-create__message--muted {
-  color: hsl(var(--muted-foreground));
-}
-
-.list-create__message--error {
-  color: #dc2626;
-}
-
-.list-create__status {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.list-create__status--muted {
-  color: hsl(var(--muted-foreground));
-}
-
-.list-create__status--error {
-  color: #dc2626;
-}
-
-.list-create__assignee-message {
-  color: #94a3b8;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
 /* =========================================================
  * List Detail
  * ======================================================= */
@@ -122,45 +80,6 @@
   padding: 1rem;
 }
 
-.list-detail__label {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  font-weight: 500;
-}
-
-.list-detail__text {
-  color: #1e293b;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  overflow-wrap: anywhere;
-}
-
-.list-detail__text--description {
-  white-space: pre-wrap;
-}
-
 .list-detail__description-input {
   min-height: 120px;
-}
-
-.list-detail__status {
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.list-detail__status--muted {
-  color: hsl(var(--muted-foreground));
-}
-
-.list-detail__status--error {
-  color: #dc2626;
-}
-
-.list-detail__message {
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-.list-detail__message--muted {
-  color: hsl(var(--muted-foreground));
 }

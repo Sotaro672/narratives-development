@@ -12,7 +12,6 @@ import {
   CardInput,
   CardTitle,
 } from "../../../../shared/ui/card";
-
 import {
   Table,
   TableBody,
@@ -21,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "../../../../shared/ui/table";
+import Text from "../../../../shared/ui/text";
 
 import { usePriceCard } from "../hook/usePriceCard";
 
@@ -50,17 +50,13 @@ function resolveProductBlueprintCategoryKind(args: {
     return "apparel";
   }
 
-  const hasAlcoholRow = args.rows.some(
-    (row) => row.kind === "alcohol",
-  );
+  const hasAlcoholRow = args.rows.some((row) => row.kind === "alcohol");
 
   if (hasAlcoholRow) {
     return "alcohol";
   }
 
-  const hasApparelRow = args.rows.some(
-    (row) => row.kind === "apparel",
-  );
+  const hasApparelRow = args.rows.some((row) => row.kind === "apparel");
 
   if (hasApparelRow) {
     return "apparel";
@@ -72,10 +68,7 @@ function resolveProductBlueprintCategoryKind(args: {
 function getVolumeValueLabel(row: PriceRowVM): string {
   const value = row.volumeValue;
 
-  if (
-    typeof value === "number" &&
-    Number.isFinite(value)
-  ) {
+  if (typeof value === "number" && Number.isFinite(value)) {
     return String(value);
   }
 
@@ -108,14 +101,10 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
         productBlueprintCategory,
         rows: rowsVM,
       }),
-    [
-      productBlueprintCategory,
-      rowsVM,
-    ],
+    [productBlueprintCategory, rowsVM],
   );
 
-  const isAlcoholCategory =
-    categoryKind === "alcohol";
+  const isAlcoholCategory = categoryKind === "alcohol";
 
   return (
     <Card className={className}>
@@ -129,9 +118,9 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
             {title}
 
             {showModeBadge && (
-              <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">
+              <Text size="xs" tone="muted" className="ml-2">
                 （{mode}）
-              </span>
+              </Text>
             )}
           </CardTitle>
         </CardHeaderLeft>
@@ -196,12 +185,10 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
                         {row.size || "-"}
                       </TableCell>
 
-                      <TableCell className="prc__color-cell">
+                      <TableCell className="text--wrap-nowrap">
                         <span
                           className="prc__color-dot"
-                          style={{
-                            backgroundColor: row.bgColor,
-                          }}
+                          style={{ backgroundColor: row.bgColor }}
                           title={row.rgbTitle}
                         />
 
@@ -222,9 +209,9 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
                     {isEdit ? (
                       <div className="flex items-center justify-end gap-2">
                         {currencySymbol ? (
-                          <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                          <Text size="xs" tone="muted">
                             {currencySymbol}
-                          </span>
+                          </Text>
                         ) : null}
 
                         <CardInput

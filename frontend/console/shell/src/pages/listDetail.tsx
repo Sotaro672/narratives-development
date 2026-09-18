@@ -4,6 +4,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 
 import { Card, CardContent } from "../shared/ui/card";
 import { Input } from "../shared/ui/input";
+import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
 import PriceCard from "../features/list/presentation/components/priceCard";
@@ -89,33 +90,33 @@ export default function ListDetail() {
       >
         <div className="list-detail__column">
           {vm.loading && (
-            <div className="list-detail__status list-detail__status--muted">
+            <Text as="div" size="sm" tone="muted">
               読み込み中...
-            </div>
+            </Text>
           )}
 
           {vm.error && (
-            <div className="list-detail__status list-detail__status--error">
+            <Text as="div" size="sm" tone="destructive">
               読み込みに失敗しました: {vm.error}
-            </div>
+            </Text>
           )}
 
           {isEdit && vm.deleteError && (
-            <div className="list-detail__status list-detail__status--error">
+            <Text as="div" size="sm" tone="destructive">
               削除に失敗しました: {vm.deleteError}
-            </div>
+            </Text>
           )}
 
           {isEdit && vm.deleting && (
-            <div className="list-detail__message list-detail__message--muted">
+            <Text as="div" size="xs" tone="muted">
               削除中...
-            </div>
+            </Text>
           )}
 
           {vm.saveError && (
-            <div className="list-detail__status list-detail__status--error">
+            <Text as="div" size="sm" tone="destructive">
               保存に失敗しました: {vm.saveError}
-            </div>
+            </Text>
           )}
 
           <ListImageCard
@@ -128,40 +129,29 @@ export default function ListDetail() {
             }
             mainImageIndex={vm.mainImageIndex}
             setMainImageIndex={vm.setMainImageIndex}
-            onAddImages={(files) =>
-              vm.onAddImages(files)
-            }
-            onRemoveImageAt={(idx) =>
-              vm.onRemoveImageAt(idx)
-            }
+            onAddImages={(files) => vm.onAddImages(files)}
+            onRemoveImageAt={(idx) => vm.onRemoveImageAt(idx)}
             onClearImages={vm.onClearImages}
           />
 
           <Card>
             <CardContent className="list-detail__card-content">
-              <div className="list-detail__label">
+              <Text as="div" size="sm" weight="medium">
                 タイトル
-              </div>
+              </Text>
 
               {!isEdit && (
-                <div className="list-detail__text">
+                <Text as="div" size="sm" wrap="anywhere">
                   {vm.listingTitle || "未設定"}
-                </div>
+                </Text>
               )}
 
               {isEdit && (
                 <Input
                   value={vm.draftListingTitle}
                   placeholder="タイトルを入力"
-                  onChange={(e) =>
-                    vm.setDraftListingTitle(
-                      e.target.value,
-                    )
-                  }
-                  disabled={
-                    vm.saving ||
-                    vm.deleting
-                  }
+                  onChange={(e) => vm.setDraftListingTitle(e.target.value)}
+                  disabled={vm.saving || vm.deleting}
                 />
               )}
             </CardContent>
@@ -169,30 +159,23 @@ export default function ListDetail() {
 
           <Card>
             <CardContent className="list-detail__card-content">
-              <div className="list-detail__label">
+              <Text as="div" size="sm" weight="medium">
                 説明
-              </div>
+              </Text>
 
               {!isEdit && (
-                <div className="list-detail__text list-detail__text--description">
+                <Text as="div" size="sm" wrap="pre-wrap" className="text--wrap-anywhere">
                   {vm.description || "未設定"}
-                </div>
+                </Text>
               )}
 
               {isEdit && (
                 <Textarea
                   value={vm.draftDescription}
                   placeholder="説明を入力"
-                  onChange={(e) =>
-                    vm.setDraftDescription(
-                      e.target.value,
-                    )
-                  }
+                  onChange={(e) => vm.setDraftDescription(e.target.value)}
                   className="list-detail__description-input"
-                  disabled={
-                    vm.saving ||
-                    vm.deleting
-                  }
+                  disabled={vm.saving || vm.deleting}
                 />
               )}
             </CardContent>
@@ -201,11 +184,7 @@ export default function ListDetail() {
           <PriceCard
             title="価格"
             rows={effectivePriceRows}
-            mode={
-              isEdit
-                ? "edit"
-                : "view"
-            }
+            mode={isEdit ? "edit" : "view"}
             currencySymbol="¥"
             onChangePrice={
               isEdit
@@ -216,24 +195,17 @@ export default function ListDetail() {
 
           {Array.isArray(effectivePriceRows) &&
             effectivePriceRows.length === 0 && (
-              <div className="list-detail__message list-detail__message--muted">
+              <Text as="div" size="xs" tone="muted">
                 価格情報がありません。
-              </div>
+              </Text>
             )}
         </div>
 
         <div className="list-detail__column">
           <AdminCard
             title="担当者"
-            mode={
-              isEdit
-                ? "edit"
-                : "view"
-            }
-            assigneeId={
-              effectiveAssigneeId ||
-              undefined
-            }
+            mode={isEdit ? "edit" : "view"}
+            assigneeId={effectiveAssigneeId || undefined}
             assigneeName={effectiveAssigneeName}
             assigneeCandidates={vm.assigneeCandidates}
             loadingMembers={vm.loadingMembers}
