@@ -6,10 +6,12 @@ import { SlidersHorizontal } from "lucide-react";
 import {
   Card,
   CardContent,
+  CardField,
   CardHeader,
   CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
+  Label,
 } from "../../../../../shared/ui";
 import { Button } from "../../../../../shared/ui/button";
 import { Input } from "../../../../../shared/ui/input";
@@ -268,17 +270,18 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
         </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="flex flex-col gap-3">
         {visibility.showVintage && (
-          <>
-            <div className="label">
+          <CardField>
+            <Label htmlFor="product-blueprint-vintage">
               ヴィンテージ
-            </div>
+            </Label>
 
             <div>
               <div className="flex items-center gap-8">
                 {isEdit ? (
                   <Input
+                    id="product-blueprint-vintage"
                     type="number"
                     inputMode="numeric"
                     min={0}
@@ -301,6 +304,7 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                   />
                 ) : (
                   <Input
+                    id="product-blueprint-vintage"
                     value={toCategoryInputValue(
                       getCategoryFieldValue(
                         categoryFields,
@@ -321,17 +325,18 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 />
               )}
             </div>
-          </>
+          </CardField>
         )}
 
         {visibility.showRegion && (
-          <>
-            <div className="label">
+          <CardField>
+            <Label htmlFor="product-blueprint-region">
               地域・産地
-            </div>
+            </Label>
 
             {isEdit ? (
               <Input
+                id="product-blueprint-region"
                 value={toCategoryInputValue(
                   getCategoryFieldValue(
                     categoryFields,
@@ -348,6 +353,7 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
               />
             ) : (
               <Input
+                id="product-blueprint-region"
                 value={toCategoryInputValue(
                   getCategoryFieldValue(
                     categoryFields,
@@ -359,20 +365,21 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 aria-label="地域・産地"
               />
             )}
-          </>
+          </CardField>
         )}
 
         {visibility.showWeight && (
-          <>
-            <div className="label">
+          <CardField>
+            <Label htmlFor="product-blueprint-weight">
               重さ
-            </div>
+            </Label>
 
             <div>
               <div className="flex items-center gap-8">
                 {isEdit ? (
                   <>
                     <Input
+                      id="product-blueprint-weight"
                       type="number"
                       inputMode="decimal"
                       min={0}
@@ -396,6 +403,7 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 ) : (
                   <>
                     <Input
+                      id="product-blueprint-weight"
                       value={
                         weightValue === ""
                           ? ""
@@ -420,19 +428,20 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 />
               )}
             </div>
-          </>
+          </CardField>
         )}
 
         {visibility.showFit && (
-          <>
-            <div className="label">
+          <CardField>
+            <Label htmlFor="product-blueprint-fit">
               フィット
-            </div>
+            </Label>
 
             {isEdit ? (
               <Popover>
                 <PopoverTrigger>
                   <Button
+                    id="product-blueprint-fit"
                     type="button"
                     variant="outline"
                     className="w-full justify-between pbc-select-trigger"
@@ -471,23 +480,25 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
               </Popover>
             ) : (
               <Input
+                id="product-blueprint-fit"
                 value={fitValue}
                 variant="readonly"
                 readOnly
                 aria-label="フィット"
               />
             )}
-          </>
+          </CardField>
         )}
 
         {visibility.showMaterial && (
-          <>
-            <div className="label">
+          <CardField>
+            <Label htmlFor="product-blueprint-material">
               素材
-            </div>
+            </Label>
 
             {isEdit ? (
               <Input
+                id="product-blueprint-material"
                 value={materialValue}
                 onChange={(event) =>
                   handleChangeCategoryField(
@@ -499,26 +510,28 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
               />
             ) : (
               <Input
+                id="product-blueprint-material"
                 value={materialValue}
                 variant="readonly"
                 readOnly
                 aria-label="素材"
               />
             )}
-          </>
+          </CardField>
         )}
 
         {visibility.showAlcoholContent && (
-          <>
-            <div className="label">
+          <CardField>
+            <Label htmlFor="product-blueprint-alcohol-content">
               アルコール度数
-            </div>
+            </Label>
 
             <div>
               <div className="flex items-center gap-8">
                 {isEdit ? (
                   <>
                     <Input
+                      id="product-blueprint-alcohol-content"
                       type="number"
                       inputMode="decimal"
                       min={0}
@@ -547,6 +560,7 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 ) : (
                   <>
                     <Input
+                      id="product-blueprint-alcohol-content"
                       value={toCategoryInputValue(
                         getCategoryFieldValue(
                           categoryFields,
@@ -572,20 +586,21 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 />
               )}
             </div>
-          </>
+          </CardField>
         )}
 
         {showCosmeticsVolume && (
-          <>
-            <div className="label">
+          <CardField>
+            <Label htmlFor="product-blueprint-volume">
               容量
-            </div>
+            </Label>
 
             <div>
               <div className="flex items-center gap-8">
                 {isEdit ? (
                   <>
                     <Input
+                      id="product-blueprint-volume"
                       type="number"
                       inputMode="decimal"
                       min={0}
@@ -614,6 +629,7 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 ) : (
                   <>
                     <Input
+                      id="product-blueprint-volume"
                       value={toCategoryInputValue(
                         getCategoryFieldValue(
                           categoryFields,
@@ -639,7 +655,7 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                 />
               )}
             </div>
-          </>
+          </CardField>
         )}
 
         {visibility.showWashTags && (

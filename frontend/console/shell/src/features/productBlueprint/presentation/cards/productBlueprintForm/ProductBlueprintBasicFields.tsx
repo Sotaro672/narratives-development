@@ -1,7 +1,10 @@
-// frontend\console\shell\src\features\productBlueprint\presentation\cards\productBlueprintForm\ProductBlueprintBasicFields.tsx
+// frontend/console/shell/src/features/productBlueprint/presentation/cards/productBlueprintForm/ProductBlueprintBasicFields.tsx
 
 import * as React from "react";
+
+import { CardField } from "../../../../../shared/ui/card";
 import { Input } from "../../../../../shared/ui/input";
+import { Label } from "../../../../../shared/ui/label";
 
 type ProductBlueprintBasicFieldsProps = {
   productName: string;
@@ -17,23 +20,26 @@ const ProductBlueprintBasicFields: React.FC<ProductBlueprintBasicFieldsProps> = 
   const isEdit = mode === "edit";
 
   return (
-    <>
-      <div className="label">プロダクト名</div>
+    <CardField>
+      <Label htmlFor="product-blueprint-product-name">
+        プロダクト名
+      </Label>
+
       {isEdit ? (
         <Input
+          id="product-blueprint-product-name"
           value={productName}
-          onChange={(e) => onChangeProductName?.(e.target.value)}
-          aria-label="プロダクト名"
+          onChange={(event) => onChangeProductName?.(event.target.value)}
         />
       ) : (
         <Input
+          id="product-blueprint-product-name"
           value={productName}
           variant="readonly"
           readOnly
-          aria-label="プロダクト名"
         />
       )}
-    </>
+    </CardField>
   );
 };
 

@@ -1,9 +1,11 @@
-// frontend/console/productBlueprint/src/presentation/components/ProductBlueprintBrandField.tsx
+// frontend/console/shell/src/features/productBlueprint/presentation/cards/classification/ProductBlueprintBrandField.tsx
 
 import * as React from "react";
 
 import { Button } from "../../../../../shared/ui/button";
+import { CardField } from "../../../../../shared/ui/card";
 import { Input } from "../../../../../shared/ui/input";
+import { Label } from "../../../../../shared/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -45,11 +47,11 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
     (brandId ? `(${brandId})` : "");
 
   return (
-    <>
-      <div className="label">ブランド</div>
+    <CardField>
+      <Label>ブランド</Label>
 
       {isEdit && brandOptions && onChangeBrandId ? (
-        <div className="mb-2 space-y-1">
+        <div className="space-y-1">
           <Popover>
             <PopoverTrigger>
               <Button
@@ -64,9 +66,7 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
 
             <PopoverContent align="start" className="popover__content--compact">
               {brandOptions.length === 0 ? (
-                <div className="popover__empty">
-                  ブランド候補がありません。
-                </div>
+                <div className="popover__empty">ブランド候補がありません。</div>
               ) : (
                 <div className="popover__list">
                   {brandOptions.map((brand) => {
@@ -89,15 +89,11 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
           </Popover>
 
           {brandLoading && (
-            <p className="text-xs text-slate-400">
-              ブランドを取得中…
-            </p>
+            <p className="text-xs text-slate-400">ブランドを取得中…</p>
           )}
 
           {brandError && (
-            <p className="text-xs text-red-500">
-              ブランド一覧の取得に失敗しました。
-            </p>
+            <p className="text-xs text-red-500">ブランド一覧の取得に失敗しました。</p>
           )}
         </div>
       ) : (
@@ -108,7 +104,7 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
           aria-label="ブランド"
         />
       )}
-    </>
+    </CardField>
   );
 };
 

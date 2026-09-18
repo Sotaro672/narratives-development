@@ -48,6 +48,27 @@
 
 .icon-btn {
   position: relative;
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: #f6f6f6;
+}
+
+.user-trigger {
+  width: auto;
+  gap: 2px;
+  padding: 0 4px;
 }
 
 .icon-wrap {
@@ -60,7 +81,16 @@
 .icon {
   width: 22px;
   height: 22px;
+  flex-shrink: 0;
   color: var(--hd-fg);
+  stroke-width: 1.8;
+}
+
+.caret {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--hd-fg-muted);
   stroke-width: 1.8;
 }
 

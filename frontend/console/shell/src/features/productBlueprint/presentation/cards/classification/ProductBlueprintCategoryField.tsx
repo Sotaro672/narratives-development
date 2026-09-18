@@ -3,7 +3,9 @@
 import * as React from "react";
 
 import { Button } from "../../../../../shared/ui/button";
+import { CardField } from "../../../../../shared/ui/card";
 import { Input } from "../../../../../shared/ui/input";
+import { Label } from "../../../../../shared/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -356,17 +358,18 @@ const ProductBlueprintCategoryField: React.FC<
   );
 
   return (
-    <>
+    <div className="flex flex-col gap-1">
       <div className="grid grid-cols-2 gap-3">
-        <div>
-          <div className="label">
+        <CardField>
+          <Label htmlFor="product-blueprint-category">
             商品カテゴリ
-          </div>
+          </Label>
 
           {canEditCategory ? (
             <Popover>
               <PopoverTrigger>
                 <Button
+                  id="product-blueprint-category"
                   type="button"
                   variant="outline"
                   className="w-full justify-between pbc-select-trigger"
@@ -421,24 +424,26 @@ const ProductBlueprintCategoryField: React.FC<
             </Popover>
           ) : (
             <Input
+              id="product-blueprint-category"
               value={displayParentLabel}
               variant="readonly"
               readOnly
               aria-label="商品カテゴリ"
             />
           )}
-        </div>
+        </CardField>
 
-        <div>
-          <div className="label">
+        <CardField>
+          <Label htmlFor="product-blueprint-detail-category">
             詳細カテゴリ
-          </div>
+          </Label>
 
           {canEditCategory ? (
             selectedParentRoot !== "" ? (
               <Popover>
                 <PopoverTrigger>
                   <Button
+                    id="product-blueprint-detail-category"
                     type="button"
                     variant="outline"
                     className="w-full justify-between pbc-select-trigger"
@@ -497,6 +502,7 @@ const ProductBlueprintCategoryField: React.FC<
               </Popover>
             ) : (
               <Input
+                id="product-blueprint-detail-category"
                 value=""
                 variant="readonly"
                 readOnly
@@ -505,13 +511,14 @@ const ProductBlueprintCategoryField: React.FC<
             )
           ) : (
             <Input
+              id="product-blueprint-detail-category"
               value={displayChildLabel}
               variant="readonly"
               readOnly
               aria-label="詳細カテゴリ"
             />
           )}
-        </div>
+        </CardField>
       </div>
 
       {canEditCategory && productBlueprintCategoryLoading && (
@@ -525,7 +532,7 @@ const ProductBlueprintCategoryField: React.FC<
           商品カテゴリ一覧の取得に失敗しました。
         </p>
       )}
-    </>
+    </div>
   );
 };
 

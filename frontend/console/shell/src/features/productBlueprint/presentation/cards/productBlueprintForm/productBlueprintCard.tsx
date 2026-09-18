@@ -149,7 +149,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
         </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent>
+      <CardContent className="flex flex-col gap-3">
         <ProductBlueprintBasicFields
           productName={mergedProductName}
           mode={mode}

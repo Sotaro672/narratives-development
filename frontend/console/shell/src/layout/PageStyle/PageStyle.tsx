@@ -4,15 +4,17 @@ import * as React from "react";
 import type { ReactNode } from "react";
 import {
   ArrowLeft,
-  Save,
-  Plus,
+  FileSpreadsheet,
+  Link2,
+  MessageSquareReply,
   Pencil,
+  Plus,
+  QrCode,
+  Save,
+  Send,
+  Tag,
   Trash2,
   X,
-  Tag,
-  Send,
-  MessageSquareReply,
-  Link2,
 } from "lucide-react";
 
 import { Button, type BtnVariant } from "../../shared/ui/button";
@@ -103,6 +105,12 @@ interface PageStyleProps {
   isClosing?: boolean;
   onPurge?: () => void | Promise<void>;
   onList?: () => void | Promise<void>;
+  onQrOutput?: () => void | Promise<void>;
+  isQrOutputting?: boolean;
+  qrOutputDisabled?: boolean;
+  onCsvOutput?: () => void | Promise<void>;
+  isCsvOutputting?: boolean;
+  csvOutputDisabled?: boolean;
   title?: ReactNode;
   badge?: ReactNode;
   leadingActions?: ReactNode;
@@ -142,6 +150,12 @@ export default function PageStyle({
   isClosing: controlledIsClosing,
   onPurge,
   onList,
+  onQrOutput,
+  isQrOutputting: controlledIsQrOutputting,
+  qrOutputDisabled,
+  onCsvOutput,
+  isCsvOutputting: controlledIsCsvOutputting,
+  csvOutputDisabled,
   title,
   badge,
   leadingActions,
@@ -166,7 +180,10 @@ export default function PageStyle({
   const [isListing, setIsListing] = React.useState(false);
   const [internalIsRefreshing, setInternalIsRefreshing] = React.useState(false);
   const [internalIsClosing, setInternalIsClosing] = React.useState(false);
-  const [internalIsStatusButtonLoading, setInternalIsStatusButtonLoading] = React.useState(false);
+  const [internalIsQrOutputting, setInternalIsQrOutputting] = React.useState(false);
+  const [internalIsCsvOutputting, setInternalIsCsvOutputting] = React.useState(false);
+  const [internalIsStatusButtonLoading, setInternalIsStatusButtonLoading] =
+    React.useState(false);
 
   const isSaving = controlledIsSaving ?? internalIsSaving;
   const isSending = controlledIsSending ?? internalIsSending;
@@ -174,6 +191,8 @@ export default function PageStyle({
   const isConnecting = controlledIsConnecting ?? internalIsConnecting;
   const isRefreshing = controlledIsRefreshing ?? internalIsRefreshing;
   const isClosing = controlledIsClosing ?? internalIsClosing;
+  const isQrOutputting = controlledIsQrOutputting ?? internalIsQrOutputting;
+  const isCsvOutputting = controlledIsCsvOutputting ?? internalIsCsvOutputting;
   const isStatusButtonLoading =
     controlledIsStatusButtonLoading ?? internalIsStatusButtonLoading;
 
@@ -265,6 +284,52 @@ export default function PageStyle({
     }
   }, [onClose, isClosing]);
 
+  const handleQrOutput = React.useCallback(async () => {
+    if (
+      !onQrOutput ||
+      isQrOutputting ||
+      isCsvOutputting ||
+      qrOutputDisabled
+    ) {
+      return;
+    }
+
+    try {
+      setInternalIsQrOutputting(true);
+      await onQrOutput();
+    } finally {
+      setInternalIsQrOutputting(false);
+    }
+  }, [
+    onQrOutput,
+    isQrOutputting,
+    isCsvOutputting,
+    qrOutputDisabled,
+  ]);
+
+  const handleCsvOutput = React.useCallback(async () => {
+    if (
+      !onCsvOutput ||
+      isCsvOutputting ||
+      isQrOutputting ||
+      csvOutputDisabled
+    ) {
+      return;
+    }
+
+    try {
+      setInternalIsCsvOutputting(true);
+      await onCsvOutput();
+    } finally {
+      setInternalIsCsvOutputting(false);
+    }
+  }, [
+    onCsvOutput,
+    isCsvOutputting,
+    isQrOutputting,
+    csvOutputDisabled,
+  ]);
+
   const handleStatusButtonClick = React.useCallback(async () => {
     if (
       !onStatusButtonClick ||
@@ -350,6 +415,40 @@ export default function PageStyle({
             )}
 
             {leadingActions}
+
+            {onQrOutput && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleQrOutput()}
+                disabled={
+                  isQrOutputting ||
+                  isCsvOutputting ||
+                  Boolean(qrOutputDisabled)
+                }
+                aria-busy={isQrOutputting}
+              >
+                {isQrOutputting ? <SpinnerArrow /> : <QrCode />}
+                {isQrOutputting ? "QR出力中..." : "QR出力"}
+              </Button>
+            )}
+
+            {onCsvOutput && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void handleCsvOutput()}
+                disabled={
+                  isCsvOutputting ||
+                  isQrOutputting ||
+                  Boolean(csvOutputDisabled)
+                }
+                aria-busy={isCsvOutputting}
+              >
+                {isCsvOutputting ? <SpinnerArrow /> : <FileSpreadsheet />}
+                {isCsvOutputting ? "CSV出力中..." : "CSV出力"}
+              </Button>
+            )}
 
             {onEdit && (
               <Button
