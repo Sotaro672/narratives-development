@@ -12,26 +12,22 @@
  * 文字スタイルは shared/ui/text を利用する。
  * ======================================================= */
 
-/* Member固有の2カラム間隔のみ上書き */
 .member-card__grid {
   column-gap: 56px;
   row-gap: 24px;
   align-items: flex-start;
 }
 
-/* Member固有のフィールド間隔のみ上書き */
 .member-card__section {
   gap: 16px;
 }
 
-/* 値のレイアウト */
 .member-card__value {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-/* インラインアイコン */
 .icon-inline {
   color: hsl(var(--muted-foreground));
 }
@@ -39,10 +35,6 @@
 .member-card__value .icon-inline {
   flex-shrink: 0;
 }
-
-/* =========================================================
- * 姓・名入力
- * ======================================================= */
 
 .name-row {
   display: flex;
@@ -60,10 +52,6 @@
     flex-direction: column;
   }
 }
-
-/* =========================================================
- * Permission
- * ======================================================= */
 
 .role-button {
   border: 1px solid #cbd5e1;
@@ -91,4 +79,76 @@
   flex-wrap: wrap;
   gap: 6px;
   white-space: normal;
+}
+
+/* =========================================================
+ * Member Detail
+ * ======================================================= */
+
+.member-detail__message {
+  padding: 16px;
+}
+
+.member-detail__aside {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.member-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.member-permissions__category {
+  margin-bottom: 4px;
+}
+
+.member-permissions__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 0 12px;
+  padding-left: 16px;
+  list-style: disc;
+}
+
+/* =========================================================
+ * Member Create
+ * ======================================================= */
+
+.member-create {
+  width: 100%;
+  max-width: 48rem;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.member-create__error {
+  margin-bottom: 12px;
+}
+
+.member-create__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.member-create__label {
+  display: block;
+  margin-bottom: 4px;
+  color: #cbd5e1;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.member-create__input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #475569;
+  border-radius: 4px;
+  background: #1e293b;
+  box-sizing: border-box;
 }

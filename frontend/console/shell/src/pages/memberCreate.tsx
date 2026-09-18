@@ -1,12 +1,14 @@
-// frontend\console\shell\src\pages\memberCreate.tsx
+// frontend/console/shell/src/pages/memberCreate.tsx
+
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import PageStyle from "../layout/PageStyle/PageStyle";
-import { useMemberCreate } from "../features/member/presentation/hooks/useMemberCreate";
-import { Input } from "../shared/ui/input";
 
 import { BrandSelect } from "../features/member/presentation/components/BrandSelect";
 import { PermissionSelect } from "../features/member/presentation/components/PermissionSelect";
+import { useMemberCreate } from "../features/member/presentation/hooks/useMemberCreate";
+import PageStyle from "../layout/PageStyle/PageStyle";
+import { Input } from "../shared/ui/input";
+import Text from "../shared/ui/text";
 
 import "../styles/member.css";
 
@@ -53,12 +55,18 @@ export default function MemberCreatePage() {
   const [selectedBrandIds, setSelectedBrandIds] = React.useState<Set<string>>(
     new Set(),
   );
+
   const toggleBrand = (id: string, explicit?: boolean) => {
     setSelectedBrandIds((prev) => {
       const next = new Set(prev);
       const willCheck = explicit ?? !next.has(id);
-      if (willCheck) next.add(id);
-      else next.delete(id);
+
+      if (willCheck) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+
       return next;
     });
   };
@@ -81,13 +89,22 @@ export default function MemberCreatePage() {
       onBack={handleBack}
       onCreate={handleCreate}
     >
-      <div className="p-4 max-w-3xl mx-auto">
-        {error && <div className="mb-3 text-red-500">エラー: {error}</div>}
+      <div className="member-create">
+        {error ? (
+          <Text
+            as="div"
+            tone="destructive"
+            className="member-create__error"
+            role="alert"
+          >
+            エラー: {error}
+          </Text>
+        ) : null}
 
         <form
           ref={formRef}
           onSubmit={onSubmit}
-          className="space-y-4"
+          className="member-create__form"
           noValidate
         >
           {/* ===== ブランド選択 ===== */}
@@ -99,15 +116,16 @@ export default function MemberCreatePage() {
 
           {/* ===== メールアドレス（必須） ===== */}
           <div>
-            <label className="block text-sm text-slate-300 mb-1">
+            <label className="member-create__label">
               メールアドレス（必須）
             </label>
+
             <Input
               type="email"
               required
               autoComplete="email"
               variant="default"
-              className="w-full rounded border border-slate-600 bg-slate-800 px-3 py-2"
+              className="member-create__input"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="taro@example.com"

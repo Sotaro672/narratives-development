@@ -1,5 +1,3 @@
-// frontend/console/shell/src/pages/locationCreate.tsx
-
 import {
   Card,
   CardContent,
@@ -7,6 +5,8 @@ import {
 import LocationFormFields from "../features/company/presentation/components/LocationFormFields";
 import { useLocationCreate } from "../features/company/presentation/hook/useLocationCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
+
+import "../styles/location.css";
 
 export default function LocationCreate() {
   const { vm, handlers } = useLocationCreate();
@@ -21,7 +21,7 @@ export default function LocationCreate() {
       onSave={handlers.onSave}
       isSaving={vm.saving}
     >
-      <div className="mx-auto w-full max-w-3xl">
+      <div className="location-create">
         <Card>
           <CardContent>
             <LocationFormFields
@@ -53,16 +53,16 @@ export default function LocationCreate() {
             {vm.error && (
               <div
                 role="alert"
-                className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3"
+                className="location-create__error"
               >
-                <p className="text-sm text-red-600">
+                <p className="location-create__error-message">
                   {vm.error}
                 </p>
               </div>
             )}
 
             {vm.saving && (
-              <p className="mt-5 text-sm text-slate-500">
+              <p className="location-create__status">
                 在庫保管場所を登録しています...
               </p>
             )}

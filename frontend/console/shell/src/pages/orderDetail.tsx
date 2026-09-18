@@ -9,6 +9,8 @@ import { getOrderStatusLabel } from "../shared/types/order";
 import { formatJPY, useOrderDetail } from "../features/order/presentation/hooks/useOrderDetail";
 import type { OrderDetailItemDTO } from "../features/order/presentation/hooks/useOrderDetail";
 
+import "../styles/orderDetail.css";
+
 function isAlcoholItem(item: OrderDetailItemDTO): boolean {
   return item.productBlueprintCategoryPath[0] === "alcohol";
 }
@@ -81,7 +83,7 @@ export default function OrderDetail() {
     items.every((item) => item.isCancelled);
 
   const left = (
-    <Card className="mt-4">
+    <Card className="order-detail__main-card">
       <CardHeader>
         <CardTitle>注文情報</CardTitle>
       </CardHeader>
@@ -92,7 +94,7 @@ export default function OrderDetail() {
             as="div"
             tone="destructive"
             wrap="pre-wrap"
-            className="mb-4 text-left"
+            className="order-detail__dispatch-error"
             role="alert"
           >
             発送処理に失敗しました: {dispatchError}
@@ -100,7 +102,7 @@ export default function OrderDetail() {
         ) : null}
 
         {loading ? (
-          <Text as="div" tone="muted" className="text-left">
+          <Text as="div" tone="muted" className="order-detail__message">
             読み込み中...
           </Text>
         ) : error ? (
@@ -108,47 +110,49 @@ export default function OrderDetail() {
             as="div"
             tone="destructive"
             wrap="pre-wrap"
-            className="text-left"
+            className="order-detail__message"
             role="alert"
           >
             {error}
           </Text>
         ) : !order ? (
-          <Text as="div" tone="muted" className="text-left">
+          <Text as="div" tone="muted" className="order-detail__message">
             データがありません。
           </Text>
         ) : (
-          <div className="space-y-8 text-left">
+          <div className="order-detail__sections">
             <div>
               <Text
                 as="div"
                 weight="semibold"
-                className="mb-2 text-left"
+                className="order-detail__section-title"
               >
                 基本情報
               </Text>
 
-              <table className="w-full text-sm text-left">
+              <table className="order-detail__table">
                 <tbody>
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       注文日
                     </th>
-                    <td className="py-2 text-left">{createdAt}</td>
+                    <td className="order-detail__value-cell">
+                      {createdAt}
+                    </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       リストID
                     </th>
-                    <td className="py-2 text-left">
+                    <td className="order-detail__value-cell">
                       {lists.length > 0 ? (
-                        <div className="flex flex-wrap gap-x-2 gap-y-1">
+                        <div className="order-detail__list-links">
                           {lists.map((list) => (
                             <button
                               key={list.id}
                               type="button"
-                              className="text-blue-600 hover:underline"
+                              className="order-detail__list-link"
                               onClick={() => goListDetail(list.id)}
                             >
                               {list.readableId}
@@ -162,45 +166,57 @@ export default function OrderDetail() {
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       アイテム数
                     </th>
-                    <td className="py-2 text-left">{items.length} 点</td>
+                    <td className="order-detail__value-cell">
+                      {items.length} 点
+                    </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       数量合計
                     </th>
-                    <td className="py-2 text-left">{quantity} 点</td>
+                    <td className="order-detail__value-cell">
+                      {quantity} 点
+                    </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       商品小計
                     </th>
-                    <td className="py-2 text-left">{formatJPY(subtotal)}</td>
+                    <td className="order-detail__value-cell">
+                      {formatJPY(subtotal)}
+                    </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       配送料
                     </th>
-                    <td className="py-2 text-left">{formatJPY(shippingAmount)}</td>
+                    <td className="order-detail__value-cell">
+                      {formatJPY(shippingAmount)}
+                    </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       消費税
                     </th>
-                    <td className="py-2 text-left">{formatJPY(consumptionTax)}</td>
+                    <td className="order-detail__value-cell">
+                      {formatJPY(consumptionTax)}
+                    </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       合計金額
                     </th>
-                    <td className="py-2 text-left">{formatJPY(totalPrice)}</td>
+                    <td className="order-detail__value-cell">
+                      {formatJPY(totalPrice)}
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -210,50 +226,50 @@ export default function OrderDetail() {
               <Text
                 as="div"
                 weight="semibold"
-                className="mb-2 text-left"
+                className="order-detail__section-title"
               >
                 配送先
               </Text>
 
-              <table className="w-full text-sm text-left">
+              <table className="order-detail__table">
                 <tbody>
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       郵便番号
                     </th>
-                    <td className="py-2 pr-6 text-left">
+                    <td className="order-detail__value-cell order-detail__value-cell--spaced">
                       {shipping?.zipCode ?? "-"}
                     </td>
 
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       都道府県
                     </th>
-                    <td className="py-2 pr-6 text-left">
+                    <td className="order-detail__value-cell order-detail__value-cell--spaced">
                       {shipping?.state ?? "-"}
                     </td>
 
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       市町村
                     </th>
-                    <td className="py-2 text-left">
+                    <td className="order-detail__value-cell">
                       {shipping?.city ?? "-"}
                     </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       住所1
                     </th>
-                    <td className="py-2 text-left" colSpan={5}>
+                    <td className="order-detail__value-cell" colSpan={5}>
                       {shipping?.street ?? "-"}
                     </td>
                   </tr>
 
                   <tr>
-                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                    <th className="order-detail__label-cell">
                       住所2
                     </th>
-                    <td className="py-2 text-left" colSpan={5}>
+                    <td className="order-detail__value-cell" colSpan={5}>
                       {shipping?.street2 ?? "-"}
                     </td>
                   </tr>
@@ -265,17 +281,17 @@ export default function OrderDetail() {
               <Text
                 as="div"
                 weight="semibold"
-                className="mb-2 text-left"
+                className="order-detail__section-title"
               >
                 アイテム
               </Text>
 
               {items.length === 0 ? (
-                <Text as="div" tone="muted" className="text-left">
+                <Text as="div" tone="muted" className="order-detail__message">
                   アイテムがありません。
                 </Text>
               ) : (
-                <div className="space-y-4">
+                <div className="order-detail__items">
                   {items.map((item, index) => {
                     const transferredAt = safeDateTimeLabelJa(
                       item.transferredAt,
@@ -292,58 +308,58 @@ export default function OrderDetail() {
 
                     return (
                       <Card key={index}>
-                        <CardHeader className="py-3">
-                          <CardTitle className="text-base text-left">
+                        <CardHeader className="order-detail__item-header">
+                          <CardTitle className="order-detail__item-title">
                             アイテム {index + 1}
                           </CardTitle>
                         </CardHeader>
 
-                        <CardContent className="pt-0">
-                          <table className="w-full text-sm text-left">
+                        <CardContent className="order-detail__item-content">
+                          <table className="order-detail__table">
                             <tbody>
                               {alcohol ? (
                                 <>
                                   <tr>
-                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                    <th className="order-detail__label-cell">
                                       容量
                                     </th>
-                                    <td className="py-2 text-left">
+                                    <td className="order-detail__value-cell">
                                       {formatVolume(item)}
                                     </td>
                                   </tr>
 
                                   <tr>
-                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                    <th className="order-detail__label-cell">
                                       ヴィンテージ
                                     </th>
-                                    <td className="py-2 text-left">
+                                    <td className="order-detail__value-cell">
                                       {formatDisplayValue(vintage)}
                                     </td>
                                   </tr>
 
                                   <tr>
-                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                    <th className="order-detail__label-cell">
                                       地域・産地
                                     </th>
-                                    <td className="py-2 text-left">
+                                    <td className="order-detail__value-cell">
                                       {formatDisplayValue(region)}
                                     </td>
                                   </tr>
 
                                   <tr>
-                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                    <th className="order-detail__label-cell">
                                       素材
                                     </th>
-                                    <td className="py-2 text-left">
+                                    <td className="order-detail__value-cell">
                                       {formatDisplayValue(material)}
                                     </td>
                                   </tr>
 
                                   <tr>
-                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                    <th className="order-detail__label-cell">
                                       アルコール度数
                                     </th>
-                                    <td className="py-2 text-left">
+                                    <td className="order-detail__value-cell">
                                       {formatDisplayValue(alcoholContent, "%")}
                                     </td>
                                   </tr>
@@ -351,19 +367,19 @@ export default function OrderDetail() {
                               ) : (
                                 <>
                                   <tr>
-                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                    <th className="order-detail__label-cell">
                                       サイズ
                                     </th>
-                                    <td className="py-2 text-left">
+                                    <td className="order-detail__value-cell">
                                       {item.size ?? "-"}
                                     </td>
                                   </tr>
 
                                   <tr>
-                                    <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                    <th className="order-detail__label-cell">
                                       カラー
                                     </th>
-                                    <td className="py-2 text-left">
+                                    <td className="order-detail__value-cell">
                                       {(() => {
                                         const name = item.color?.trim() ?? "";
                                         const rgbInt = coerceRgbInt(item.rgb);
@@ -374,10 +390,10 @@ export default function OrderDetail() {
                                         }
 
                                         return (
-                                          <div className="flex items-center gap-2">
+                                          <div className="order-detail__color">
                                             {hex ? (
                                               <span
-                                                className="inline-block h-4 w-4 rounded border"
+                                                className="order-detail__color-swatch"
                                                 style={{ backgroundColor: hex }}
                                                 aria-label={`color ${hex}`}
                                                 title={hex}
@@ -393,53 +409,55 @@ export default function OrderDetail() {
                               )}
 
                               <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                <th className="order-detail__label-cell">
                                   型番
                                 </th>
-                                <td className="py-2 text-left">
+                                <td className="order-detail__value-cell">
                                   {item.modelNumber ?? "-"}
                                 </td>
                               </tr>
 
                               <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                <th className="order-detail__label-cell">
                                   商品名
                                 </th>
-                                <td className="py-2 text-left">
+                                <td className="order-detail__value-cell">
                                   {item.productName ?? "-"}
                                 </td>
                               </tr>
 
                               <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                <th className="order-detail__label-cell">
                                   トークン名
                                 </th>
-                                <td className="py-2 text-left">
+                                <td className="order-detail__value-cell">
                                   {item.tokenName ?? "-"}
                                 </td>
                               </tr>
 
                               <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                <th className="order-detail__label-cell">
                                   数量
                                 </th>
-                                <td className="py-2 text-left">{item.qty}</td>
+                                <td className="order-detail__value-cell">
+                                  {item.qty}
+                                </td>
                               </tr>
 
                               <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                <th className="order-detail__label-cell">
                                   金額
                                 </th>
-                                <td className="py-2 text-left">
+                                <td className="order-detail__value-cell">
                                   {formatJPY(item.price)}
                                 </td>
                               </tr>
 
                               <tr>
-                                <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                                <th className="order-detail__label-cell">
                                   移譲日
                                 </th>
-                                <td className="py-2 text-left">
+                                <td className="order-detail__value-cell">
                                   {transferredAt}
                                 </td>
                               </tr>
@@ -459,17 +477,17 @@ export default function OrderDetail() {
   );
 
   const right = (
-    <div className="mt-4 space-y-4 text-left">
+    <div className="order-detail__aside">
       <Card>
         <CardHeader>
-          <CardTitle className="text-left">
+          <CardTitle className="order-detail__card-title">
             購入者情報
           </CardTitle>
         </CardHeader>
 
         <CardContent>
           {loading ? (
-            <Text as="div" tone="muted" className="text-left">
+            <Text as="div" tone="muted" className="order-detail__message">
               読み込み中...
             </Text>
           ) : error ? (
@@ -477,32 +495,32 @@ export default function OrderDetail() {
               as="div"
               tone="destructive"
               wrap="pre-wrap"
-              className="text-left"
+              className="order-detail__message"
               role="alert"
             >
               {error}
             </Text>
           ) : !order ? (
-            <Text as="div" tone="muted" className="text-left">
+            <Text as="div" tone="muted" className="order-detail__message">
               -
             </Text>
           ) : (
-            <table className="w-full text-sm text-left">
+            <table className="order-detail__table">
               <tbody>
                 <tr>
-                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                  <th className="order-detail__label-cell">
                     ユーザー名
                   </th>
-                  <td className="py-2 text-left">
+                  <td className="order-detail__value-cell">
                     {userName}
                   </td>
                 </tr>
 
                 <tr>
-                  <th className="text-muted-foreground font-medium pr-4 py-2 align-top whitespace-nowrap text-left">
+                  <th className="order-detail__label-cell">
                     メールアドレス
                   </th>
-                  <td className="py-2 text-left">
+                  <td className="order-detail__value-cell">
                     {email}
                   </td>
                 </tr>

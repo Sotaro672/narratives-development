@@ -2,17 +2,21 @@
 
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import PageStyle from "../layout/PageStyle/PageStyle";
+
+import { cancelMemberInvitation } from "../features/member/application/invitationService";
+import { BrandCard } from "../features/member/presentation/components/BrandCard";
 import MemberDetailCard from "../features/member/presentation/components/MemberCard";
 import { useMemberDetail } from "../features/member/presentation/hooks/useMemberDetail";
-import { cancelMemberInvitation } from "../features/member/application/invitationService";
+import PageStyle from "../layout/PageStyle/PageStyle";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../shared/ui/card";
-import { BrandCard } from "../features/member/presentation/components/BrandCard";
+import Text from "../shared/ui/text";
+
+import "../styles/member.css";
 
 export default function MemberDetail() {
   const navigate = useNavigate();
@@ -43,6 +47,7 @@ export default function MemberDetail() {
     const confirmed = window.confirm(
       "このメンバーの招待を取り消して削除しますか？送信済みの招待URLも無効になります。",
     );
+
     if (!confirmed) {
       return;
     }
@@ -63,9 +68,14 @@ export default function MemberDetail() {
   if (!memberId) {
     return (
       <PageStyle layout="single" title="メンバー詳細" onBack={handleBack}>
-        <div className="p-4 text-red-500">
+        <Text
+          as="div"
+          tone="destructive"
+          className="member-detail__message"
+          role="alert"
+        >
           メンバーIDが指定されていません。
-        </div>
+        </Text>
       </PageStyle>
     );
   }
@@ -85,38 +95,50 @@ export default function MemberDetail() {
         />
       </div>
 
-      <div className="space-y-4">
-        <BrandCard assignedBrands={assignedBrands} brandRows={brandRows} />
+      <div className="member-detail__aside">
+        <BrandCard
+          assignedBrands={assignedBrands}
+          brandRows={brandRows}
+        />
 
         <Card>
           <CardHeader>
             <CardTitle>権限</CardTitle>
           </CardHeader>
+
           <CardContent>
             {loading ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              <Text as="p" tone="muted">
                 権限情報を読み込み中です…
-              </p>
+              </Text>
             ) : permissions.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              <Text as="p" tone="muted">
                 権限は未設定です。
-              </p>
+              </Text>
             ) : !hasGroupedPermissions ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              <Text as="p" tone="muted">
                 権限情報を表示できません。
-              </p>
+              </Text>
             ) : (
-              <div className="space-y-3">
+              <div className="member-permissions">
                 {Object.entries(groupedPermissionsByCategory).map(
                   ([category, perms]) => (
                     <div key={category}>
-                      <div className="text-xs font-semibold text-slate-500 mb-1">
+                      <Text
+                        as="div"
+                        size="xs"
+                        tone="muted"
+                        weight="semibold"
+                        className="member-permissions__category"
+                      >
                         {category}
-                      </div>
+                      </Text>
 
-                      <ul className="text-sm space-y-1 ml-3 list-disc">
+                      <ul className="member-permissions__list">
                         {perms?.map((perm: string) => (
-                          <li key={`${category}:${perm}`}>{perm}</li>
+                          <li key={`${category}:${perm}`}>
+                            <Text>{perm}</Text>
+                          </li>
                         ))}
                       </ul>
                     </div>

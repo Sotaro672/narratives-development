@@ -1,5 +1,4 @@
-// frontend/console/shell/src/pages/locationDetail.tsx
-
+//frontend\console\shell\src\pages\locationDetail.tsx
 import { useCallback, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -9,6 +8,8 @@ import { useLocationDetail } from "../features/company/presentation/hook/useLoca
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
+
+import "../styles/location.css";
 
 export default function LocationDetail() {
   const { locationId } = useParams<{
@@ -51,9 +52,9 @@ export default function LocationDetail() {
     : "";
 
   const left = (
-    <div className="space-y-6">
+    <div className="location-detail__main">
       {vm.loading ? (
-        <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
+        <div className="location-detail__state">
           在庫保管場所を読み込んでいます...
         </div>
       ) : location ? (
@@ -83,20 +84,22 @@ export default function LocationDetail() {
           {vm.error && (
             <div
               role="alert"
-              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3"
+              className="location-detail__error"
             >
-              <p className="text-sm text-red-600">{vm.error}</p>
+              <p className="location-detail__error-message">
+                {vm.error}
+              </p>
             </div>
           )}
 
           {vm.deleting && (
-            <p className="text-sm text-slate-500">
+            <p className="location-detail__status">
               在庫保管場所を削除しています...
             </p>
           )}
         </>
       ) : (
-        <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
+        <div className="location-detail__state">
           在庫保管場所を表示できませんでした。
         </div>
       )}
@@ -104,9 +107,9 @@ export default function LocationDetail() {
   );
 
   const right = (
-    <div className="space-y-4">
+    <div className="location-detail__aside">
       {vm.loading ? (
-        <div className="rounded-lg border border-slate-200 bg-white px-5 py-12 text-center text-sm text-slate-500">
+        <div className="location-detail__state">
           管理情報を読み込んでいます...
         </div>
       ) : location ? (
