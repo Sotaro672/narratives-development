@@ -7,6 +7,8 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
   CardTitle,
 } from "../../../../../shared/ui";
 import { Button } from "../../../../../shared/ui/button";
@@ -239,14 +241,19 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
   return (
     <Card className={`pbc${isEdit ? "" : " view-mode"}`}>
-      <CardHeader className="box__header">
-        <SlidersHorizontal size={16} />
-        <CardTitle className="box__title">
-          {cardTitle}
-        </CardTitle>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <SlidersHorizontal className="card__header-icon-svg" />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
+            {cardTitle}
+          </CardTitle>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="box__body">
+      <CardContent>
         {visibility.showVintage && (
           <>
             <div className="label">ヴィンテージ</div>
