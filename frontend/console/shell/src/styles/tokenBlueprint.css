@@ -1,7 +1,7 @@
 /* frontend/console/shell/src/styles/tokenBlueprint.css */
 
 /* =========================================================
- * TokenBlueprint shared design tokens
+ * TokenBlueprint-specific design tokens
  * =======================================================*/
 
 :root {
@@ -17,110 +17,19 @@
   --token-blueprint-text-muted: #64748b;
 
   --token-blueprint-primary: #4f46e5;
-  --token-blueprint-primary-hover: #4338ca;
   --token-blueprint-primary-soft: #eef2ff;
   --token-blueprint-primary-border: #c7d2fe;
 
   --token-blueprint-danger: #dc2626;
-  --token-blueprint-danger-hover: #b91c1c;
   --token-blueprint-danger-soft: #fef2f2;
   --token-blueprint-danger-border: #fecaca;
-
-  --token-blueprint-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    0 8px 24px rgba(15, 23, 42, 0.04);
 
   --token-blueprint-focus-ring: rgba(79, 70, 229, 0.2);
 }
 
 /* =========================================================
- * TokenBlueprintCard
+ * TokenBlueprintCard-specific layout
  * =======================================================*/
-
-.token-blueprint-card {
-  width: 100%;
-  overflow: hidden;
-  border: 1px solid var(--token-blueprint-border);
-  border-radius: 16px;
-  background: var(--token-blueprint-surface);
-  color: var(--token-blueprint-text);
-  box-shadow: var(--token-blueprint-shadow);
-}
-
-/* -------------------------
- * Header
- * ---------------------- */
-
-.token-blueprint-card__header {
-  display: flex;
-  min-height: 68px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--token-blueprint-border);
-  background: var(--token-blueprint-surface);
-}
-
-.token-blueprint-card__header-left {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.token-blueprint-card__header-icon {
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--token-blueprint-primary-border);
-  border-radius: 10px;
-  background: var(--token-blueprint-primary-soft);
-  color: var(--token-blueprint-primary);
-}
-
-.token-blueprint-card__link-icon {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2;
-}
-
-.token-blueprint-card__header-title {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--token-blueprint-text);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.4;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.token-blueprint-card__header-badge {
-  display: inline-flex;
-  min-height: 24px;
-  flex: 0 0 auto;
-  align-items: center;
-  border: 1px solid var(--token-blueprint-primary-border);
-  border-radius: 999px;
-  background: var(--token-blueprint-primary-soft);
-  padding: 3px 9px;
-  color: var(--token-blueprint-primary);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-/* -------------------------
- * Main layout
- * ---------------------- */
-
-.token-blueprint-card > div:last-child {
-  padding: 22px;
-}
 
 .token-blueprint-card__top {
   display: grid;
@@ -217,41 +126,7 @@
 }
 
 .token-blueprint-card__upload-btn {
-  display: inline-flex;
   width: 100%;
-  min-height: 38px;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid var(--token-blueprint-primary-border);
-  border-radius: 10px;
-  background: var(--token-blueprint-primary-soft);
-  padding: 8px 12px;
-  color: var(--token-blueprint-primary);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    background-color 160ms ease,
-    border-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.token-blueprint-card__upload-btn:hover {
-  border-color: var(--token-blueprint-primary);
-  background: var(--token-blueprint-primary);
-  color: #ffffff;
-}
-
-.token-blueprint-card__upload-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
-}
-
-.token-blueprint-card__upload-icon {
-  width: 16px;
-  height: 16px;
 }
 
 .token-blueprint-card__icon-selected {
@@ -298,27 +173,8 @@
 }
 
 /* -------------------------
- * Fields
+ * Identity lock
  * ---------------------- */
-
-.token-blueprint-card__spacer {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 16px;
-}
-
-.token-blueprint-card__field-col,
-.token-blueprint-card__brand-label-cell {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.token-blueprint-card__brand-label-cell {
-  grid-column: 1 / -1;
-}
 
 .token-blueprint-card__identity-lock-message {
   grid-column: 1 / -1;
@@ -326,94 +182,6 @@
   color: var(--token-blueprint-text-muted);
   font-size: 12px;
   line-height: 1.6;
-}
-
-.token-blueprint-card__label {
-  display: block;
-  color: var(--token-blueprint-text-subtle);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.token-blueprint-card__readonly-input,
-.token-blueprint-card__select-input {
-  width: 100%;
-  height: 42px;
-  border: 1px solid var(--token-blueprint-border-strong);
-  border-radius: 10px;
-  background: var(--token-blueprint-surface);
-  padding: 0 12px;
-  color: var(--token-blueprint-text);
-  font-size: 14px;
-  line-height: 42px;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.token-blueprint-card__readonly-input:hover:not(.readonly),
-.token-blueprint-card__select:hover .token-blueprint-card__select-input {
-  border-color: #a5b4fc;
-}
-
-.token-blueprint-card__readonly-input:focus,
-.token-blueprint-card__select-input:focus {
-  outline: none;
-  border-color: var(--token-blueprint-primary);
-  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
-}
-
-.token-blueprint-card__readonly-input.readonly {
-  border-color: var(--token-blueprint-border);
-  background: var(--token-blueprint-surface-muted);
-  color: var(--token-blueprint-text-subtle);
-  cursor: default;
-}
-
-.token-blueprint-card__readonly-input.readonly:focus {
-  box-shadow: none;
-}
-
-.token-blueprint-card__view-value {
-  display: flex;
-  width: 100%;
-  min-height: 42px;
-  align-items: center;
-  border: 1px solid var(--token-blueprint-border);
-  border-radius: 10px;
-  background: var(--token-blueprint-surface-muted);
-  padding: 9px 12px;
-  color: var(--token-blueprint-text-subtle);
-  font-size: 14px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.token-blueprint-card__select {
-  position: relative;
-  width: 100%;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.token-blueprint-card__select::after {
-  position: absolute;
-  top: 50%;
-  right: 14px;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--token-blueprint-text-muted);
-  border-bottom: 2px solid var(--token-blueprint-text-muted);
-  content: "";
-  pointer-events: none;
-  transform: translateY(-65%) rotate(45deg);
-}
-
-.token-blueprint-card__select-input {
-  padding-right: 38px;
-  cursor: pointer;
 }
 
 /* -------------------------
@@ -486,171 +254,20 @@
   margin-top: 20px;
 }
 
-.token-blueprint-card__description-input {
-  width: 100%;
-  min-height: 132px;
-  resize: vertical;
-  border: 1px solid var(--token-blueprint-border-strong);
-  border-radius: 10px;
-  background: var(--token-blueprint-surface);
-  padding: 11px 12px;
-  color: var(--token-blueprint-text);
-  font: inherit;
-  font-size: 14px;
-  line-height: 1.7;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.token-blueprint-card__description-input::placeholder,
-.token-blueprint-card__readonly-input::placeholder {
-  color: #94a3b8;
-}
-
-.token-blueprint-card__description-input:hover:not(.readonly) {
-  border-color: #a5b4fc;
-}
-
-.token-blueprint-card__description-input:focus {
-  outline: none;
-  border-color: var(--token-blueprint-primary);
-  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
-}
-
-.token-blueprint-card__description-input.readonly {
-  resize: none;
-  border-color: var(--token-blueprint-border);
-  background: var(--token-blueprint-surface-muted);
-  color: var(--token-blueprint-text-subtle);
-  cursor: default;
-}
-
-.token-blueprint-card__description-input.readonly:focus {
-  box-shadow: none;
-}
-
 .token-blueprint-card__description-value {
-  width: 100%;
+  display: block;
   min-height: 132px;
-  border: 1px solid var(--token-blueprint-border);
-  border-radius: 10px;
-  background: var(--token-blueprint-surface-muted);
   padding: 11px 12px;
-  color: var(--token-blueprint-text-subtle);
-  font-size: 14px;
-  line-height: 1.7;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 /* =========================================================
  * TokenContentsCard
  * =======================================================*/
 
-.token-contents-card {
-  width: 100%;
-  overflow: hidden;
-  border: 1px solid var(--token-blueprint-border);
-  border-radius: 16px;
-  background: var(--token-blueprint-surface);
-  color: var(--token-blueprint-text);
-  box-shadow: var(--token-blueprint-shadow);
-}
-
-/* -------------------------
- * Header
- * ---------------------- */
-
-.token-contents-card__header {
-  display: flex;
-  min-height: 68px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--token-blueprint-border);
-  background: var(--token-blueprint-surface);
-}
-
-.token-contents-card__title-wrap {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 10px;
-}
-
-.token-contents-card__title-icon {
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--token-blueprint-primary-border);
-  border-radius: 10px;
-  background: var(--token-blueprint-primary-soft);
-  color: var(--token-blueprint-primary);
-}
-
-.token-contents-card__title-icon-svg {
-  width: 18px;
-  height: 18px;
-}
-
-.token-contents-card__title {
-  color: var(--token-blueprint-text);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.token-contents-card__add-btn {
-  display: inline-flex;
-  min-height: 38px;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  border: 1px solid var(--token-blueprint-primary);
-  border-radius: 10px;
-  background: var(--token-blueprint-primary);
-  padding: 8px 13px;
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
-}
-
-.token-contents-card__add-btn:hover {
-  border-color: var(--token-blueprint-primary-hover);
-  background: var(--token-blueprint-primary-hover);
-  transform: translateY(-1px);
-}
-
-.token-contents-card__add-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
-}
-
-.token-contents-card__add-btn-icon {
-  width: 16px;
-  height: 16px;
-}
-
 /* -------------------------
  * Viewer
  * ---------------------- */
-
-.token-contents-card > div:last-child {
-  padding: 20px;
-}
 
 .token-contents-card__viewer {
   display: grid;
@@ -930,15 +547,6 @@
 }
 
 /* =========================================================
- * Shared disabled states
- * =======================================================*/
-
-.token-blueprint-card button:disabled,
-.token-contents-card button:disabled {
-  pointer-events: none;
-}
-
-/* =========================================================
  * TokenBlueprintCreateProgressModal
  * =======================================================*/
 
@@ -1147,15 +755,6 @@
     gap: 20px;
   }
 
-  .token-blueprint-card__spacer {
-    grid-template-columns: 1fr;
-  }
-
-  .token-blueprint-card__brand-label-cell,
-  .token-blueprint-card__identity-lock-message {
-    grid-column: auto;
-  }
-
   .token-contents-card__image-slot,
   .token-contents-card__image-main-wrap,
   .token-contents-card__placeholder {
@@ -1169,43 +768,6 @@
 }
 
 @media (max-width: 640px) {
-  .token-blueprint-card,
-  .token-contents-card {
-    border-radius: 12px;
-  }
-
-  .token-blueprint-card__header,
-  .token-contents-card__header {
-    min-height: 60px;
-    padding: 13px 14px;
-  }
-
-  .token-blueprint-card__header-left,
-  .token-contents-card__title-wrap {
-    gap: 8px;
-  }
-
-  .token-blueprint-card__header-icon,
-  .token-contents-card__title-icon {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-  }
-
-  .token-blueprint-card__header-title,
-  .token-contents-card__title {
-    font-size: 14px;
-  }
-
-  .token-blueprint-card__header-badge {
-    display: none;
-  }
-
-  .token-blueprint-card > div:last-child,
-  .token-contents-card > div:last-child {
-    padding: 14px;
-  }
-
   .token-blueprint-card__top {
     grid-template-columns: 1fr;
     gap: 18px;
@@ -1216,18 +778,8 @@
     margin: 0 auto;
   }
 
-  .token-blueprint-card__spacer {
-    gap: 14px;
-  }
-
   .token-blueprint-card__description {
     margin-top: 16px;
-  }
-
-  .token-contents-card__add-btn {
-    min-height: 36px;
-    padding: 7px 10px;
-    font-size: 12px;
   }
 
   .token-contents-card__viewer {
@@ -1270,15 +822,6 @@
 }
 
 @media (max-width: 420px) {
-  .token-contents-card__header {
-    align-items: flex-start;
-  }
-
-  .token-contents-card__add-btn {
-    flex-shrink: 1;
-    white-space: nowrap;
-  }
-
   .token-contents-card__viewer {
     position: relative;
     display: block;
@@ -1325,28 +868,12 @@
     --token-blueprint-text-muted: rgba(255, 255, 255, 0.58);
 
     --token-blueprint-primary: #a5b4fc;
-    --token-blueprint-primary-hover: #818cf8;
     --token-blueprint-primary-soft: rgba(99, 102, 241, 0.16);
     --token-blueprint-primary-border: rgba(129, 140, 248, 0.4);
 
     --token-blueprint-danger: #fca5a5;
-    --token-blueprint-danger-hover: #f87171;
     --token-blueprint-danger-soft: rgba(220, 38, 38, 0.16);
     --token-blueprint-danger-border: rgba(248, 113, 113, 0.36);
-
-    --token-blueprint-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.24),
-      0 12px 28px rgba(0, 0, 0, 0.18);
-  }
-
-  .token-blueprint-card__readonly-input.readonly,
-  .token-blueprint-card__description-input.readonly {
-    color: var(--token-blueprint-text-subtle);
-  }
-
-  .token-blueprint-card__description-input::placeholder,
-  .token-blueprint-card__readonly-input::placeholder {
-    color: rgba(255, 255, 255, 0.38);
   }
 
   .token-contents-card__delete-btn,
@@ -1379,19 +906,5 @@
     .token-contents-card__nav {
       background: rgba(23, 23, 23, 0.92);
     }
-  }
-}
-
-/* =========================================================
- * Reduced motion
- * =======================================================*/
-
-@media (prefers-reduced-motion: reduce) {
-  .token-blueprint-card *,
-  .token-contents-card * {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
   }
 }

@@ -5,16 +5,25 @@ import { Link2, Upload, X } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import type { IconCropPosition } from "../../../../shared/types/iconCrop";
-import { Badge } from "../../../../shared/ui/badge";
 import {
   Card,
+  CardBadge,
+  CardButton,
   CardContent,
+  CardField,
+  CardFields,
   CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardInput,
+  CardLabel,
+  CardReadonly,
+  CardSelectWrap,
+  CardTextarea,
   CardTitle,
+  CardViewValue,
 } from "../../../../shared/ui/card";
 import IconCropper from "../../../../shared/ui/icon-cropper";
-import { Input } from "../../../../shared/ui/input";
-import { Label } from "../../../../shared/ui/label";
 import {
   Popover,
   PopoverContent,
@@ -91,24 +100,24 @@ export default function TokenBlueprintCard({
   const isCroppingIcon = Boolean(canEditIcon && selectedIconFile && vm.iconUrl);
 
   return (
-    <Card className="token-blueprint-card">
-      <CardHeader className="token-blueprint-card__header">
-        <div className="token-blueprint-card__header-left">
-          <span className="token-blueprint-card__header-icon">
-            <Link2 className="token-blueprint-card__link-icon" />
-          </span>
+    <Card elevated largeRadius>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon variant="primary">
+            <Link2 className="card__header-icon-svg" />
+          </CardHeaderIcon>
 
-          <CardTitle className="token-blueprint-card__header-title">
+          <CardTitle strong truncate>
             {vm.id ? "トークン設計" : "トークン：新規トークン設計"}
           </CardTitle>
 
-          <Badge className="token-blueprint-card__header-badge">
+          <CardBadge variant="primary">
             設計情報
-          </Badge>
-        </div>
+          </CardBadge>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent>
+      <CardContent size="large">
         <div className="token-blueprint-card__top">
           <div className="token-blueprint-card__icon-area">
             {isCroppingIcon ? (
@@ -171,7 +180,7 @@ export default function TokenBlueprintCard({
               </div>
             )}
 
-            {canEditIcon && (
+            {canEditIcon ? (
               <>
                 <input
                   ref={handlers.iconInputRef ?? undefined}
@@ -181,20 +190,20 @@ export default function TokenBlueprintCard({
                   onChange={handlers.onIconInputChange}
                 />
 
-                <button
-                  type="button"
+                <CardButton
+                  variant="primary"
                   className="token-blueprint-card__upload-btn"
                   onClick={() => {
                     handlers.onRequestPickIconFile?.();
                   }}
                 >
-                  <Upload className="token-blueprint-card__upload-icon" />
+                  <Upload className="card__button-icon" />
                   アップロード
-                </button>
+                </CardButton>
               </>
-            )}
+            ) : null}
 
-            {canEditIcon && selectedIconFile && (
+            {canEditIcon && selectedIconFile ? (
               <div className="token-blueprint-card__icon-selected">
                 <span>
                   選択中：{selectedIconFile.name}（
@@ -202,7 +211,7 @@ export default function TokenBlueprintCard({
                   KB）
                 </span>
 
-                {handlers.onClearLocalIconFile && (
+                {handlers.onClearLocalIconFile ? (
                   <button
                     type="button"
                     className="token-blueprint-card__icon-clear-btn"
@@ -213,79 +222,86 @@ export default function TokenBlueprintCard({
                   >
                     <X size={16} />
                   </button>
-                )}
+                ) : null}
               </div>
-            )}
+            ) : null}
           </div>
 
-          <div className="token-blueprint-card__spacer">
-            <div className="token-blueprint-card__field-col">
-              <Label className="token-blueprint-card__label">
+          <CardFields>
+            <CardField>
+              <CardLabel strong>
                 トークン名
-              </Label>
+              </CardLabel>
 
               {vm.isEditMode ? (
-                <Input
-                  value={vm.name}
-                  placeholder="例：LUMINA VIP 会員トークン"
-                  onChange={(event) => {
-                    if (!isIdentityLocked) {
+                isIdentityLocked ? (
+                  <CardReadonly inputLike size="large">
+                    {vm.name || "未設定"}
+                  </CardReadonly>
+                ) : (
+                  <CardInput
+                    sizeVariant="large"
+                    value={vm.name}
+                    placeholder="例：LUMINA VIP 会員トークン"
+                    onChange={(event) => {
                       handlers.onChangeName?.(event.target.value);
-                    }
-                  }}
-                  readOnly={isIdentityLocked}
-                  className={`token-blueprint-card__readonly-input ${isIdentityLocked ? "readonly" : ""}`}
-                />
+                    }}
+                  />
+                )
               ) : (
-                <div className="token-blueprint-card__view-value">
+                <CardViewValue>
                   {vm.name || "未設定"}
-                </div>
+                </CardViewValue>
               )}
-            </div>
+            </CardField>
 
-            <div className="token-blueprint-card__field-col">
-              <Label className="token-blueprint-card__label">
+            <CardField>
+              <CardLabel strong>
                 シンボル
-              </Label>
+              </CardLabel>
 
               {vm.isEditMode ? (
-                <Input
-                  value={vm.symbol}
-                  placeholder="例：LUMI"
-                  onChange={(event) => {
-                    if (!isIdentityLocked) {
-                      handlers.onChangeSymbol?.(event.target.value.toUpperCase());
-                    }
-                  }}
-                  readOnly={isIdentityLocked}
-                  className={`token-blueprint-card__readonly-input ${isIdentityLocked ? "readonly" : ""}`}
-                />
+                isIdentityLocked ? (
+                  <CardReadonly inputLike size="large">
+                    {vm.symbol || "未設定"}
+                  </CardReadonly>
+                ) : (
+                  <CardInput
+                    sizeVariant="large"
+                    value={vm.symbol}
+                    placeholder="例：LUMI"
+                    onChange={(event) => {
+                      handlers.onChangeSymbol?.(
+                        event.target.value.toUpperCase(),
+                      );
+                    }}
+                  />
+                )
               ) : (
-                <div className="token-blueprint-card__view-value">
+                <CardViewValue>
                   {vm.symbol || "未設定"}
-                </div>
+                </CardViewValue>
               )}
-            </div>
+            </CardField>
 
-            <div className="token-blueprint-card__brand-label-cell">
-              <Label className="token-blueprint-card__label">
+            <CardField full>
+              <CardLabel strong>
                 ブランド
-              </Label>
+              </CardLabel>
 
               {vm.isEditMode && !isIdentityLocked ? (
                 <Popover>
                   <PopoverTrigger>
-                    <div
-                      className="token-blueprint-card__select"
+                    <CardSelectWrap
                       role="button"
                       aria-label="ブランドを選択"
                     >
-                      <Input
+                      <CardInput
+                        sizeVariant="large"
                         readOnly
                         value={vm.brandName || vm.brandId || "ブランド未設定"}
-                        className="token-blueprint-card__select-input"
                       />
-                    </div>
+                    </CardSelectWrap>
                   </PopoverTrigger>
 
                   <PopoverContent
@@ -318,42 +334,38 @@ export default function TokenBlueprintCard({
                   </PopoverContent>
                 </Popover>
               ) : (
-                <Input
-                  readOnly
-                  value={vm.brandName || vm.brandId || "ブランド未設定"}
-                  className="token-blueprint-card__readonly-input readonly"
-                />
+                <CardReadonly inputLike size="large">
+                  {vm.brandName || vm.brandId || "ブランド未設定"}
+                </CardReadonly>
               )}
-            </div>
+            </CardField>
 
-            {isIdentityLocked && (
+            {isIdentityLocked ? (
               <div className="token-blueprint-card__identity-lock-message">
-                このトークン設計はmint済みのため、
-                トークン名・シンボル・ブランドは変更できません。
+                このトークン設計はmint済みのため、トークン名・シンボル・ブランドは変更できません。
               </div>
-            )}
-          </div>
+            ) : null}
+          </CardFields>
         </div>
 
         <div className="token-blueprint-card__description">
-          <Label className="token-blueprint-card__label">
+          <CardLabel strong>
             説明
-          </Label>
+          </CardLabel>
 
           {vm.isEditMode ? (
-            <textarea
+            <CardTextarea
               ref={handlers.descriptionRef ?? undefined}
               value={vm.description}
               placeholder="このトークンで付与する権利・特典を記載してください。"
               onChange={(event) => {
                 handlers.onChangeDescription?.(event.target.value);
               }}
-              className="token-blueprint-card__description-input"
             />
           ) : (
-            <div className="token-blueprint-card__description-value">
+            <CardViewValue className="token-blueprint-card__description-value">
               {vm.description || "未設定"}
-            </div>
+            </CardViewValue>
           )}
         </div>
       </CardContent>

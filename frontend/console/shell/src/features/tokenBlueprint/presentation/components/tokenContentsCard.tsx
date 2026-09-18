@@ -1,12 +1,25 @@
 // frontend/console/shell/src/features/tokenBlueprint/presentation/components/tokenContentsCard.tsx
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, FileText, Trash2, Upload } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import type { ContentFile } from "../../../../shared/types/tokenBlueprint";
-import { Button } from "../../../../shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import {
+  Card,
+  CardButton,
+  CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardTitle,
+} from "../../../../shared/ui/card";
 
 type Mode = "edit" | "view";
 
@@ -107,31 +120,59 @@ export default function TokenContentsCard({
 
   const hasItems = contents.length > 0;
   const safeIndex = React.useMemo(() => {
-    if (contents.length === 0) return 0;
+    if (contents.length === 0) {
+      return 0;
+    }
+
     return Math.min(index, contents.length - 1);
   }, [index, contents.length]);
 
-  const currentItem = hasItems ? contents[safeIndex] : undefined;
+  const currentItem = hasItems
+    ? contents[safeIndex]
+    : undefined;
 
   React.useEffect(() => {
     setIndex((currentIndex) => {
-      if (contents.length === 0) return 0;
-      return Math.min(currentIndex, contents.length - 1);
+      if (contents.length === 0) {
+        return 0;
+      }
+
+      return Math.min(
+        currentIndex,
+        contents.length - 1,
+      );
     });
   }, [contents.length]);
 
   const prev = () => {
-    if (!hasItems) return;
-    setIndex((currentIndex) => (currentIndex - 1 + contents.length) % contents.length);
+    if (!hasItems) {
+      return;
+    }
+
+    setIndex(
+      (currentIndex) =>
+        (currentIndex - 1 + contents.length) %
+        contents.length,
+    );
   };
 
   const next = () => {
-    if (!hasItems) return;
-    setIndex((currentIndex) => (currentIndex + 1) % contents.length);
+    if (!hasItems) {
+      return;
+    }
+
+    setIndex(
+      (currentIndex) =>
+        (currentIndex + 1) %
+        contents.length,
+    );
   };
 
   const handleUploadClick = () => {
-    if (!isEditMode) return;
+    if (!isEditMode) {
+      return;
+    }
+
     inputRef.current?.click();
   };
 
@@ -143,34 +184,47 @@ export default function TokenContentsCard({
       return;
     }
 
-    const files = event.target.files ? Array.from(event.target.files) : [];
+    const files = event.target.files
+      ? Array.from(event.target.files)
+      : [];
+
     event.target.value = "";
 
-    if (files.length === 0 || !onFilesSelected) return;
+    if (files.length === 0 || !onFilesSelected) {
+      return;
+    }
+
     await onFilesSelected(files);
   };
 
-  const handleDelete = async (targetIndex: number): Promise<void> => {
-    if (!isEditMode || !onDelete) return;
+  const handleDelete = async (
+    targetIndex: number,
+  ): Promise<void> => {
+    if (!isEditMode || !onDelete) {
+      return;
+    }
 
     const target = contents[targetIndex];
-    if (!target) return;
+
+    if (!target) {
+      return;
+    }
 
     await onDelete(target, targetIndex);
   };
 
   return (
-    <Card className="token-contents-card">
-      <CardHeader className="token-contents-card__header">
-        <div className="token-contents-card__title-wrap">
-          <span className="token-contents-card__title-icon">
-            <FileText className="token-contents-card__title-icon-svg" />
-          </span>
+    <Card elevated largeRadius>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon variant="primary">
+            <FileText className="card__header-icon-svg" />
+          </CardHeaderIcon>
 
-          <CardTitle className="token-contents-card__title">
+          <CardTitle strong>
             コンテンツ
           </CardTitle>
-        </div>
+        </CardHeaderLeft>
 
         <input
           ref={inputRef}
@@ -183,19 +237,18 @@ export default function TokenContentsCard({
           }}
         />
 
-        {isEditMode && (
-          <Button
-            type="button"
-            className="token-contents-card__add-btn"
+        {isEditMode ? (
+          <CardButton
+            variant="primary"
             onClick={handleUploadClick}
           >
-            <Upload className="token-contents-card__add-btn-icon" />
+            <Upload className="card__button-icon" />
             ファイル追加
-          </Button>
-        )}
+          </CardButton>
+        ) : null}
       </CardHeader>
 
-      <CardContent>
+      <CardContent size="large">
         <div className="token-contents-card__viewer">
           <button
             type="button"
@@ -212,7 +265,7 @@ export default function TokenContentsCard({
               <div className="token-contents-card__image-main-wrap">
                 {renderMain(currentItem)}
 
-                {isEditMode && (
+                {isEditMode ? (
                   <button
                     type="button"
                     className="token-contents-card__delete-btn"
@@ -223,7 +276,7 @@ export default function TokenContentsCard({
                   >
                     <Trash2 className="token-contents-card__delete-icon" />
                   </button>
-                )}
+                ) : null}
               </div>
             ) : (
               <div className="token-contents-card__placeholder">
@@ -243,10 +296,11 @@ export default function TokenContentsCard({
           </button>
         </div>
 
-        {contents.length > 1 && (
+        {contents.length > 1 ? (
           <div className="token-contents-card__thumbs">
             {contents.map((item, itemIndex) => {
-              const isActive = itemIndex === safeIndex;
+              const isActive =
+                itemIndex === safeIndex;
 
               return (
                 <div
@@ -256,7 +310,9 @@ export default function TokenContentsCard({
                   <button
                     type="button"
                     className="token-contents-card__thumb-click"
-                    onClick={() => setIndex(itemIndex)}
+                    onClick={() => {
+                      setIndex(itemIndex);
+                    }}
                     aria-label={`コンテンツ ${itemIndex + 1}を表示`}
                   >
                     {item.type === "image" ? (
@@ -272,7 +328,7 @@ export default function TokenContentsCard({
                     )}
                   </button>
 
-                  {isEditMode && (
+                  {isEditMode ? (
                     <button
                       type="button"
                       className="token-contents-card__thumb-delete-btn"
@@ -283,12 +339,12 @@ export default function TokenContentsCard({
                     >
                       <Trash2 className="token-contents-card__thumb-delete-icon" />
                     </button>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   );
