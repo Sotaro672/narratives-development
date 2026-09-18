@@ -3,6 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 
+import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
 import {
@@ -70,9 +71,14 @@ export default function ReplyModal({
               返信を入力
             </h2>
 
-            <p className="inq-reply-modal__description">
+            <Text
+              as="p"
+              size="sm"
+              tone="muted"
+              className="inq-reply-modal__description"
+            >
               この問い合わせに対する返信内容を入力してください。
-            </p>
+            </Text>
           </div>
 
           <button
@@ -111,19 +117,31 @@ export default function ReplyModal({
             onChange={(event) => onChangeContent(event.target.value)}
           />
 
-          <div className="inq-reply-modal__counter">
+          <Text
+            as="div"
+            size="xs"
+            tone="muted"
+            className="inq-reply-modal__counter"
+          >
             {content.length.toLocaleString()} / 2,000
-          </div>
+          </Text>
 
           <div className="inq-reply-modal__upload">
             <div className="inq-reply-modal__upload-header">
-              <span className="inq-reply-modal__label">
+              <Text
+                size="sm"
+                weight="bold"
+              >
                 添付画像
-              </span>
+              </Text>
 
-              <span className="inq-reply-modal__upload-count">
+              <Text
+                size="xs"
+                tone="muted"
+                weight="bold"
+              >
                 {images.length} / {MAX_REPLY_IMAGES}
-              </span>
+              </Text>
             </div>
 
             <label className="inq-reply-modal__upload-box">
@@ -132,17 +150,26 @@ export default function ReplyModal({
                 accept="image/*"
                 multiple
                 className="inq-reply-modal__upload-input"
-                disabled={submitting || images.length >= MAX_REPLY_IMAGES}
+                disabled={
+                  submitting ||
+                  images.length >= MAX_REPLY_IMAGES
+                }
                 onChange={onChangeImages}
               />
 
-              <span className="inq-reply-modal__upload-main">
+              <Text
+                size="sm"
+                weight="bold"
+              >
                 画像を選択
-              </span>
+              </Text>
 
-              <span className="inq-reply-modal__upload-sub">
+              <Text
+                size="xs"
+                tone="muted"
+              >
                 JPG / PNG / WebP / GIF、1枚 {MAX_REPLY_IMAGE_SIZE_MB}MBまで
-              </span>
+              </Text>
             </label>
 
             {images.length > 0 ? (

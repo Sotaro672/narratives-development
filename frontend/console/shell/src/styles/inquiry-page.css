@@ -392,9 +392,6 @@
 
 .inq-reply-modal__description {
   margin: 6px 0 0;
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  font-size: 0.88rem;
-  line-height: 1.7;
 }
 
 .inq-reply-modal__body {
@@ -411,38 +408,7 @@
   line-height: 1.5;
 }
 
-.inq-reply-modal__textarea {
-  width: 100%;
-  min-height: 180px;
-  resize: vertical;
-  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  border-radius: 14px;
-  outline: none;
-  background: hsl(var(--background, 0 0% 100%));
-  padding: 12px 14px;
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font: inherit;
-  font-size: 0.95rem;
-  line-height: 1.8;
-  transition:
-    border-color 140ms ease,
-    box-shadow 140ms ease;
-}
-
-.inq-reply-modal__textarea:focus {
-  border-color: hsl(var(--ring, 215 20.2% 65.1%));
-  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.25);
-}
-
-.inq-reply-modal__textarea:disabled {
-  cursor: not-allowed;
-  opacity: 0.65;
-}
-
 .inq-reply-modal__counter {
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  font-size: 0.78rem;
-  line-height: 1.4;
   text-align: right;
 }
 
@@ -471,13 +437,6 @@
   gap: 12px;
 }
 
-.inq-reply-modal__upload-count {
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  font-size: 0.78rem;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
 .inq-reply-modal__upload-box {
   display: flex;
   min-height: 92px;
@@ -503,19 +462,6 @@
 
 .inq-reply-modal__upload-input {
   display: none;
-}
-
-.inq-reply-modal__upload-main {
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font-size: 0.9rem;
-  font-weight: 800;
-  line-height: 1.5;
-}
-
-.inq-reply-modal__upload-sub {
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  font-size: 0.78rem;
-  line-height: 1.5;
 }
 
 .inq-reply-modal__preview-grid {

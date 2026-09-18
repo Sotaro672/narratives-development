@@ -12,6 +12,8 @@ import TransportOptionCard from "../features/list/presentation/components/transp
 import TokenBlueprintCard, { type TokenBlueprintCardViewModel } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
 
+import "../styles/inventory.css";
+
 export default function InventoryDetail() {
   const navigate = useNavigate();
   const { inventoryId: inventoryIdParam } = useParams<{ inventoryId?: string }>();
@@ -147,19 +149,19 @@ export default function InventoryDetail() {
         />
 
         {tokenBlueprintId ? (
-          <div className="mt-3">
+          <div className="inventory-detail__token">
             <TokenBlueprintCard vm={tokenCardVM} />
           </div>
         ) : null}
 
         {loading ? (
-          <div className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+          <div className="inventory-detail__status">
             読み込み中...
           </div>
         ) : null}
 
         {error ? (
-          <div className="mt-2 text-sm text-red-600">
+          <div className="inventory-detail__status inventory-detail__status--error">
             読み込みに失敗しました: {error}
           </div>
         ) : null}
@@ -168,7 +170,7 @@ export default function InventoryDetail() {
       </div>
 
       {/* 右カラム */}
-      <div className="space-y-4">
+      <div className="inventory-detail__aside">
         <InventoryShippingAddressCard
           shippingAddressId={selectedShippingAddressId}
           shippingAddressOptions={shippingAddressOptions}
@@ -179,7 +181,7 @@ export default function InventoryDetail() {
         />
 
         {shippingAddressError ? (
-          <div className="text-sm text-red-600">
+          <div className="inventory-detail__error">
             保存に失敗しました: {shippingAddressError}
           </div>
         ) : null}
@@ -196,7 +198,7 @@ export default function InventoryDetail() {
         />
 
         {transportationError ? (
-          <div className="text-sm text-red-600">
+          <div className="inventory-detail__error">
             配送方法の保存に失敗しました: {transportationError}
           </div>
         ) : null}
