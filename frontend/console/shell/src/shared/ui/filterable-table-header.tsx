@@ -1,5 +1,3 @@
-// frontend/console/shell/src/shared/ui/filterable-table-header.tsx
-
 import React, { useEffect, useState } from "react";
 import { Filter as FilterIcon } from "lucide-react";
 
@@ -10,6 +8,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "./popover";
+
+import "./filter-able-table-header.css";
 
 type Option = {
   value: string;
@@ -71,18 +71,25 @@ export default function FilterableTableHeader({
         <button
           type="button"
           className={[
-            "inline-flex items-center gap-2 rounded-xl border border-[#d9dde3] bg-[#eef1f4] px-3 py-1.5 font-bold leading-none text-[#0f172a]",
+            "filterable-table-header__trigger",
             className,
-          ].filter(Boolean).join(" ")}
+          ]
+            .filter(Boolean)
+            .join(" ")}
           title={`${label}で絞り込む`}
         >
           <span>{label}</span>
-          <FilterIcon size={16} aria-hidden className="opacity-90" />
+
+          <FilterIcon
+            size={16}
+            aria-hidden
+            className="filterable-table-header__icon"
+          />
 
           {count > 0 && (
             <Badge
               variant="secondary"
-              className="ml-1 rounded-full px-1.5 text-[10px]"
+              className="filterable-table-header__count"
             >
               {count}
             </Badge>
@@ -90,9 +97,12 @@ export default function FilterableTableHeader({
         </button>
       </PopoverTrigger>
 
-      <PopoverContent align="start" className="popover__content--compact popover__content--medium">
+      <PopoverContent
+        align="start"
+        className="popover__content--compact popover__content--medium"
+      >
         <div className="popover__header">
-          <div className="text-[13px] font-semibold">
+          <div className="filterable-table-header__dialog-title">
             {dialogTitle ?? `${label}で絞り込み`}
           </div>
 
@@ -101,7 +111,7 @@ export default function FilterableTableHeader({
               <button
                 type="button"
                 onClick={clearAll}
-                className="border-0 bg-transparent text-xs text-[hsl(var(--muted-foreground))] cursor-pointer"
+                className="filterable-table-header__clear"
               >
                 クリア
               </button>
@@ -110,9 +120,7 @@ export default function FilterableTableHeader({
         </div>
 
         {options.length === 0 ? (
-          <div className="popover__empty">
-            候補がありません
-          </div>
+          <div className="popover__empty">候補がありません</div>
         ) : (
           <div className="popover__list">
             {options.map((option) => {
@@ -132,7 +140,8 @@ export default function FilterableTableHeader({
                       toggle(option.value, !!nextChecked)
                     }
                   />
-                  <span className="text-sm">
+
+                  <span className="filterable-table-header__option-label">
                     {option.label ?? option.value}
                   </span>
                 </label>

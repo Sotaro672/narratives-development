@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/productBlueprint/presentation/cards/categoryFields/WashTagField.tsx
+// frontend\console\shell\src\features\productBlueprint\presentation\components\categoryFields\WashTagField.tsx
 import * as React from "react";
 import { ShieldCheck, X } from "lucide-react";
 import { Badge } from "../../../../../shared/ui/badge";

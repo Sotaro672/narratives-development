@@ -11,7 +11,7 @@ import type {
 
 import type {
   ProductBlueprintCardProps,
-} from "../../../productBlueprint/presentation/cards/productBlueprintForm/productBlueprintCard";
+} from "../../../productBlueprint/presentation/components/productBlueprintForm/productBlueprintCard";
 
 import type {
   TokenBlueprintCardViewModel,

@@ -1,0 +1,46 @@
+/* =========================================================
+ * FilterableTableHeader
+ * ======================================================= */
+
+.filterable-table-header__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #d9dde3;
+  border-radius: 0.75rem;
+  background: #eef1f4;
+  color: #0f172a;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.filterable-table-header__icon {
+  opacity: 0.9;
+}
+
+.filterable-table-header__count {
+  margin-left: 0.25rem;
+  padding-right: 0.375rem;
+  padding-left: 0.375rem;
+  border-radius: 9999px;
+  font-size: 0.625rem;
+}
+
+.filterable-table-header__dialog-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.filterable-table-header__clear {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.filterable-table-header__option-label {
+  font-size: 0.875rem;
+}

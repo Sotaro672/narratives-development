@@ -2,7 +2,7 @@
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
-import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/components/productBlueprintForm";
 import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/domain/productBlueprintCategory";
 import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";

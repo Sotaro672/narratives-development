@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/popover";
 import Text from "../shared/ui/text";
 
-import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/components/productBlueprintForm";
 import InspectionResultCard from "../features/mint/presentation/components/inspectionResultCard";
 import { useMintRequestDetail } from "../features/mint/presentation/hook/useMintRequestDetail";
 import type { MintTaskProgressDTO } from "../features/mint/infrastructure/dto/mintRequestManagementRow";

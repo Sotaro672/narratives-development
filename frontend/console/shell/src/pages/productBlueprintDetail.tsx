@@ -4,8 +4,8 @@ import * as React from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
-import ProductBlueprintCard from "../features/productBlueprint/presentation/cards/productBlueprintForm";
-import CategoryFieldsCard from "../features/productBlueprint/presentation/cards/categoryFields";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/components/productBlueprintForm";
+import CategoryFieldsCard from "../features/productBlueprint/presentation/components/categoryFields";
 import ColorVariationCard from "../features/model/presentation/components/ColorVariationCard";
 import SizeVariationCard from "../features/model/presentation/components/SizeVariationCard";
 import ModelNumberCard from "../features/model/presentation/components/ModelNumberCard";

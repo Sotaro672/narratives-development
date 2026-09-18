@@ -4,7 +4,7 @@ import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import ProductBlueprintCard, { type ProductBlueprintPatchInput } from "../features/productBlueprint/presentation/cards/productBlueprintForm";
+import ProductBlueprintCard, { type ProductBlueprintPatchInput } from "../features/productBlueprint/presentation/components/productBlueprintForm";
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
 import InventoryShippingAddressCard from "../features/inventory/presentation/components/InventoryShippingAddressCard";
 import InventoryListCard from "../features/inventory/presentation/components/InventoryListCard";
