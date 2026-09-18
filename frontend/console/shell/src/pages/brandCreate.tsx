@@ -101,7 +101,7 @@ export default function BrandCreate() {
   );
 
   const left = (
-    <div className="space-y-4">
+    <div className="brand-create__column">
       <Card>
         <CardContent>
           <div className="brand-hero">
@@ -160,7 +160,7 @@ export default function BrandCreate() {
             </div>
 
             {brandBackgroundImageError && (
-              <p className="mt-2 text-xs text-red-500">
+              <p className="brand-create__error brand-create__error--media">
                 {brandBackgroundImageError}
               </p>
             )}
@@ -231,7 +231,7 @@ export default function BrandCreate() {
                 </div>
 
                 {brandIconError && (
-                  <p className="mt-2 text-xs text-red-500">
+                  <p className="brand-create__error brand-create__error--media">
                     {brandIconError}
                   </p>
                 )}
@@ -278,7 +278,7 @@ export default function BrandCreate() {
           />
 
           {nameError && (
-            <p className="mt-1 text-xs text-red-500">
+            <p className="brand-create__error brand-create__error--field">
               {nameError}
             </p>
           )}
@@ -291,7 +291,7 @@ export default function BrandCreate() {
             id="description"
             value={description}
             placeholder="ブランドの説明を入力してください"
-            className="mt-1 min-h-[112px]"
+            className="brand-create__textarea"
             onChange={(event) =>
               setDescription(event.target.value)
             }
@@ -317,7 +317,7 @@ export default function BrandCreate() {
   );
 
   const right = (
-    <div className="space-y-4">
+    <div className="brand-create__column">
       <AdminCard
         mode="edit"
         assigneeId={managerId}
@@ -328,7 +328,7 @@ export default function BrandCreate() {
       />
 
       {managerIdError && (
-        <p className="text-xs text-red-500">
+        <p className="brand-create__error">
           {managerIdError}
         </p>
       )}

@@ -11,6 +11,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Badge } from "../../../../shared/ui/badge";
 import {
   Table,
   TableBody,
@@ -287,9 +288,9 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                 </TableCell>
 
                 <TableCell className="mqc__quantity-cell">
-                  <span className="mqc__pill mqc__pill--total">
+                  <Badge variant="active">
                     {totalQuantity}
-                  </span>
+                  </Badge>
                 </TableCell>
               </TableRow>
             )}

@@ -108,11 +108,11 @@ export default function BrandDetail() {
     <Card>
       <CardContent>
         {loading ? (
-          <div className="py-6 text-left text-sm text-muted-foreground">
+          <div className="brand-detail__state brand-detail__state--padded">
             読み込み中...
           </div>
         ) : error && !isEditing ? (
-          <div className="py-6 text-left text-sm text-red-600 whitespace-pre-wrap">
+          <div className="brand-detail__state brand-detail__state--padded brand-detail__state--error brand-detail__state--pre-wrap">
             {error.message}
           </div>
         ) : (
@@ -180,7 +180,7 @@ export default function BrandDetail() {
                 </div>
 
                 {brandBackgroundImageError && (
-                  <p className="mt-2 text-xs text-red-500">
+                  <p className="brand-detail__media-error">
                     {brandBackgroundImageError}
                   </p>
                 )}
@@ -261,7 +261,7 @@ export default function BrandDetail() {
                     </div>
 
                     {brandIconError && (
-                      <p className="mt-2 text-xs text-red-500">
+                      <p className="brand-detail__media-error">
                         {brandIconError}
                       </p>
                     )}
@@ -294,7 +294,7 @@ export default function BrandDetail() {
   );
 
   const left = (
-    <div className="space-y-4">
+    <div className="brand-detail__column">
       {hero}
 
       <Card>
@@ -306,13 +306,13 @@ export default function BrandDetail() {
 
         <CardContent>
           {loading ? (
-            <div className="text-left text-sm text-muted-foreground">
+            <div className="brand-detail__state">
               読み込み中...
             </div>
           ) : (
             <>
               {error && isEditing && (
-                <div className="mb-4 text-left text-sm text-red-600 whitespace-pre-wrap">
+                <div className="brand-detail__form-error">
                   {error.message}
                 </div>
               )}
@@ -360,7 +360,6 @@ export default function BrandDetail() {
                       description: event.target.value,
                     }))
                   }
-                  className="brand-detail__textarea"
                   disabled={saving}
                 />
               )}
@@ -396,7 +395,7 @@ export default function BrandDetail() {
   );
 
   const right = (
-    <div className="space-y-4">
+    <div className="brand-detail__column">
       <ManagerCard
         managerName={
           isEditing

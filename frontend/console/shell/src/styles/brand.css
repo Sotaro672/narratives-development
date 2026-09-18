@@ -1,5 +1,39 @@
 /* frontend/console/shell/src/styles/brand.css */
 
+/* =========================================================
+ * Brand Create
+ * ======================================================= */
+
+.brand-create__column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.brand-create__error {
+  margin: 0;
+  color: #ef4444;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.brand-create__error--field {
+  margin-top: 0.25rem;
+}
+
+.brand-create__error--media {
+  margin-top: 0.5rem;
+}
+
+.brand-create__textarea {
+  min-height: 112px;
+  margin-top: 0.25rem;
+}
+
+/* =========================================================
+ * Brand Common
+ * ======================================================= */
+
 .brand-date-row {
   display: flex;
   gap: 12px;
@@ -11,22 +45,50 @@
   min-width: 0;
 }
 
-.brand-detail.is-view .brand-detail__textarea {
-  display: none;
+/* =========================================================
+ * Brand Detail
+ * ======================================================= */
+
+.brand-detail__column {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
-.brand-detail.is-edit .brand-detail__textarea {
-  display: block;
-  width: 100%;
-  min-height: 96px;
-  resize: none;
-  border: 1px solid hsl(var(--border));
-  border-radius: 12px;
-  background: hsl(var(--background));
-  padding: 10px 12px;
-  color: hsl(var(--foreground));
-  font-size: 14px;
-  line-height: 1.4;
+.brand-detail__state {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-align: left;
+}
+
+.brand-detail__state--padded {
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.brand-detail__state--error {
+  color: #dc2626;
+}
+
+.brand-detail__state--pre-wrap {
+  white-space: pre-wrap;
+}
+
+.brand-detail__form-error {
+  margin-bottom: 1rem;
+  color: #dc2626;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.brand-detail__media-error {
+  margin: 0.5rem 0 0;
+  color: #ef4444;
+  font-size: 0.75rem;
+  line-height: 1rem;
 }
 
 .brand-detail.is-view .brand-detail__desc-box {
@@ -53,6 +115,10 @@
   line-height: 1.6;
   word-break: break-word;
 }
+
+/* =========================================================
+ * Brand Hero
+ * ======================================================= */
 
 .brand-hero {
   display: flex;
@@ -150,6 +216,10 @@
 .brand-hero__toolbar--avatar {
   margin-top: 12px;
 }
+
+/* =========================================================
+ * Responsive
+ * ======================================================= */
 
 @media (max-width: 767px) {
   .brand-hero__header {

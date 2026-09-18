@@ -276,11 +276,6 @@ export default function AnnouncementDetailPage() {
       window.alert("告知を削除しました。");
       navigate("/sales");
     } catch (error) {
-      console.error(
-        "[AnnouncementDetailPage] delete announcement failed",
-        error,
-      );
-
       window.alert(
         error instanceof Error
           ? error.message
@@ -464,11 +459,6 @@ export default function AnnouncementDetailPage() {
         window.alert("告知を保存しました。");
       }
     } catch (error) {
-      console.error(
-        "[AnnouncementDetailPage] save announcement failed",
-        error,
-      );
-
       const message =
         error instanceof Error
           ? error.message
@@ -562,11 +552,6 @@ export default function AnnouncementDetailPage() {
         window.alert("告知を送信しました。");
       }
     } catch (error) {
-      console.error(
-        "[AnnouncementDetailPage] send announcement failed",
-        error,
-      );
-
       const message =
         error instanceof Error
           ? error.message

@@ -65,17 +65,10 @@ export default function AnnouncementCreatePage() {
       return;
     }
 
-    try {
-      await onSaveAnnouncement({
-        payload: inputPayload,
-        targetAvatarIds,
-      });
-    } catch (error) {
-      console.error(
-        "[AnnouncementCreatePage] save announcement failed",
-        error,
-      );
-    }
+    await onSaveAnnouncement({
+      payload: inputPayload,
+      targetAvatarIds,
+    });
   }, [
     inputPayload,
     isSaving,
@@ -89,17 +82,10 @@ export default function AnnouncementCreatePage() {
       return;
     }
 
-    try {
-      await onSendAnnouncement({
-        payload: inputPayload,
-        targetAvatarIds,
-      });
-    } catch (error) {
-      console.error(
-        "[AnnouncementCreatePage] send announcement failed",
-        error,
-      );
-    }
+    await onSendAnnouncement({
+      payload: inputPayload,
+      targetAvatarIds,
+    });
   }, [
     inputPayload,
     isSaving,
