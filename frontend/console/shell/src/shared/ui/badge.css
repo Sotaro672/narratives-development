@@ -27,6 +27,21 @@
   color: #ffffff;
 }
 
+.badge--info {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.badge--success {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.badge--warning {
+  background: #fffbeb;
+  color: #b45309;
+}
+
 .badge--danger {
   background: #ef4444;
   color: #ffffff;

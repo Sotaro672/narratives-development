@@ -11,6 +11,7 @@ import { useNavigate } from "react-router-dom";
 import "../../../styles/auth.css";
 
 import { useNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useNotificationUnreadCount";
+import { Badge } from "../../../shared/ui/badge";
 import AdminPanel from "./AdminPanel";
 import { useHeader } from "../hook/useHeader";
 
@@ -68,8 +69,13 @@ export default function Header(props: HeaderProps) {
           cursor: "pointer",
         }}
       >
-        <span className="brand-main">{brandMain}</span>
-        <span className="brand-sub">Console</span>
+        <span className="brand-main">
+          {brandMain}
+        </span>
+
+        <span className="brand-sub">
+          Console
+        </span>
       </button>
 
       <div className="actions">
@@ -80,23 +86,36 @@ export default function Header(props: HeaderProps) {
           title="通知"
           onClick={handleOpenNotifications}
         >
-          <Bell className="icon" aria-hidden />
+          <Bell
+            className="icon"
+            aria-hidden
+          />
 
           {unreadCount > 0 ? (
-            <span className="badge" aria-hidden>
+            <Badge
+              variant="danger"
+              className="header-notification-badge"
+            >
               {unreadCount > 99 ? "99+" : unreadCount}
-            </span>
+            </Badge>
           ) : null}
         </button>
 
-        <div className="relative" ref={panelContainerRef}>
+        <div
+          className="relative"
+          ref={panelContainerRef}
+        >
           <button
             ref={triggerRef}
             type="button"
             className="icon-btn user-trigger"
             aria-haspopup="menu"
             aria-expanded={openAdmin}
-            aria-controls={openAdmin ? "admin-dropdown" : undefined}
+            aria-controls={
+              openAdmin
+                ? "admin-dropdown"
+                : undefined
+            }
             aria-label={
               openAdmin
                 ? "アカウントメニューを閉じる"
@@ -104,12 +123,21 @@ export default function Header(props: HeaderProps) {
             }
             onClick={handleToggleAdmin}
           >
-            <UserRound className="icon" aria-hidden />
+            <UserRound
+              className="icon"
+              aria-hidden
+            />
 
             {openAdmin ? (
-              <ChevronUp className="caret" aria-hidden />
+              <ChevronUp
+                className="caret"
+                aria-hidden
+              />
             ) : (
-              <ChevronDown className="caret" aria-hidden />
+              <ChevronDown
+                className="caret"
+                aria-hidden
+              />
             )}
           </button>
 

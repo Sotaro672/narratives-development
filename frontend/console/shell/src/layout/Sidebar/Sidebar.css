@@ -1,6 +1,4 @@
-/* ───────────────────────────────────────────────
-   Sidebar (uses tokens from global.css)
-   ─────────────────────────────────────────────── */
+/* frontend/console/shell/src/layout/Sidebar/Sidebar.css */
 
 :root {
   --sb-bg: hsl(var(--background));
@@ -16,69 +14,68 @@
   --sb-hover: color-mix(in oklch, var(--sb-accent) 65%, transparent);
   --sb-active: color-mix(in oklch, var(--sb-accent) 85%, transparent);
   --sb-chip: color-mix(in oklch, var(--sb-accent) 92%, white 8%);
-  --sb-badge: hsl(var(--destructive));
 }
 
 /* ─ Base / Layout ─ */
+
 .sidebar {
-  width: 180px;
-  background: #ffffff;
-  color: #111111;
-  border-right: 1px solid var(--sb-border);
-  padding-top: 0 !important;
   display: flex;
-  flex-direction: column;
-  /* ★ 上下に余白を多めにとってスクロールバーを出さない */
+  width: 180px;
   height: calc(100dvh - 140px);
   min-height: 0;
+  flex-direction: column;
   box-sizing: border-box;
+  border-right: 1px solid var(--sb-border);
+  background: #ffffff;
+  padding-top: 0 !important;
+  color: #111111;
 }
 
-/* ナビ部分だけをスクロール領域にし、フッター分の高さを差し引く */
 .sidebar-nav {
   display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 6px;
-  padding: 0 8px;
   margin-top: 0 !important;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
+  padding: 0 8px;
   overflow-x: auto;
+  overflow-y: auto;
 }
 
-/* 下部のフッターブロックを常時見えるように固定 */
 .sidebar > .p-6.border-t.border-border {
   position: sticky;
   bottom: 0;
-  background: #ffffff;
   z-index: 2;
-  min-height: var(--sb-footer-h);
   display: flex;
+  min-height: var(--sb-footer-h);
   align-items: center;
   border: 1px solid #000000 !important;
+  background: #ffffff;
 }
 
 /* ─ Items ─ */
+
 .sidebar-item {
+  position: relative;
   display: flex;
-  align-items: center;
   width: 100%;
+  align-items: center;
   border: 0;
-  background: transparent;
-  cursor: pointer;
-  padding: 8px 14px;
   border-radius: var(--radius-lg, 10px);
-  text-align: left;
+  background: transparent;
+  padding: 8px 14px;
+  color: var(--sb-fg);
   font-size: 14px;
   line-height: 1;
-  color: var(--sb-fg);
-  position: relative; /* ← 追加：バッジ位置の基準枠 */
+  text-align: left;
+  cursor: pointer;
 }
 
 .sidebar-item:hover {
   background: var(--sb-hover);
 }
+
 .sidebar-item.active {
   background: transparent;
   font-weight: 600;
@@ -88,51 +85,60 @@
   width: 20px;
   height: 20px;
   margin-right: 10px;
-  stroke-width: 1.75;
   color: var(--sb-fg-muted);
+  stroke-width: 1.75;
 }
 
 .right {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
 .chevron {
   width: 16px;
   height: 16px;
-  stroke-width: 2;
   color: var(--sb-fg-muted);
-  transition: transform 160ms ease, color 120ms ease, opacity 120ms ease;
   opacity: 0.9;
+  stroke-width: 2;
+  transition:
+    transform 160ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
 }
 
 .sidebar-item:hover .chevron {
   color: color-mix(in oklch, var(--sb-fg) 78%, var(--sb-bg) 22%);
   opacity: 1;
 }
+
 .sidebar-item:not(.has-children) .chevron {
   display: none;
 }
 
-/* ─ Group (親の白い枠) ─ */
+/* ─ Group ─ */
+
 .group-block {
-  border-radius: calc(var(--radius-xl, 14px));
+  border-radius: var(--radius-xl, 14px);
   padding: 2px;
 }
+
 .sidebar-item.parent {
-  border-radius: calc(var(--radius-xl, 14px));
+  border-radius: var(--radius-xl, 14px);
 }
+
 .group-open .sidebar-item.parent {
   outline: 3px solid color-mix(in oklch, var(--sb-fg) 8%, transparent);
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
 }
+
 .group-open .sidebar-item.parent .chevron {
   transform: rotate(180deg);
 }
 
-/* ─ Submenu (pill) ─ */
+/* ─ Submenu ─ */
+
 .submenu-container {
   display: flex;
   flex-direction: column;
@@ -143,22 +149,23 @@
 
 .submenu-item {
   display: flex;
-  align-items: center;
   width: 100%;
+  align-items: center;
   border: 0;
-  background: transparent;
-  cursor: pointer;
-  padding: 10px 12px;
   border-radius: var(--radius-lg, 10px);
-  text-align: left;
+  background: transparent;
+  padding: 10px 12px;
+  color: var(--sb-fg);
   font-size: 14px;
   line-height: 1;
-  color: var(--sb-fg);
+  text-align: left;
+  cursor: pointer;
 }
 
 .submenu-item:hover {
   background: var(--sb-hover);
 }
+
 .submenu-item.active {
   background: var(--sb-chip);
   color: var(--sb-fg);
@@ -172,33 +179,28 @@
   padding-left: 2px;
 }
 
-/* ─ Badge ─ */
-.badge {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--sb-badge);
-  color: #fff;
-  font-size: 12px;
-  line-height: 18px;
-  font-weight: 700;
-}
+/* ─ Notification Badge ─ */
 
-/* ▼ サイドバー内バッジ位置を右上に固定 */
-.sidebar .sidebar-item .badge {
+.sidebar-badge {
   position: absolute;
   top: 6px;
   right: 10px;
   z-index: 1;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* ─ A11y ─ */
+
 .sidebar-item:focus-visible,
 .submenu-item:focus-visible {
+  border-radius: var(--radius-lg, 10px);
   outline: 2px solid var(--sb-ring);
   outline-offset: 2px;
-  border-radius: var(--radius-lg, 10px);
 }
 
 .sidebar .icon-left,
@@ -207,7 +209,6 @@
   stroke: #111111 !important;
 }
 
-/* Optional: ensure border color is visible if using custom tokens */
 .border-border {
   border-color: #e5e7eb;
 }

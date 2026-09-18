@@ -8,9 +8,10 @@ import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import ReportModal from "../features/report/presentation/components/ReportModal";
 
+import { Badge, type BadgeVariant } from "../shared/ui/badge";
+import { Button } from "../shared/ui/button";
 import Pagination from "../shared/ui/pagination";
 import RefreshButton from "../shared/ui/refresh";
-import { Button } from "../shared/ui/button";
 
 import {
   ratingToStars,
@@ -30,6 +31,21 @@ type DetailNavState = {
 
 type SortKey = "Rating" | "ReviewedAt" | null;
 type SortDir = "asc" | "desc";
+
+function getReviewStatusBadgeVariant(
+  status: ReviewStatus,
+): BadgeVariant {
+  switch (status) {
+    case "PUBLISHED":
+      return "success";
+    case "HIDDEN":
+      return "warning";
+    case "REMOVED":
+      return "danger";
+    default:
+      return "default";
+  }
+}
 
 export default function ProductBlueprintReviewDetail() {
   const Location = useLocation();
@@ -233,10 +249,6 @@ export default function ProductBlueprintReviewDetail() {
                     review.Body ?? "",
                   );
 
-                  const TitleText = String(
-                    review.Title ?? "",
-                  );
-
                   const AvatarName = String(
                     review.AvatarName ?? "",
                   );
@@ -282,21 +294,17 @@ export default function ProductBlueprintReviewDetail() {
                           {AuthorName}
                         </span>
 
-                        <span className="pbrd-pill">
+                        <Badge
+                          variant={getReviewStatusBadgeVariant(
+                            review.Status,
+                          )}
+                        >
                           {StatusLabel}
-                        </span>
+                        </Badge>
 
-                        <span className="pbrd-pill">
+                        <Badge variant="secondary">
                           {RatingStars}
-                        </span>
-                      </div>
-
-                      <div className="pbrd-title">
-                        {TitleText || (
-                          <span className="pbrd-body-empty">
-                            （タイトルなし）
-                          </span>
-                        )}
+                        </Badge>
                       </div>
 
                       <div className="pbrd-body">

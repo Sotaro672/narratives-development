@@ -17,6 +17,8 @@ import {
 
 import { countActionRequiredInquiriesHTTP } from "../../features/inquiry/infrastructure/inquiryRepositoryHTTP";
 import { createOrderRepository } from "../../features/order/infrastructure/repository";
+import { Badge } from "../../shared/ui/badge";
+
 import "./Sidebar.css";
 
 interface SidebarProps {
@@ -36,16 +38,41 @@ type SubItem = {
   path: string;
 };
 
-type OpenKey = "products" | "tokens" | "shipping" | "reviews" | "org" | "finance" | null;
+type OpenKey =
+  | "products"
+  | "tokens"
+  | "shipping"
+  | "reviews"
+  | "org"
+  | "finance"
+  | null;
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
 const INQUIRY_STATUS_CHANGED_EVENT = "inquiry:status-changed";
 const ORDER_DISPATCH_STATE_CHANGED_EVENT = "order:dispatch-state-changed";
 
 function toSafeCount(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
+
   const count = Math.trunc(value);
   return count > 0 ? count : null;
+}
+
+function renderBadge(badgeCount?: number | null) {
+  if (typeof badgeCount !== "number" || badgeCount <= 0) {
+    return null;
+  }
+
+  return (
+    <Badge
+      variant="danger"
+      className="sidebar-badge"
+    >
+      {badgeCount > 99 ? "99+" : badgeCount}
+    </Badge>
+  );
 }
 
 export default function Sidebar({ isOpen }: SidebarProps) {
@@ -58,7 +85,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   const loadInquiryActionRequiredCount = useCallback(async () => {
     try {
-      const result = await countActionRequiredInquiriesHTTP({ companyId: CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER });
+      const result = await countActionRequiredInquiriesHTTP({
+        companyId: CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER,
+      });
+
       setInquiryActionRequiredCount(toSafeCount(result.count));
     } catch {
       setInquiryActionRequiredCount(null);
@@ -108,15 +138,59 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
   const menuItems: MenuItem[] = useMemo(
     () => [
-      { label: "問い合わせ", path: "/inquiry", icon: MessageSquare, badgeCount: inquiryActionRequiredCount },
-      { label: "商品", path: "/product", icon: Box, hasSubmenu: true },
-      { label: "トークン", path: "/token", icon: Coins, hasSubmenu: true },
-      { label: "出品", path: "/list", icon: Store },
-      { label: "注文", path: "/order", icon: ShoppingCart, badgeCount: orderActionRequiredCount },
-      { label: "配送", path: "/shipping", icon: Truck, hasSubmenu: true },
-      { label: "レビュー", path: "/review", icon: MessagesSquare, hasSubmenu: true },
-      { label: "組織", path: "/company", icon: Building2, hasSubmenu: true },
-      { label: "財務", path: "/finance", icon: Wallet, hasSubmenu: true },
+      {
+        label: "問い合わせ",
+        path: "/inquiry",
+        icon: MessageSquare,
+        badgeCount: inquiryActionRequiredCount,
+      },
+      {
+        label: "商品",
+        path: "/product",
+        icon: Box,
+        hasSubmenu: true,
+      },
+      {
+        label: "トークン",
+        path: "/token",
+        icon: Coins,
+        hasSubmenu: true,
+      },
+      {
+        label: "出品",
+        path: "/list",
+        icon: Store,
+      },
+      {
+        label: "注文",
+        path: "/order",
+        icon: ShoppingCart,
+        badgeCount: orderActionRequiredCount,
+      },
+      {
+        label: "配送",
+        path: "/shipping",
+        icon: Truck,
+        hasSubmenu: true,
+      },
+      {
+        label: "レビュー",
+        path: "/review",
+        icon: MessagesSquare,
+        hasSubmenu: true,
+      },
+      {
+        label: "組織",
+        path: "/company",
+        icon: Building2,
+        hasSubmenu: true,
+      },
+      {
+        label: "財務",
+        path: "/finance",
+        icon: Wallet,
+        hasSubmenu: true,
+      },
     ],
     [inquiryActionRequiredCount, orderActionRequiredCount],
   );
@@ -191,10 +265,12 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     }
 
     if (
-      (path.startsWith("/product") ||
+      (
+        path.startsWith("/product") ||
         path.startsWith("/productBlueprint") ||
         path.startsWith("/production") ||
-        path.startsWith("/inventory")) &&
+        path.startsWith("/inventory")
+      ) &&
       !path.startsWith("/productBlueprintReview")
     ) {
       setOpenKey("products");
@@ -202,10 +278,12 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     }
 
     if (
-      (path.startsWith("/token") ||
+      (
+        path.startsWith("/token") ||
         path.startsWith("/tokenBlueprint") ||
         path.startsWith("/mint") ||
-        path.startsWith("/sales")) &&
+        path.startsWith("/sales")
+      ) &&
       !path.startsWith("/tokenBlueprintReview")
     ) {
       setOpenKey("tokens");
@@ -244,7 +322,11 @@ export default function Sidebar({ isOpen }: SidebarProps) {
   }, [location.pathname]);
 
   const toggleExclusive = (key: Exclude<OpenKey, null>) => {
-    setOpenKey((current) => (current === key ? null : key));
+    setOpenKey((current) =>
+      current === key
+        ? null
+        : key,
+    );
   };
 
   const navigateAndCloseAll = (path: string) => {
@@ -252,13 +334,27 @@ export default function Sidebar({ isOpen }: SidebarProps) {
     navigate(path);
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
-    <aside className="sidebar" style={{ height: "calc(100vh - 103px)" }}>
+    <aside
+      className="sidebar"
+      style={{ height: "calc(100vh - 103px)" }}
+    >
       <nav className="sidebar-nav">
-        {menuItems.map(({ label, path, icon: Icon, hasSubmenu, badgeCount }) => {
-          const isActiveTop = location.pathname === path || location.pathname.startsWith(`${path}/`);
+        {menuItems.map(({
+          label,
+          path,
+          icon: Icon,
+          hasSubmenu,
+          badgeCount,
+        }) => {
+          const isActiveTop =
+            location.pathname === path ||
+            location.pathname.startsWith(`${path}/`);
+
           const isProductsOpen = openKey === "products";
           const isTokensOpen = openKey === "tokens";
           const isShippingOpen = openKey === "shipping";
@@ -270,7 +366,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isGroupOpen = isProductsOpen;
 
             return (
-              <div key={path} className={`group-block ${isGroupOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isGroupOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("products")}
@@ -280,14 +379,18 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
+
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 ? <span className="badge">{badgeCount}</span> : null}
+                    {renderBadge(badgeCount)}
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
 
                 {isGroupOpen ? (
-                  <div id="submenu-products" className="submenu-container">
+                  <div
+                    id="submenu-products"
+                    className="submenu-container"
+                  >
                     {productSubItems.map((subItem) => {
                       const activeSub =
                         location.pathname === subItem.path ||
@@ -300,7 +403,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                           onClick={() => navigate(subItem.path)}
                           className={`submenu-item ${activeSub ? "active" : ""}`}
                         >
-                          <span className="submenu-label">{subItem.label}</span>
+                          <span className="submenu-label">
+                            {subItem.label}
+                          </span>
                         </button>
                       );
                     })}
@@ -314,7 +419,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isGroupOpen = isTokensOpen;
 
             return (
-              <div key={path} className={`group-block ${isGroupOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isGroupOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("tokens")}
@@ -324,14 +432,18 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
+
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 ? <span className="badge">{badgeCount}</span> : null}
+                    {renderBadge(badgeCount)}
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
 
                 {isGroupOpen ? (
-                  <div id="submenu-tokens" className="submenu-container">
+                  <div
+                    id="submenu-tokens"
+                    className="submenu-container"
+                  >
                     {tokenSubItems.map((subItem) => {
                       const activeSub =
                         location.pathname === subItem.path ||
@@ -344,7 +456,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                           onClick={() => navigate(subItem.path)}
                           className={`submenu-item ${activeSub ? "active" : ""}`}
                         >
-                          <span className="submenu-label">{subItem.label}</span>
+                          <span className="submenu-label">
+                            {subItem.label}
+                          </span>
                         </button>
                       );
                     })}
@@ -356,13 +470,17 @@ export default function Sidebar({ isOpen }: SidebarProps) {
 
           if (label === "配送") {
             const isGroupOpen = isShippingOpen;
+
             const isShippingActive =
               location.pathname.startsWith("/shipping") ||
               location.pathname.startsWith("/stockLocation") ||
               location.pathname.startsWith("/transportationFee");
 
             return (
-              <div key={path} className={`group-block ${isGroupOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isGroupOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("shipping")}
@@ -372,13 +490,17 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
+
                   <span className="right">
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
 
                 {isGroupOpen ? (
-                  <div id="submenu-shipping" className="submenu-container">
+                  <div
+                    id="submenu-shipping"
+                    className="submenu-container"
+                  >
                     {shippingSubItems.map((subItem) => {
                       const activeSub =
                         location.pathname === subItem.path ||
@@ -391,7 +513,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                           onClick={() => navigate(subItem.path)}
                           className={`submenu-item ${activeSub ? "active" : ""}`}
                         >
-                          <span className="submenu-label">{subItem.label}</span>
+                          <span className="submenu-label">
+                            {subItem.label}
+                          </span>
                         </button>
                       );
                     })}
@@ -405,7 +529,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isGroupOpen = isReviewsOpen;
 
             return (
-              <div key={path} className={`group-block ${isGroupOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isGroupOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("reviews")}
@@ -415,14 +542,18 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
+
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 ? <span className="badge">{badgeCount}</span> : null}
+                    {renderBadge(badgeCount)}
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
 
                 {isGroupOpen ? (
-                  <div id="submenu-reviews" className="submenu-container">
+                  <div
+                    id="submenu-reviews"
+                    className="submenu-container"
+                  >
                     {reviewSubItems.map((subItem) => {
                       const activeSub =
                         location.pathname === subItem.path ||
@@ -435,7 +566,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                           onClick={() => navigate(subItem.path)}
                           className={`submenu-item ${activeSub ? "active" : ""}`}
                         >
-                          <span className="submenu-label">{subItem.label}</span>
+                          <span className="submenu-label">
+                            {subItem.label}
+                          </span>
                         </button>
                       );
                     })}
@@ -449,7 +582,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isGroupOpen = isOrgOpen;
 
             return (
-              <div key={path} className={`group-block ${isGroupOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isGroupOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("org")}
@@ -459,14 +595,18 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
+
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 ? <span className="badge">{badgeCount}</span> : null}
+                    {renderBadge(badgeCount)}
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
 
                 {isGroupOpen ? (
-                  <div id="submenu-org" className="submenu-container">
+                  <div
+                    id="submenu-org"
+                    className="submenu-container"
+                  >
                     {orgSubItems.map((subItem) => {
                       const activeSub =
                         location.pathname === subItem.path ||
@@ -479,7 +619,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                           onClick={() => navigate(subItem.path)}
                           className={`submenu-item ${activeSub ? "active" : ""}`}
                         >
-                          <span className="submenu-label">{subItem.label}</span>
+                          <span className="submenu-label">
+                            {subItem.label}
+                          </span>
                         </button>
                       );
                     })}
@@ -493,7 +635,10 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             const isGroupOpen = isFinanceOpen;
 
             return (
-              <div key={path} className={`group-block ${isGroupOpen ? "group-open" : ""}`}>
+              <div
+                key={path}
+                className={`group-block ${isGroupOpen ? "group-open" : ""}`}
+              >
                 <button
                   type="button"
                   onClick={() => toggleExclusive("finance")}
@@ -503,14 +648,18 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                 >
                   <Icon className="icon-left" aria-hidden />
                   <span className="label">{label}</span>
+
                   <span className="right">
-                    {typeof badgeCount === "number" && badgeCount > 0 ? <span className="badge">{badgeCount}</span> : null}
+                    {renderBadge(badgeCount)}
                     <ChevronRight className="chevron" aria-hidden />
                   </span>
                 </button>
 
                 {isGroupOpen ? (
-                  <div id="submenu-finance" className="submenu-container">
+                  <div
+                    id="submenu-finance"
+                    className="submenu-container"
+                  >
                     {financeSubItems.map((subItem) => {
                       const activeSub =
                         location.pathname === subItem.path ||
@@ -523,7 +672,9 @@ export default function Sidebar({ isOpen }: SidebarProps) {
                           onClick={() => navigate(subItem.path)}
                           className={`submenu-item ${activeSub ? "active" : ""}`}
                         >
-                          <span className="submenu-label">{subItem.label}</span>
+                          <span className="submenu-label">
+                            {subItem.label}
+                          </span>
                         </button>
                       );
                     })}
@@ -543,9 +694,13 @@ export default function Sidebar({ isOpen }: SidebarProps) {
             >
               <Icon className="icon-left" aria-hidden />
               <span className="label">{label}</span>
+
               <span className="right">
-                {typeof badgeCount === "number" && badgeCount > 0 ? <span className="badge">{badgeCount}</span> : null}
-                {hasSubmenu ? <ChevronRight className="chevron" aria-hidden /> : null}
+                {renderBadge(badgeCount)}
+
+                {hasSubmenu ? (
+                  <ChevronRight className="chevron" aria-hidden />
+                ) : null}
               </span>
             </button>
           );

@@ -1,44 +1,15 @@
 /* frontend/console/shell/src/styles/mintRequest.css */
 
-/* Mint Request Management styles */
-
-.mint-badge {
-  display: inline-block;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.25rem 0.6rem;
-  border-radius: 9999px;
-}
-
-/* ステータス別 */
-.mint-badge.is-done {
-  background: #ef4444; /* ミント完了 */
-}
-
-.mint-badge.is-minting {
-  background: #2563eb; /* ミント中 */
-  color: #ffffff;
-}
-
-.mint-badge.is-requested {
-  background: #0b0f1a; /* リクエスト済み */
-}
-
-.mint-badge.is-planned {
-  background: #e5e7eb; /* 計画中 */
-  color: #0f172a;
-}
-
 /* ミント申請カード（シンプル版） */
+
 .mint-request-card {
-  background: var(--pbp-surface, #ffffff);
-  border: 1px solid
-    var(--pbp-border, rgba(15, 23, 42, 0.08));
-  border-radius: 16px;
-  padding: 0;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
   margin: 6px 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--pbp-border, rgba(15, 23, 42, 0.08));
+  border-radius: 16px;
+  background: var(--pbp-surface, #ffffff);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
 }
 
 .mint-request-card__body {
@@ -53,11 +24,11 @@
 }
 
 .mint-request-card__button {
-  background-color: #2563eb;
-  color: #fff;
-  font-weight: 600;
   padding: 10px 18px;
   border-radius: 10px;
+  background-color: #2563eb;
+  color: #ffffff;
+  font-weight: 600;
   transition: background-color 0.2s ease-in-out;
 }
 
@@ -66,6 +37,6 @@
 }
 
 .mint-request-card__total {
-  font-size: 0.9rem;
   color: var(--pbp-text-soft, #6b7280);
+  font-size: 0.9rem;
 }

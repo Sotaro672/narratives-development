@@ -1,5 +1,6 @@
 // frontend/console/shell/src/features/brand/presentation/components/brandCreateProgressModal.tsx
 
+import { Badge, type BadgeVariant } from "../../../../shared/ui/badge";
 import { Modal, ModalCloseButton } from "../../../../shared/ui/modal";
 import type { BrandCreateProgress } from "../model/brandCreateProgress";
 
@@ -46,8 +47,22 @@ function phaseStatusLabel(progress: BrandCreateProgress): string {
   }
 }
 
-function statusClassName(progress: BrandCreateProgress): string {
-  return `brand-create-progress-modal__status--${progress.phase}`;
+function phaseStatusVariant(progress: BrandCreateProgress): BadgeVariant {
+  switch (progress.phase) {
+    case "creating":
+      return "secondary";
+    case "uploading":
+      return "info";
+    case "saving":
+      return "warning";
+    case "completed":
+      return "success";
+    case "failed":
+      return "danger";
+    case "idle":
+    default:
+      return "default";
+  }
 }
 
 function shouldShowIndeterminate(progress: BrandCreateProgress): boolean {
@@ -114,14 +129,9 @@ export default function BrandCreateProgressModal({
       description={progress.message}
       eyebrow={
         statusLabel ? (
-          <span
-            className={[
-              "brand-create-progress-modal__status",
-              statusClassName(progress),
-            ].join(" ")}
-          >
+          <Badge variant={phaseStatusVariant(progress)}>
             {statusLabel}
-          </span>
+          </Badge>
         ) : undefined
       }
       onClose={canClose ? onClose : undefined}

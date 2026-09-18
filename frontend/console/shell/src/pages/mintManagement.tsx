@@ -1,9 +1,21 @@
 // frontend/console/shell/src/pages/mintManagement.tsx
 
 import List from "../layout/List/List";
+import { Badge, type BadgeVariant } from "../shared/ui/badge";
 import { useMintRequestManagement } from "../features/mint/presentation/hook/useMintRequestManagement";
 
-import "../styles/mintRequest.css";
+function getMintStatusBadgeVariant(status: string): BadgeVariant {
+  switch (status) {
+    case "minted":
+      return "danger";
+    case "minting":
+      return "info";
+    case "requested":
+      return "active";
+    default:
+      return "default";
+  }
+}
 
 export default function MintRequestManagementPage() {
   const {
@@ -26,23 +38,13 @@ export default function MintRequestManagementPage() {
         onReset={onReset}
       >
         {rows.map((row) => {
-          /**
-           * mints.createdByNameのみを使用する。
-           */
           const requesterName = row.createdByName ?? "-";
 
-          /**
-           * Mint完了時だけ実行日時を表示する。
-           */
           const mintedAtLabel =
             row.status === "minted"
               ? row.mintedAt ?? "-"
               : "-";
 
-          /**
-           * tokenNameを優先して表示し、
-           * 存在しない場合はtokenBlueprintIdを表示する。
-           */
           const tokenLabel =
             row.tokenName ??
             row.tokenBlueprintId ??
@@ -54,14 +56,8 @@ export default function MintRequestManagementPage() {
           return (
             <tr
               key={row.productionId}
-              onClick={() =>
-                handleRowClick(
-                  row.productionId,
-                )
-              }
-              style={{
-                cursor: "pointer",
-              }}
+              onClick={() => handleRowClick(row.productionId)}
+              className="cursor-pointer"
               tabIndex={0}
               onKeyDown={(event) =>
                 handleRowKeyDown(
@@ -83,41 +79,17 @@ export default function MintRequestManagementPage() {
                 </span>
               </td>
 
-              <td>
-                {row.mintQuantity}
-              </td>
+              <td>{row.mintQuantity}</td>
+              <td>{row.productionQuantity}</td>
 
               <td>
-                {row.productionQuantity}
+                <Badge variant={getMintStatusBadgeVariant(row.status)}>
+                  {row.statusLabel}
+                </Badge>
               </td>
 
-              <td>
-                {row.status === "minted" ? (
-                  <span className="mint-badge is-done">
-                    {row.statusLabel}
-                  </span>
-                ) : row.status === "minting" ? (
-                  <span className="mint-badge is-minting">
-                    {row.statusLabel}
-                  </span>
-                ) : row.status === "requested" ? (
-                  <span className="mint-badge is-requested">
-                    {row.statusLabel}
-                  </span>
-                ) : (
-                  <span className="mint-badge is-planned">
-                    {row.statusLabel}
-                  </span>
-                )}
-              </td>
-
-              <td>
-                {requesterName}
-              </td>
-
-              <td>
-                {mintedAtLabel}
-              </td>
+              <td>{requesterName}</td>
+              <td>{mintedAtLabel}</td>
             </tr>
           );
         })}

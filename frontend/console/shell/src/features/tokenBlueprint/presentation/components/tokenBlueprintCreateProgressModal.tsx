@@ -1,5 +1,6 @@
 // frontend/console/shell/src/features/tokenBlueprint/presentation/components/tokenBlueprintCreateProgressModal.tsx
 
+import { Badge, type BadgeVariant } from "../../../../shared/ui/badge";
 import {
   Modal,
   ModalButton,
@@ -71,6 +72,30 @@ function phaseStatusLabel(
   }
 }
 
+function phaseStatusVariant(
+  progress: TokenBlueprintCreateProgress,
+): BadgeVariant {
+  switch (progress.phase) {
+    case "starting":
+      return "secondary";
+    case "uploading":
+      return "info";
+    case "queued":
+      return "secondary";
+    case "processing":
+      return "warning";
+    case "completed":
+      return "success";
+    case "failed_retryable":
+      return "warning";
+    case "failed_fatal":
+      return "danger";
+    case "idle":
+    default:
+      return "default";
+  }
+}
+
 function shouldShowProgressBar(
   progress: TokenBlueprintCreateProgress,
 ): boolean {
@@ -135,14 +160,9 @@ export default function TokenBlueprintCreateProgressModal({
       description={progress.message}
       eyebrow={
         statusLabel ? (
-          <span
-            className={[
-              "token-blueprint-create-progress-modal__status",
-              `token-blueprint-create-progress-modal__status--${progress.phase}`,
-            ].join(" ")}
-          >
+          <Badge variant={phaseStatusVariant(progress)}>
             {statusLabel}
-          </span>
+          </Badge>
         ) : undefined
       }
       onClose={canClose ? onClose : undefined}

@@ -1,5 +1,6 @@
 // frontend/console/shell/src/features/announcement/presentation/components/announcementCreateProgressModal.tsx
 
+import { Badge, type BadgeVariant } from "../../../../shared/ui/badge";
 import { Modal, ModalCloseButton } from "../../../../shared/ui/modal";
 import type { AnnouncementCreateProgress } from "../model/announcementCreateProgress";
 
@@ -46,18 +47,38 @@ function phaseStatusLabel(progress: AnnouncementCreateProgress): string {
   }
 }
 
-function statusClassName(progress: AnnouncementCreateProgress): string {
-  return `list-progress-modal__status--${progress.phase}`;
+function phaseStatusVariant(
+  progress: AnnouncementCreateProgress,
+): BadgeVariant {
+  switch (progress.phase) {
+    case "preparing":
+      return "secondary";
+    case "uploading":
+      return "info";
+    case "saving":
+      return "warning";
+    case "completed":
+      return "success";
+    case "failed":
+      return "danger";
+    case "idle":
+    default:
+      return "default";
+  }
 }
 
-function shouldShowIndeterminate(progress: AnnouncementCreateProgress): boolean {
+function shouldShowIndeterminate(
+  progress: AnnouncementCreateProgress,
+): boolean {
   return (
     progress.phase === "preparing" ||
     (progress.phase === "saving" && progress.totalBytes <= 0)
   );
 }
 
-function shouldShowProgressBar(progress: AnnouncementCreateProgress): boolean {
+function shouldShowProgressBar(
+  progress: AnnouncementCreateProgress,
+): boolean {
   if (progress.totalBytes <= 0) {
     return false;
   }
@@ -69,7 +90,9 @@ function shouldShowProgressBar(progress: AnnouncementCreateProgress): boolean {
   );
 }
 
-function shouldShowUploadCount(progress: AnnouncementCreateProgress): boolean {
+function shouldShowUploadCount(
+  progress: AnnouncementCreateProgress,
+): boolean {
   return (
     progress.expectedUploadCount > 0 &&
     (
@@ -114,14 +137,9 @@ export default function AnnouncementCreateProgressModal({
       description={progress.message}
       eyebrow={
         statusLabel ? (
-          <span
-            className={[
-              "list-progress-modal__status",
-              statusClassName(progress),
-            ].join(" ")}
-          >
+          <Badge variant={phaseStatusVariant(progress)}>
             {statusLabel}
-          </span>
+          </Badge>
         ) : undefined
       }
       onClose={canClose ? onClose : undefined}

@@ -8,6 +8,9 @@ export type BadgeVariant =
   | "default"
   | "secondary"
   | "active"
+  | "info"
+  | "success"
+  | "warning"
   | "danger";
 
 interface BadgeProps {
@@ -23,9 +26,17 @@ export function Badge({
   style,
   variant = "secondary",
 }: BadgeProps) {
+  const classNames = [
+    "badge",
+    `badge--${variant}`,
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <span
-      className={`badge badge--${variant} ${className}`.trim()}
+      className={classNames}
       style={style}
     >
       {children}

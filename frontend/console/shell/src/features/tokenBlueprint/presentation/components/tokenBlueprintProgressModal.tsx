@@ -3,6 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 
+import { Badge, type BadgeVariant } from "../../../../shared/ui/badge";
 import type {
   TokenBlueprintProgress,
 } from "../model/tokenBlueprintProgress";
@@ -54,10 +55,8 @@ function uploadTargetLabel(
   switch (target) {
     case "icon":
       return "アイコン";
-
     case "content":
       return "コンテンツ";
-
     default:
       return "";
   }
@@ -69,36 +68,36 @@ function phaseStatusLabel(
   switch (progress.phase) {
     case "idle":
       return "";
-
     case "preparing":
       return "準備中";
-
     case "uploading":
       return "転送中";
-
     case "saving":
       return "保存中";
-
     case "completed":
       return "完了";
-
     case "failed":
       return "失敗";
   }
 }
 
-function statusClassName(
+function phaseStatusVariant(
   progress: TokenBlueprintProgress,
-): string {
+): BadgeVariant {
   switch (progress.phase) {
+    case "preparing":
+      return "secondary";
+    case "uploading":
+      return "info";
+    case "saving":
+      return "warning";
     case "completed":
-      return "token-blueprint-create-progress-modal__status--completed";
-
+      return "success";
     case "failed":
-      return "token-blueprint-create-progress-modal__status--failed_fatal";
-
+      return "danger";
+    case "idle":
     default:
-      return `token-blueprint-create-progress-modal__status--${progress.phase}`;
+      return "default";
   }
 }
 
@@ -242,14 +241,9 @@ export default function TokenBlueprintProgressModal({
         <div className="token-blueprint-create-progress-modal__header">
           <div className="token-blueprint-create-progress-modal__heading">
             {statusLabel ? (
-              <span
-                className={[
-                  "token-blueprint-create-progress-modal__status",
-                  statusClassName(progress),
-                ].join(" ")}
-              >
+              <Badge variant={phaseStatusVariant(progress)}>
                 {statusLabel}
-              </span>
+              </Badge>
             ) : null}
 
             <h2

@@ -377,38 +377,6 @@
  * TokenBlueprintCreateProgressModal
  * =======================================================*/
 
-.token-blueprint-create-progress-modal__status {
-  display: inline-flex;
-  min-height: 24px;
-  align-items: center;
-  border: 1px solid var(--token-blueprint-primary-border);
-  border-radius: 999px;
-  background: var(--token-blueprint-primary-soft);
-  padding: 3px 9px;
-  color: var(--token-blueprint-primary);
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.token-blueprint-create-progress-modal__status--completed {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
-}
-
-.token-blueprint-create-progress-modal__status--failed_retryable {
-  border-color: #fde68a;
-  background: #fffbeb;
-  color: #b45309;
-}
-
-.token-blueprint-create-progress-modal__status--failed-fatal {
-  border-color: var(--token-blueprint-danger-border);
-  background: var(--token-blueprint-danger-soft);
-  color: var(--token-blueprint-danger);
-}
-
 .token-blueprint-create-progress-modal__indeterminate {
   width: 100%;
   height: 8px;
@@ -686,13 +654,6 @@
     background: var(--token-blueprint-surface);
   }
 
-  .token-blueprint-create-progress-modal__status--completed {
-    border-color: rgba(74, 222, 128, 0.34);
-    background: rgba(22, 163, 74, 0.14);
-    color: #86efac;
-  }
-
-  .token-blueprint-create-progress-modal__status--failed_retryable,
   .token-blueprint-create-progress-modal__warning {
     border-color: rgba(251, 191, 36, 0.34);
     background: rgba(217, 119, 6, 0.14);

@@ -1,5 +1,6 @@
 // frontend/console/shell/src/features/list/presentation/components/listProgressModal.tsx
 
+import { Badge, type BadgeVariant } from "../../../../shared/ui/badge";
 import { Modal, ModalCloseButton } from "../../../../shared/ui/modal";
 import type { ListProgress } from "../modal/listProgress";
 
@@ -46,14 +47,21 @@ function phaseStatusLabel(progress: ListProgress): string {
   }
 }
 
-function statusClassName(progress: ListProgress): string {
+function phaseStatusVariant(progress: ListProgress): BadgeVariant {
   switch (progress.phase) {
+    case "preparing":
+      return "secondary";
+    case "uploading":
+      return "info";
+    case "saving":
+      return "warning";
     case "completed":
-      return "list-progress-modal__status--completed";
+      return "success";
     case "failed":
-      return "list-progress-modal__status--failed";
+      return "danger";
+    case "idle":
     default:
-      return `list-progress-modal__status--${progress.phase}`;
+      return "default";
   }
 }
 
@@ -121,14 +129,9 @@ export default function ListProgressModal({
       description={progress.message}
       eyebrow={
         statusLabel ? (
-          <span
-            className={[
-              "list-progress-modal__status",
-              statusClassName(progress),
-            ].join(" ")}
-          >
+          <Badge variant={phaseStatusVariant(progress)}>
             {statusLabel}
-          </span>
+          </Badge>
         ) : undefined
       }
       onClose={canClose ? onClose : undefined}

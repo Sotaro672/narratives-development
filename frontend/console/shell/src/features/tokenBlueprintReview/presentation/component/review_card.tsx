@@ -7,6 +7,7 @@ import type {
   ReactionType,
 } from "../../../../shared/types/tokenBlueprintReview";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+import { Badge } from "../../../../shared/ui/badge";
 import { Button } from "../../../../shared/ui/button";
 
 type ReviewCardProps = {
@@ -234,9 +235,9 @@ export default function ReviewCard({
         <span>{authorPrimary}</span>
 
         {authorType === "brand" && isOwnerComment ? (
-          <span className="inline-flex items-center rounded-full border border-slate-300 px-2 py-0.5 text-[11px] text-slate-600">
+          <Badge variant="secondary">
             投稿者
-          </span>
+          </Badge>
         ) : null}
 
         <span className="tbrd-created-at">
