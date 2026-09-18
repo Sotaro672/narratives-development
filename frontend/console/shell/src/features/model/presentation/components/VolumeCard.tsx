@@ -5,19 +5,22 @@ import { Beaker, Plus, Trash2 } from "lucide-react";
 
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardInput,
+  CardReadonly,
+  CardTitle,
 } from "../../../../shared/ui";
 import { Button } from "../../../../shared/ui/button";
-import { Input } from "../../../../shared/ui/input";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../../../shared/ui/table";
 
 import type { VolumeRow } from "../../application/modelCreateService";
@@ -53,7 +56,9 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
 
   const handleChangeVolumeValue =
     (id: string) => (event: React.ChangeEvent<HTMLInputElement>) => {
-      if (!isEdit) return;
+      if (!isEdit) {
+        return;
+      }
 
       const rawValue = event.target.value;
 
@@ -73,7 +78,9 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
 
   const handleChangeVolumeUnit =
     (id: string) => (event: React.ChangeEvent<HTMLInputElement>) => {
-      if (!isEdit) return;
+      if (!isEdit) {
+        return;
+      }
 
       onChangeVolume?.(id, {
         volumeUnit: event.target.value,
@@ -86,16 +93,22 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
         mode === "view" ? "view-mode" : ""
       }`}
     >
-      <CardHeader className="box__header">
-        <Beaker size={16} />
-        <CardTitle className="box__title">
-          容量
-          {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-              （閲覧）
-            </span>
-          )}
-        </CardTitle>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Beaker className="card__header-icon-svg" />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
+            容量
+
+            {mode === "view" && (
+              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
+                （閲覧）
+              </span>
+            )}
+          </CardTitle>
+        </CardHeaderLeft>
 
         {isEdit && (
           <Button
@@ -111,7 +124,7 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
         )}
       </CardHeader>
 
-      <CardContent className="box__body">
+      <CardContent>
         <Table className="svc__table">
           <TableHeader>
             <TableRow>
@@ -126,7 +139,7 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
               <TableRow key={volume.id}>
                 <TableCell>
                   {isEdit ? (
-                    <Input
+                    <CardInput
                       type="number"
                       min={0}
                       value={toInputNumberValue(volume.volumeValue)}
@@ -135,30 +148,24 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
                       aria-label="容量"
                     />
                   ) : (
-                    <Input
-                      value={toInputNumberValue(volume.volumeValue)}
-                      variant="readonly"
-                      readOnly
-                      aria-label="容量"
-                    />
+                    <CardReadonly inputLike aria-label="容量">
+                      {toInputNumberValue(volume.volumeValue) || "-"}
+                    </CardReadonly>
                   )}
                 </TableCell>
 
                 <TableCell>
                   {isEdit ? (
-                    <Input
+                    <CardInput
                       value={volume.volumeUnit}
                       onChange={handleChangeVolumeUnit(volume.id)}
                       placeholder="ml"
                       aria-label="容量の単位"
                     />
                   ) : (
-                    <Input
-                      value={volume.volumeUnit}
-                      variant="readonly"
-                      readOnly
-                      aria-label="容量の単位"
-                    />
+                    <CardReadonly inputLike aria-label="容量の単位">
+                      {volume.volumeUnit || "-"}
+                    </CardReadonly>
                   )}
                 </TableCell>
 
@@ -181,7 +188,10 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
 
             {volumes.length === 0 && (
               <TableRow>
-                <TableCell colSpan={isEdit ? 3 : 2} className="svc__empty">
+                <TableCell
+                  colSpan={isEdit ? 3 : 2}
+                  className="svc__empty"
+                >
                   登録されている容量はありません。
                 </TableCell>
               </TableRow>

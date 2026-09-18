@@ -3,9 +3,23 @@
 import * as React from "react";
 import { Package } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui";
-import { Input } from "../../../../shared/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../../shared/ui/table";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardInput,
+  CardTitle,
+} from "../../../../shared/ui";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../../../shared/ui/table";
 
 import type {
   AlcoholModelNumber,
@@ -24,13 +38,19 @@ type CommonShippingPackageCardProps = {
 type ApparelShippingPackageCardProps = CommonShippingPackageCardProps & {
   kind: "apparel";
   modelNumbers: ApparelModelNumber[];
-  onChangeShippingPackage?: (size: string, patch: ShippingPackagePatch) => void;
+  onChangeShippingPackage?: (
+    size: string,
+    patch: ShippingPackagePatch,
+  ) => void;
 };
 
 type AlcoholShippingPackageCardProps = CommonShippingPackageCardProps & {
   kind: "alcohol";
   modelNumbers: AlcoholModelNumber[];
-  onChangeShippingPackage?: (volumeLabel: string, patch: ShippingPackagePatch) => void;
+  onChangeShippingPackage?: (
+    volumeLabel: string,
+    patch: ShippingPackagePatch,
+  ) => void;
 };
 
 export type ShippingPackageCardProps =
@@ -187,7 +207,7 @@ function ShippingPackageInput({
   const isDimension = field.unit === "cm";
 
   return (
-    <Input
+    <CardInput
       type="number"
       min={0}
       step={isDimension ? 0.1 : 1}
@@ -255,7 +275,9 @@ function ApparelShippingPackageRows({
 
         return (
           <TableRow key={size}>
-            <TableCell className="mnc__size">{size}</TableCell>
+            <TableCell className="mnc__size">
+              {size}
+            </TableCell>
 
             {SHIPPING_PACKAGE_FIELDS.map((field) => (
               <TableCell key={field.key}>
@@ -344,31 +366,44 @@ function AlcoholShippingPackageRows({
 }
 
 const ShippingPackageCard: React.FC<ShippingPackageCardProps> = (props) => {
-  const { className, mode = "edit" } = props;
+  const {
+    className,
+    mode = "edit",
+  } = props;
+
   const isApparel = props.kind === "apparel";
 
   return (
     <Card
-      className={`spc ${mode === "view" ? "view-mode" : ""} ${className ?? ""}`}
+      className={`spc ${mode === "view" ? "view-mode" : ""} ${
+        className ?? ""
+      }`}
     >
-      <CardHeader className="box__header">
-        <Package size={16} />
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Package className="card__header-icon-svg" />
+          </CardHeaderIcon>
 
-        <CardTitle className="box__title">
-          配送用梱包情報
-          {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-              （閲覧）
-            </span>
-          )}
-        </CardTitle>
+          <CardTitle strong>
+            配送用梱包情報
+
+            {mode === "view" && (
+              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
+                （閲覧）
+              </span>
+            )}
+          </CardTitle>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="box__body">
+      <CardContent>
         <Table className="mnc__table">
           <TableHeader>
             <TableRow>
-              <TableHead>{isApparel ? "サイズ" : "容量"}</TableHead>
+              <TableHead>
+                {isApparel ? "サイズ" : "容量"}
+              </TableHead>
 
               {SHIPPING_PACKAGE_FIELDS.map((field) => (
                 <TableHead key={field.key}>

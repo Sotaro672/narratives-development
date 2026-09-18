@@ -2,20 +2,23 @@
 
 import * as React from "react";
 import { Tags } from "lucide-react";
+
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardInput,
+  CardTitle,
 } from "../../../../shared/ui";
-import { Input } from "../../../../shared/ui/input";
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../../../shared/ui/table";
 
 /**
@@ -59,10 +62,12 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
 
   const handleChange =
     (sizeLabel: string, color: string) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      if (!isEdit) return;
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      if (!isEdit) {
+        return;
+      }
 
-      const nextCode = e.target.value;
+      const nextCode = event.target.value;
       onChangeModelNumber?.(sizeLabel, color, nextCode);
     };
 
@@ -72,25 +77,34 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
         className ?? ""
       }`}
     >
-      <CardHeader className="box__header">
-        <Tags size={16} />
-        <CardTitle className="box__title">
-          モデルナンバー
-          {mode === "view" && (
-            <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
-              （閲覧）
-            </span>
-          )}
-        </CardTitle>
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Tags className="card__header-icon-svg" />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
+            モデルナンバー
+
+            {mode === "view" && (
+              <span className="ml-2 text-xs text-[var(--pbp-text-soft)]">
+                （閲覧）
+              </span>
+            )}
+          </CardTitle>
+        </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="box__body">
+      <CardContent>
         <Table className="mnc__table">
           <TableHeader>
             <TableRow>
               <TableHead>サイズ / カラー</TableHead>
+
               {colors.map((color) => (
-                <TableHead key={color}>{color}</TableHead>
+                <TableHead key={color}>
+                  {color}
+                </TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -108,7 +122,7 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
                   return (
                     <TableCell key={color}>
                       {isEdit ? (
-                        <Input
+                        <CardInput
                           value={code}
                           onChange={handleChange(size.sizeLabel, color)}
                           placeholder="例: LM-SB-S-WHT"

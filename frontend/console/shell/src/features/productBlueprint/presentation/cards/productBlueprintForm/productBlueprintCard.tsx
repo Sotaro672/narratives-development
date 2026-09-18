@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../../shared/ui";
@@ -30,30 +31,24 @@ export type ProductBlueprintPatchInput = {
   productName?: string | null;
   brandId?: string | null;
   brandName?: string | null;
-
   productBlueprintCategoryPath?: ProductBlueprintCategoryPath | null;
-
   fit?: string | null;
   material?: string | null;
   weight?: number | null;
   qualityAssurance?: string[] | null;
   categoryFields?: CategoryFieldValues | null;
-
   assigneeId?: string | null;
 };
 
 export type ProductBlueprintCardProps = {
   productBlueprintPatch?: ProductBlueprintPatchInput;
-
   productName?: string;
-
   brandId?: string;
   brandName?: string;
   brandOptions?: BrandOption[];
   brandLoading?: boolean;
   brandError?: Error | null;
   onChangeBrandId?: (id: string) => void;
-
   productBlueprintCategoryPath?: ProductBlueprintCategoryPath | null;
   productBlueprintCategoryOptions?: ProductBlueprintCategoryOption[];
   productBlueprintCategoryLoading?: boolean;
@@ -61,9 +56,7 @@ export type ProductBlueprintCardProps = {
   onChangeProductBlueprintCategoryPath?: (
     productBlueprintCategoryPath: ProductBlueprintCategoryPath | null,
   ) => void;
-
   onChangeProductName?: (value: string) => void;
-
   mode?: "edit" | "view";
 };
 
@@ -97,24 +90,19 @@ function resolveCardTitle(
 
 const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   productBlueprintPatch,
-
   productName,
-
   brandId,
   brandName,
   brandOptions,
   brandLoading,
   brandError,
   onChangeBrandId,
-
   productBlueprintCategoryPath,
   productBlueprintCategoryOptions,
   productBlueprintCategoryLoading,
   productBlueprintCategoryError,
   onChangeProductBlueprintCategoryPath,
-
   onChangeProductName,
-
   mode = "edit",
 }) => {
   const isEdit = mode === "edit";
@@ -146,22 +134,22 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
   return (
     <Card
       className={`pbc ${
-        !isEdit
-          ? "view-mode"
-          : ""
+        !isEdit ? "view-mode" : ""
       }`}
     >
-      <CardHeader className="box__header">
+      <CardHeader>
         <CardHeaderLeft>
-          <Package2 size={16} />
+          <CardHeaderIcon>
+            <Package2 className="card__header-icon-svg" />
+          </CardHeaderIcon>
 
-          <CardTitle className="box__title">
+          <CardTitle strong>
             {cardTitle}
           </CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
-      <CardContent className="box__body">
+      <CardContent>
         <ProductBlueprintBasicFields
           productName={mergedProductName}
           mode={mode}

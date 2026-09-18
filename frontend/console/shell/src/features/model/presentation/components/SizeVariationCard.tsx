@@ -5,32 +5,29 @@ import { Tags, Trash2 } from "lucide-react";
 
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
+  CardHeader,
+  CardHeaderIcon,
+  CardHeaderLeft,
+  CardInput,
+  CardTitle,
 } from "../../../../shared/ui";
-
 import { Button } from "../../../../shared/ui/button";
-import { Input } from "../../../../shared/ui/input";
-
 import {
   Table,
-  TableHeader,
   TableBody,
-  TableHead,
-  TableRow,
   TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
 } from "../../../../shared/ui/table";
 
-import type {
-  MeasurementOption,
-} from "../../../../shared/types/apparel";
+import type { MeasurementOption } from "../../../../shared/types/apparel";
 
-// ロジックはhook側に集約
 import {
   useSizeVariationCard,
-  type SizeRow,
   type SizePatch,
+  type SizeRow,
 } from "../hook/useModelCard";
 
 export type SizeVariationCardProps = {
@@ -45,7 +42,6 @@ export type SizeVariationCardProps = {
   onAddSize?: () => void;
 };
 
-// MeasurementのラベルからSizeRowのfieldを取得する。
 type SizeFieldKey = keyof Omit<
   SizeRow,
   "id" | "sizeLabel"
@@ -58,7 +54,6 @@ function mapLabelToField(
   label: string,
 ): SizeFieldKey {
   switch (label) {
-    // トップス
     case "着丈":
       return "length";
 
@@ -74,7 +69,6 @@ function mapLabelToField(
     case "袖丈":
       return "sleeveLength";
 
-    // ボトムス
     case "ウエスト":
       return "waist";
 
@@ -100,9 +94,7 @@ function mapLabelToField(
   }
 }
 
-const SizeVariationCard: React.FC<
-  SizeVariationCardProps
-> = ({
+const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
   sizes,
   onRemove,
   onChangeSize,
@@ -124,12 +116,10 @@ const SizeVariationCard: React.FC<
 
   const measurementCols = React.useMemo(
     () =>
-      (measurementHeaders ?? []).map(
-        (label) => ({
-          label,
-          field: mapLabelToField(label),
-        }),
-      ),
+      (measurementHeaders ?? []).map((label) => ({
+        label,
+        field: mapLabelToField(label),
+      })),
     [measurementHeaders],
   );
 
@@ -139,11 +129,13 @@ const SizeVariationCard: React.FC<
         mode === "view" ? "view-mode" : ""
       }`}
     >
-      <CardHeader className="box__header">
-        <div className="flex items-center gap-2">
-          <Tags size={16} />
+      <CardHeader>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <Tags className="card__header-icon-svg" />
+          </CardHeaderIcon>
 
-          <CardTitle className="box__title">
+          <CardTitle strong>
             サイズバリエーション
 
             {mode === "view" && (
@@ -152,14 +144,13 @@ const SizeVariationCard: React.FC<
               </span>
             )}
           </CardTitle>
-        </div>
+        </CardHeaderLeft>
 
         {isEdit && (
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="ml-auto"
             onClick={() => onAddSize?.()}
           >
             サイズを追加
@@ -167,7 +158,7 @@ const SizeVariationCard: React.FC<
         )}
       </CardHeader>
 
-      <CardContent className="box__body">
+      <CardContent>
         <Table className="svc__table">
           <TableHeader>
             <TableRow>
@@ -192,7 +183,7 @@ const SizeVariationCard: React.FC<
               <TableRow key={row.id}>
                 <TableCell>
                   {isEdit ? (
-                    <Input
+                    <CardInput
                       {...readonlyInputProps}
                       value={row.sizeLabel}
                       onChange={handleChange(
@@ -211,15 +202,13 @@ const SizeVariationCard: React.FC<
                 {measurementCols.map((col) => (
                   <TableCell key={col.field}>
                     {isEdit ? (
-                      <Input
+                      <CardInput
                         {...readonlyInputProps}
                         type="number"
                         min={0}
                         step={1}
                         inputMode="numeric"
-                        value={
-                          row[col.field] ?? ""
-                        }
+                        value={row[col.field] ?? ""}
                         onChange={handleChange(
                           row.id,
                           col.field,
@@ -243,9 +232,7 @@ const SizeVariationCard: React.FC<
                       type="button"
                       variant="ghost"
                       size="icon"
-                      onClick={() =>
-                        onRemove(row.id)
-                      }
+                      onClick={() => onRemove(row.id)}
                       aria-label={`${row.sizeLabel} を削除`}
                       className="svc__remove"
                     >
