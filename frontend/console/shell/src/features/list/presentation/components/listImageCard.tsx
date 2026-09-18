@@ -1,7 +1,7 @@
 // frontend/console/list/src/presentation/components/listImageCard.tsx
 // 商品画像カード（表示はshared/ui/media、ロジックはhookに委譲）
 
-import { Image as ImageIcon, Plus } from "lucide-react";
+import { Image as ImageIcon, Plus, X } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import { Button } from "../../../../shared/ui/button";
@@ -114,23 +114,21 @@ export default function ListImageCard(props: ListImageCardProps) {
               />
 
               {props.isEdit && (
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="icon"
                   className="lic__remove-btn"
                   onClick={(event) => {
                     event.stopPropagation();
-                    vm.handleRemoveAt(
-                      props.mainImageIndex,
-                    );
+                    vm.handleRemoveAt(props.mainImageIndex);
                   }}
                   aria-label="メイン画像を削除"
                   title="削除"
                   disabled={Boolean(props.saving)}
                 >
-                  <span className="lic__remove-x">
-                    ×
-                  </span>
-                </button>
+                  <X aria-hidden="true" />
+                </Button>
               )}
 
               <div className="lic__footer">
@@ -151,8 +149,7 @@ export default function ListImageCard(props: ListImageCardProps) {
 
             <div className="lic__grid">
               {vm.thumbIndices.map((idx: number) => {
-                const url =
-                  vm.effectiveImageUrls[idx] ?? "";
+                const url = vm.effectiveImageUrls[idx] ?? "";
 
                 return (
                   <div
@@ -166,14 +163,14 @@ export default function ListImageCard(props: ListImageCardProps) {
                       variant="square"
                       fit="cover"
                       bordered={false}
-                      onActivate={() =>
-                        vm.handleSetMainIndex(idx)
-                      }
+                      onActivate={() => vm.handleSetMainIndex(idx)}
                     />
 
                     {props.isEdit && (
-                      <button
+                      <Button
                         type="button"
+                        variant="outline"
+                        size="icon"
                         className="lic__thumb-remove"
                         onClick={(event) => {
                           event.stopPropagation();
@@ -183,10 +180,8 @@ export default function ListImageCard(props: ListImageCardProps) {
                         title="削除"
                         disabled={Boolean(props.saving)}
                       >
-                        <span className="lic__remove-x">
-                          ×
-                        </span>
-                      </button>
+                        <X aria-hidden="true" />
+                      </Button>
                     )}
                   </div>
                 );

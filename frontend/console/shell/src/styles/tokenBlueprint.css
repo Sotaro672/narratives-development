@@ -126,32 +126,6 @@
   overflow-wrap: anywhere;
 }
 
-.token-blueprint-card__icon-clear-btn {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  padding: 0;
-  color: var(--token-blueprint-text-muted);
-  cursor: pointer;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-
-.token-blueprint-card__icon-clear-btn:hover {
-  background: var(--token-blueprint-danger-soft);
-  color: var(--token-blueprint-danger);
-}
-
-.token-blueprint-card__icon-clear-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
-}
-
 /* -------------------------
  * Identity lock
  * ---------------------- */
@@ -534,10 +508,10 @@
 }
 
 .token-blueprint-create-progress-modal__error {
+  overflow-wrap: anywhere;
   border-color: var(--token-blueprint-danger-border);
   background: var(--token-blueprint-danger-soft);
   color: var(--token-blueprint-danger);
-  overflow-wrap: anywhere;
 }
 
 /* =========================================================

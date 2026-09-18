@@ -5,6 +5,7 @@ import { Link2, Upload, X } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import type { IconCropPosition } from "../../../../shared/types/iconCrop";
+import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardBadge,
@@ -207,16 +208,18 @@ export default function TokenBlueprintCard({
                 </span>
 
                 {handlers.onClearLocalIconFile ? (
-                  <button
+                  <Button
                     type="button"
-                    className="token-blueprint-card__icon-clear-btn"
+                    variant="ghost"
+                    size="icon"
                     onClick={() => {
                       handlers.onClearLocalIconFile?.();
                     }}
                     aria-label="選択したアイコンを取り消す"
+                    title="選択を取り消す"
                   >
-                    <X size={16} />
-                  </button>
+                    <X aria-hidden="true" />
+                  </Button>
                 ) : null}
               </div>
             ) : null}

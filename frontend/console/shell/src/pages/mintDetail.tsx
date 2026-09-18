@@ -168,32 +168,44 @@ export default function MintRequestDetail() {
       <div className="space-y-4 mt-4">
         {productBlueprintLoading ? (
           <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">プロダクト基本情報を読み込み中です…</CardContent>
+            <CardContent className="mint-request-card__body">
+              プロダクト基本情報を読み込み中です…
+            </CardContent>
           </Card>
         ) : productBlueprintError ? (
           <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body text-red-600">{productBlueprintError}</CardContent>
+            <CardContent className="mint-request-card__body text-red-600">
+              {productBlueprintError}
+            </CardContent>
           </Card>
         ) : productBlueprintCardView ? (
           <ProductBlueprintCard
             mode="view"
             productName={productBlueprintCardView.productName}
             brandName={productBlueprintCardView.brandName}
-            productBlueprintCategoryPath={productBlueprintCardView.productBlueprintCategoryPath ?? null}
+            productBlueprintCategoryPath={
+              productBlueprintCardView.productBlueprintCategoryPath ?? null
+            }
           />
         ) : (
           <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">プロダクト基本情報を読み込み中です…</CardContent>
+            <CardContent className="mint-request-card__body">
+              プロダクト基本情報を読み込み中です…
+            </CardContent>
           </Card>
         )}
 
         {loading ? (
           <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">検査結果を読み込み中です…</CardContent>
+            <CardContent className="mint-request-card__body">
+              検査結果を読み込み中です…
+            </CardContent>
           </Card>
         ) : error ? (
           <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body text-red-600">{error}</CardContent>
+            <CardContent className="mint-request-card__body text-red-600">
+              {error}
+            </CardContent>
           </Card>
         ) : (
           <>
@@ -204,7 +216,9 @@ export default function MintRequestDetail() {
                 <CardContent className="mint-request-card__body">
                   <div className="space-y-3">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">検品完了</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        検品完了
+                      </div>
                       <p className="text-xs text-gray-500 mt-1">
                         除外対象がない場合でも、ここで検品完了を確定できます。
                         完了後、未入力の検品結果は合格として扱われます。
@@ -215,7 +229,6 @@ export default function MintRequestDetail() {
                       type="button"
                       onClick={handleCompleteInspection}
                       disabled={isCompletingInspection || isMinting}
-                      className="mint-request-card__button flex items-center gap-2"
                     >
                       <CheckCircle2 size={16} />
                       {isCompletingInspection ? "検品完了中..." : "検品を完了する"}
@@ -254,7 +267,9 @@ export default function MintRequestDetail() {
                     SOL見積を取得中です…
                   </div>
                 ) : mintFundingEstimateError ? (
-                  <div className="text-sm text-red-600">{mintFundingEstimateError}</div>
+                  <div className="text-sm text-red-600">
+                    {mintFundingEstimateError}
+                  </div>
                 ) : mintFundingEstimate ? (
                   <div className="space-y-4">
                     <div className="grid gap-2 text-sm">
@@ -271,21 +286,30 @@ export default function MintRequestDetail() {
                         <div className="flex items-center justify-between gap-4">
                           <span className="text-gray-600">1件あたりMint手数料</span>
                           <strong className="text-gray-900">
-                            {formatSol(mintFundingEstimate.estimate.mintTransactionFeePerItemSol)} SOL
+                            {formatSol(
+                              mintFundingEstimate.estimate.mintTransactionFeePerItemSol,
+                            )}{" "}
+                            SOL
                           </strong>
                         </div>
 
                         <div className="flex items-center justify-between gap-4">
                           <span className="text-gray-600">Mint手数料合計</span>
                           <strong className="text-gray-900">
-                            {formatSol(mintFundingEstimate.estimate.mintTransactionFeeTotalSol)} SOL
+                            {formatSol(
+                              mintFundingEstimate.estimate.mintTransactionFeeTotalSol,
+                            )}{" "}
+                            SOL
                           </strong>
                         </div>
 
                         <div className="flex items-center justify-between gap-4">
                           <span className="text-gray-600">初回作成費</span>
                           <strong className="text-gray-900">
-                            {formatSol(mintFundingEstimate.estimate.initialCreationCostSol)} SOL
+                            {formatSol(
+                              mintFundingEstimate.estimate.initialCreationCostSol,
+                            )}{" "}
+                            SOL
                           </strong>
                         </div>
                       </div>
@@ -293,9 +317,14 @@ export default function MintRequestDetail() {
 
                     <div className="border-t border-gray-200 pt-3">
                       <div className="flex items-center justify-between gap-4 text-sm">
-                        <span className="font-semibold text-gray-900">最終必要SOL合計</span>
+                        <span className="font-semibold text-gray-900">
+                          最終必要SOL合計
+                        </span>
                         <strong className="text-gray-900">
-                          {formatSol(mintFundingEstimate.estimate.totalRequiredSol)} SOL
+                          {formatSol(
+                            mintFundingEstimate.estimate.totalRequiredSol,
+                          )}{" "}
+                          SOL
                         </strong>
                       </div>
                     </div>
@@ -320,7 +349,6 @@ export default function MintRequestDetail() {
                     type="button"
                     onClick={handleMint}
                     disabled={!canSubmitMint}
-                    className="mint-request-card__button flex items-center gap-2"
                   >
                     <Coins size={16} />
                     ミント申請を実行
@@ -355,7 +383,10 @@ export default function MintRequestDetail() {
                 </div>
 
                 <div>
-                  リクエスト者: {mintRequestRow.requestedByName || mintRequestRow.requestedBy || "（不明）"}
+                  リクエスト者:{" "}
+                  {mintRequestRow.requestedByName ||
+                    mintRequestRow.requestedBy ||
+                    "（不明）"}
                 </div>
 
                 <div>ミント日時: {mintMintedAtLabel}</div>
@@ -377,7 +408,9 @@ export default function MintRequestDetail() {
             <CardContent>
               <Popover>
                 <PopoverTrigger>
-                  <div className="pb-select__trigger">{selectedBrandName || "ブランドを選択"}</div>
+                  <div className="pb-select__trigger">
+                    {selectedBrandName || "ブランドを選択"}
+                  </div>
                 </PopoverTrigger>
 
                 <PopoverContent>
@@ -386,7 +419,10 @@ export default function MintRequestDetail() {
                       <button
                         key={brand.id}
                         type="button"
-                        className={"pb-select__row" + (selectedBrandId === brand.id ? " is-active" : "")}
+                        className={
+                          "pb-select__row" +
+                          (selectedBrandId === brand.id ? " is-active" : "")
+                        }
                         onClick={() => handleSelectBrand(brand.id)}
                         disabled={isMinting}
                       >
@@ -395,7 +431,9 @@ export default function MintRequestDetail() {
                     ))}
 
                     {brandOptions.length === 0 && (
-                      <div className="pb-select__empty">ブランド候補が未設定です</div>
+                      <div className="pb-select__empty">
+                        ブランド候補が未設定です
+                      </div>
                     )}
                   </div>
                 </PopoverContent>
@@ -412,7 +450,9 @@ export default function MintRequestDetail() {
 
             <CardContent>
               {!selectedBrandId && (
-                <div className="pb-select__empty">先にブランドを選択してください。</div>
+                <div className="pb-select__empty">
+                  先にブランドを選択してください。
+                </div>
               )}
 
               {selectedBrandId && tokenBlueprintOptions.length > 0 && (
@@ -423,9 +463,13 @@ export default function MintRequestDetail() {
                       type="button"
                       className={
                         "pb-select__row" +
-                        (selectedTokenBlueprintId === tokenBlueprint.id ? " is-active" : "")
+                        (selectedTokenBlueprintId === tokenBlueprint.id
+                          ? " is-active"
+                          : "")
                       }
-                      onClick={() => handleSelectTokenBlueprint(tokenBlueprint.id)}
+                      onClick={() =>
+                        handleSelectTokenBlueprint(tokenBlueprint.id)
+                      }
                       disabled={isMinting}
                     >
                       {tokenBlueprint.tokenName}

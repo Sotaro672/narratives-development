@@ -1,110 +1,43 @@
+/* frontend/console/shell/src/layout/List/List.css */
+
 /* ========================================
    共通レイアウト（リストページ用）
    ======================================== */
 
 .list-container {
   display: flex;
+  min-height: 100%;
   flex-direction: column;
   gap: 1.5rem;
-  padding: 1.5rem;
   background-color: var(--background, #f9f9fb);
-  min-height: 100%;
+  padding: 1.5rem;
 }
 
 /* タイトル */
+
 .list-title {
+  margin: 0;
+  color: var(--text-primary, #222);
   font-size: 1.25rem;
   font-weight: 600;
-  color: var(--text-primary, #222);
-  margin: 0;
+  line-height: 1.1;
+  white-space: nowrap;
 }
 
 /* ========================================
-   アクションエリア（ボタン群）
+   アクションエリア
    ======================================== */
+
 .list-actions {
   display: flex;
-  justify-content: flex-end;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .list-actions-right {
   display: flex;
-  gap: 0.75rem;
-}
-
-/* ボタン: 通常 / プライマリ */
-.lp-btn {
-  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  font-size: 0.9rem;
-  font-weight: 500;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #fff;
-  color: #333;
-  padding: 0.45rem 0.9rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.lp-btn:hover {
-  background-color: #f3f3f3;
-}
-
-.lp-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.lp-btn-primary {
-  background-color: black;
-  color: #fff;
-  border-color: black;
-}
-
-.lp-btn-primary:hover {
-  background-color: #1d4ed8;
-}
-
-.lp-btn-icon {
-  width: 16px;
-  height: 16px;
-}
-
-/* アイコンボタン（リセットなど） */
-.lp-icon-btn {
-  display: inline-flex;
-  justify-content: center;
-  align-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  border: 1px solid #ccc;
-  background: #fff;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.lp-icon-btn:hover {
-  background-color: #f3f3f3;
-}
-
-.lp-icon-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* 回転アニメーション */
-.lp-rotate {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  gap: 12px;
 }
 
 /* ========================================
@@ -112,10 +45,10 @@
    ======================================== */
 
 .lp-card {
+  overflow: hidden;
   border: 1px solid #ddd;
   border-radius: 8px;
   background: #fff;
-  overflow: hidden;
 }
 
 .lp-table {
@@ -124,9 +57,9 @@
 }
 
 .lp-thead {
+  border-bottom: 1px solid #ddd;
   background-color: #f6f7fb;
   text-align: left;
-  border-bottom: 1px solid #ddd;
 }
 
 .lp-row-head {
@@ -134,11 +67,11 @@
 }
 
 .lp-th {
+  border-bottom: 1px solid #e3e3e3;
   padding: 0.75rem 1rem;
+  color: #333;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #333;
-  border-bottom: 1px solid #e3e3e3;
 }
 
 .lp-tbody tr {
@@ -150,46 +83,49 @@
 }
 
 .lp-tbody td {
-  padding: 0.75rem 1rem;
   border-bottom: 1px solid #eee;
-  font-size: 0.9rem;
+  padding: 0.75rem 1rem;
   color: #444;
+  font-size: 0.9rem;
 }
 
 /* 空リスト用メッセージ */
+
 .lp-empty-row {
-  height: 180px; /* テーブル中央付近に見えるように少し高さを持たせる */
+  height: 180px;
 }
 
 .lp-empty-cell {
+  color: #777;
+  font-size: 0.95rem;
   text-align: center;
   vertical-align: middle;
-  font-size: 0.95rem;
-  color: #777;
 }
 
 /* ========================================
    カテゴリラベル
    ======================================== */
+
 .lp-brand-pill {
   display: inline-block;
+  border-radius: 9999px;
   background-color: #eef2ff;
+  padding: 0.2rem 0.6rem;
   color: #3730a3;
   font-size: 0.75rem;
   font-weight: 500;
-  padding: 0.2rem 0.6rem;
-  border-radius: 9999px;
 }
 
 /* ========================================
    テーブル列内フィルターボタン
    ======================================== */
+
 .lp-th-filter {
   margin-left: 0.4rem;
   border: none;
   background: transparent;
-  cursor: pointer;
   color: #666;
+  cursor: pointer;
   transition: color 0.2s ease;
 }
 
@@ -197,49 +133,40 @@
   color: #111;
 }
 
+/* ========================================
+   ページネーション
+   ======================================== */
+
 .list-pagination {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   gap: 12px;
   margin-top: 1.25rem;
 }
 
 .lp-page-info {
-  font-size: 0.85rem;
   color: #666;
+  font-size: 0.85rem;
 }
 
-/* ─────────────────────────────────────────
-   ヘッダー（タイトル＋右寄せボタン）を一段で横並び
-   ───────────────────────────────────────── */
+/* ========================================
+   ヘッダー
+   ======================================== */
+
 .list-header {
   display: flex;
-  align-items: center;   /* 高さを揃える */
+  flex-wrap: nowrap;
+  align-items: center;
   gap: 12px;
-  flex-wrap: nowrap;     /* 折り返し禁止 */
   margin-bottom: 12px;
 }
 
 .list-header.one-line {
-  /* クラス指定が来たときも同じ振る舞いに */
   display: flex;
   align-items: center;
 }
 
 .list-header-spacer {
-  flex: 1 1 auto;        /* 右側ボタンを右端へ押し出す */
-}
-
-/* 右側のボタン群 */
-.list-actions-right {
-  display: flex;
-  align-items: center;   /* ボタンの縦位置を中央に */
-  gap: 12px;
-}
-
-/* ヘッダー内のタイトルを一行に保つ（必要に応じて縮む） */
-.list-title {
-  white-space: nowrap;
-  line-height: 1.1;
+  flex: 1 1 auto;
 }

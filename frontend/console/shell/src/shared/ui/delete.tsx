@@ -1,5 +1,10 @@
 // frontend/console/shell/src/shared/ui/delete.tsx
+
 import type * as React from "react";
+import { X } from "lucide-react";
+
+import { Button } from "./button";
+
 import "./delete.css";
 
 export type DeleteButtonSize = "sm" | "md";
@@ -32,9 +37,11 @@ export default function DeleteButton({
   onClick,
 }: DeleteButtonProps) {
   return (
-    <button
+    <Button
       type="button"
-      className={["ui-delete-btn", sizeClassName(size), className]
+      variant="destructive"
+      size="icon"
+      className={[sizeClassName(size), className]
         .filter(Boolean)
         .join(" ")}
       onClick={onClick}
@@ -42,7 +49,10 @@ export default function DeleteButton({
       title={title}
       disabled={disabled}
     >
-      <span className="ui-delete-btn__x">×</span>
-    </button>
+      <X
+        className="ui-delete-btn__x"
+        aria-hidden="true"
+      />
+    </Button>
   );
 }
