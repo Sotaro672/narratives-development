@@ -1,124 +1,8 @@
 /* frontend/console/shell/src/styles/list.css */
 
-.list-stock-pill {
-  display: inline-block;
-  min-width: 36px;
-  background: #0b0f1a;
-  color: #fff;
-  font-weight: 600;
-  text-align: center;
-  border-radius: 12px;
-  padding: 0.2rem 0.6rem;
-  line-height: 1;
-}
-
-/* Inventory Select */
-
-.inventory-select-card {
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.inventory-select-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 18px;
-  border-bottom: 1px solid hsl(var(--border));
-}
-
-.inventory-select-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: hsl(var(--muted-foreground));
-}
-
-.inventory-select-summary {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.summary-label {
-  font-size: 0.75rem;
-  color: hsl(var(--muted-foreground));
-}
-
-.summary-value {
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.inventory-select-body {
-  padding: 14px 16px 16px;
-}
-
-.inventory-select-table-wrapper {
-  max-height: 360px;
-  overflow: auto;
-}
-
-.inventory-select-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8rem;
-}
-
-.inventory-select-table thead tr {
-  background-color: hsl(var(--muted));
-}
-
-.inventory-select-table th,
-.inventory-select-table td {
-  padding: 8px 6px;
-  border-bottom: 1px solid hsl(var(--border));
-  text-align: left;
-  white-space: nowrap;
-}
-
-.inventory-select-table th {
-  font-size: 0.7rem;
-  font-weight: 600;
-  color: hsl(var(--muted-foreground));
-}
-
-.inventory-select-table .cell-main-text {
-  font-weight: 500;
-}
-
-.inventory-select-table .cell-sub-text {
-  font-size: 0.68rem;
-  color: hsl(var(--muted-foreground));
-}
-
-.col-select {
-  width: 28px;
-}
-
-.col-qty {
-  width: 72px;
-}
-
-.qty-input {
-  width: 100%;
-  padding: 4px 6px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
-  background-color: hsl(var(--background));
-  font-size: 0.72rem;
-}
-
-.inventory-select-table tr.is-selected {
-  background-color: hsl(var(--accent));
-}
-
-.inventory-select-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 10px;
-}
-
-/* PriceCard */
+/* =========================================================
+ * PriceCard
+ * ======================================================= */
 
 .prc__color-cell {
   white-space: nowrap;
@@ -138,7 +22,9 @@
   vertical-align: middle;
 }
 
-/* List Create */
+/* =========================================================
+ * List Create
+ * ======================================================= */
 
 .list-create__column {
   display: flex;
@@ -219,7 +105,9 @@
   line-height: 1rem;
 }
 
-/* List Detail */
+/* =========================================================
+ * List Detail
+ * ======================================================= */
 
 .list-detail__column {
   display: flex;
