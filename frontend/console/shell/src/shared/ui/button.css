@@ -1,0 +1,195 @@
+/* frontend/console/shell/src/shared/ui/button.css */
+
+.button {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  outline: none;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
+}
+
+.button > svg {
+  flex-shrink: 0;
+  pointer-events: none;
+}
+
+.button > svg:not([class*="size-"]) {
+  width: 16px;
+  height: 16px;
+}
+
+.button:disabled {
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.5;
+}
+
+.button:focus-visible {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.5);
+}
+
+.button[aria-invalid="true"] {
+  border-color: hsl(var(--destructive));
+  box-shadow: 0 0 0 3px hsl(var(--destructive) / 0.2);
+}
+
+/* =========================================================
+ * Variants
+ * =======================================================*/
+
+.button--default {
+  border-radius: 6px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.button--default:hover:not(:disabled) {
+  background: hsl(var(--primary) / 0.9);
+}
+
+.button--destructive {
+  border-radius: 6px;
+  background: hsl(var(--destructive));
+  color: #ffffff;
+}
+
+.button--destructive:hover:not(:disabled) {
+  background: hsl(var(--destructive) / 0.9);
+}
+
+.button--outline {
+  border-color: hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+.button--outline:hover:not(:disabled) {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.button--secondary {
+  border-radius: 6px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+}
+
+.button--secondary:hover:not(:disabled) {
+  background: hsl(var(--secondary) / 0.8);
+}
+
+.button--ghost {
+  border-radius: 6px;
+  background: transparent;
+  color: hsl(var(--foreground));
+}
+
+.button--ghost:hover:not(:disabled) {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+
+.button--link {
+  border-radius: 0;
+  background: transparent;
+  padding-right: 0;
+  padding-left: 0;
+  color: hsl(var(--primary));
+  text-underline-offset: 4px;
+}
+
+.button--link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.button--solid {
+  border-radius: 8px;
+  background: #0a0a1b;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(2, 6, 23, 0.1);
+}
+
+.button--solid:hover:not(:disabled) {
+  opacity: 0.95;
+}
+
+/* =========================================================
+ * Sizes
+ * =======================================================*/
+
+.button--default {
+  min-height: 36px;
+  padding: 8px 16px;
+}
+
+.button--default:has(> svg) {
+  padding-right: 12px;
+  padding-left: 12px;
+}
+
+.button--sm {
+  min-height: 32px;
+  gap: 6px;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+
+.button--sm:has(> svg) {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.button--lg {
+  min-height: 40px;
+  border-radius: 6px;
+  padding: 8px 24px;
+}
+
+.button--lg:has(> svg) {
+  padding-right: 16px;
+  padding-left: 16px;
+}
+
+.button--icon {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  border-radius: 8px;
+  padding: 0;
+}
+
+/* =========================================================
+ * Dark mode
+ * =======================================================*/
+
+@media (prefers-color-scheme: dark) {
+  .button[aria-invalid="true"] {
+    box-shadow: 0 0 0 3px hsl(var(--destructive) / 0.4);
+  }
+}
+
+/* =========================================================
+ * Reduced motion
+ * =======================================================*/
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}

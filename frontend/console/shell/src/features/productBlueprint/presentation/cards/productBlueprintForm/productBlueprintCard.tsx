@@ -1,4 +1,4 @@
-// frontend\console\shell\src\features\productBlueprint\presentation\cards\productBlueprintForm\productBlueprintCard.tsx
+// frontend/console/shell/src/features/productBlueprint/presentation/cards/productBlueprintForm/productBlueprintCard.tsx
 
 import * as React from "react";
 import { Package2 } from "lucide-react";
@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardHeaderLeft,
   CardTitle,
 } from "../../../../../shared/ui";
 
@@ -67,11 +68,9 @@ export type ProductBlueprintCardProps = {
 };
 
 function resolveCardTitle(
-  productBlueprintCategoryPath:
-    ProductBlueprintCategoryPath | null | undefined,
+  productBlueprintCategoryPath: ProductBlueprintCategoryPath | null | undefined,
 ): string {
-  const root =
-    productBlueprintCategoryPath?.[0] ?? "";
+  const root = productBlueprintCategoryPath?.[0] ?? "";
 
   if (root === "apparel") {
     return "基本情報（衣類）";
@@ -153,11 +152,13 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
       }`}
     >
       <CardHeader className="box__header">
-        <Package2 size={16} />
+        <CardHeaderLeft>
+          <Package2 size={16} />
 
-        <CardTitle className="box__title">
-          {cardTitle}
-        </CardTitle>
+          <CardTitle className="box__title">
+            {cardTitle}
+          </CardTitle>
+        </CardHeaderLeft>
       </CardHeader>
 
       <CardContent className="box__body">

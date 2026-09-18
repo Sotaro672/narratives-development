@@ -1,62 +1,103 @@
 // frontend/console/shell/src/shared/ui/icon.tsx
+
 import * as React from "react";
+
 import "./icon.css";
 
-function cn(...classes: Array<string | undefined | false | null>) {
+function cn(...classes: Array<string | undefined | false | null>): string {
   return classes.filter(Boolean).join(" ");
 }
 
-export type AvatarIconSize = "sm" | "md" | "lg";
+export type EntityIconSize = "sm" | "md" | "lg" | "fluid";
 
-export type AvatarIconProps = {
+export type EntityIconProps = {
   src?: string | null;
   name?: string | null;
   alt?: string;
-  size?: AvatarIconSize;
+  size?: EntityIconSize;
   className?: string;
+  imageClassName?: string;
+  fallbackClassName?: string;
+  fallback?: React.ReactNode;
+  loading?: "eager" | "lazy";
+  onClick?: () => void;
+  disabled?: boolean;
 };
 
 function getInitial(name?: string | null): string {
-  const value = String(name ?? "");
-  if (!value) return "-";
+  const value = String(name ?? "").trim();
+
+  if (!value) {
+    return "-";
+  }
 
   return value.slice(0, 1).toUpperCase();
 }
 
-export default function AvatarIcon({
+export default function EntityIcon({
   src,
   name,
   alt,
   size = "md",
   className,
-}: AvatarIconProps) {
-  const imageUrl = String(src ?? "");
-  const displayName = String(name ?? "");
-  const label = alt ?? displayName ?? "avatar icon";
+  imageClassName,
+  fallbackClassName,
+  fallback,
+  loading = "lazy",
+  onClick,
+  disabled = false,
+}: EntityIconProps) {
+  const imageUrl = String(src ?? "").trim();
+  const displayName = String(name ?? "").trim();
+  const label = alt || displayName || "アイコン";
+
+  const content = imageUrl ? (
+    <img
+      src={imageUrl}
+      alt={label}
+      className={cn("entity-icon__image", imageClassName)}
+      loading={loading}
+    />
+  ) : (
+    <span
+      className={cn("entity-icon__fallback", fallbackClassName)}
+      aria-hidden="true"
+    >
+      {fallback ?? getInitial(displayName)}
+    </span>
+  );
+
+  const rootClassName = cn(
+    "entity-icon",
+    `entity-icon--${size}`,
+    onClick && "entity-icon--interactive",
+    disabled && "entity-icon--disabled",
+    className,
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={rootClassName}
+        onClick={onClick}
+        disabled={disabled}
+        aria-label={label}
+      >
+        {content}
+      </button>
+    );
+  }
 
   return (
-    <div
-      className={cn(
-        "avatar-icon",
-        `avatar-icon--${size}`,
-        className,
-      )}
+    <span
+      className={rootClassName}
       aria-label={label}
+      role="img"
     >
-      {imageUrl ? (
-        <img
-          src={imageUrl}
-          alt={label}
-          className="avatar-icon__image"
-          loading="lazy"
-        />
-      ) : (
-        <div className="avatar-icon__fallback" aria-hidden="true">
-          {getInitial(displayName)}
-        </div>
-      )}
-    </div>
+      {content}
+    </span>
   );
 }
 
-export { AvatarIcon };
+export { EntityIcon };

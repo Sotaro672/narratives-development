@@ -1,45 +1,86 @@
 /* frontend/console/shell/src/shared/ui/icon.css */
 
-.avatar-icon {
+.entity-icon {
   display: inline-flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
   overflow: hidden;
-  border-radius: 9999px;
   border: 1px solid hsl(var(--border, 214 32% 91%));
+  border-radius: 9999px;
   background: hsl(var(--muted, 210 40% 96%));
+  padding: 0;
+  color: inherit;
+  vertical-align: middle;
 }
 
-.avatar-icon--sm {
+.entity-icon--sm {
   width: 32px;
   height: 32px;
 }
 
-.avatar-icon--md {
+.entity-icon--md {
   width: 40px;
   height: 40px;
 }
 
-.avatar-icon--lg {
+.entity-icon--lg {
   width: 56px;
   height: 56px;
 }
 
-.avatar-icon__image {
+.entity-icon--fluid {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+}
+
+.entity-icon--interactive {
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.entity-icon--interactive:hover:not(:disabled) {
+  opacity: 0.92;
+}
+
+.entity-icon--interactive:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+}
+
+.entity-icon--disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.entity-icon__image {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.avatar-icon__fallback {
+.entity-icon__fallback {
   display: flex;
   width: 100%;
   height: 100%;
   align-items: center;
   justify-content: center;
+  background: hsl(var(--muted, 210 40% 96%));
+  color: hsl(var(--muted-foreground, 215 16% 47%));
   font-size: 0.75rem;
   font-weight: 600;
-  color: hsl(var(--muted-foreground, 215 16% 47%));
-  background: hsl(var(--muted, 210 40% 96%));
+  line-height: 1;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entity-icon {
+    transition: none;
+  }
 }

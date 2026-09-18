@@ -55,16 +55,13 @@
   aspect-ratio: 1 / 1;
 }
 
-.token-blueprint-card__icon-wrap {
-  position: relative;
-  display: flex;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border: 1px dashed var(--token-blueprint-border-strong);
-  border-radius: 9999px;
+/* -------------------------
+ * Token icon
+ * ---------------------- */
+
+.token-blueprint-card__icon {
+  border-style: dashed;
+  border-color: var(--token-blueprint-border-strong);
   background:
     linear-gradient(
       135deg,
@@ -75,18 +72,9 @@
 }
 
 .token-blueprint-card__icon-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  cursor: default;
-  object-fit: cover;
   transition:
     opacity 160ms ease,
     transform 160ms ease;
-}
-
-.token-blueprint-card__icon-image.is-clickable {
-  cursor: pointer;
 }
 
 .token-blueprint-card__icon-image.is-clickable:hover {
@@ -95,14 +83,7 @@
 }
 
 .token-blueprint-card__icon-placeholder {
-  display: flex;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  border: 0;
   background: transparent;
-  cursor: pointer;
   padding: 16px;
   color: var(--token-blueprint-text-muted);
   font-size: 13px;
@@ -117,7 +98,6 @@
 }
 
 .token-blueprint-card__icon-placeholder-view {
-  cursor: default;
   opacity: 0.72;
 }
 

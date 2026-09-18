@@ -5,13 +5,14 @@ import { Upload, X } from "lucide-react";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
-  CardLabel,
+  CardHeader,
   CardInput,
+  CardLabel,
+  CardTitle,
 } from "../shared/ui/card";
 import IconCropper from "../shared/ui/icon-cropper";
+import EntityIcon from "../shared/ui/icon";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
@@ -172,26 +173,18 @@ export default function BrandCreate() {
                     disabled={saving}
                   />
                 ) : (
-                  <div className="brand-hero__avatar">
-                    {brandIconPreviewUrl ? (
-                      <img
-                        src={brandIconPreviewUrl}
-                        alt="ブランドアイコン"
-                        className="brand-hero__avatar-image"
-                        onClick={saving ? undefined : handlePickBrandIcon}
-                        style={{ cursor: saving ? "default" : "pointer" }}
-                      />
-                    ) : (
-                      <button
-                        type="button"
-                        className="brand-hero__avatar-empty is-clickable"
-                        onClick={handlePickBrandIcon}
-                        disabled={saving}
-                      >
-                        アイコンを選択
-                      </button>
-                    )}
-                  </div>
+                  <EntityIcon
+                    src={brandIconPreviewUrl}
+                    name={displayBrandName}
+                    alt="ブランドアイコン"
+                    size="fluid"
+                    className="brand-hero__avatar"
+                    imageClassName="brand-hero__avatar-image"
+                    fallbackClassName="brand-hero__avatar-empty"
+                    fallback="アイコンを選択"
+                    onClick={saving ? undefined : handlePickBrandIcon}
+                    disabled={saving}
+                  />
                 )}
 
                 <input

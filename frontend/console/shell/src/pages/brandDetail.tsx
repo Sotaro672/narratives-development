@@ -8,12 +8,13 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 
 import {
   Card,
-  CardHeader,
-  CardTitle,
   CardContent,
+  CardHeader,
   CardLabel,
+  CardTitle,
 } from "../shared/ui/card";
 import IconCropper from "../shared/ui/icon-cropper";
+import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
 
 import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
@@ -85,10 +86,18 @@ export default function BrandDetail() {
   } = useBrandDetail();
 
   const canEditImage = isEditing && !saving;
-  const isCroppingBrandIcon = Boolean(isEditing && brandIconFile && brandIconPreviewUrl);
+  const isCroppingBrandIcon = Boolean(
+    isEditing &&
+    brandIconFile &&
+    brandIconPreviewUrl,
+  );
 
   const accountLabel =
     accountCandidates.find((candidate) => candidate.id === brand.accountId)?.label ?? null;
+
+  const displayBrandName = isEditing
+    ? draft.name || "ブランド名未入力"
+    : brand.name || "ブランド名未設定";
 
   const hero = (
     <Card>
@@ -182,25 +191,18 @@ export default function BrandDetail() {
                     disabled={saving}
                   />
                 ) : (
-                  <div className="brand-hero__avatar">
-                    {brandIconPreviewUrl ? (
-                      <img
-                        src={brandIconPreviewUrl}
-                        alt="ブランドアイコン"
-                        className="brand-hero__avatar-image"
-                        onClick={canEditImage ? handlePickBrandIcon : undefined}
-                        style={{ cursor: canEditImage ? "pointer" : "default" }}
-                      />
-                    ) : (
-                      <div
-                        className={`brand-hero__avatar-empty${canEditImage ? " is-clickable" : ""}`}
-                        onClick={canEditImage ? handlePickBrandIcon : undefined}
-                        style={{ cursor: canEditImage ? "pointer" : "default" }}
-                      >
-                        {isEditing ? "アイコンを選択" : "アイコン未設定"}
-                      </div>
-                    )}
-                  </div>
+                  <EntityIcon
+                    src={brandIconPreviewUrl}
+                    name={displayBrandName}
+                    alt="ブランドアイコン"
+                    size="fluid"
+                    className="brand-hero__avatar"
+                    imageClassName="brand-hero__avatar-image"
+                    fallbackClassName="brand-hero__avatar-empty"
+                    fallback={isEditing ? "アイコンを選択" : "アイコン未設定"}
+                    onClick={canEditImage ? handlePickBrandIcon : undefined}
+                    disabled={saving}
+                  />
                 )}
 
                 {isEditing && (
@@ -251,9 +253,7 @@ export default function BrandDetail() {
 
               <div className="brand-hero__meta">
                 <div className="brand-hero__title">
-                  {isEditing
-                    ? draft.name || "ブランド名未入力"
-                    : brand.name || "ブランド名未設定"}
+                  {displayBrandName}
                 </div>
 
                 <div className="brand-hero__sub">

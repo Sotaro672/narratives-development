@@ -24,6 +24,7 @@ import {
   CardViewValue,
 } from "../../../../shared/ui/card";
 import IconCropper from "../../../../shared/ui/icon-cropper";
+import EntityIcon from "../../../../shared/ui/icon";
 import {
   Popover,
   PopoverContent,
@@ -137,47 +138,41 @@ export default function TokenBlueprintCard({
                 alt="トークンアイコンの切り抜きプレビュー"
               />
             ) : (
-              <div className="token-blueprint-card__icon-wrap">
-                {vm.iconUrl ? (
-                  <img
-                    src={vm.iconUrl}
-                    alt="Token Icon"
-                    className={`token-blueprint-card__icon-image${canEditIcon ? " is-clickable" : ""}`}
-                    onClick={
-                      canEditIcon
-                        ? () => {
-                            handlers.onRequestPickIconFile?.();
-                          }
-                        : undefined
-                    }
-                  />
-                ) : canEditIcon ? (
-                  <button
-                    type="button"
-                    className={[
-                      "token-blueprint-card__icon-placeholder",
-                      "token-blueprint-card__icon-placeholder-button",
-                    ].join(" ")}
-                    onClick={() => {
-                      handlers.onRequestPickIconFile?.();
-                    }}
-                    aria-label="アイコン画像をアップロード"
-                  >
-                    アイコン画像を
-                    <br />
-                    アップロード
-                  </button>
-                ) : (
-                  <div
-                    className={[
-                      "token-blueprint-card__icon-placeholder",
-                      "token-blueprint-card__icon-placeholder-view",
-                    ].join(" ")}
-                  >
-                    アイコン未設定
-                  </div>
-                )}
-              </div>
+              <EntityIcon
+                src={vm.iconUrl}
+                name={vm.name}
+                alt="トークンアイコン"
+                size="fluid"
+                className="token-blueprint-card__icon"
+                imageClassName={
+                  canEditIcon
+                    ? "token-blueprint-card__icon-image is-clickable"
+                    : "token-blueprint-card__icon-image"
+                }
+                fallbackClassName={
+                  canEditIcon
+                    ? "token-blueprint-card__icon-placeholder token-blueprint-card__icon-placeholder-button"
+                    : "token-blueprint-card__icon-placeholder token-blueprint-card__icon-placeholder-view"
+                }
+                fallback={
+                  canEditIcon ? (
+                    <>
+                      アイコン画像を
+                      <br />
+                      アップロード
+                    </>
+                  ) : (
+                    "アイコン未設定"
+                  )
+                }
+                onClick={
+                  canEditIcon
+                    ? () => {
+                        handlers.onRequestPickIconFile?.();
+                      }
+                    : undefined
+                }
+              />
             )}
 
             {canEditIcon ? (
