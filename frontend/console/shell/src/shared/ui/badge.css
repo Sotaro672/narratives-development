@@ -1,0 +1,33 @@
+/* frontend/console/shell/src/shared/ui/badge.css */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge--default {
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.badge--secondary {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
+.badge--active {
+  background: #0b0f1a;
+  color: #ffffff;
+}
+
+.badge--danger {
+  background: #ef4444;
+  color: #ffffff;
+}

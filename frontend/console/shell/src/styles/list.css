@@ -1,4 +1,4 @@
-/* frontend\console\list\src\presentation\styles\list.css */
+/* frontend/console/shell/src/styles/list.css */
 
 .list-stock-pill {
   display: inline-block;
@@ -12,24 +12,7 @@
   line-height: 1;
 }
 
-.list-status-badge {
-  display: inline-block;
-  color: #fff;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 0.3rem 0.6rem;
-  border-radius: 9999px;
-}
-
-.list-status-badge.is-active {
-  background: #0b0f1a; /* 出品中 */
-}
-
-.list-status-badge.is-paused {
-  background: #ef4444; /* 停止中 */
-}
-
-/* frontend/list/src/pages/listDetail.css */
+/* Inventory Select */
 
 .inventory-select-card {
   border-radius: 16px;
@@ -94,8 +77,8 @@
 }
 
 .inventory-select-table th {
-  font-weight: 600;
   font-size: 0.7rem;
+  font-weight: 600;
   color: hsl(var(--muted-foreground));
 }
 
@@ -119,10 +102,10 @@
 .qty-input {
   width: 100%;
   padding: 4px 6px;
-  font-size: 0.72rem;
-  border-radius: 6px;
   border: 1px solid hsl(var(--border));
+  border-radius: 6px;
   background-color: hsl(var(--background));
+  font-size: 0.72rem;
 }
 
 .inventory-select-table tr.is-selected {
@@ -137,13 +120,13 @@
 
 .primary-button {
   padding: 8px 16px;
-  border-radius: 999px;
   border: none;
+  border-radius: 999px;
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
-  background-color: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
 }
 
 /* PriceCard */

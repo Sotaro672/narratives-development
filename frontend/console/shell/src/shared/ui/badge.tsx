@@ -1,11 +1,20 @@
-// frontend\shell\src\shared\ui\badge.tsx
+// frontend/console/shell/src/shared/ui/badge.tsx
+
 import type { CSSProperties, ReactNode } from "react";
+
+import "./badge.css";
+
+export type BadgeVariant =
+  | "default"
+  | "secondary"
+  | "active"
+  | "danger";
 
 interface BadgeProps {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
-  variant?: "secondary" | "default";
+  variant?: BadgeVariant;
 }
 
 export function Badge({
@@ -14,24 +23,10 @@ export function Badge({
   style,
   variant = "secondary",
 }: BadgeProps) {
-  const bg = variant === "secondary" ? "#eef2ff" : "#e5e7eb";
-  const color = variant === "secondary" ? "#3730a3" : "#111827";
-
   return (
     <span
-      className={className}
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        justifyContent: "center",
-        borderRadius: 9999,
-        fontSize: 11,
-        fontWeight: 600,
-        padding: "2px 6px",
-        background: bg,
-        color,
-        ...style,
-      }}
+      className={`badge badge--${variant} ${className}`.trim()}
+      style={style}
     >
       {children}
     </span>

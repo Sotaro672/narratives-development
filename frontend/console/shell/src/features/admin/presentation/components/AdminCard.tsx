@@ -79,9 +79,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   mode = "view",
 }) => {
   const isEdit = mode === "edit";
-
-  const showsTargetAvatarCount =
-    typeof targetAvatarCount === "number";
+  const showsTargetAvatarCount = typeof targetAvatarCount === "number";
 
   const {
     assigneeCandidates: hookAssigneeCandidates,
@@ -98,20 +96,17 @@ export const AdminCard: React.FC<AdminCardProps> = ({
       ? loadingMembers
       : hookLoadingMembers;
 
-  const effectiveAssigneeName =
-    assigneeName ?? "未設定";
+  const effectiveAssigneeName = assigneeName ?? "未設定";
 
   const selectedValue = React.useMemo(() => {
-    const normalizedId =
-      assigneeId?.trim() ?? "";
+    const normalizedId = assigneeId?.trim() ?? "";
 
     if (normalizedId) {
       return normalizedId;
     }
 
     const matched = effectiveCandidates.find(
-      (candidate) =>
-        candidate.name === effectiveAssigneeName,
+      (candidate) => candidate.name === effectiveAssigneeName,
     );
 
     return matched?.id ?? "";
@@ -122,11 +117,9 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   ]);
 
   const selectedCandidateName = React.useMemo(() => {
-    const selectedCandidate =
-      effectiveCandidates.find(
-        (candidate) =>
-          candidate.id === selectedValue,
-      );
+    const selectedCandidate = effectiveCandidates.find(
+      (candidate) => candidate.id === selectedValue,
+    );
 
     return (
       selectedCandidate?.name ||
@@ -159,8 +152,8 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   );
 
   return (
-    <Card className="admin-card">
-      <CardHeader className="admin-card__header">
+    <Card>
+      <CardHeader>
         <CardTitle className="admin-card__title">
           {title}
         </CardTitle>
@@ -168,8 +161,8 @@ export const AdminCard: React.FC<AdminCardProps> = ({
 
       <CardContent className="admin-card__body space-y-4">
         {showsTargetAvatarCount ? (
-          <div className="admin-card__section">
-            <div className="admin-card__label mb-1 text-xs text-slate-500">
+          <div>
+            <div className="mb-1 text-xs text-slate-500">
               宛先数
             </div>
 
@@ -178,8 +171,8 @@ export const AdminCard: React.FC<AdminCardProps> = ({
             </div>
           </div>
         ) : showAssignee ? (
-          <div className="admin-card__section">
-            <div className="admin-card__label mb-1 text-xs text-slate-500">
+          <div>
+            <div className="mb-1 text-xs text-slate-500">
               担当者
             </div>
 
@@ -228,9 +221,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                               type="button"
                               className={`popover__item${isSelected ? " is-active" : ""}`}
                               onClick={() =>
-                                handleSelectAssignee(
-                                  candidate.id,
-                                )
+                                handleSelectAssignee(candidate.id)
                               }
                             >
                               {candidate.name}
@@ -257,7 +248,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
           createdAt ||
           updatedByName ||
           updatedAt) && (
-          <div className="admin-card__section space-y-1 text-xs text-slate-500">
+          <div className="space-y-1 text-xs text-slate-500">
             {(createdByName || createdAt) && (
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                 {createdByName && (
