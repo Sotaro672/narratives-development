@@ -17,6 +17,7 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Label } from "../../../../shared/ui/label";
+import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
 import "./inputCard.css";
@@ -102,7 +103,8 @@ export default function InputCard({
 }: Props) {
   const [inputTitle, setInputTitle] = useState(initialTitle);
   const [text, setText] = useState(initialText);
-  const [attachments, setAttachments] = useState<AnnouncementInputAttachment[]>(initialAttachments);
+  const [attachments, setAttachments] =
+    useState<AnnouncementInputAttachment[]>(initialAttachments);
   const [mainImageIndex, setMainImageIndex] = useState(0);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -167,6 +169,7 @@ export default function InputCard({
       if (mainImageIndex !== 0) {
         setMainImageIndex(0);
       }
+
       return;
     }
 
@@ -320,12 +323,23 @@ export default function InputCard({
                   <div className="announcement-input-card__empty-icon">
                     <ImageIcon />
                   </div>
-                  <div className="announcement-input-card__empty-title">
+
+                  <Text
+                    as="div"
+                    weight="semibold"
+                    className="announcement-input-card__empty-title"
+                  >
                     画像を追加
-                  </div>
-                  <div className="announcement-input-card__empty-help">
+                  </Text>
+
+                  <Text
+                    as="div"
+                    size="xs"
+                    tone="muted"
+                    className="announcement-input-card__empty-help"
+                  >
                     クリックで選択（複数可） / ドロップでも追加できます
-                  </div>
+                  </Text>
                 </div>
               ) : null}
 
@@ -334,9 +348,14 @@ export default function InputCard({
                   <div className="announcement-input-card__empty-icon">
                     <ImageIcon />
                   </div>
-                  <div className="announcement-input-card__empty-title">
+
+                  <Text
+                    as="div"
+                    weight="semibold"
+                    className="announcement-input-card__empty-title"
+                  >
                     画像はありません
-                  </div>
+                  </Text>
                 </div>
               ) : null}
 
@@ -351,8 +370,12 @@ export default function InputCard({
                     <div
                       className={[
                         "announcement-input-card__main-image-stage",
-                        isEditMode ? "announcement-input-card__main-image-stage--clickable" : "",
-                      ].filter(Boolean).join(" ")}
+                        isEditMode
+                          ? "announcement-input-card__main-image-stage--clickable"
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                       onClick={openPicker}
                       role={isEditMode ? "button" : undefined}
                       tabIndex={isEditMode ? 0 : undefined}
@@ -378,13 +401,16 @@ export default function InputCard({
                       />
                     ) : null}
 
-                    <div className="announcement-input-card__image-meta">
-                      <div>
-                        {isEditMode
-                          ? `${previewImages.length} 枚（×で削除 / クリックで追加）`
-                          : `${previewImages.length} 枚`}
-                      </div>
-                    </div>
+                    <Text
+                      as="div"
+                      size="xs"
+                      tone="muted"
+                      className="announcement-input-card__image-meta"
+                    >
+                      {isEditMode
+                        ? `${previewImages.length} 枚（×で削除 / クリックで追加）`
+                        : `${previewImages.length} 枚`}
+                    </Text>
                   </div>
 
                   <div className="announcement-input-card__thumbnail-grid">
@@ -397,12 +423,20 @@ export default function InputCard({
                           key={item.key}
                           className={[
                             "announcement-input-card__thumbnail",
-                            isEditMode ? "announcement-input-card__thumbnail--clickable" : "",
-                          ].filter(Boolean).join(" ")}
+                            isEditMode
+                              ? "announcement-input-card__thumbnail--clickable"
+                              : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
                           onClick={() => handleSelectMainImage(index)}
                           role={isEditMode ? "button" : undefined}
                           tabIndex={isEditMode ? 0 : undefined}
-                          title={isEditMode ? "クリックでメインに設定" : undefined}
+                          title={
+                            isEditMode
+                              ? "クリックでメインに設定"
+                              : undefined
+                          }
                         >
                           <div className="announcement-input-card__thumbnail-image-wrap">
                             <img
@@ -440,9 +474,16 @@ export default function InputCard({
                         <div className="announcement-input-card__add-image-icon">
                           <PlusIcon />
                         </div>
-                        <div className="announcement-input-card__add-image-label">
+
+                        <Text
+                          as="div"
+                          size="xs"
+                          tone="muted"
+                          weight="medium"
+                          className="announcement-input-card__add-image-label"
+                        >
                           画像を追加
-                        </div>
+                        </Text>
                       </div>
                     ) : null}
                   </div>
@@ -465,9 +506,12 @@ export default function InputCard({
                 className="announcement-input-card__title-input"
               />
             ) : (
-              <div className="announcement-input-card__title-view">
+              <Text
+                as="div"
+                className="announcement-input-card__title-view"
+              >
                 {formatViewText(inputTitle)}
-              </div>
+              </Text>
             )}
           </div>
 
@@ -484,9 +528,13 @@ export default function InputCard({
                 disabled={isDisabled}
               />
             ) : (
-              <div className="announcement-input-card__text-view">
+              <Text
+                as="div"
+                wrap="pre-wrap"
+                className="announcement-input-card__text-view"
+              >
                 {formatViewText(text)}
-              </div>
+              </Text>
             )}
           </div>
         </div>

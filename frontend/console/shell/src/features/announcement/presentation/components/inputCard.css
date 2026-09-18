@@ -61,18 +61,8 @@
   color: #94a3b8;
 }
 
-.announcement-input-card__empty-title {
-  color: #1e293b;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.25rem;
-}
-
 .announcement-input-card__empty-help {
   margin-top: 0.25rem;
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1rem;
 }
 
 .announcement-input-card__images {
@@ -112,9 +102,6 @@
   align-items: center;
   justify-content: space-between;
   margin-top: 0.5rem;
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1rem;
 }
 
 .announcement-input-card__thumbnail-grid {
@@ -157,7 +144,6 @@
   border: 1px dashed #cbd5e1;
   border-radius: 0.75rem;
   background: #ffffff;
-  color: #64748b;
   cursor: pointer;
   transition: background-color 150ms ease;
 }
@@ -168,12 +154,7 @@
 
 .announcement-input-card__add-image-icon {
   margin-bottom: 0.25rem;
-}
-
-.announcement-input-card__add-image-label {
-  font-size: 0.75rem;
-  font-weight: 500;
-  line-height: 1rem;
+  color: hsl(var(--muted-foreground));
 }
 
 .announcement-input-card__title-input {
@@ -210,9 +191,6 @@
   border: 1px solid #e2e8f0;
   border-radius: 0.375rem;
   background: #f8fafc;
-  color: #0f172a;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
 }
 
 .announcement-input-card__text-view {
@@ -223,10 +201,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 0.375rem;
   background: #f8fafc;
-  color: #0f172a;
-  font-size: 0.875rem;
   line-height: 1.5rem;
-  white-space: pre-wrap;
 }
 
 @media (min-width: 768px) {

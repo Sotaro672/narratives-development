@@ -9,6 +9,7 @@
  * Card / CardHeader / CardHeaderLeft / CardHeaderIcon /
  * CardTitle / CardContent / CardFields / CardField は
  * shared/ui/card を利用する。
+ * 文字スタイルは shared/ui/text を利用する。
  * ======================================================= */
 
 /* Member固有の2カラム間隔のみ上書き */
@@ -23,24 +24,11 @@
   gap: 16px;
 }
 
-/* ラベル */
-.member-card__label {
-  color: hsl(var(--muted-foreground));
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-/* 値 */
+/* 値のレイアウト */
 .member-card__value {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: hsl(var(--foreground));
-  font-size: 0.88rem;
-}
-
-.member-card__value:hover {
-  color: hsl(var(--foreground));
 }
 
 /* インラインアイコン */

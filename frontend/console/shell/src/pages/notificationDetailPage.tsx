@@ -21,6 +21,7 @@ import {
 } from "../features/notification/presentation/model/reportDecisionNotification";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import type { News } from "../shared/types/news";
+import Text from "../shared/ui/text";
 
 import "../styles/notificationDetail.css";
 
@@ -144,7 +145,9 @@ export default function NotificationDetailPage({
     return (
       <PageStyle layout="single" title="通知詳細" onBack={handleBack}>
         <div className="notification-detail">
-          <p className="notification-detail__message">読み込み中です。</p>
+          <Text as="p" tone="muted">
+            読み込み中です。
+          </Text>
         </div>
       </PageStyle>
     );
@@ -154,12 +157,9 @@ export default function NotificationDetailPage({
     return (
       <PageStyle layout="single" title="通知詳細" onBack={handleBack}>
         <div className="notification-detail">
-          <p
-            className="notification-detail__message notification-detail__message--error"
-            role="alert"
-          >
+          <Text as="p" tone="destructive" role="alert">
             {error}
-          </p>
+          </Text>
         </div>
       </PageStyle>
     );
@@ -169,9 +169,9 @@ export default function NotificationDetailPage({
     return (
       <PageStyle layout="single" title="通知詳細" onBack={handleBack}>
         <div className="notification-detail">
-          <p className="notification-detail__message">
+          <Text as="p" tone="muted">
             表示可能な通知がありません。
-          </p>
+          </Text>
         </div>
       </PageStyle>
     );

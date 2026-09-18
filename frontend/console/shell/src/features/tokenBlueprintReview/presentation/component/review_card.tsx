@@ -9,6 +9,7 @@ import type {
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import { Badge } from "../../../../shared/ui/badge";
 import { Button } from "../../../../shared/ui/button";
+import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
 import "./review_card.css";
@@ -235,7 +236,9 @@ export default function ReviewCard({
           />
         ) : null}
 
-        <span>{authorPrimary}</span>
+        <Text size="xs" tone="muted">
+          {authorPrimary}
+        </Text>
 
         {authorType === "brand" && isOwnerComment ? (
           <Badge variant="secondary">
@@ -243,18 +246,22 @@ export default function ReviewCard({
           </Badge>
         ) : null}
 
-        <span>
+        <Text size="xs" tone="muted">
           {createdAtLabel}
-        </span>
+        </Text>
       </div>
 
-      <div className="token-blueprint-review-card__body">
+      <Text
+        as="div"
+        wrap="pre-wrap"
+        className="token-blueprint-review-card__body"
+      >
         {body || (
-          <span className="token-blueprint-review-card__body-empty">
+          <Text tone="muted">
             （本文なし）
-          </span>
+          </Text>
         )}
-      </div>
+      </Text>
 
       <div className="token-blueprint-review-card__meta-row">
         <Button
@@ -338,9 +345,14 @@ export default function ReviewCard({
         ) : null}
       </div>
 
-      <div className="token-blueprint-review-card__meta-row">
-        <span>返信数: {visibleReplyCount}</span>
-      </div>
+      <Text
+        as="div"
+        size="xs"
+        tone="muted"
+        className="token-blueprint-review-card__meta-row"
+      >
+        返信数: {visibleReplyCount}
+      </Text>
 
       {isReplyFormOpen ? (
         <div className="token-blueprint-review-card__reply-form">

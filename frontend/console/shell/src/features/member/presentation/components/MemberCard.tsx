@@ -13,6 +13,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Text from "../../../../shared/ui/text";
 
 import type { MemberDetail } from "../../application/memberDetailService";
 
@@ -61,8 +62,8 @@ export default function MemberDetailCard({
     return (
       <Card>
         <MemberCardHeader />
-        <CardContent className="text-sm text-[hsl(var(--muted-foreground))]">
-          読み込み中です…
+        <CardContent>
+          <Text tone="muted">読み込み中です…</Text>
         </CardContent>
       </Card>
     );
@@ -72,8 +73,10 @@ export default function MemberDetailCard({
     return (
       <Card>
         <MemberCardHeader />
-        <CardContent className="text-sm text-red-500">
-          データ取得エラー: {error.message}
+        <CardContent>
+          <Text tone="destructive">
+            データ取得エラー: {error.message}
+          </Text>
         </CardContent>
       </Card>
     );
@@ -83,8 +86,10 @@ export default function MemberDetailCard({
     return (
       <Card>
         <MemberCardHeader />
-        <CardContent className="text-sm text-[hsl(var(--muted-foreground))]">
-          該当するメンバーが見つかりません。
+        <CardContent>
+          <Text tone="muted">
+            該当するメンバーが見つかりません。
+          </Text>
         </CardContent>
       </Card>
     );
@@ -105,49 +110,94 @@ export default function MemberDetailCard({
     <Card>
       <MemberCardHeader />
 
-      <CardContent className="space-y-6 text-sm">
+      <CardContent className="space-y-6">
         <CardFields className="member-card__grid">
           <CardField className="member-card__section">
-            <div className="member-card__label">氏名</div>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="semibold"
+              className="member-card__label"
+            >
+              氏名
+            </Text>
+
             <div className="member-card__value">
               <IconUser className="icon-inline w-4 h-4" />
-              <span className="font-medium">{fullName || "-"}</span>
+              <Text weight="medium">{fullName || "-"}</Text>
             </div>
           </CardField>
 
           <CardField className="member-card__section">
-            <div className="member-card__label">読み仮名</div>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="semibold"
+              className="member-card__label"
+            >
+              読み仮名
+            </Text>
+
             <div className="member-card__value">
               <IconUser className="icon-inline w-4 h-4" />
-              <span>{fullKana || "-"}</span>
+              <Text>{fullKana || "-"}</Text>
             </div>
           </CardField>
         </CardFields>
 
         <CardFields className="member-card__grid">
           <CardField className="member-card__section">
-            <div className="member-card__label">メールアドレス</div>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="semibold"
+              className="member-card__label"
+            >
+              メールアドレス
+            </Text>
+
             <div className="member-card__value">
               <IconMail className="icon-inline w-4 h-4" />
-              <span className="break-all">{member.email}</span>
+              <Text wrap="anywhere">{member.email}</Text>
             </div>
           </CardField>
         </CardFields>
 
         <CardFields className="member-card__grid">
           <CardField className="member-card__section">
-            <div className="member-card__label">更新日</div>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="semibold"
+              className="member-card__label"
+            >
+              更新日
+            </Text>
+
             <div className="member-card__value">
               <IconCalendar className="icon-inline w-4 h-4" />
-              <span>{updatedAt}</span>
+              <Text>{updatedAt}</Text>
             </div>
           </CardField>
 
           <CardField className="member-card__section">
-            <div className="member-card__label">参加日</div>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="semibold"
+              className="member-card__label"
+            >
+              参加日
+            </Text>
+
             <div className="member-card__value">
               <IconCalendar className="icon-inline w-4 h-4" />
-              <span>{joinedAt}</span>
+              <Text>{joinedAt}</Text>
             </div>
           </CardField>
         </CardFields>

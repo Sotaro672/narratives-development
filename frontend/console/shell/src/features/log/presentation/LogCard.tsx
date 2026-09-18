@@ -1,10 +1,12 @@
-// frontend/console/log/presentation/LogCard.tsx
+// frontend/console/shell/src/features/log/presentation/LogCard.tsx
+
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "../../../shared/ui";
+import Text from "../../../shared/ui/text";
 
 export type LogCardEntry = {
   /** 一意な ID（履歴 ID / ログ ID など） */
@@ -50,15 +52,15 @@ export default function LogCard({
 
       <CardContent>
         {logs.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{emptyText}</p>
+          <Text as="p" tone="muted">
+            {emptyText}
+          </Text>
         ) : (
           logs.map((log) => {
             // 1行目: version があれば "v3 〜" のように表示し、それ以外は message をそのまま
             const hasVersion = typeof log.version === "number";
             const primaryText = hasVersion
-              ? `v${log.version}${
-                  log.message ? ` - ${log.message}` : ""
-                }`
+              ? `v${log.version}${log.message ? ` - ${log.message}` : ""}`
               : log.message ?? "";
 
             // 2行目: updatedAt / createdAt / updatedByName を組み合わせて表示
@@ -67,14 +69,21 @@ export default function LogCard({
 
             return (
               <div key={log.id} className="log-card__item">
-                <div className="log-card__item-main text-sm">{primaryText}</div>
+                <Text as="div" className="log-card__item-main">
+                  {primaryText}
+                </Text>
 
                 {(timestamp || hasActor) && (
-                  <div className="text-xs text-muted-foreground mt-1 log-card__item-meta">
+                  <Text
+                    as="div"
+                    size="xs"
+                    tone="muted"
+                    className="mt-1 log-card__item-meta"
+                  >
                     {timestamp && <span>{timestamp}</span>}
                     {timestamp && hasActor && <span> ・ </span>}
                     {hasActor && <span>{log.updatedByName}</span>}
-                  </div>
+                  </Text>
                 )}
               </div>
             );

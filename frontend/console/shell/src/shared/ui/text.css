@@ -1,0 +1,84 @@
+/* frontend/console/shell/src/shared/ui/text.css */
+
+/* =========================================================
+ * Base
+ * ======================================================= */
+
+.text {
+  margin: 0;
+}
+
+/* =========================================================
+ * Size
+ * ======================================================= */
+
+.text--xs {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.text--sm {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.text--md {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+/* =========================================================
+ * Tone
+ * ======================================================= */
+
+.text--default {
+  color: hsl(var(--foreground));
+}
+
+.text--muted {
+  color: hsl(var(--muted-foreground));
+}
+
+.text--destructive {
+  color: hsl(var(--destructive));
+}
+
+/* =========================================================
+ * Weight
+ * ======================================================= */
+
+.text--weight-normal {
+  font-weight: 400;
+}
+
+.text--weight-medium {
+  font-weight: 500;
+}
+
+.text--weight-semibold {
+  font-weight: 600;
+}
+
+.text--weight-bold {
+  font-weight: 700;
+}
+
+/* =========================================================
+ * Wrap
+ * ======================================================= */
+
+.text--wrap-normal {
+  white-space: normal;
+}
+
+.text--wrap-pre-wrap {
+  white-space: pre-wrap;
+}
+
+.text--wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+
+.text--wrap-nowrap {
+  white-space: nowrap;
+}

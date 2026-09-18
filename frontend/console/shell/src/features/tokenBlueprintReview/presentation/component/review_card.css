@@ -5,16 +5,13 @@
   border: 1px solid #e2e8f0;
   border-radius: 0.75rem;
   background-color: #ffffff;
-  box-shadow:
-    0 1px 2px 0 rgb(0 0 0 / 0.05);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 
 .token-blueprint-review-card__author-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #64748b;
-  font-size: 12px;
 }
 
 .token-blueprint-review-card__author-icon {
@@ -27,11 +24,6 @@
 
 .token-blueprint-review-card__body {
   margin-top: 6px;
-  white-space: pre-wrap;
-}
-
-.token-blueprint-review-card__body-empty {
-  color: #94a3b8;
 }
 
 .token-blueprint-review-card__meta-row {
@@ -39,8 +31,6 @@
   flex-wrap: wrap;
   gap: 12px;
   margin-top: 10px;
-  color: #475569;
-  font-size: 12px;
 }
 
 .token-blueprint-review-card__danger-button {

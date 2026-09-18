@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Label } from "../../../../shared/ui/label";
+import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
 import type { InquiryCreateAttachment } from "../hooks/useInquiryCreate";
@@ -51,9 +52,13 @@ export default function InquiryCreateForm({
       <CardContent>
         <div className="inquiry-create-form">
           {errorMessage ? (
-            <div className="inquiry-create-form__error">
+            <Text
+              as="div"
+              tone="destructive"
+              className="inquiry-create-form__error"
+            >
               {errorMessage}
-            </div>
+            </Text>
           ) : null}
 
           <div className="inquiry-create-form__message">
@@ -75,21 +80,30 @@ export default function InquiryCreateForm({
               onChange={(event) => onChangeMessage(event.target.value)}
             />
 
-            <div className="inquiry-create-form__counter">
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              className="inquiry-create-form__counter"
+            >
               {message.length.toLocaleString()} /{" "}
               {maxMessageLength.toLocaleString()}
-            </div>
+            </Text>
           </div>
 
           <div className="inquiry-create-form__attachments">
             <div className="inquiry-create-form__attachment-header">
-              <span className="inquiry-create-form__attachment-title">
+              <Text weight="semibold" className="inquiry-create-form__attachment-title">
                 添付ファイル
-              </span>
+              </Text>
 
-              <span className="inquiry-create-form__attachment-count">
+              <Text
+                size="xs"
+                tone="muted"
+                className="inquiry-create-form__attachment-count"
+              >
                 {attachments.length} / {maxImages}
-              </span>
+              </Text>
             </div>
 
             <label className="inquiry-create-form__file-picker">
@@ -102,13 +116,17 @@ export default function InquiryCreateForm({
                 onChange={onChangeFiles}
               />
 
-              <span className="inquiry-create-form__file-picker-title">
+              <Text weight="semibold" className="inquiry-create-form__file-picker-title">
                 画像を選択
-              </span>
+              </Text>
 
-              <span className="inquiry-create-form__file-picker-help">
+              <Text
+                size="xs"
+                tone="muted"
+                className="inquiry-create-form__file-picker-help"
+              >
                 JPG / PNG / WebP / GIF、1枚 {maxImageSizeMB}MBまで
-              </span>
+              </Text>
             </label>
 
             {attachments.length > 0 ? (
@@ -134,12 +152,15 @@ export default function InquiryCreateForm({
                       ×
                     </button>
 
-                    <div
+                    <Text
+                      as="div"
+                      size="xs"
+                      wrap="nowrap"
                       className="inquiry-create-form__attachment-name"
                       title={attachment.file.name}
                     >
                       {attachment.file.name}
-                    </div>
+                    </Text>
                   </div>
                 ))}
               </div>
@@ -149,8 +170,12 @@ export default function InquiryCreateForm({
           {submitting && attachments.length > 0 ? (
             <div className="inquiry-create-form__progress">
               <div className="inquiry-create-form__progress-header">
-                <span>添付ファイルをアップロード中</span>
-                <span>{uploadProgress}%</span>
+                <Text size="xs" tone="muted">
+                  添付ファイルをアップロード中
+                </Text>
+                <Text size="xs" tone="muted">
+                  {uploadProgress}%
+                </Text>
               </div>
 
               <progress
