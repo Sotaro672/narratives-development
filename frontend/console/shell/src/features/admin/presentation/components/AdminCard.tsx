@@ -2,12 +2,18 @@
 
 import * as React from "react";
 
+import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../../../shared/ui/popover";
 
 import { useAdminCard as useAdminCardHook } from "../hook/useAdminCard";
 
@@ -47,6 +53,13 @@ export type AdminCardProps = {
 
   mode?: "edit" | "view";
 };
+
+const closePopover = () =>
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Escape",
+    }),
+  );
 
 export const AdminCard: React.FC<AdminCardProps> = ({
   title = "管理情報",
@@ -108,23 +121,34 @@ export const AdminCard: React.FC<AdminCardProps> = ({
     effectiveAssigneeName,
   ]);
 
-  const handleChange = React.useCallback(
-    (
-      event: React.ChangeEvent<HTMLSelectElement>,
-    ) => {
-      if (!isEdit) {
-        return;
-      }
+  const selectedCandidateName = React.useMemo(() => {
+    const selectedCandidate =
+      effectiveCandidates.find(
+        (candidate) =>
+          candidate.id === selectedValue,
+      );
 
-      const nextId = event.target.value.trim();
+    return (
+      selectedCandidate?.name ||
+      effectiveAssigneeName ||
+      "担当者を選択してください"
+    );
+  }, [
+    effectiveAssigneeName,
+    effectiveCandidates,
+    selectedValue,
+  ]);
 
-      if (!nextId) {
+  const handleSelectAssignee = React.useCallback(
+    (nextId: string) => {
+      if (!isEdit || !nextId) {
         return;
       }
 
       onClickAssignee?.();
       onEditAssignee?.();
       onSelectAssignee?.(nextId);
+      closePopover();
     },
     [
       isEdit,
@@ -159,37 +183,64 @@ export const AdminCard: React.FC<AdminCardProps> = ({
               担当者
             </div>
 
-            {!isEdit && (
+            {!isEdit ? (
               <div className="py-1 text-sm text-slate-800">
                 {effectiveAssigneeName}
               </div>
-            )}
-
-            {isEdit && (
+            ) : (
               <>
-                <select
-                  className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400"
-                  value={selectedValue}
-                  onChange={handleChange}
-                  disabled={effectiveLoading}
-                >
-                  <option value="" disabled>
-                    {effectiveLoading
-                      ? "担当者を読み込み中です…"
-                      : "担当者を選択してください"}
-                  </option>
+                <Popover>
+                  <PopoverTrigger>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full justify-between text-left"
+                      disabled={effectiveLoading}
+                      aria-label="担当者を選択"
+                    >
+                      {effectiveLoading
+                        ? "担当者を読み込み中です…"
+                        : selectedCandidateName}
+                    </Button>
+                  </PopoverTrigger>
 
-                  {effectiveCandidates.map(
-                    (candidate) => (
-                      <option
-                        key={candidate.id}
-                        value={candidate.id}
-                      >
-                        {candidate.name}
-                      </option>
-                    ),
-                  )}
-                </select>
+                  <PopoverContent
+                    align="start"
+                    className="popover__content--compact popover__content--medium"
+                  >
+                    {effectiveLoading ? (
+                      <div className="popover__empty">
+                        担当者を読み込み中です…
+                      </div>
+                    ) : effectiveCandidates.length === 0 ? (
+                      <div className="popover__empty">
+                        担当者候補がありません。
+                      </div>
+                    ) : (
+                      <div className="popover__list">
+                        {effectiveCandidates.map((candidate) => {
+                          const isSelected =
+                            candidate.id === selectedValue;
+
+                          return (
+                            <button
+                              key={candidate.id}
+                              type="button"
+                              className={`popover__item${isSelected ? " is-active" : ""}`}
+                              onClick={() =>
+                                handleSelectAssignee(
+                                  candidate.id,
+                                )
+                              }
+                            >
+                              {candidate.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
 
                 {!effectiveLoading &&
                   effectiveCandidates.length === 0 && (

@@ -173,7 +173,8 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
    * CategoryFieldsCardでは化粧品のvolumeだけを表示する。
    */
   const showCosmeticsVolume =
-    visibility.showVolume && !visibility.showAlcoholContent;
+    visibility.showVolume &&
+    !visibility.showAlcoholContent;
 
   const handleChangeCategoryField = React.useCallback(
     (key: string, rawValue: string) => {
@@ -191,7 +192,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
       onChangeCategoryField(
         key,
-        rawValue.trim() === "" ? null : rawValue,
+        rawValue.trim() === ""
+          ? null
+          : rawValue,
       );
     },
     [onChangeCategoryField],
@@ -199,7 +202,10 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
   const handleChangeWashTags = React.useCallback(
     (nextTags: string[]) => {
-      onChangeCategoryField?.("washTags", nextTags);
+      onChangeCategoryField?.(
+        "washTags",
+        nextTags,
+      );
     },
     [onChangeCategoryField],
   );
@@ -211,19 +217,28 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
     [onChangeCategoryField],
   );
 
-  const fitValue = getFitFieldValue(categoryFields);
-  const materialValue = getStringFieldValue(
-    categoryFields,
-    "material",
-  );
-  const weightValue = getNumberFieldValue(
-    categoryFields,
-    "weight",
-  );
-  const washTagsValue = getWashTagsValue(categoryFields);
+  const fitValue =
+    getFitFieldValue(categoryFields);
+
+  const materialValue =
+    getStringFieldValue(
+      categoryFields,
+      "material",
+    );
+
+  const weightValue =
+    getNumberFieldValue(
+      categoryFields,
+      "weight",
+    );
+
+  const washTagsValue =
+    getWashTagsValue(categoryFields);
 
   const cardTitle =
-    resolveCategoryFieldsCardTitle(visibility);
+    resolveCategoryFieldsCardTitle(
+      visibility,
+    );
 
   const hasVisibleFields =
     visibility.showVintage ||
@@ -256,7 +271,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
       <CardContent>
         {visibility.showVintage && (
           <>
-            <div className="label">ヴィンテージ</div>
+            <div className="label">
+              ヴィンテージ
+            </div>
 
             <div>
               <div className="flex items-center gap-8">
@@ -309,7 +326,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showRegion && (
           <>
-            <div className="label">地域・産地</div>
+            <div className="label">
+              地域・産地
+            </div>
 
             {isEdit ? (
               <Input
@@ -345,7 +364,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showWeight && (
           <>
-            <div className="label">重さ</div>
+            <div className="label">
+              重さ
+            </div>
 
             <div>
               <div className="flex items-center gap-8">
@@ -368,7 +389,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                       aria-describedby="weight-input-note"
                     />
 
-                    <span className="suffix">g</span>
+                    <span className="suffix">
+                      g
+                    </span>
                   </>
                 ) : (
                   <>
@@ -383,7 +406,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                       aria-label="重さ"
                     />
 
-                    <span className="suffix">g</span>
+                    <span className="suffix">
+                      g
+                    </span>
                   </>
                 )}
               </div>
@@ -400,7 +425,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showFit && (
           <>
-            <div className="label">フィット</div>
+            <div className="label">
+              フィット
+            </div>
 
             {isEdit ? (
               <Popover>
@@ -415,28 +442,31 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                   </Button>
                 </PopoverTrigger>
 
-                <PopoverContent align="start" className="p-1">
-                  {FIT_OPTIONS.map((option) => {
-                    const isSelected =
-                      fitValue === option.value;
+                <PopoverContent
+                  align="start"
+                  className="popover__content--compact"
+                >
+                  <div className="popover__list">
+                    {FIT_OPTIONS.map((option) => {
+                      const isSelected =
+                        fitValue === option.value;
 
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        className={`block w-full rounded-md px-3 py-2 text-left hover:bg-blue-50 ${
-                          isSelected
-                            ? "bg-blue-100 font-medium text-blue-700"
-                            : ""
-                        }`}
-                        onClick={() =>
-                          handleChangeFit(option.value)
-                        }
-                      >
-                        {option.label}
-                      </button>
-                    );
-                  })}
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={`popover__item${isSelected ? " is-active" : ""}`}
+                          onClick={() =>
+                            handleChangeFit(
+                              option.value,
+                            )
+                          }
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </PopoverContent>
               </Popover>
             ) : (
@@ -452,7 +482,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showMaterial && (
           <>
-            <div className="label">素材</div>
+            <div className="label">
+              素材
+            </div>
 
             {isEdit ? (
               <Input
@@ -478,7 +510,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {visibility.showAlcoholContent && (
           <>
-            <div className="label">アルコール度数</div>
+            <div className="label">
+              アルコール度数
+            </div>
 
             <div>
               <div className="flex items-center gap-8">
@@ -506,7 +540,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                       aria-describedby="alcohol-content-input-note"
                     />
 
-                    <span className="suffix">%</span>
+                    <span className="suffix">
+                      %
+                    </span>
                   </>
                 ) : (
                   <>
@@ -522,7 +558,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                       aria-label="アルコール度数"
                     />
 
-                    <span className="suffix">%</span>
+                    <span className="suffix">
+                      %
+                    </span>
                   </>
                 )}
               </div>
@@ -539,7 +577,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
 
         {showCosmeticsVolume && (
           <>
-            <div className="label">容量</div>
+            <div className="label">
+              容量
+            </div>
 
             <div>
               <div className="flex items-center gap-8">
@@ -567,7 +607,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                       aria-describedby="volume-input-note"
                     />
 
-                    <span className="suffix">ml</span>
+                    <span className="suffix">
+                      ml
+                    </span>
                   </>
                 ) : (
                   <>
@@ -583,7 +625,9 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
                       aria-label="容量"
                     />
 
-                    <span className="suffix">ml</span>
+                    <span className="suffix">
+                      ml
+                    </span>
                   </>
                 )}
               </div>

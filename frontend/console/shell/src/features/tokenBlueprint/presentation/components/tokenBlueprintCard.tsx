@@ -301,20 +301,20 @@ export default function TokenBlueprintCard({
 
                   <PopoverContent
                     align="start"
-                    className="token-blueprint-card__popover"
+                    className="popover__content--compact token-blueprint-card__popover"
                   >
                     {vm.brandOptions.length === 0 ? (
-                      <div className="token-blueprint-card__popover-empty">
+                      <div className="popover__empty">
                         ブランド候補が未設定です
                       </div>
                     ) : (
-                      <div className="token-blueprint-card__popover-list">
+                      <div className="popover__list">
                         {vm.brandOptions.map((brand) => (
                           <button
                             key={brand.id}
                             type="button"
                             className={
-                              "token-blueprint-card__popover-item" +
+                              "popover__item" +
                               (brand.id === vm.brandId ? " is-active" : "")
                             }
                             onClick={() => {

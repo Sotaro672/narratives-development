@@ -1,0 +1,187 @@
+/* frontend/console/shell/src/shared/ui/popover.css */
+
+/* =========================================================
+ * Popover Trigger
+ * ======================================================= */
+
+.popover__trigger {
+  display: inline-flex;
+  min-width: 0;
+}
+
+/* =========================================================
+ * Popover Content
+ * ======================================================= */
+
+.popover__content {
+  position: fixed;
+  z-index: 1000;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  padding: 12px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.popover__content--compact {
+  overflow: hidden;
+  padding: 6px;
+}
+
+.popover__content--medium {
+  width: min(320px, calc(100vw - 32px));
+}
+
+.popover__content--wide {
+  width: min(400px, calc(100vw - 32px));
+}
+
+/* =========================================================
+ * Header
+ * ======================================================= */
+
+.popover__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.popover__header-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+/* =========================================================
+ * Empty
+ * ======================================================= */
+
+.popover__empty {
+  padding: 18px 14px;
+  color: var(--popover-muted-color, hsl(var(--muted-foreground)));
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* =========================================================
+ * Scroll
+ * ======================================================= */
+
+.popover__scroll {
+  min-width: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.popover__scroll--tall {
+  max-height: 400px;
+}
+
+/* =========================================================
+ * List
+ * ======================================================= */
+
+.popover__list {
+  display: flex;
+  min-width: 0;
+  max-height: 260px;
+  flex-direction: column;
+  gap: 3px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.popover__list--tall {
+  max-height: 400px;
+}
+
+/* =========================================================
+ * Item
+ * ======================================================= */
+
+.popover__item {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  padding: 9px 10px;
+  color: var(--popover-item-color, hsl(var(--popover-foreground)));
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.popover__item--control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.popover__item:hover:not(:disabled) {
+  background: var(--popover-item-hover-bg, hsl(var(--muted)));
+}
+
+.popover__item:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px hsl(var(--ring) / 0.24);
+}
+
+.popover__item.is-active {
+  background: var(--popover-item-active-bg, hsl(var(--muted)));
+  color: var(--popover-item-active-color, hsl(var(--foreground)));
+  font-weight: 700;
+}
+
+.popover__item:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* =========================================================
+ * Dark mode
+ * ======================================================= */
+
+@media (prefers-color-scheme: dark) {
+  .popover__content {
+    border-color: hsl(var(--border));
+    background: hsl(var(--popover));
+    color: hsl(var(--popover-foreground));
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  }
+}
+
+/* =========================================================
+ * Responsive
+ * ======================================================= */
+
+@media (max-width: 640px) {
+  .popover__content--medium,
+  .popover__content--wide {
+    width: min(100%, calc(100vw - 24px));
+  }
+}
+
+/* =========================================================
+ * Reduced motion
+ * ======================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .popover__content,
+  .popover__item {
+    transition: none;
+  }
+}

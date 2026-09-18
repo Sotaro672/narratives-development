@@ -1,6 +1,7 @@
 // frontend/console/productBlueprint/src/presentation/components/ProductBlueprintBrandField.tsx
 
 import * as React from "react";
+
 import { Button } from "../../../../../shared/ui/button";
 import { Input } from "../../../../../shared/ui/input";
 import {
@@ -46,11 +47,13 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
   return (
     <>
       <div className="label">ブランド</div>
+
       {isEdit && brandOptions && onChangeBrandId ? (
         <div className="mb-2 space-y-1">
           <Popover>
             <PopoverTrigger>
               <Button
+                type="button"
                 variant="outline"
                 className="w-full justify-between pbc-select-trigger"
                 aria-label="ブランドを選択"
@@ -58,26 +61,39 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
                 {selectedBrandName || "ブランドを選択してください。"}
               </Button>
             </PopoverTrigger>
-            <PopoverContent align="start" className="p-1">
-              {brandOptions.map((brand) => (
-                <div
-                  key={brand.id}
-                  className={`px-3 py-2 rounded-md cursor-pointer hover:bg-blue-50 ${
-                    brandId === brand.id
-                      ? "bg-blue-100 text-blue-700 font-medium"
-                      : ""
-                  }`}
-                  onClick={() => onChangeBrandId(brand.id)}
-                >
-                  {brand.name}
+
+            <PopoverContent align="start" className="popover__content--compact">
+              {brandOptions.length === 0 ? (
+                <div className="popover__empty">
+                  ブランド候補がありません。
                 </div>
-              ))}
+              ) : (
+                <div className="popover__list">
+                  {brandOptions.map((brand) => {
+                    const isSelected = brandId === brand.id;
+
+                    return (
+                      <button
+                        key={brand.id}
+                        type="button"
+                        className={`popover__item${isSelected ? " is-active" : ""}`}
+                        onClick={() => onChangeBrandId(brand.id)}
+                      >
+                        {brand.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </PopoverContent>
           </Popover>
 
           {brandLoading && (
-            <p className="text-xs text-slate-400">ブランドを取得中…</p>
+            <p className="text-xs text-slate-400">
+              ブランドを取得中…
+            </p>
           )}
+
           {brandError && (
             <p className="text-xs text-red-500">
               ブランド一覧の取得に失敗しました。

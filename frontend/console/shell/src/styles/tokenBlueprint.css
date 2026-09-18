@@ -166,61 +166,18 @@
 
 /* -------------------------
  * Brand popover
+ * 共通レイアウトはshared/ui/popover.cssを利用
  * ---------------------- */
 
 .token-blueprint-card__popover {
   width: var(--radix-popover-trigger-width, 300px);
   max-width: min(360px, calc(100vw - 32px));
-  overflow: hidden;
-  border: 1px solid var(--token-blueprint-border);
-  border-radius: 12px;
-  background: var(--token-blueprint-surface);
-  padding: 6px;
-  box-shadow:
-    0 12px 32px rgba(15, 23, 42, 0.12),
-    0 2px 8px rgba(15, 23, 42, 0.06);
-}
 
-.token-blueprint-card__popover-empty {
-  padding: 18px 14px;
-  color: var(--token-blueprint-text-muted);
-  font-size: 13px;
-  text-align: center;
-}
-
-.token-blueprint-card__popover-list {
-  display: flex;
-  max-height: 260px;
-  flex-direction: column;
-  gap: 3px;
-  overflow-y: auto;
-}
-
-.token-blueprint-card__popover-item {
-  display: block;
-  width: 100%;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 9px 10px;
-  color: var(--token-blueprint-text);
-  font-size: 13px;
-  line-height: 1.5;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color 140ms ease,
-    color 140ms ease;
-}
-
-.token-blueprint-card__popover-item:hover {
-  background: var(--token-blueprint-surface-muted);
-}
-
-.token-blueprint-card__popover-item.is-active {
-  background: var(--token-blueprint-primary-soft);
-  color: var(--token-blueprint-primary);
-  font-weight: 700;
+  --popover-muted-color: var(--token-blueprint-text-muted);
+  --popover-item-color: var(--token-blueprint-text);
+  --popover-item-hover-bg: var(--token-blueprint-surface-muted);
+  --popover-item-active-bg: var(--token-blueprint-primary-soft);
+  --popover-item-active-color: var(--token-blueprint-primary);
 }
 
 /* -------------------------

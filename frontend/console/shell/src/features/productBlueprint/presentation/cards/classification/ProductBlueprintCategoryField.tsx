@@ -10,29 +10,18 @@ import {
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
 
-import {
-  APPAREL_CATEGORY_OPTIONS,
-} from "../../../../../shared/types/apparel";
+import { APPAREL_CATEGORY_OPTIONS } from "../../../../../shared/types/apparel";
 
-import {
-  ALCOHOL_CATEGORY_OPTIONS,
-} from "../../../domain/alcohol";
-import {
-  COSMETICS_CATEGORY_OPTIONS,
-} from "../../../domain/cosmetics";
-import {
-  HEALTHCARE_CATEGORY_OPTIONS,
-} from "../../../domain/healthcare";
-import {
-  OTHER_CATEGORY_OPTIONS,
-} from "../../../domain/other";
+import { ALCOHOL_CATEGORY_OPTIONS } from "../../../domain/alcohol";
+import { COSMETICS_CATEGORY_OPTIONS } from "../../../domain/cosmetics";
+import { HEALTHCARE_CATEGORY_OPTIONS } from "../../../domain/healthcare";
+import { OTHER_CATEGORY_OPTIONS } from "../../../domain/other";
 import {
   toProductBlueprintCategoryPathKey,
   type ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
 
-export type ProductBlueprintCategoryOption =
-  ProductBlueprintCategoryPath;
+export type ProductBlueprintCategoryOption = ProductBlueprintCategoryPath;
 
 type ProductBlueprintCategoryFieldProps = {
   productBlueprintCategoryPath: ProductBlueprintCategoryPath | null;
@@ -47,9 +36,7 @@ type ProductBlueprintCategoryFieldProps = {
 
 const EMPTY_CATEGORY_OPTIONS: ProductBlueprintCategoryOption[] = [];
 
-const ROOT_CATEGORY_LABELS: Readonly<
-  Record<string, string>
-> = {
+const ROOT_CATEGORY_LABELS: Readonly<Record<string, string>> = {
   apparel: "衣類",
   alcohol: "酒類",
   cosmetics: "化粧品",
@@ -57,22 +44,19 @@ const ROOT_CATEGORY_LABELS: Readonly<
   other: "その他",
 };
 
-const CATEGORY_LABEL_BY_PATH_KEY: Readonly<
-  Record<string, string>
-> = Object.fromEntries(
-  [
-    ...APPAREL_CATEGORY_OPTIONS,
-    ...ALCOHOL_CATEGORY_OPTIONS,
-    ...COSMETICS_CATEGORY_OPTIONS,
-    ...HEALTHCARE_CATEGORY_OPTIONS,
-    ...OTHER_CATEGORY_OPTIONS,
-  ].map(
-    (option) => [
+const CATEGORY_LABEL_BY_PATH_KEY: Readonly<Record<string, string>> =
+  Object.fromEntries(
+    [
+      ...APPAREL_CATEGORY_OPTIONS,
+      ...ALCOHOL_CATEGORY_OPTIONS,
+      ...COSMETICS_CATEGORY_OPTIONS,
+      ...HEALTHCARE_CATEGORY_OPTIONS,
+      ...OTHER_CATEGORY_OPTIONS,
+    ].map((option) => [
       option.value,
       option.label,
-    ],
-  ),
-);
+    ]),
+  );
 
 function isSameCategoryPath(
   left: ProductBlueprintCategoryPath | null | undefined,
@@ -96,20 +80,16 @@ function findCategoryByPath(
   options: ProductBlueprintCategoryOption[],
   path: ProductBlueprintCategoryPath | null | undefined,
 ): ProductBlueprintCategoryOption | null {
-  if (
-    !path ||
-    path.length === 0
-  ) {
+  if (!path || path.length === 0) {
     return null;
   }
 
   return (
-    options.find(
-      (option) =>
-        isSameCategoryPath(
-          option,
-          path,
-        ),
+    options.find((option) =>
+      isSameCategoryPath(
+        option,
+        path,
+      ),
     ) ?? null
   );
 }
@@ -117,28 +97,18 @@ function findCategoryByPath(
 function buildParentCategoryOptions(
   options: ProductBlueprintCategoryOption[],
 ): ProductBlueprintCategoryOption[] {
-  const parentCategories:
-    ProductBlueprintCategoryOption[] = [];
-
-  const seen =
-    new Set<string>();
+  const parentCategories: ProductBlueprintCategoryOption[] = [];
+  const seen = new Set<string>();
 
   for (const option of options) {
-    const root =
-      option[0];
+    const root = option[0];
 
-    if (
-      !root ||
-      seen.has(root)
-    ) {
+    if (!root || seen.has(root)) {
       continue;
     }
 
     seen.add(root);
-
-    parentCategories.push(
-      [root],
-    );
+    parentCategories.push([root]);
   }
 
   return parentCategories;
@@ -152,11 +122,8 @@ function buildChildCategoryOptions(
     return [];
   }
 
-  const childCategories:
-    ProductBlueprintCategoryOption[] = [];
-
-  const seen =
-    new Set<string>();
+  const childCategories: ProductBlueprintCategoryOption[] = [];
+  const seen = new Set<string>();
 
   for (const option of options) {
     if (
@@ -176,10 +143,7 @@ function buildChildCategoryOptions(
     }
 
     seen.add(pathKey);
-
-    childCategories.push(
-      [...option],
-    );
+    childCategories.push([...option]);
   }
 
   return childCategories;
@@ -196,16 +160,11 @@ export function resolveProductBlueprintCategoryLabel(
     return "";
   }
 
-  if (
-    productBlueprintCategoryPath.length === 1
-  ) {
+  if (productBlueprintCategoryPath.length === 1) {
     const root =
       productBlueprintCategoryPath[0] ?? "";
 
-    return (
-      ROOT_CATEGORY_LABELS[root] ??
-      root
-    );
+    return ROOT_CATEGORY_LABELS[root] ?? root;
   }
 
   const pathKey =
@@ -233,10 +192,7 @@ function resolveProductBlueprintParentCategoryLabel(
     return "";
   }
 
-  return (
-    ROOT_CATEGORY_LABELS[root] ??
-    root
-  );
+  return ROOT_CATEGORY_LABELS[root] ?? root;
 }
 
 const ProductBlueprintCategoryField: React.FC<
@@ -250,6 +206,7 @@ const ProductBlueprintCategoryField: React.FC<
   onChangeProductBlueprintCategoryPath,
 }) => {
   const isEdit = mode === "edit";
+
   const canEditCategory =
     isEdit &&
     Boolean(
@@ -358,10 +315,8 @@ const ProductBlueprintCategoryField: React.FC<
     ? resolveProductBlueprintCategoryLabel(
         selectedChild,
       )
-    : (
-        selectedCategory &&
+    : selectedCategory &&
         selectedCategory.length > 1
-      )
       ? resolveProductBlueprintCategoryLabel(
           selectedCategory,
         )
@@ -404,7 +359,9 @@ const ProductBlueprintCategoryField: React.FC<
     <>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <div className="label">商品カテゴリ</div>
+          <div className="label">
+            商品カテゴリ
+          </div>
 
           {canEditCategory ? (
             <Popover>
@@ -423,38 +380,43 @@ const ProductBlueprintCategoryField: React.FC<
                 </Button>
               </PopoverTrigger>
 
-              <PopoverContent align="start" className="w-64 p-1">
-                <div className="max-h-64 space-y-1 overflow-y-auto">
-                  {parentCategories.map((parent) => {
-                    const parentRoot =
-                      parent[0] ?? "";
+              <PopoverContent
+                align="start"
+                className="w-64 popover__content--compact"
+              >
+                {parentCategories.length === 0 ? (
+                  <div className="popover__empty">
+                    商品カテゴリがありません。
+                  </div>
+                ) : (
+                  <div className="popover__list">
+                    {parentCategories.map((parent) => {
+                      const parentRoot =
+                        parent[0] ?? "";
 
-                    const isSelected =
-                      selectedParentRoot ===
-                      parentRoot;
+                      const isSelected =
+                        selectedParentRoot ===
+                        parentRoot;
 
-                    return (
-                      <button
-                        key={parentRoot}
-                        type="button"
-                        className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-blue-50 ${
-                          isSelected
-                            ? "bg-blue-100 font-medium text-blue-700"
-                            : ""
-                        }`}
-                        onClick={() => handleSelectParent(parent)}
-                      >
-                        {resolveProductBlueprintCategoryLabel(parent)}
-                      </button>
-                    );
-                  })}
-
-                  {parentCategories.length === 0 && (
-                    <div className="px-3 py-2 text-sm text-slate-400">
-                      商品カテゴリがありません。
-                    </div>
-                  )}
-                </div>
+                      return (
+                        <button
+                          key={parentRoot}
+                          type="button"
+                          className={`popover__item${isSelected ? " is-active" : ""}`}
+                          onClick={() =>
+                            handleSelectParent(
+                              parent,
+                            )
+                          }
+                        >
+                          {resolveProductBlueprintCategoryLabel(
+                            parent,
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </PopoverContent>
             </Popover>
           ) : (
@@ -468,7 +430,9 @@ const ProductBlueprintCategoryField: React.FC<
         </div>
 
         <div>
-          <div className="label">詳細カテゴリ</div>
+          <div className="label">
+            詳細カテゴリ
+          </div>
 
           {canEditCategory ? (
             selectedParentRoot !== "" ? (
@@ -488,42 +452,47 @@ const ProductBlueprintCategoryField: React.FC<
                   </Button>
                 </PopoverTrigger>
 
-                <PopoverContent align="start" className="w-64 p-1">
-                  <div className="max-h-64 space-y-1 overflow-y-auto">
-                    {childCategories.map((child) => {
-                      const childPathKey =
-                        toProductBlueprintCategoryPathKey(
-                          child,
+                <PopoverContent
+                  align="start"
+                  className="w-64 popover__content--compact"
+                >
+                  {childCategories.length === 0 ? (
+                    <div className="popover__empty">
+                      詳細カテゴリがありません。
+                    </div>
+                  ) : (
+                    <div className="popover__list">
+                      {childCategories.map((child) => {
+                        const childPathKey =
+                          toProductBlueprintCategoryPathKey(
+                            child,
+                          );
+
+                        const isSelected =
+                          isSameCategoryPath(
+                            selectedChild,
+                            child,
+                          );
+
+                        return (
+                          <button
+                            key={childPathKey}
+                            type="button"
+                            className={`popover__item${isSelected ? " is-active" : ""}`}
+                            onClick={() =>
+                              handleSelectChild(
+                                child,
+                              )
+                            }
+                          >
+                            {resolveProductBlueprintCategoryLabel(
+                              child,
+                            )}
+                          </button>
                         );
-
-                      const isSelected =
-                        isSameCategoryPath(
-                          selectedChild,
-                          child,
-                        );
-
-                      return (
-                        <button
-                          key={childPathKey}
-                          type="button"
-                          className={`block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-blue-50 ${
-                            isSelected
-                              ? "bg-blue-100 font-medium text-blue-700"
-                              : ""
-                          }`}
-                          onClick={() => handleSelectChild(child)}
-                        >
-                          {resolveProductBlueprintCategoryLabel(child)}
-                        </button>
-                      );
-                    })}
-
-                    {childCategories.length === 0 && (
-                      <div className="px-3 py-2 text-sm text-slate-400">
-                        詳細カテゴリがありません。
-                      </div>
-                    )}
-                  </div>
+                      })}
+                    </div>
+                  )}
                 </PopoverContent>
               </Popover>
             ) : (

@@ -1,4 +1,5 @@
 // frontend/console/member/src/presentation/components/PermissionSelect.tsx
+
 import * as React from "react";
 
 import type {
@@ -8,15 +9,15 @@ import type {
 
 import {
   Popover,
-  PopoverTrigger,
   PopoverContent,
+  PopoverTrigger,
 } from "../../../../shared/ui/popover";
 import { Button } from "../../../../shared/ui/button";
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "../../../../shared/ui/card";
 import { Checkbox } from "../../../../shared/ui/checkbox";
 import { Badge } from "../../../../shared/ui/badge";
@@ -40,9 +41,13 @@ export type PermissionSelectProps = {
 
 const categoryLabel = (c?: string) => c ?? "";
 
-// Popover を閉じるためのユーティリティ
+// Popoverを閉じるためのユーティリティ
 const closePopover = () =>
-  document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", {
+      key: "Escape",
+    }),
+  );
 
 export function PermissionSelect({
   category,
@@ -54,45 +59,84 @@ export function PermissionSelect({
 }: PermissionSelectProps) {
   // ========= 権限カテゴリ ==========
   const selectedCategory = React.useMemo(
-    () => permissionCategories.find((x) => x.key === category),
+    () =>
+      permissionCategories.find(
+        (item) => item.key === category,
+      ),
     [permissionCategories, category],
   );
-  const currentPerms = selectedCategory?.permissions ?? [];
 
-  const togglePerm = (permId: string, checked: boolean) => {
+  const currentPerms =
+    selectedCategory?.permissions ?? [];
+
+  const togglePerm = (
+    permId: string,
+    checked: boolean,
+  ) => {
     setSelectedPermIds((prev) => {
       const next = new Set(prev);
-      if (checked) next.add(permId);
-      else next.delete(permId);
+
+      if (checked) {
+        next.add(permId);
+      } else {
+        next.delete(permId);
+      }
+
       return next;
     });
   };
 
   const allSelectedInCategory =
     currentPerms.length > 0 &&
-    currentPerms.every((p) => selectedPermIds.has((p as any).id));
+    currentPerms.every((permission) =>
+      selectedPermIds.has(
+        (permission as any).id,
+      ),
+    );
 
-  const toggleAllInCategory = (checked: boolean) => {
-    if (currentPerms.length === 0) return;
+  const toggleAllInCategory = (
+    checked: boolean,
+  ) => {
+    if (currentPerms.length === 0) {
+      return;
+    }
+
     setSelectedPermIds((prev) => {
       const next = new Set(prev);
-      if (checked)
-        currentPerms.forEach((p) => next.add((p as any).id as string));
-      else currentPerms.forEach((p) => next.delete((p as any).id as string));
+
+      if (checked) {
+        currentPerms.forEach((permission) =>
+          next.add(
+            (permission as any).id as string,
+          ),
+        );
+      } else {
+        currentPerms.forEach((permission) =>
+          next.delete(
+            (permission as any).id as string,
+          ),
+        );
+      }
+
       return next;
     });
   };
 
   const allPerms = React.useMemo(
     () =>
-      permissionCategories.flatMap((c) => c.permissions) as (Permission & {
+      permissionCategories.flatMap(
+        (item) => item.permissions,
+      ) as (Permission & {
         id: string;
       })[],
     [permissionCategories],
   );
 
   const selectedPerms = React.useMemo(
-    () => allPerms.filter((p) => selectedPermIds.has(p.id)),
+    () =>
+      allPerms.filter((permission) =>
+        selectedPermIds.has(permission.id),
+      ),
     [allPerms, selectedPermIds],
   );
 
@@ -103,6 +147,7 @@ export function PermissionSelect({
         <label className="block text-sm text-slate-300 mb-1">
           役割（必須）
         </label>
+
         <Popover>
           <PopoverTrigger>
             <Button
@@ -113,29 +158,40 @@ export function PermissionSelect({
               {category ? (
                 categoryLabel(category)
               ) : (
-                <span className="text-slate-400">役割を選択</span>
+                <span className="text-slate-400">
+                  役割を選択
+                </span>
               )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="text-sm max-h-[320px] overflow-y-auto">
-            <div className="flex flex-col gap-1">
-              {permissionCategoryList.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => {
-                    setCategory(c);
-                    closePopover();
-                  }}
-                  className={
-                    "w-full text-left px-3 py-2 rounded hover:bg-slate-100 " +
-                    (category === c ? "bg-slate-100 font-semibold" : "")
-                  }
-                >
-                  {categoryLabel(c)}
-                </button>
-              ))}
-            </div>
+
+          <PopoverContent className="popover__content--compact">
+            {permissionCategoryList.length === 0 ? (
+              <div className="popover__empty">
+                選択可能な役割がありません。
+              </div>
+            ) : (
+              <div className="popover__list">
+                {permissionCategoryList.map((item) => {
+                  const isSelected =
+                    category === item;
+
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`popover__item${isSelected ? " is-active" : ""}`}
+                      onClick={() => {
+                        setCategory(item);
+                        closePopover();
+                      }}
+                    >
+                      {categoryLabel(item)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </PopoverContent>
         </Popover>
       </div>
@@ -147,12 +203,16 @@ export function PermissionSelect({
             <Checkbox
               id="category-select-all"
               checked={allSelectedInCategory}
-              onCheckedChange={(v) => toggleAllInCategory(!!v)}
+              onCheckedChange={(value) =>
+                toggleAllInCategory(!!value)
+              }
             />
+
             <CardTitle style={{ marginLeft: 8 }}>
               権限一覧（{categoryLabel(category)}）
             </CardTitle>
           </CardHeader>
+
           <CardContent>
             {currentPerms.length === 0 ? (
               <p className="text-sm text-[hsl(var(--muted-foreground))]">
@@ -161,21 +221,36 @@ export function PermissionSelect({
             ) : (
               <ul className="text-sm space-y-2">
                 {currentPerms.map((perm: any) => {
-                  const checked = selectedPermIds.has(perm.id);
-                  const inputId = `perm_${perm.id}`;
+                  const checked =
+                    selectedPermIds.has(perm.id);
+
+                  const inputId =
+                    `perm_${perm.id}`;
+
                   return (
-                    <li key={perm.id} className="flex items-start gap-2">
+                    <li
+                      key={perm.id}
+                      className="flex items-start gap-2"
+                    >
                       <Checkbox
                         id={inputId}
                         checked={checked}
-                        onCheckedChange={(v) => togglePerm(perm.id, !!v)}
+                        onCheckedChange={(value) =>
+                          togglePerm(
+                            perm.id,
+                            !!value,
+                          )
+                        }
                       />
+
                       <label
-                        id={inputId}
+                        htmlFor={inputId}
                         className="cursor-pointer select-none"
-                        onClick={() => togglePerm(perm.id, !checked)}
                       >
-                        <span className="font-medium">{perm.name}</span>
+                        <span className="font-medium">
+                          {perm.name}
+                        </span>
+
                         <span className="text-[hsl(var(--muted-foreground))]">
                           {" — "}
                           {perm.description}
@@ -197,7 +272,10 @@ export function PermissionSelect({
             </span>
           ) : (
             selectedPerms.map((perm) => (
-              <Badge key={`badge_${perm.id}`} variant="secondary">
+              <Badge
+                key={`badge_${perm.id}`}
+                variant="secondary"
+              >
                 {perm.name}
               </Badge>
             ))
