@@ -1,32 +1,6 @@
 /* frontend/console/shell/src/styles/productBlueprintReview.css */
 
 /* =========================================================
- * Product Blueprint Brand Field
- * ======================================================= */
-
-.pbc-brand-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.pbc-brand-field__trigger {
-  width: 100%;
-  justify-content: space-between;
-}
-
-.pbc-brand-field__status {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-.pbc-brand-field__error {
-  margin: 0;
-}
-
-/* =========================================================
  * Review Management
  * ======================================================= */
 

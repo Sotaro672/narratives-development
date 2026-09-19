@@ -132,7 +132,7 @@ export default function ProductionCreate() {
                   {brandError && (
                     <ErrorMessage
                       size="xs"
-                      className="pb-select__empty"
+                      className="pb-select__error"
                     >
                       ブランド一覧の取得に失敗しました。
                     </ErrorMessage>

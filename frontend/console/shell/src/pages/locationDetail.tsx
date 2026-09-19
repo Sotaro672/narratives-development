@@ -14,9 +14,7 @@ import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import "../styles/location.css";
 
 export default function LocationDetail() {
-  const { locationId } = useParams<{
-    locationId: string;
-  }>();
+  const { locationId } = useParams<{ locationId: string }>();
 
   const { vm, handlers } = useLocationDetail(locationId);
   const [isEditing, setIsEditing] = useState(false);
@@ -84,10 +82,7 @@ export default function LocationDetail() {
           </Card>
 
           {vm.error && (
-            <ErrorMessage
-              variant="panel"
-              className="location-detail__error"
-            >
+            <ErrorMessage variant="panel">
               {vm.error}
             </ErrorMessage>
           )}

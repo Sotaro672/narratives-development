@@ -1,4 +1,4 @@
-// frontend/console/shell/src/features/productBlueprint/presentation/cards/classification/ProductBlueprintBrandField.tsx
+// frontend/console/shell/src/features/productBlueprint/presentation/components/classification/ProductBlueprintBrandField.tsx
 
 import * as React from "react";
 
@@ -13,7 +13,7 @@ import {
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
 
-import "../../../../../styles/productBlueprintReview.css";
+import "../../../../../styles/productBlueprint.css";
 
 export type BrandOption = {
   id: string;
@@ -60,14 +60,17 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
               <Button
                 type="button"
                 variant="outline"
-                className="pbc-select-trigger pbc-brand-field__trigger"
+                className="pbc-brand-field__trigger"
                 aria-label="ブランドを選択"
               >
                 {selectedBrandName || "ブランドを選択してください。"}
               </Button>
             </PopoverTrigger>
 
-            <PopoverContent align="start" className="popover__content--compact">
+            <PopoverContent
+              align="start"
+              className="popover__content--compact"
+            >
               {brandOptions.length === 0 ? (
                 <div className="popover__empty">
                   ブランド候補がありません。

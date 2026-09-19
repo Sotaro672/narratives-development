@@ -13,6 +13,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../shared/ui/error";
 import Text from "../../../../shared/ui/text";
 
 import type { MemberDetail } from "../../application/memberDetailService";
@@ -74,9 +75,9 @@ export default function MemberDetailCard({
       <Card>
         <MemberCardHeader />
         <CardContent>
-          <Text tone="destructive">
+          <ErrorMessage>
             データ取得エラー: {error.message}
-          </Text>
+          </ErrorMessage>
         </CardContent>
       </Card>
     );

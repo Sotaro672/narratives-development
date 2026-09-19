@@ -86,6 +86,12 @@
  * 文字スタイルは shared/ui/text を利用する。
  * ======================================================= */
 
+.member-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
 .member-card__grid {
   column-gap: 56px;
   row-gap: 24px;
@@ -103,6 +109,8 @@
 }
 
 .icon-inline {
+  width: 1rem;
+  height: 1rem;
   color: hsl(var(--muted-foreground));
 }
 
@@ -119,12 +127,6 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-}
-
-@media (max-width: 640px) {
-  .name-row {
-    flex-direction: column;
-  }
 }
 
 .permission-category-divider {
@@ -313,4 +315,18 @@
 .invitation-page__submit:disabled {
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* =========================================================
+ * Responsive
+ * ======================================================= */
+
+@media (max-width: 640px) {
+  .name-row {
+    flex-direction: column;
+  }
+
+  .invitation-page__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
