@@ -3,7 +3,10 @@
 import * as React from "react";
 
 import type { BrandRow } from "../hooks/useMemberCreate";
-import { Badge } from "../../../../shared/ui/badge";
+import {
+  Badge,
+  BadgeGroup,
+} from "../../../../shared/ui/badge";
 import { Button } from "../../../../shared/ui/button";
 import { Checkbox } from "../../../../shared/ui/checkbox";
 import { Label } from "../../../../shared/ui/label";
@@ -12,6 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
+import { Text } from "../../../../shared/ui/text";
 
 import "../../../../styles/member.css";
 
@@ -83,11 +87,15 @@ export function BrandSelect({
         </PopoverContent>
       </Popover>
 
-      <div className="brand-select__badges">
+      <BadgeGroup className="brand-select__badges">
         {selectedCount === 0 ? (
-          <span className="brand-select__hint">
+          <Text
+            as="span"
+            size="xs"
+            tone="muted"
+          >
             選択したブランドがここに表示されます。
-          </span>
+          </Text>
         ) : (
           brandRows
             .filter((brand) => selectedBrandIds.has(brand.id))
@@ -97,7 +105,7 @@ export function BrandSelect({
               </Badge>
             ))
         )}
-      </div>
+      </BadgeGroup>
     </div>
   );
 }

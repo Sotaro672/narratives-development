@@ -1,6 +1,10 @@
 // frontend/console/shell/src/shared/ui/badge.tsx
 
-import type { CSSProperties, ReactNode } from "react";
+import type {
+  CSSProperties,
+  HTMLAttributes,
+  ReactNode,
+} from "react";
 
 import "./badge.css";
 
@@ -41,5 +45,27 @@ export function Badge({
     >
       {children}
     </span>
+  );
+}
+
+export interface BadgeGroupProps
+  extends HTMLAttributes<HTMLDivElement> {}
+
+export function BadgeGroup({
+  className = "",
+  ...props
+}: BadgeGroupProps) {
+  const classNames = [
+    "badge-group",
+    className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div
+      className={classNames}
+      {...props}
+    />
   );
 }

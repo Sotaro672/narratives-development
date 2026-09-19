@@ -4,6 +4,7 @@
  * Member Management
  * Table row interaction is handled by shared/ui/table.
  * Pagination layout is handled by shared/ui/pagination.
+ * Text and badges are handled by shared/ui.
  * ======================================================= */
 
 .member-management {
@@ -14,27 +15,14 @@
   padding: 1rem;
 }
 
-.member-management__empty-permission {
-  color: hsl(var(--muted-foreground));
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.mm-brand-tag {
-  margin-right: 6px;
-}
-
-.mm-permission-col {
-  display: flex;
+.member-management__permission-badges {
   max-width: 240px;
-  flex-wrap: wrap;
-  gap: 6px;
-  white-space: normal;
 }
 
 /* =========================================================
  * Brand Select
  * Popover の幅・候補レイアウトは shared/ui/popover を利用する。
+ * Label / Button / Badge / Text は shared/ui を利用する。
  * ======================================================= */
 
 .brand-select__label {
@@ -49,33 +37,7 @@
 }
 
 .brand-select__badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
   margin-top: 0.5rem;
-}
-
-.brand-select__hint {
-  color: hsl(var(--muted-foreground));
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-/* =========================================================
- * Brand Card
- * ======================================================= */
-
-.brand-card__message {
-  margin: 0;
-  color: hsl(var(--muted-foreground));
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.brand-card__badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
 }
 
 /* =========================================================
@@ -85,12 +47,6 @@
  * shared/ui/card を利用する。
  * 文字スタイルは shared/ui/text を利用する。
  * ======================================================= */
-
-.member-card__content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
 
 .member-card__grid {
   column-gap: 56px;
@@ -111,29 +67,8 @@
 .icon-inline {
   width: 1rem;
   height: 1rem;
-  color: hsl(var(--muted-foreground));
-}
-
-.member-card__value .icon-inline {
   flex-shrink: 0;
-}
-
-.name-row {
-  display: flex;
-  gap: 12px;
-}
-
-.name-row .name-field {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-}
-
-.permission-category-divider {
-  width: 100%;
-  height: 1px;
-  margin: 12px 0;
-  background-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
 }
 
 /* =========================================================
@@ -165,7 +100,6 @@
 
 /* =========================================================
  * Member Create
- * Label / Input は shared/ui/card を利用する。
  * ======================================================= */
 
 .member-create {
@@ -188,6 +122,7 @@
 
 /* =========================================================
  * Invitation
+ * Input / Button は shared/ui を利用する。
  * ======================================================= */
 
 .invitation-page {
@@ -262,15 +197,6 @@
   word-break: break-all;
 }
 
-.invitation-page__input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.25rem;
-  background-color: #ffffff;
-}
-
 .invitation-page__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -289,32 +215,9 @@
 }
 
 .invitation-page__submit {
-  padding: 0.5rem 2.5rem;
-  border: 0;
   border-radius: 9999px;
-  background-color: #0f172a;
-  color: #ffffff;
-  font-family: inherit;
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.25rem;
-  cursor: pointer;
-  box-shadow:
-    0 1px 3px 0 rgb(0 0 0 / 0.1),
-    0 1px 2px -1px rgb(0 0 0 / 0.1);
-  transition:
-    color 150ms cubic-bezier(0.4, 0, 0.2, 1),
-    background-color 150ms cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.invitation-page__submit:hover:not(:disabled) {
-  background-color: #000000;
-}
-
-.invitation-page__submit:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
+  padding-right: 2.5rem;
+  padding-left: 2.5rem;
 }
 
 /* =========================================================
@@ -322,10 +225,6 @@
  * ======================================================= */
 
 @media (max-width: 640px) {
-  .name-row {
-    flex-direction: column;
-  }
-
   .invitation-page__grid {
     grid-template-columns: minmax(0, 1fr);
   }

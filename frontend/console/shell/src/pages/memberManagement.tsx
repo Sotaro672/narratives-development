@@ -8,9 +8,17 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
+import {
+  Badge,
+  BadgeGroup,
+} from "../shared/ui/badge";
 import { ErrorMessage } from "../shared/ui/error";
 import Pagination from "../shared/ui/pagination";
-import { TableCell, TableRow } from "../shared/ui/table";
+import {
+  TableCell,
+  TableRow,
+} from "../shared/ui/table";
+import { Text } from "../shared/ui/text";
 
 import "../styles/member.css";
 
@@ -41,9 +49,13 @@ export default function MemberManagementPage() {
 
   if (loading) {
     return (
-      <div className="member-management__message">
+      <Text
+        as="div"
+        tone="muted"
+        className="member-management__message"
+      >
         読み込み中...
-      </div>
+      </Text>
     );
   }
 
@@ -135,39 +147,46 @@ export default function MemberManagementPage() {
               <TableCell>{m.email}</TableCell>
 
               <TableCell>
-                {assigned.map((brandId) => {
-                  const label = brandMap[brandId] ?? brandId;
-
-                  return (
-                    <span
+                <BadgeGroup>
+                  {assigned.map((brandId) => (
+                    <Badge
                       key={brandId}
-                      className="lp-brand-pill mm-brand-tag"
+                      variant="secondary"
                     >
-                      {label}
-                    </span>
-                  );
-                })}
+                      {brandMap[brandId] ?? brandId}
+                    </Badge>
+                  ))}
+                </BadgeGroup>
               </TableCell>
 
-              <TableCell className="mm-permission-col">
+              <TableCell>
                 {categories.length === 0 ? (
-                  <span className="member-management__empty-permission">
+                  <Text
+                    as="span"
+                    tone="muted"
+                  >
                     なし
-                  </span>
+                  </Text>
                 ) : (
-                  categories.map((cat) => (
-                    <span
-                      key={cat}
-                      className="lp-brand-pill mm-brand-tag"
-                    >
-                      {cat}
-                    </span>
-                  ))
+                  <BadgeGroup className="member-management__permission-badges">
+                    {categories.map((category) => (
+                      <Badge
+                        key={category}
+                        variant="secondary"
+                      >
+                        {category}
+                      </Badge>
+                    ))}
+                  </BadgeGroup>
                 )}
               </TableCell>
 
-              <TableCell>{formatYmd((m as any).createdAt)}</TableCell>
-              <TableCell>{formatYmd((m as any).updatedAt)}</TableCell>
+              <TableCell>
+                {formatYmd((m as any).createdAt)}
+              </TableCell>
+              <TableCell>
+                {formatYmd((m as any).updatedAt)}
+              </TableCell>
             </TableRow>
           );
         })}
@@ -176,7 +195,9 @@ export default function MemberManagementPage() {
       <Pagination
         currentPage={page.number}
         totalPages={page.totalPages ?? 1}
-        onPageChange={(p) => setPageNumber(p)}
+        onPageChange={(pageNumber) =>
+          setPageNumber(pageNumber)
+        }
       />
     </div>
   );

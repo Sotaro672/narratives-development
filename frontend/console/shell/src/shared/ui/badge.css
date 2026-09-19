@@ -46,3 +46,15 @@
   background: #ef4444;
   color: #ffffff;
 }
+
+/* =========================================================
+ * Badge Group
+ * ======================================================= */
+
+.badge-group {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}

@@ -1,7 +1,11 @@
 // frontend/console/shell/src/features/member/presentation/components/MemberCard.tsx
 
 import * as React from "react";
-import { Calendar, Mail, User } from "lucide-react";
+import {
+  Calendar,
+  Mail,
+  User,
+} from "lucide-react";
 
 import {
   Card,
@@ -18,9 +22,14 @@ import Text from "../../../../shared/ui/text";
 
 import type { MemberDetail } from "../../application/memberDetailService";
 
-const IconUser = User as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
-const IconMail = Mail as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
-const IconCalendar = Calendar as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+import "../../../../styles/member.css";
+
+const IconUser =
+  User as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const IconMail =
+  Mail as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
+const IconCalendar =
+  Calendar as unknown as React.ComponentType<React.SVGProps<SVGSVGElement>>;
 
 type MemberDetailCardProps = {
   member: MemberDetail | null;
@@ -64,7 +73,9 @@ export default function MemberDetailCard({
       <Card>
         <MemberCardHeader />
         <CardContent>
-          <Text tone="muted">読み込み中です…</Text>
+          <Text tone="muted">
+            読み込み中です…
+          </Text>
         </CardContent>
       </Card>
     );
@@ -96,11 +107,17 @@ export default function MemberDetailCard({
     );
   }
 
-  const fullName = [member.lastName, member.firstName]
+  const fullName = [
+    member.lastName,
+    member.firstName,
+  ]
     .filter((value) => value.length > 0)
     .join(" ");
 
-  const fullKana = [member.lastNameKana, member.firstNameKana]
+  const fullKana = [
+    member.lastNameKana,
+    member.firstNameKana,
+  ]
     .filter((value) => value.length > 0)
     .join(" ");
 
@@ -119,14 +136,15 @@ export default function MemberDetailCard({
               size="xs"
               tone="muted"
               weight="semibold"
-              className="member-card__label"
             >
               氏名
             </Text>
 
             <div className="member-card__value">
-              <IconUser className="icon-inline w-4 h-4" />
-              <Text weight="medium">{fullName || "-"}</Text>
+              <IconUser className="icon-inline" />
+              <Text weight="medium">
+                {fullName || "-"}
+              </Text>
             </div>
           </CardField>
 
@@ -136,13 +154,12 @@ export default function MemberDetailCard({
               size="xs"
               tone="muted"
               weight="semibold"
-              className="member-card__label"
             >
               読み仮名
             </Text>
 
             <div className="member-card__value">
-              <IconUser className="icon-inline w-4 h-4" />
+              <IconUser className="icon-inline" />
               <Text>{fullKana || "-"}</Text>
             </div>
           </CardField>
@@ -155,14 +172,15 @@ export default function MemberDetailCard({
               size="xs"
               tone="muted"
               weight="semibold"
-              className="member-card__label"
             >
               メールアドレス
             </Text>
 
             <div className="member-card__value">
-              <IconMail className="icon-inline w-4 h-4" />
-              <Text wrap="anywhere">{member.email}</Text>
+              <IconMail className="icon-inline" />
+              <Text wrap="anywhere">
+                {member.email}
+              </Text>
             </div>
           </CardField>
         </CardFields>
@@ -174,13 +192,12 @@ export default function MemberDetailCard({
               size="xs"
               tone="muted"
               weight="semibold"
-              className="member-card__label"
             >
               更新日
             </Text>
 
             <div className="member-card__value">
-              <IconCalendar className="icon-inline w-4 h-4" />
+              <IconCalendar className="icon-inline" />
               <Text>{updatedAt}</Text>
             </div>
           </CardField>
@@ -191,13 +208,12 @@ export default function MemberDetailCard({
               size="xs"
               tone="muted"
               weight="semibold"
-              className="member-card__label"
             >
               参加日
             </Text>
 
             <div className="member-card__value">
-              <IconCalendar className="icon-inline w-4 h-4" />
+              <IconCalendar className="icon-inline" />
               <Text>{joinedAt}</Text>
             </div>
           </CardField>

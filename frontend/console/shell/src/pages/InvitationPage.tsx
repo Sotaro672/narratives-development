@@ -4,6 +4,7 @@ import * as React from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { useInvitationPage } from "../auth/presentation/hook/useInvitationPage";
+import { Button } from "../shared/ui/button";
 import { ErrorMessage } from "../shared/ui/error";
 import { Input } from "../shared/ui/input";
 import { Label } from "../shared/ui/label";
@@ -19,7 +20,8 @@ import "../styles/member.css";
 export default function InvitationPage() {
   const [searchParams] = useSearchParams();
 
-  const invitationToken = searchParams.get("token") ?? "";
+  const invitationToken =
+    searchParams.get("token") ?? "";
 
   const {
     setToken,
@@ -48,7 +50,10 @@ export default function InvitationPage() {
 
   React.useEffect(() => {
     setToken(invitationToken);
-  }, [invitationToken, setToken]);
+  }, [
+    invitationToken,
+    setToken,
+  ]);
 
   const companyText = loadingInvitationInfo
     ? "読み込み中..."
@@ -117,10 +122,10 @@ export default function InvitationPage() {
                 id="invitation-email"
                 type="email"
                 autoComplete="email"
-                variant="default"
-                className="invitation-page__input"
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
                 placeholder="example@example.com"
                 disabled={submitting}
               />
@@ -140,10 +145,10 @@ export default function InvitationPage() {
                 <Input
                   id="invitation-last-name"
                   autoComplete="family-name"
-                  variant="default"
-                  className="invitation-page__input"
                   value={lastName}
-                  onChange={(event) => setLastName(event.target.value)}
+                  onChange={(event) =>
+                    setLastName(event.target.value)
+                  }
                   placeholder="山田"
                   disabled={submitting}
                 />
@@ -159,10 +164,10 @@ export default function InvitationPage() {
 
                 <Input
                   id="invitation-last-name-kana"
-                  variant="default"
-                  className="invitation-page__input"
                   value={lastNameKana}
-                  onChange={(event) => setLastNameKana(event.target.value)}
+                  onChange={(event) =>
+                    setLastNameKana(event.target.value)
+                  }
                   placeholder="やまだ"
                   disabled={submitting}
                 />
@@ -181,10 +186,10 @@ export default function InvitationPage() {
                 <Input
                   id="invitation-first-name"
                   autoComplete="given-name"
-                  variant="default"
-                  className="invitation-page__input"
                   value={firstName}
-                  onChange={(event) => setFirstName(event.target.value)}
+                  onChange={(event) =>
+                    setFirstName(event.target.value)
+                  }
                   placeholder="太郎"
                   disabled={submitting}
                 />
@@ -200,10 +205,10 @@ export default function InvitationPage() {
 
                 <Input
                   id="invitation-first-name-kana"
-                  variant="default"
-                  className="invitation-page__input"
                   value={firstNameKana}
-                  onChange={(event) => setFirstNameKana(event.target.value)}
+                  onChange={(event) =>
+                    setFirstNameKana(event.target.value)
+                  }
                   placeholder="たろう"
                   disabled={submitting}
                 />
@@ -225,10 +230,10 @@ export default function InvitationPage() {
                   id="invitation-password"
                   type="password"
                   autoComplete="new-password"
-                  variant="default"
-                  className="invitation-page__input"
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
                   placeholder="8文字以上"
                   disabled={submitting}
                 />
@@ -246,10 +251,10 @@ export default function InvitationPage() {
                   id="invitation-password-confirm"
                   type="password"
                   autoComplete="new-password"
-                  variant="default"
-                  className="invitation-page__input"
                   value={passwordConfirm}
-                  onChange={(event) => setPasswordConfirm(event.target.value)}
+                  onChange={(event) =>
+                    setPasswordConfirm(event.target.value)
+                  }
                   placeholder="もう一度入力"
                   disabled={submitting}
                 />
@@ -260,8 +265,10 @@ export default function InvitationPage() {
           <div className="invitation-page__spacer" />
 
           <div className="invitation-page__actions">
-            <button
+            <Button
               type="submit"
+              variant="solid"
+              size="lg"
               className="invitation-page__submit"
               disabled={loading}
             >
@@ -270,7 +277,7 @@ export default function InvitationPage() {
                 : loadingInvitationInfo
                   ? "招待情報を確認中..."
                   : "サインイン"}
-            </button>
+            </Button>
           </div>
         </form>
       </main>

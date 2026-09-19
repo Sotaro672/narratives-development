@@ -3,15 +3,17 @@
 import React from "react";
 
 import type { BrandRow } from "../../../brand/application/brandService";
-import { Badge } from "../../../../shared/ui/badge";
+import {
+  Badge,
+  BadgeGroup,
+} from "../../../../shared/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
-
-import "../../../../styles/member.css";
+import { Text } from "../../../../shared/ui/text";
 
 export function BrandCard({
   assignedBrands,
@@ -38,17 +40,17 @@ export function BrandCard({
 
       <CardContent>
         {assignedBrands.length === 0 ? (
-          <p className="brand-card__message">
+          <Text as="p" tone="muted">
             所属ブランドは未設定です。
-          </p>
+          </Text>
         ) : (
-          <div className="brand-card__badges">
+          <BadgeGroup>
             {assignedBrands.map((brandId) => (
               <Badge key={brandId}>
                 {brandMap[brandId] ?? brandId}
               </Badge>
             ))}
-          </div>
+          </BadgeGroup>
         )}
       </CardContent>
     </Card>
