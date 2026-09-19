@@ -2,11 +2,13 @@
 
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "../../../../shared/ui/card";
 import type { PermissionCategory } from "../../../../shared/types/permission";
+
+import "../../../../shell/src/styles/permission.css";
 
 type PermissionCardProps = {
   /** メンバーに付与されている Permission.Name の配列 */
@@ -27,44 +29,53 @@ export function PermissionCard({
   groupedByCategory,
   loading,
 }: PermissionCardProps) {
-  const categories = Object.keys(groupedByCategory) as PermissionCategory[];
+  const categories = Object.keys(
+    groupedByCategory,
+  ) as PermissionCategory[];
 
-  const hasGrouped = categories.length > 0 && permissions.length > 0;
+  const hasGrouped =
+    categories.length > 0 &&
+    permissions.length > 0;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>権限</CardTitle>
       </CardHeader>
+
       <CardContent>
         {permissions.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">
+          <p className="permission-card__message">
             権限は未設定です。
           </p>
         ) : loading && !hasGrouped ? (
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">
+          <p className="permission-card__message">
             権限情報を読み込み中です…
           </p>
         ) : hasGrouped ? (
-          <div className="space-y-4">
+          <div className="permission-card__groups">
             {categories.map((cat, index) => {
               const list = groupedByCategory[cat];
-              if (!list || list.length === 0) return null;
+
+              if (!list || list.length === 0) {
+                return null;
+              }
 
               return (
                 <div key={cat}>
-                  {/* ---- 区切りバー：最初のカテゴリ以外に入れる ---- */}
-                  {index > 0 && <div className="permission-category-divider" />}
+                  {index > 0 ? (
+                    <div className="permission-card__divider" />
+                  ) : null}
 
-                  {/* ▼ 親要素: Category */}
-                  <div className="text-xs font-semibold text-slate-500 mb-1">
+                  <div className="permission-card__category">
                     {cat}
                   </div>
 
-                  {/* ▼ 子要素 */}
-                  <ul className="text-sm space-y-1 ml-3 list-disc">
+                  <ul className="permission-card__list permission-card__list--indented">
                     {list.map((perm) => (
-                      <li key={`${cat}:${perm}`}>{perm}</li>
+                      <li key={`${cat}:${perm}`}>
+                        {perm}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -72,10 +83,11 @@ export function PermissionCard({
             })}
           </div>
         ) : (
-          // フォールバック（カテゴリ情報が取得できなかった場合）
-          <ul className="text-sm space-y-1">
+          <ul className="permission-card__list permission-card__list--fallback">
             {permissions.map((perm) => (
-              <li key={perm}>{perm}</li>
+              <li key={perm}>
+                {perm}
+              </li>
             ))}
           </ul>
         )}

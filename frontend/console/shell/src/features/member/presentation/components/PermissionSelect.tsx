@@ -7,11 +7,7 @@ import type {
   PermissionCategory,
 } from "../../../../shared/types/permission";
 
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../../shared/ui/popover";
+import { Badge } from "../../../../shared/ui/badge";
 import { Button } from "../../../../shared/ui/button";
 import {
   Card,
@@ -20,8 +16,14 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Checkbox } from "../../../../shared/ui/checkbox";
-import { Badge } from "../../../../shared/ui/badge";
 import { Label } from "../../../../shared/ui/label";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../../../../shared/ui/popover";
+
+import "../../../../shell/src/styles/permission.css";
 
 type PermissionCategoryView = {
   key: PermissionCategory;
@@ -138,10 +140,10 @@ export function PermissionSelect({
   );
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
+    <div className="permission-select">
       {/* 役割選択 */}
       <div>
-        <Label className="mb-1 block">
+        <Label className="permission-select__label">
           役割（必須）
         </Label>
 
@@ -150,12 +152,12 @@ export function PermissionSelect({
             <Button
               type="button"
               variant="outline"
-              className="w-full justify-start text-left"
+              className="permission-select__trigger"
             >
               {category ? (
                 categoryLabel(category)
               ) : (
-                <span className="text-slate-400">
+                <span className="permission-select__placeholder">
                   役割を選択
                 </span>
               )}
@@ -205,29 +207,28 @@ export function PermissionSelect({
               }
             />
 
-            <CardTitle style={{ marginLeft: 8 }}>
+            <CardTitle className="permission-select__card-title">
               権限一覧（{categoryLabel(category)}）
             </CardTitle>
           </CardHeader>
 
           <CardContent>
             {currentPerms.length === 0 ? (
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">
+              <p className="permission-select__empty">
                 この役割に紐づく権限はありません。
               </p>
             ) : (
-              <ul className="space-y-2 text-sm">
+              <ul className="permission-select__list">
                 {currentPerms.map((perm: any) => {
                   const checked =
                     selectedPermIds.has(perm.id);
-
                   const inputId =
                     `perm_${perm.id}`;
 
                   return (
                     <li
                       key={perm.id}
-                      className="flex items-start gap-2"
+                      className="permission-select__item"
                     >
                       <Checkbox
                         id={inputId}
@@ -242,13 +243,13 @@ export function PermissionSelect({
 
                       <label
                         htmlFor={inputId}
-                        className="cursor-pointer select-none"
+                        className="permission-select__item-label"
                       >
-                        <span className="font-medium">
+                        <span className="permission-select__permission-name">
                           {perm.name}
                         </span>
 
-                        <span className="text-[hsl(var(--muted-foreground))]">
+                        <span className="permission-select__permission-description">
                           {" — "}
                           {perm.description}
                         </span>
@@ -262,9 +263,9 @@ export function PermissionSelect({
         </Card>
 
         {/* 選択済み権限バッジ */}
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="permission-select__badges">
           {selectedPerms.length === 0 ? (
-            <span className="text-xs text-[hsl(var(--muted-foreground))]">
+            <span className="permission-select__hint">
               権限を選択するとここに表示されます。
             </span>
           ) : (

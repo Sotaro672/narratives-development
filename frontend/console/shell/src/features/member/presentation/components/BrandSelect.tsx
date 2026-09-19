@@ -3,15 +3,17 @@
 import * as React from "react";
 
 import type { BrandRow } from "../hooks/useMemberCreate";
+import { Badge } from "../../../../shared/ui/badge";
+import { Button } from "../../../../shared/ui/button";
+import { Checkbox } from "../../../../shared/ui/checkbox";
+import { Label } from "../../../../shared/ui/label";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
-import { Button } from "../../../../shared/ui/button";
-import { Checkbox } from "../../../../shared/ui/checkbox";
-import { Badge } from "../../../../shared/ui/badge";
-import { Label } from "../../../../shared/ui/label";
+
+import "../../../../shell/src/styles/member.css";
 
 type BrandSelectProps = {
   brandRows: BrandRow[];
@@ -30,8 +32,8 @@ export function BrandSelect({
   );
 
   return (
-    <div>
-      <Label className="mb-1 block">
+    <div className="brand-select">
+      <Label className="brand-select__label">
         ブランド（任意・複数選択可）
       </Label>
 
@@ -40,7 +42,7 @@ export function BrandSelect({
           <Button
             type="button"
             variant="outline"
-            className="w-full justify-start text-left"
+            className="brand-select__trigger"
           >
             {selectedCount > 0
               ? `選択中のブランド: ${selectedCount}件`
@@ -48,7 +50,7 @@ export function BrandSelect({
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent className="w-[320px] popover__content--compact">
+        <PopoverContent className="brand-select__popover popover__content--compact">
           {brandRows.length === 0 ? (
             <div className="popover__empty">
               現在、選択可能なブランドがありません。
@@ -63,7 +65,7 @@ export function BrandSelect({
                   <label
                     key={brand.id}
                     htmlFor={inputId}
-                    className="popover__item flex items-center gap-2"
+                    className="popover__item brand-select__option"
                   >
                     <Checkbox
                       id={inputId}
@@ -88,17 +90,15 @@ export function BrandSelect({
       </Popover>
 
       {/* 選択済みブランドのバッジ表示 */}
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="brand-select__badges">
         {selectedCount === 0 ? (
-          <span className="text-xs text-[hsl(var(--muted-foreground))]">
+          <span className="brand-select__hint">
             選択したブランドがここに表示されます。
           </span>
         ) : (
           brandRows
             .filter((brand) =>
-              selectedBrandIds.has(
-                brand.id,
-              ),
+              selectedBrandIds.has(brand.id),
             )
             .map((brand) => (
               <Badge

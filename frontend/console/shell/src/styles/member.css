@@ -43,6 +43,61 @@
 }
 
 /* =========================================================
+ * Brand Select
+ * ======================================================= */
+
+.brand-select__label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.brand-select__trigger {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.brand-select__popover {
+  width: 320px;
+}
+
+.brand-select__option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.brand-select__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.brand-select__hint {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* =========================================================
+ * Brand Card
+ * ======================================================= */
+
+.brand-card__message {
+  margin: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.brand-card__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* =========================================================
  * Member Card
  * Card / CardHeader / CardHeaderLeft / CardHeaderIcon /
  * CardTitle / CardContent / CardFields / CardField は

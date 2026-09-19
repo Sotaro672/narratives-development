@@ -1,14 +1,17 @@
 // frontend/console/member/src/presentation/components/BrandCard.tsx
 
 import React from "react";
+
+import type { BrandRow } from "../../../brand/application/brandService";
+import { Badge } from "../../../../shared/ui/badge";
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "../../../../shared/ui/card";
-import { Badge } from "../../../../shared/ui/badge";
-import type { BrandRow } from "../../../brand/application/brandService";
+
+import "../../../../shell/src/styles/member.css";
 
 export function BrandCard({
   assignedBrands,
@@ -17,12 +20,13 @@ export function BrandCard({
   assignedBrands: string[];
   brandRows: BrandRow[];
 }) {
-  // brandId -> brandName のマップを作る
   const brandMap = React.useMemo(() => {
     const map: Record<string, string> = {};
-    for (const b of brandRows) {
-      map[b.id] = b.name;
+
+    for (const brand of brandRows) {
+      map[brand.id] = brand.name;
     }
+
     return map;
   }, [brandRows]);
 
@@ -31,16 +35,17 @@ export function BrandCard({
       <CardHeader>
         <CardTitle>所属ブランド</CardTitle>
       </CardHeader>
+
       <CardContent>
         {assignedBrands.length === 0 ? (
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">
+          <p className="brand-card__message">
             所属ブランドは未設定です。
           </p>
         ) : (
-          <div className="flex flex-wrap gap-2">
+          <div className="brand-card__badges">
             {assignedBrands.map((brandId) => (
               <Badge key={brandId}>
-                {brandMap[brandId] ?? brandId /* fallback */}
+                {brandMap[brandId] ?? brandId}
               </Badge>
             ))}
           </div>
