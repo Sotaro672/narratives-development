@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Input } from "../../../../shared/ui/input";
 import { Label } from "../../../../shared/ui/label";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
@@ -281,7 +282,7 @@ export default function InputCard({
 
       <CardContent>
         <div className="announcement-input-card__content">
-          <div className="announcement-input-card__section">
+          <div className="card__field">
             <div className="announcement-input-card__section-header">
               <Label>画像アップロード</Label>
 
@@ -289,7 +290,7 @@ export default function InputCard({
                 <Button
                   type="button"
                   variant="ghost"
-                  className="announcement-input-card__clear-button"
+                  size="sm"
                   disabled={isDisabled}
                   onClick={handleClearImages}
                 >
@@ -492,30 +493,26 @@ export default function InputCard({
             </div>
           </div>
 
-          <div className="announcement-input-card__section">
+          <div className="card__field">
             <Label htmlFor="sales-input-title">タイトル</Label>
 
             {isEditMode ? (
-              <input
+              <Input
                 id="sales-input-title"
                 type="text"
                 value={inputTitle}
                 onChange={(event) => setInputTitle(event.target.value)}
                 placeholder="タイトルを入力してください"
                 disabled={isDisabled}
-                className="announcement-input-card__title-input"
               />
             ) : (
-              <Text
-                as="div"
-                className="announcement-input-card__title-view"
-              >
+              <Text as="div" className="card__view-value">
                 {formatViewText(inputTitle)}
               </Text>
             )}
           </div>
 
-          <div className="announcement-input-card__section">
+          <div className="card__field">
             <Label htmlFor="sales-input-text">文章</Label>
 
             {isEditMode ? (
@@ -530,8 +527,7 @@ export default function InputCard({
             ) : (
               <Text
                 as="div"
-                wrap="pre-wrap"
-                className="announcement-input-card__text-view"
+                className="card__view-value card__view-value--multiline"
               >
                 {formatViewText(text)}
               </Text>

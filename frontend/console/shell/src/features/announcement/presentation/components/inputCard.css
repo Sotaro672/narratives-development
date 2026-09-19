@@ -6,21 +6,11 @@
   gap: 1rem;
 }
 
-.announcement-input-card__section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
 .announcement-input-card__section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-}
-
-.announcement-input-card__clear-button {
-  height: 2rem;
 }
 
 .announcement-input-card__file-input {
@@ -155,53 +145,6 @@
 .announcement-input-card__add-image-icon {
   margin-bottom: 0.25rem;
   color: hsl(var(--muted-foreground));
-}
-
-.announcement-input-card__title-input {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.375rem;
-  background: #ffffff;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  outline: none;
-  transition:
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    background-color 150ms ease;
-}
-
-.announcement-input-card__title-input:focus {
-  border-color: #94a3b8;
-  box-shadow: 0 0 0 2px #e2e8f0;
-}
-
-.announcement-input-card__title-input:disabled {
-  background: #f8fafc;
-  cursor: not-allowed;
-}
-
-.announcement-input-card__title-view {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 2.5rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.375rem;
-  background: #f8fafc;
-}
-
-.announcement-input-card__text-view {
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 140px;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.375rem;
-  background: #f8fafc;
-  line-height: 1.5rem;
 }
 
 @media (min-width: 768px) {
