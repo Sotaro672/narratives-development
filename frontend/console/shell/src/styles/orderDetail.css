@@ -113,14 +113,6 @@
   border-radius: 4px;
 }
 
-.order-detail__aside {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-top: 16px;
-  text-align: left;
-}
-
 .order-detail__card-title {
   text-align: left;
 }

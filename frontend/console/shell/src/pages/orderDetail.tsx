@@ -523,7 +523,7 @@ export default function OrderDetail() {
   );
 
   const right = (
-    <div className="order-detail__aside">
+    <div className="page-column page-column--offset-top sticky-aside">
       <Card>
         <CardHeader>
           <CardTitle className="order-detail__card-title">

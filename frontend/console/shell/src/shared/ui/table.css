@@ -16,25 +16,28 @@
 
 .table {
   width: 100%;
+  border-collapse: collapse;
   caption-side: bottom;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
 }
 
 /* =========================================================
  * Header
  * ======================================================= */
 
-.table__header tr {
-  border-bottom: 1px solid hsl(var(--border));
+.table__header .table__row {
+  height: 40px;
 }
 
 /* =========================================================
  * Body
  * ======================================================= */
 
-.table__body tr:last-child {
-  border-bottom: 0;
+.table__body .table__row {
+  transition: background-color 0.2s ease;
+}
+
+.table__body .table__row:hover {
+  background-color: #f9fafb;
 }
 
 /* =========================================================
@@ -47,7 +50,7 @@
   font-weight: 500;
 }
 
-.table__footer > tr:last-child {
+.table__footer > .table__row:last-child {
   border-bottom: 0;
 }
 
@@ -56,12 +59,11 @@
  * ======================================================= */
 
 .table__row {
-  border-bottom: 1px solid hsl(var(--border));
-  transition: background-color 0.15s ease;
+  transition: background-color 0.2s ease;
 }
 
 .table__row:hover {
-  background-color: hsl(var(--muted) / 0.5);
+  background-color: #f9fafb;
 }
 
 .table__row[data-state="selected"] {
@@ -73,11 +75,11 @@
  * ======================================================= */
 
 .table__head {
-  height: 2.5rem;
-  padding-right: 0.5rem;
-  padding-left: 0.5rem;
-  color: hsl(var(--foreground));
-  font-weight: 500;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e3e3e3;
+  color: #333;
+  font-size: 0.9rem;
+  font-weight: 600;
   text-align: left;
   vertical-align: middle;
   white-space: nowrap;
@@ -96,7 +98,10 @@
  * ======================================================= */
 
 .table__cell {
-  padding: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #eee;
+  color: #444;
+  font-size: 0.9rem;
   vertical-align: middle;
   white-space: nowrap;
 }
