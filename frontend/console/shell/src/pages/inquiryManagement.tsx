@@ -11,10 +11,12 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
+import Empty from "../shared/ui/empty";
 import {
   TableCell,
   TableRow,
 } from "../shared/ui/table";
+import Text from "../shared/ui/text";
 
 export default function InquiryManagementPage() {
   const navigate = useNavigate();
@@ -143,17 +145,22 @@ export default function InquiryManagementPage() {
         {loading ? (
           <TableRow>
             <TableCell colSpan={headers.length}>
-              <div className="inq__empty">
+              <Text as="div" tone="muted">
                 問い合わせ一覧を読み込み中です。
-              </div>
+              </Text>
             </TableCell>
           </TableRow>
         ) : errorMessage ? (
           <TableRow>
             <TableCell colSpan={headers.length}>
-              <div className="inq__empty">
+              <Text
+                as="div"
+                tone="destructive"
+                wrap="pre-wrap"
+                role="alert"
+              >
                 {errorMessage}
-              </div>
+              </Text>
             </TableCell>
           </TableRow>
         ) : rowElements.length > 0 ? (
@@ -161,9 +168,7 @@ export default function InquiryManagementPage() {
         ) : (
           <TableRow>
             <TableCell colSpan={headers.length}>
-              <div className="inq__empty">
-                問い合わせはありません。
-              </div>
+              <Empty description="問い合わせはありません。" />
             </TableCell>
           </TableRow>
         )}

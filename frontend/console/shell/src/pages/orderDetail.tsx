@@ -1,11 +1,10 @@
 // frontend/console/shell/src/pages/orderDetail.tsx
 
-import { useOrderDetail } from "../features/order/presentation/hooks/useOrderDetail";
-
 import OrderBasicInfo from "../features/order/presentation/components/orderBasicInfo";
 import OrderBuyerCard from "../features/order/presentation/components/orderBuyerCard";
 import OrderItemList from "../features/order/presentation/components/orderItemList";
 import OrderShippingAddress from "../features/order/presentation/components/orderShippingAddress";
+import { useOrderDetail } from "../features/order/presentation/hooks/useOrderDetail";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 
@@ -15,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../shared/ui/card";
+import Empty from "../shared/ui/empty";
 import Text from "../shared/ui/text";
 
 import "../styles/orderDetail.css";
@@ -67,11 +67,7 @@ export default function OrderDetail() {
         ) : null}
 
         {loading ? (
-          <Text
-            as="div"
-            tone="muted"
-            className="order-detail__message"
-          >
+          <Text as="div" tone="muted" className="order-detail__message">
             読み込み中...
           </Text>
         ) : error ? (
@@ -85,13 +81,7 @@ export default function OrderDetail() {
             {error}
           </Text>
         ) : !order ? (
-          <Text
-            as="div"
-            tone="muted"
-            className="order-detail__message"
-          >
-            データがありません。
-          </Text>
+          <Empty description="データがありません。" />
         ) : (
           <div className="order-detail__sections">
             <OrderBasicInfo

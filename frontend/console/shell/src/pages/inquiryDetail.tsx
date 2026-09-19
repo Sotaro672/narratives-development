@@ -1,7 +1,13 @@
 // frontend/console/shell/src/pages/inquiryDetail.tsx
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../shell/src/shared/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../shell/src/shared/ui/card";
+import Empty from "../../../shell/src/shared/ui/empty";
 
 import InquiryContentCard from "../features/inquiry/presentation/components/inquiryContentCard";
 import InquiryInfoCard from "../features/inquiry/presentation/components/inquiryInfoCard";
@@ -121,8 +127,10 @@ export default function InquiryDetail() {
 
   const status =
     getInquiryStatusLabel(inquiry?.status);
+
   const isResolved =
     inquiry?.status === "resolved";
+
   const isOpenOrInProgress =
     inquiry?.status === "open" ||
     inquiry?.status === "in_progress";
@@ -173,8 +181,7 @@ export default function InquiryDetail() {
         ? "対応済みにする"
         : undefined;
 
-  const statusButtonBusyLabel =
-    "更新中";
+  const statusButtonBusyLabel = "更新中";
 
   const showReturnRefund =
     isReturnInquiry &&
@@ -195,9 +202,10 @@ export default function InquiryDetail() {
           </CardHeader>
 
           <CardContent>
-            <div className="inq__empty">
-              問い合わせ詳細を読み込み中です。
-            </div>
+            <Empty
+              compact
+              description="問い合わせ詳細を読み込み中です。"
+            />
           </CardContent>
         </Card>
 
@@ -208,9 +216,10 @@ export default function InquiryDetail() {
             </CardHeader>
 
             <CardContent>
-              <div className="inq__empty">
-                問い合わせ情報を読み込み中です。
-              </div>
+              <Empty
+                compact
+                description="問い合わせ情報を読み込み中です。"
+              />
             </CardContent>
           </Card>
 
@@ -220,9 +229,10 @@ export default function InquiryDetail() {
             </CardHeader>
 
             <CardContent>
-              <div className="inq__empty">
-                商品・注文情報を読み込み中です。
-              </div>
+              <Empty
+                compact
+                description="商品・注文情報を読み込み中です。"
+              />
             </CardContent>
           </Card>
         </div>
@@ -244,9 +254,7 @@ export default function InquiryDetail() {
           </CardHeader>
 
           <CardContent>
-            <div className="inq__empty">
-              {errorMessage}
-            </div>
+            <Empty description={errorMessage} />
           </CardContent>
         </Card>
 
@@ -257,9 +265,7 @@ export default function InquiryDetail() {
             </CardHeader>
 
             <CardContent>
-              <div className="inq__empty">
-                問い合わせ情報を表示できません。
-              </div>
+              <Empty description="問い合わせ情報を表示できません。" />
             </CardContent>
           </Card>
 
@@ -269,9 +275,7 @@ export default function InquiryDetail() {
             </CardHeader>
 
             <CardContent>
-              <div className="inq__empty">
-                商品・注文情報を表示できません。
-              </div>
+              <Empty description="商品・注文情報を表示できません。" />
             </CardContent>
           </Card>
         </div>

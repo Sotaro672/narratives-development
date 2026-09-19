@@ -3,9 +3,7 @@
 import type { KeyboardEvent } from "react";
 
 import { useProductBlueprintReviewManagement } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement";
-import List, {
-  FilterableTableHeader,
-} from "../layout/List/List";
+import List, { FilterableTableHeader } from "../layout/List/List";
 import { TableCell, TableRow } from "../shared/ui/table";
 
 import "../styles/productBlueprintReview.css";
@@ -15,12 +13,8 @@ type FilterOption = {
   label: string;
 };
 
-function BuildFilterOptions(
-  Values: string[],
-): FilterOption[] {
-  return Array.from(
-    new Set(Values.filter(Boolean)),
-  ).map((Value) => ({
+function BuildFilterOptions(Values: string[]): FilterOption[] {
+  return Array.from(new Set(Values.filter(Boolean))).map((Value) => ({
     value: Value,
     label: Value,
   }));

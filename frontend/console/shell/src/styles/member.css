@@ -1,7 +1,45 @@
 /* frontend/console/shell/src/styles/member.css */
 
+/* =========================================================
+ * Member Management
+ * ======================================================= */
+
+.member-management {
+  padding: 0;
+}
+
+.member-management__message {
+  padding: 1rem;
+}
+
+.member-management__message--error {
+  color: hsl(var(--destructive));
+}
+
+.member-management__row {
+  cursor: pointer;
+}
+
+.member-management__empty-permission {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.member-management__pagination {
+  margin-top: 1rem;
+}
+
 .mm-brand-tag {
   margin-right: 6px;
+}
+
+.mm-permission-col {
+  display: flex;
+  max-width: 240px;
+  flex-wrap: wrap;
+  gap: 6px;
+  white-space: normal;
 }
 
 /* =========================================================
@@ -71,14 +109,6 @@
   height: 1px;
   margin: 12px 0;
   background-color: hsl(var(--border));
-}
-
-.mm-permission-col {
-  display: flex;
-  max-width: 240px;
-  flex-wrap: wrap;
-  gap: 6px;
-  white-space: normal;
 }
 
 /* =========================================================

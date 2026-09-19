@@ -121,17 +121,6 @@
   color: #475569;
 }
 
-.inq__empty {
-  border-radius: 12px;
-  background: hsl(var(--muted, 210 40% 96.1%));
-  padding: 14px 16px;
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  font-size: 0.9rem;
-  line-height: 1.7;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 /* =========================================================
    Inquiry images
 ========================================================= */

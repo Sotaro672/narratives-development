@@ -6,6 +6,7 @@ import { Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "../../shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../shared/ui/card";
+import Empty from "../../shared/ui/empty";
 import Pagination from "../../shared/ui/pagination";
 import RefreshButton from "../../shared/ui/refresh";
 import {
@@ -107,13 +108,7 @@ export default function List({
             )}
 
             {showCancelButton && (
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={onCancel}
-                title="キャンセル"
-                aria-label="キャンセル"
-              >
+              <Button variant="outline" size="icon" onClick={onCancel} title="キャンセル" aria-label="キャンセル">
                 <X aria-hidden="true" />
               </Button>
             )}
@@ -128,13 +123,7 @@ export default function List({
             )}
 
             {showTrashButton && (
-              <Button
-                variant="destructive"
-                size="icon"
-                onClick={onTrash}
-                title="ゴミ箱"
-                aria-label="ゴミ箱"
-              >
+              <Button variant="destructive" size="icon" onClick={onTrash} title="ゴミ箱" aria-label="ゴミ箱">
                 <Trash2 aria-hidden="true" />
               </Button>
             )}
@@ -161,15 +150,15 @@ export default function List({
 
             <TableBody>
               {isBusy ? (
-                <TableRow className="lp-empty-row">
-                  <TableCell className="lp-empty-cell" colSpan={colSpan}>
-                    読み込み中...
+                <TableRow>
+                  <TableCell colSpan={colSpan}>
+                    <Empty compact description="読み込み中..." />
                   </TableCell>
                 </TableRow>
               ) : totalItems === 0 ? (
-                <TableRow className="lp-empty-row">
-                  <TableCell className="lp-empty-cell" colSpan={colSpan}>
-                    現在登録されている項目はございません。
+                <TableRow>
+                  <TableCell colSpan={colSpan}>
+                    <Empty description="現在登録されている項目はございません。" />
                   </TableCell>
                 </TableRow>
               ) : (

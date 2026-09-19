@@ -4,11 +4,6 @@
 
 .pbrm-row {
   cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.pbrm-row:hover {
-  background-color: rgba(0, 0, 0, 0.03);
 }
 
 /* Review Detail */

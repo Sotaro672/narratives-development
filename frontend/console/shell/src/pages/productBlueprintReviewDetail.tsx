@@ -10,6 +10,7 @@ import ReportModal from "../features/report/presentation/components/ReportModal"
 
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
 import { Button } from "../shared/ui/button";
+import Empty from "../shared/ui/empty";
 import Pagination from "../shared/ui/pagination";
 import RefreshButton from "../shared/ui/refresh";
 import Text from "../shared/ui/text";
@@ -33,9 +34,7 @@ type DetailNavState = {
 type SortKey = "Rating" | "ReviewedAt" | null;
 type SortDir = "asc" | "desc";
 
-function getReviewStatusBadgeVariant(
-  status: ReviewStatus,
-): BadgeVariant {
+function getReviewStatusBadgeVariant(status: ReviewStatus): BadgeVariant {
   switch (status) {
     case "PUBLISHED":
       return "success";
@@ -96,14 +95,10 @@ export default function ProductBlueprintReviewDetail() {
       return;
     }
 
-    setSortDir((current) =>
-      current === "desc" ? "asc" : "desc",
-    );
+    setSortDir((current) => current === "desc" ? "asc" : "desc");
   };
 
-  const sortLabel = (
-    key: Exclude<SortKey, null>,
-  ): string => {
+  const sortLabel = (key: Exclude<SortKey, null>): string => {
     if (SortBy !== key) {
       return "↕";
     }
@@ -160,11 +155,7 @@ export default function ProductBlueprintReviewDetail() {
 
   return (
     <>
-      <PageStyle
-        layout="grid-2"
-        title={Title}
-        onBack={OnBack}
-      >
+      <PageStyle layout="grid-2" title={Title} onBack={OnBack}>
         <div>
           <div className="pbrd-toolbar">
             <div className="pbrd-toolbar-left" />
@@ -173,9 +164,7 @@ export default function ProductBlueprintReviewDetail() {
               <select
                 value={Status}
                 onChange={(event) =>
-                  SetStatus(
-                    event.target.value as ReviewStatus,
-                  )
+                  SetStatus(event.target.value as ReviewStatus)
                 }
                 className="pbrd-status-select"
               >
@@ -234,60 +223,23 @@ export default function ProductBlueprintReviewDetail() {
 
           <div className="pbrd-reviewcard-wrapper">
             {IsLoading ? (
-              <Text
-                as="div"
-                size="xs"
-                tone="muted"
-                className="pbrd-empty"
-              >
+              <Text as="div" size="xs" tone="muted">
                 読み込み中...
               </Text>
             ) : SortedItems.length === 0 ? (
-              <Text
-                as="div"
-                size="xs"
-                tone="muted"
-                className="pbrd-empty"
-              >
-                No reviews
-              </Text>
+              <Empty description="現在登録されているレビューはございません。" />
             ) : (
               <div className="pbrd-grid">
                 {SortedItems.map((review, index) => {
-                  const ReviewID = String(
-                    review.ID ?? "",
-                  ).trim();
-
-                  const ReviewKey =
-                    ReviewID || `rv_${index}`;
-
-                  const Body = String(
-                    review.Body ?? "",
-                  );
-
-                  const AvatarName = String(
-                    review.AvatarName ?? "",
-                  );
-
-                  const AvatarIcon = String(
-                    review.AvatarIcon ?? "",
-                  );
-
-                  const AuthorName =
-                    AvatarName || "-";
-
-                  const RatingStars = ratingToStars(
-                    Number(review.Rating ?? 0),
-                  );
-
-                  const ReviewedAt = String(
-                    review.ReviewedAt ?? "",
-                  );
-
-                  const StatusLabel = statusLabelJa(
-                    review.Status,
-                  );
-
+                  const ReviewID = String(review.ID ?? "").trim();
+                  const ReviewKey = ReviewID || `rv_${index}`;
+                  const Body = String(review.Body ?? "");
+                  const AvatarName = String(review.AvatarName ?? "");
+                  const AvatarIcon = String(review.AvatarIcon ?? "");
+                  const AuthorName = AvatarName || "-";
+                  const RatingStars = ratingToStars(Number(review.Rating ?? 0));
+                  const ReviewedAt = String(review.ReviewedAt ?? "");
+                  const StatusLabel = statusLabelJa(review.Status);
                   const CanReport =
                     Boolean(ReviewID) &&
                     review.Status !== "REMOVED";

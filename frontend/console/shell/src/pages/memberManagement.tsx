@@ -39,12 +39,16 @@ export default function MemberManagementPage() {
   } = useMemberList();
 
   if (loading) {
-    return <div className="p-4">読み込み中...</div>;
+    return (
+      <div className="member-management__message">
+        読み込み中...
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="p-4 text-red-500">
+      <div className="member-management__message member-management__message--error">
         データ取得エラー: {error.message}
       </div>
     );
@@ -52,7 +56,6 @@ export default function MemberManagementPage() {
 
   const goDetail = (memberId: string) => {
     if (!memberId) {
-      console.warn("[MemberManagementPage] member id is empty");
       return;
     }
 
@@ -60,7 +63,7 @@ export default function MemberManagementPage() {
   };
 
   return (
-    <div className="p-0">
+    <div className="member-management">
       <List
         title="メンバー管理"
         headerCells={[
@@ -118,11 +121,11 @@ export default function MemberManagementPage() {
               key={m.id}
               role="button"
               tabIndex={0}
-              className="cursor-pointer"
+              className="member-management__row"
               onClick={() => goDetail(m.id)}
-              onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
+              onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
                   goDetail(m.id);
                 }
               }}
@@ -147,7 +150,7 @@ export default function MemberManagementPage() {
 
               <TableCell className="mm-permission-col">
                 {categories.length === 0 ? (
-                  <span className="text-sm text-[hsl(var(--muted-foreground))]">
+                  <span className="member-management__empty-permission">
                     なし
                   </span>
                 ) : (
@@ -173,7 +176,7 @@ export default function MemberManagementPage() {
         currentPage={page.number}
         totalPages={page.totalPages ?? 1}
         onPageChange={(p) => setPageNumber(p)}
-        className="mt-4"
+        className="member-management__pagination"
       />
     </div>
   );
