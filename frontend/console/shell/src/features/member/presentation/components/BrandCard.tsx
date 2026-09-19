@@ -1,4 +1,4 @@
-// frontend/console/member/src/presentation/components/BrandCard.tsx
+// frontend/console/shell/src/features/member/presentation/components/BrandCard.tsx
 
 import React from "react";
 
@@ -11,7 +11,7 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 
-import "../../../../shell/src/styles/member.css";
+import "../../../../styles/member.css";
 
 export function BrandCard({
   assignedBrands,

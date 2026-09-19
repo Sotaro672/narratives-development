@@ -1,4 +1,8 @@
-// frontend\console\shell\src\shared\ui\pagination.tsx
+// frontend/console/shell/src/shared/ui/pagination.tsx
+
+import { Button } from "./button";
+
+import "./pagination.css";
 
 export interface PaginationProps {
   /** 現在ページ (1始まり) */
@@ -17,7 +21,8 @@ export interface PaginationProps {
 /**
  * 共通ページネーションUI
  * - `totalPages <= 1` のときは描画しません（自動で非表示）
- * - スタイルは List.css と整合するクラス名（list-pagination / lp-btn / lp-page-info）を使用
+ * - ボタンは shared/ui/button を利用
+ * - ページネーション固有スタイルは pagination.css で管理
  */
 export default function Pagination({
   currentPage,
@@ -27,36 +32,40 @@ export default function Pagination({
   nextLabel = "次へ",
   className,
 }: PaginationProps) {
-  if (!totalPages || totalPages <= 1) return null;
+  if (!totalPages || totalPages <= 1) {
+    return null;
+  }
 
   const goPrev = () => onPageChange(Math.max(1, currentPage - 1));
   const goNext = () => onPageChange(Math.min(totalPages, currentPage + 1));
 
   return (
-    <div className={`list-pagination${className ? ` ${className}` : ""}`}>
-      <button
+    <div className={`pagination${className ? ` ${className}` : ""}`}>
+      <Button
         type="button"
-        className="lp-btn"
+        variant="outline"
+        size="sm"
         onClick={goPrev}
         disabled={currentPage === 1}
         aria-label="前のページへ"
       >
         {prevLabel}
-      </button>
+      </Button>
 
-      <span className="lp-page-info" aria-live="polite">
+      <span className="pagination__page-info" aria-live="polite">
         {currentPage} / {totalPages} ページ
       </span>
 
-      <button
+      <Button
         type="button"
-        className="lp-btn"
+        variant="outline"
+        size="sm"
         onClick={goNext}
         disabled={currentPage === totalPages}
         aria-label="次のページへ"
       >
         {nextLabel}
-      </button>
+      </Button>
     </div>
   );
 }

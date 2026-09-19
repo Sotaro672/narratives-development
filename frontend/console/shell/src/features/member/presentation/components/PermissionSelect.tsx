@@ -1,4 +1,4 @@
-// frontend/console/member/src/presentation/components/PermissionSelect.tsx
+// frontend/console/shell/src/features/member/presentation/components/PermissionSelect.tsx
 
 import * as React from "react";
 
@@ -23,7 +23,7 @@ import {
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
 
-import "../../../../shell/src/styles/permission.css";
+import "../../../../styles/permission.css";
 
 type PermissionCategoryView = {
   key: PermissionCategory;
@@ -58,20 +58,13 @@ export function PermissionSelect({
   setSelectedPermIds,
 }: PermissionSelectProps) {
   const selectedCategory = React.useMemo(
-    () =>
-      permissionCategories.find(
-        (item) => item.key === category,
-      ),
+    () => permissionCategories.find((item) => item.key === category),
     [permissionCategories, category],
   );
 
-  const currentPerms =
-    selectedCategory?.permissions ?? [];
+  const currentPerms = selectedCategory?.permissions ?? [];
 
-  const togglePerm = (
-    permId: string,
-    checked: boolean,
-  ) => {
+  const togglePerm = (permId: string, checked: boolean) => {
     setSelectedPermIds((prev) => {
       const next = new Set(prev);
 
@@ -88,14 +81,10 @@ export function PermissionSelect({
   const allSelectedInCategory =
     currentPerms.length > 0 &&
     currentPerms.every((permission) =>
-      selectedPermIds.has(
-        (permission as any).id,
-      ),
+      selectedPermIds.has((permission as any).id),
     );
 
-  const toggleAllInCategory = (
-    checked: boolean,
-  ) => {
+  const toggleAllInCategory = (checked: boolean) => {
     if (currentPerms.length === 0) {
       return;
     }
@@ -105,15 +94,11 @@ export function PermissionSelect({
 
       if (checked) {
         currentPerms.forEach((permission) =>
-          next.add(
-            (permission as any).id as string,
-          ),
+          next.add((permission as any).id as string),
         );
       } else {
         currentPerms.forEach((permission) =>
-          next.delete(
-            (permission as any).id as string,
-          ),
+          next.delete((permission as any).id as string),
         );
       }
 
@@ -123,19 +108,14 @@ export function PermissionSelect({
 
   const allPerms = React.useMemo(
     () =>
-      permissionCategories.flatMap(
-        (item) => item.permissions,
-      ) as (Permission & {
+      permissionCategories.flatMap((item) => item.permissions) as (Permission & {
         id: string;
       })[],
     [permissionCategories],
   );
 
   const selectedPerms = React.useMemo(
-    () =>
-      allPerms.filter((permission) =>
-        selectedPermIds.has(permission.id),
-      ),
+    () => allPerms.filter((permission) => selectedPermIds.has(permission.id)),
     [allPerms, selectedPermIds],
   );
 
@@ -172,8 +152,7 @@ export function PermissionSelect({
             ) : (
               <div className="popover__list">
                 {permissionCategoryList.map((item) => {
-                  const isSelected =
-                    category === item;
+                  const isSelected = category === item;
 
                   return (
                     <button
@@ -202,9 +181,7 @@ export function PermissionSelect({
             <Checkbox
               id="category-select-all"
               checked={allSelectedInCategory}
-              onCheckedChange={(value) =>
-                toggleAllInCategory(!!value)
-              }
+              onCheckedChange={(value) => toggleAllInCategory(!!value)}
             />
 
             <CardTitle className="permission-select__card-title">
@@ -220,10 +197,8 @@ export function PermissionSelect({
             ) : (
               <ul className="permission-select__list">
                 {currentPerms.map((perm: any) => {
-                  const checked =
-                    selectedPermIds.has(perm.id);
-                  const inputId =
-                    `perm_${perm.id}`;
+                  const checked = selectedPermIds.has(perm.id);
+                  const inputId = `perm_${perm.id}`;
 
                   return (
                     <li
@@ -234,10 +209,7 @@ export function PermissionSelect({
                         id={inputId}
                         checked={checked}
                         onCheckedChange={(value) =>
-                          togglePerm(
-                            perm.id,
-                            !!value,
-                          )
+                          togglePerm(perm.id, !!value)
                         }
                       />
 

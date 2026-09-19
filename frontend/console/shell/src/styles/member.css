@@ -2,6 +2,8 @@
 
 /* =========================================================
  * Member Management
+ * Table row interaction is handled by shared/ui/table.
+ * Pagination layout is handled by shared/ui/pagination.
  * ======================================================= */
 
 .member-management {
@@ -16,18 +18,10 @@
   color: hsl(var(--destructive));
 }
 
-.member-management__row {
-  cursor: pointer;
-}
-
 .member-management__empty-permission {
   color: hsl(var(--muted-foreground));
   font-size: 0.875rem;
   line-height: 1.25rem;
-}
-
-.member-management__pagination {
-  margin-top: 1rem;
 }
 
 .mm-brand-tag {
@@ -44,6 +38,7 @@
 
 /* =========================================================
  * Brand Select
+ * Popover の幅・候補レイアウトは shared/ui/popover を利用する。
  * ======================================================= */
 
 .brand-select__label {
@@ -55,16 +50,6 @@
   width: 100%;
   justify-content: flex-start;
   text-align: left;
-}
-
-.brand-select__popover {
-  width: 320px;
-}
-
-.brand-select__option {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .brand-select__badges {
@@ -182,6 +167,7 @@
 
 /* =========================================================
  * Member Create
+ * Label / Input は shared/ui/card を利用する。
  * ======================================================= */
 
 .member-create {
@@ -200,21 +186,4 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.member-create__label {
-  display: block;
-  margin-bottom: 4px;
-  color: #cbd5e1;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.member-create__input {
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid #475569;
-  border-radius: 4px;
-  background: #1e293b;
-  box-sizing: border-box;
 }

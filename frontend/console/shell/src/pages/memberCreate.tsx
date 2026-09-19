@@ -76,7 +76,6 @@ export default function MemberCreatePage() {
     const permissionNames = selectedPerms.map((p: any) => p.name as string);
     const brandIdsArray = Array.from(selectedBrandIds);
 
-    // handleSubmit に override として渡す
     handleSubmit(e, {
       permissions: permissionNames,
       assignedBrandIds: brandIdsArray,
@@ -116,7 +115,7 @@ export default function MemberCreatePage() {
 
           {/* ===== メールアドレス（必須） ===== */}
           <div>
-            <label className="member-create__label">
+            <label className="card__label">
               メールアドレス（必須）
             </label>
 
@@ -125,7 +124,7 @@ export default function MemberCreatePage() {
               required
               autoComplete="email"
               variant="default"
-              className="member-create__input"
+              className="card__input"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="taro@example.com"

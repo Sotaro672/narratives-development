@@ -121,7 +121,7 @@ export default function MemberManagementPage() {
               key={m.id}
               role="button"
               tabIndex={0}
-              className="member-management__row"
+              className="table__row--clickable"
               onClick={() => goDetail(m.id)}
               onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
                 if (event.key === "Enter" || event.key === " ") {
@@ -176,7 +176,6 @@ export default function MemberManagementPage() {
         currentPage={page.number}
         totalPages={page.totalPages ?? 1}
         onPageChange={(p) => setPageNumber(p)}
-        className="member-management__pagination"
       />
     </div>
   );

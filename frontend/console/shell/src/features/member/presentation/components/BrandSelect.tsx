@@ -1,4 +1,4 @@
-// frontend/console/member/src/presentation/components/BrandSelect.tsx
+// frontend/console/shell/src/features/member/presentation/components/BrandSelect.tsx
 
 import * as React from "react";
 
@@ -13,7 +13,7 @@ import {
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
 
-import "../../../../shell/src/styles/member.css";
+import "../../../../styles/member.css";
 
 type BrandSelectProps = {
   brandRows: BrandRow[];
@@ -50,7 +50,7 @@ export function BrandSelect({
           </Button>
         </PopoverTrigger>
 
-        <PopoverContent className="brand-select__popover popover__content--compact">
+        <PopoverContent className="popover__content--compact popover__content--medium">
           {brandRows.length === 0 ? (
             <div className="popover__empty">
               現在、選択可能なブランドがありません。
@@ -65,22 +65,16 @@ export function BrandSelect({
                   <label
                     key={brand.id}
                     htmlFor={inputId}
-                    className="popover__item brand-select__option"
+                    className="popover__item popover__item--control"
                   >
                     <Checkbox
                       id={inputId}
                       checked={checked}
                       onCheckedChange={(value) =>
-                        onToggleBrand(
-                          brand.id,
-                          !!value,
-                        )
+                        onToggleBrand(brand.id, !!value)
                       }
                     />
-
-                    <span>
-                      {brand.name}
-                    </span>
+                    <span>{brand.name}</span>
                   </label>
                 );
               })}
@@ -89,7 +83,6 @@ export function BrandSelect({
         </PopoverContent>
       </Popover>
 
-      {/* 選択済みブランドのバッジ表示 */}
       <div className="brand-select__badges">
         {selectedCount === 0 ? (
           <span className="brand-select__hint">
@@ -97,13 +90,9 @@ export function BrandSelect({
           </span>
         ) : (
           brandRows
-            .filter((brand) =>
-              selectedBrandIds.has(brand.id),
-            )
+            .filter((brand) => selectedBrandIds.has(brand.id))
             .map((brand) => (
-              <Badge
-                key={`brand_badge_${brand.id}`}
-              >
+              <Badge key={`brand_badge_${brand.id}`}>
                 {brand.name}
               </Badge>
             ))

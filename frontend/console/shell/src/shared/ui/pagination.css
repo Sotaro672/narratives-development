@@ -1,0 +1,19 @@
+/* frontend/console/shell/src/shared/ui/pagination.css */
+
+/* =========================================================
+ * Pagination
+ * ======================================================= */
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 1.25rem;
+}
+
+.pagination__page-info {
+  color: #666;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
