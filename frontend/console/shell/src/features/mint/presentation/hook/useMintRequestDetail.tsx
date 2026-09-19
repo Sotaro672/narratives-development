@@ -103,9 +103,7 @@ export function useMintRequestDetail() {
         setMintRequestDetail(detail);
         setMintRequestRow(row);
       } catch (error: unknown) {
-        if (!cancelled) {
-          setError(getErrorMessage(error, "検査結果の取得に失敗しました"));
-        }
+        if (!cancelled) setError(getErrorMessage(error, "検査結果の取得に失敗しました"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -135,11 +133,7 @@ export function useMintRequestDetail() {
         const result = await fetchMintProductBlueprintHTTP(productBlueprintId);
         if (!cancelled) setProductBlueprint(result);
       } catch (error: unknown) {
-        if (!cancelled) {
-          setProductBlueprintError(
-            getErrorMessage(error, "プロダクト基本情報の取得に失敗しました"),
-          );
-        }
+        if (!cancelled) setProductBlueprintError(getErrorMessage(error, "プロダクト基本情報の取得に失敗しました"));
       } finally {
         if (!cancelled) setProductBlueprintLoading(false);
       }
@@ -240,14 +234,7 @@ export function useMintRequestDetail() {
           !isMintCompleted &&
           !isInspectionCompleted,
       ),
-    [
-      inspectionBatch,
-      loading,
-      error,
-      isMinting,
-      isMintCompleted,
-      isInspectionCompleted,
-    ],
+    [inspectionBatch, loading, error, isMinting, isMintCompleted, isInspectionCompleted],
   );
 
   const showMintControls = isInspectionCompleted && !isMinting && !isMintCompleted;
@@ -271,6 +258,12 @@ export function useMintRequestDetail() {
     tokenBlueprintId: selectedTokenBlueprintId,
     enabled: showMintControls,
   });
+
+  const canSubmitMint =
+    !isMinting &&
+    !mintFundingEstimateLoading &&
+    Boolean(mintFundingEstimate) &&
+    mintFundingEstimate?.estimate.sufficient === true;
 
   const displayTokenBlueprintId = React.useMemo(
     () => selectedTokenBlueprintId || mintRequestedTokenBlueprintId,
@@ -301,22 +294,11 @@ export function useMintRequestDetail() {
       await reloadDetail();
       alert("検品を完了しました。");
     } catch (error: unknown) {
-      alert(
-        `検品完了に失敗しました: ${getErrorMessage(
-          error,
-          "不明なエラーが発生しました",
-        )}`,
-      );
+      alert(`検品完了に失敗しました: ${getErrorMessage(error, "不明なエラーが発生しました")}`);
     } finally {
       setIsCompletingInspection(false);
     }
-  }, [
-    inspectionBatch,
-    isCompletingInspection,
-    isMinting,
-    isMintCompleted,
-    reloadDetail,
-  ]);
+  }, [inspectionBatch, isCompletingInspection, isMinting, isMintCompleted, reloadDetail]);
 
   const handleMint = React.useCallback(async () => {
     if (!isInspectionCompleted || isMinting || isMintCompleted) return;
@@ -400,10 +382,7 @@ export function useMintRequestDetail() {
   }, []);
 
   const selectedTokenBlueprint = React.useMemo(
-    () =>
-      tokenBlueprintOptions.find(
-        (tokenBlueprint) => tokenBlueprint.id === selectedTokenBlueprintId,
-      ) ?? null,
+    () => tokenBlueprintOptions.find((tokenBlueprint) => tokenBlueprint.id === selectedTokenBlueprintId) ?? null,
     [tokenBlueprintOptions, selectedTokenBlueprintId],
   );
 
@@ -445,6 +424,7 @@ export function useMintRequestDetail() {
     onBack,
     handleMint,
     isMinting,
+    canSubmitMint,
     hasMint,
     isMintCompleted,
     isInspectionCompleted,
