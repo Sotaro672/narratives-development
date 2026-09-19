@@ -12,6 +12,7 @@ import List, {
   SortableTableHeader,
 } from "../layout/List/List";
 import Empty from "../shared/ui/empty";
+import { ErrorMessage } from "../shared/ui/error";
 import {
   TableCell,
   TableRow,
@@ -153,14 +154,9 @@ export default function InquiryManagementPage() {
         ) : errorMessage ? (
           <TableRow>
             <TableCell colSpan={headers.length}>
-              <Text
-                as="div"
-                tone="destructive"
-                wrap="pre-wrap"
-                role="alert"
-              >
+              <ErrorMessage>
                 {errorMessage}
-              </Text>
+              </ErrorMessage>
             </TableCell>
           </TableRow>
         ) : rowElements.length > 0 ? (

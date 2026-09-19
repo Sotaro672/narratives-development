@@ -13,6 +13,7 @@ import {
   CardLabel,
   CardTitle,
 } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
@@ -94,9 +95,9 @@ export default function BrandDetail() {
             読み込み中...
           </div>
         ) : error && !isEditing ? (
-          <div className="brand-detail__state brand-detail__state--padded brand-detail__state--error brand-detail__state--pre-wrap">
+          <ErrorMessage className="brand-detail__state--padded">
             {error.message}
-          </div>
+          </ErrorMessage>
         ) : (
           <div className="brand-hero">
             <Media
@@ -156,9 +157,13 @@ export default function BrandDetail() {
                 </div>
 
                 {brandBackgroundImageError && (
-                  <p className="brand-detail__media-error">
+                  <ErrorMessage
+                    as="p"
+                    size="xs"
+                    className="brand-detail__media-error"
+                  >
                     {brandBackgroundImageError}
-                  </p>
+                  </ErrorMessage>
                 )}
               </>
             )}
@@ -229,9 +234,13 @@ export default function BrandDetail() {
                     </div>
 
                     {brandIconError && (
-                      <p className="brand-detail__media-error">
+                      <ErrorMessage
+                        as="p"
+                        size="xs"
+                        className="brand-detail__media-error"
+                      >
                         {brandIconError}
-                      </p>
+                      </ErrorMessage>
                     )}
                   </>
                 )}
@@ -272,7 +281,9 @@ export default function BrandDetail() {
           ) : (
             <>
               {error && isEditing && (
-                <div className="brand-detail__form-error">{error.message}</div>
+                <ErrorMessage className="brand-detail__form-error">
+                  {error.message}
+                </ErrorMessage>
               )}
 
               <CardLabel htmlFor="brand-name">ブランド名</CardLabel>

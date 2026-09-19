@@ -2,6 +2,7 @@
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import Text from "../shared/ui/text";
 
 import MintBrandSelectorCard from "../features/mint/presentation/components/mintBrandSelectorCard";
@@ -66,9 +67,9 @@ export default function MintRequestDetail() {
         ) : productBlueprintError ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
-              <Text tone="destructive" role="alert">
+              <ErrorMessage>
                 {productBlueprintError}
-              </Text>
+              </ErrorMessage>
             </CardContent>
           </Card>
         ) : productBlueprintCardView ? (
@@ -76,7 +77,9 @@ export default function MintRequestDetail() {
             mode="view"
             productName={productBlueprintCardView.productName}
             brandName={productBlueprintCardView.brandName}
-            productBlueprintCategoryPath={productBlueprintCardView.productBlueprintCategoryPath ?? null}
+            productBlueprintCategoryPath={
+              productBlueprintCardView.productBlueprintCategoryPath ?? null
+            }
           />
         ) : (
           <Card className="mint-request-card">
@@ -95,14 +98,15 @@ export default function MintRequestDetail() {
         ) : error ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
-              <Text tone="destructive" role="alert">
+              <ErrorMessage>
                 {error}
-              </Text>
+              </ErrorMessage>
             </CardContent>
           </Card>
         ) : (
           <>
             <InspectionResultCard data={inspectionCardData} />
+
             {showCompleteInspectionButton && (
               <MintInspectionCompleteCard
                 completing={isCompletingInspection}
@@ -113,7 +117,9 @@ export default function MintRequestDetail() {
           </>
         )}
 
-        {tokenBlueprintCardVm && <TokenBlueprintCard vm={tokenBlueprintCardVm} />}
+        {tokenBlueprintCardVm && (
+          <TokenBlueprintCard vm={tokenBlueprintCardVm} />
+        )}
 
         {showMintButton && (
           <MintFundingEstimateCard

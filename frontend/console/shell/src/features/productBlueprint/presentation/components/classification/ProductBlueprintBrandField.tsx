@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { Button } from "../../../../../shared/ui/button";
 import { CardField } from "../../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../../shared/ui/error";
 import { Input } from "../../../../../shared/ui/input";
 import { Label } from "../../../../../shared/ui/label";
 import {
@@ -11,6 +12,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
+
+import "../../../../../styles/productBlueprintReview.css";
 
 export type BrandOption = {
   id: string;
@@ -51,13 +54,13 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
       <Label>ブランド</Label>
 
       {isEdit && brandOptions && onChangeBrandId ? (
-        <div className="space-y-1">
+        <div className="pbc-brand-field">
           <Popover>
             <PopoverTrigger>
               <Button
                 type="button"
                 variant="outline"
-                className="w-full justify-between pbc-select-trigger"
+                className="pbc-select-trigger pbc-brand-field__trigger"
                 aria-label="ブランドを選択"
               >
                 {selectedBrandName || "ブランドを選択してください。"}
@@ -66,7 +69,9 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
 
             <PopoverContent align="start" className="popover__content--compact">
               {brandOptions.length === 0 ? (
-                <div className="popover__empty">ブランド候補がありません。</div>
+                <div className="popover__empty">
+                  ブランド候補がありません。
+                </div>
               ) : (
                 <div className="popover__list">
                   {brandOptions.map((brand) => {
@@ -89,11 +94,19 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
           </Popover>
 
           {brandLoading && (
-            <p className="text-xs text-slate-400">ブランドを取得中…</p>
+            <p className="pbc-brand-field__status">
+              ブランドを取得中…
+            </p>
           )}
 
           {brandError && (
-            <p className="text-xs text-red-500">ブランド一覧の取得に失敗しました。</p>
+            <ErrorMessage
+              as="p"
+              size="xs"
+              className="pbc-brand-field__error"
+            >
+              ブランド一覧の取得に失敗しました。
+            </ErrorMessage>
           )}
         </div>
       ) : (

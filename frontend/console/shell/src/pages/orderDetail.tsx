@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "../shared/ui/card";
 import Empty from "../shared/ui/empty";
+import { ErrorMessage } from "../shared/ui/error";
 import Text from "../shared/ui/text";
 
 import "../styles/orderDetail.css";
@@ -55,15 +56,9 @@ export default function OrderDetail() {
 
       <CardContent>
         {dispatchError ? (
-          <Text
-            as="div"
-            tone="destructive"
-            wrap="pre-wrap"
-            className="order-detail__dispatch-error"
-            role="alert"
-          >
+          <ErrorMessage className="order-detail__dispatch-error">
             発送処理に失敗しました: {dispatchError}
-          </Text>
+          </ErrorMessage>
         ) : null}
 
         {loading ? (
@@ -71,15 +66,9 @@ export default function OrderDetail() {
             読み込み中...
           </Text>
         ) : error ? (
-          <Text
-            as="div"
-            tone="destructive"
-            wrap="pre-wrap"
-            className="order-detail__message"
-            role="alert"
-          >
+          <ErrorMessage className="order-detail__message">
             {error}
-          </Text>
+          </ErrorMessage>
         ) : !order ? (
           <Empty description="データがありません。" />
         ) : (

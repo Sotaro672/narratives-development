@@ -8,6 +8,7 @@ import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
+import { ErrorMessage } from "../shared/ui/error";
 import Pagination from "../shared/ui/pagination";
 import { TableCell, TableRow } from "../shared/ui/table";
 
@@ -48,9 +49,9 @@ export default function MemberManagementPage() {
 
   if (error) {
     return (
-      <div className="member-management__message member-management__message--error">
+      <ErrorMessage className="member-management__message">
         データ取得エラー: {error.message}
-      </div>
+      </ErrorMessage>
     );
   }
 

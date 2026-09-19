@@ -2,10 +2,13 @@
 
 import { Button } from "../../../../shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../shared/ui/error";
 
 import type { InquiryImageFile } from "../../../../shared/types/inquiry";
 
 import InquiryImageGrid from "./inquiryImageGrid";
+
+import "../../../../styles/inquiry-page.css";
 
 export type InquiryContentCardProps = {
   content?: string | null;
@@ -72,7 +75,9 @@ export default function InquiryContentCard({
       <CardContent>
         <div className="inq-detail">
           {errorMessage ? (
-            <div className="inq__empty">{errorMessage}</div>
+            <ErrorMessage>
+              {errorMessage}
+            </ErrorMessage>
           ) : null}
 
           <div className="inq-detail__body">
@@ -90,16 +95,16 @@ export default function InquiryContentCard({
             <div className="inq-detail__body">
               <div className="inq-detail__label">返品の返金内容</div>
 
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-2">
+              <div className="inq-return-refund">
+                <div className="inq-return-refund__field">
                   <label
                     htmlFor="merchandise-refund-amount"
-                    className="text-sm font-medium"
+                    className="inq-return-refund__label"
                   >
                     返金額（税込）
                   </label>
 
-                  <div className="flex items-center gap-2">
+                  <div className="inq-return-refund__amount-row">
                     <input
                       id="merchandise-refund-amount"
                       type="number"
@@ -119,9 +124,11 @@ export default function InquiryContentCard({
                       }
                       disabled={inputDisabled}
                       aria-label="商品返金額"
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      className="inq-return-refund__amount-input"
                     />
-                    <span className="shrink-0 text-sm">円</span>
+                    <span className="inq-return-refund__currency">
+                      円
+                    </span>
                   </div>
 
                   <div className="inq-detail__text">
@@ -134,7 +141,7 @@ export default function InquiryContentCard({
                   </div>
                 </div>
 
-                <label className="flex items-start gap-3">
+                <label className="inq-return-refund__option">
                   <input
                     type="checkbox"
                     checked={refundOutboundShipping}
@@ -144,11 +151,11 @@ export default function InquiryContentCard({
                       )
                     }
                     disabled={inputDisabled}
-                    className="mt-1"
+                    className="inq-return-refund__checkbox"
                   />
 
-                  <span className="flex flex-col gap-1">
-                    <span className="text-sm font-medium">
+                  <span className="inq-return-refund__option-content">
+                    <span className="inq-return-refund__option-title">
                       購入時の配送料も返金する
                     </span>
                     <span className="inq-detail__text">
@@ -157,7 +164,7 @@ export default function InquiryContentCard({
                   </span>
                 </label>
 
-                <label className="flex items-start gap-3">
+                <label className="inq-return-refund__option">
                   <input
                     type="checkbox"
                     checked={coverReturnShipping}
@@ -167,11 +174,11 @@ export default function InquiryContentCard({
                       )
                     }
                     disabled={inputDisabled}
-                    className="mt-1"
+                    className="inq-return-refund__checkbox"
                   />
 
-                  <span className="flex flex-col gap-1">
-                    <span className="text-sm font-medium">
+                  <span className="inq-return-refund__option-content">
+                    <span className="inq-return-refund__option-title">
                       返品時の配送料をブランド側が負担する
                     </span>
                     <span className="inq-detail__text">
@@ -181,9 +188,9 @@ export default function InquiryContentCard({
                 </label>
 
                 {returnRefundErrorMessage ? (
-                  <div className="inq__empty">
+                  <ErrorMessage>
                     {returnRefundErrorMessage}
-                  </div>
+                  </ErrorMessage>
                 ) : null}
 
                 {returnRefundSelectionLocked ? (

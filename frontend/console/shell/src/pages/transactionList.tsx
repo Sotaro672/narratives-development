@@ -5,6 +5,7 @@ import React from "react";
 import { useTransactionList } from "../features/transaction/presentation/hook/useTransactionList";
 import List from "../layout/List/List";
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
+import { ErrorMessage } from "../shared/ui/error";
 import { TableCell, TableRow } from "../shared/ui/table";
 import Text from "../shared/ui/text";
 
@@ -51,9 +52,9 @@ export default function TransactionListPage() {
   if (error) {
     return (
       <div className="p-4">
-        <Text tone="destructive">
+        <ErrorMessage>
           データ取得エラー: {error.message}
-        </Text>
+        </ErrorMessage>
       </div>
     );
   }

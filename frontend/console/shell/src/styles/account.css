@@ -1,9 +1,9 @@
-/* frontend\console\shell\src\styles\account.css */
+/* frontend/console/shell/src/styles/account.css */
 
 .account-empty {
   padding: 2rem;
-  text-align: center;
   color: #6b7280;
+  text-align: center;
 }
 
 .account-connect-page {
@@ -45,10 +45,6 @@
 
 .account-connect-error {
   margin-bottom: 1.5rem;
-  padding: 1rem;
-  border: 1px solid #dc2626;
-  border-radius: 0.5rem;
-  color: #b91c1c;
 }
 
 .account-connect-field {
@@ -63,9 +59,9 @@
 
 .account-connect-select,
 .account-connect-input {
+  box-sizing: border-box;
   width: 100%;
   min-height: 44px;
-  box-sizing: border-box;
   padding: 0.5rem 0.75rem;
   border: 1px solid #d1d5db;
   border-radius: 0.5rem;
@@ -74,9 +70,9 @@
 
 .account-connect-select:disabled,
 .account-connect-input:disabled {
-  cursor: not-allowed;
   background-color: #f3f4f6;
   color: #6b7280;
+  cursor: not-allowed;
 }
 
 .account-connect-summary {

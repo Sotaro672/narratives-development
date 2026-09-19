@@ -7,6 +7,7 @@ import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/
 import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/popover";
 import {
   Table,
@@ -129,9 +130,12 @@ export default function ProductionCreate() {
                   )}
 
                   {brandError && (
-                    <div className="pb-select__empty pb-select__empty--error">
+                    <ErrorMessage
+                      size="xs"
+                      className="pb-select__empty"
+                    >
                       ブランド一覧の取得に失敗しました。
-                    </div>
+                    </ErrorMessage>
                   )}
                 </div>
               </PopoverContent>

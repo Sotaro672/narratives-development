@@ -4,6 +4,7 @@ export * from "./badge";
 export * from "./button";
 export * from "./card";
 export * from "./checkbox";
+export * from "./error";
 export * from "./filter-able-table-header";
 export * from "./icon";
 export * from "./input";

@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../shared/ui/error";
 import { Label } from "../../../../shared/ui/label";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
@@ -52,13 +53,9 @@ export default function InquiryCreateForm({
       <CardContent>
         <div className="inquiry-create-form">
           {errorMessage ? (
-            <Text
-              as="div"
-              tone="destructive"
-              className="inquiry-create-form__error"
-            >
+            <ErrorMessage className="inquiry-create-form__error">
               {errorMessage}
-            </Text>
+            </ErrorMessage>
           ) : null}
 
           <div className="inquiry-create-form__message">
@@ -93,7 +90,10 @@ export default function InquiryCreateForm({
 
           <div className="inquiry-create-form__attachments">
             <div className="inquiry-create-form__attachment-header">
-              <Text weight="semibold" className="inquiry-create-form__attachment-title">
+              <Text
+                weight="semibold"
+                className="inquiry-create-form__attachment-title"
+              >
                 添付ファイル
               </Text>
 
@@ -116,7 +116,10 @@ export default function InquiryCreateForm({
                 onChange={onChangeFiles}
               />
 
-              <Text weight="semibold" className="inquiry-create-form__file-picker-title">
+              <Text
+                weight="semibold"
+                className="inquiry-create-form__file-picker-title"
+              >
                 画像を選択
               </Text>
 

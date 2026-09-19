@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { ErrorMessage } from "../../../../shared/ui/error";
 import {
   Modal,
   ModalButton,
@@ -76,7 +77,9 @@ export default function ReplyModal({
       }
     >
       {errorMessage ? (
-        <div className="inq__empty">{errorMessage}</div>
+        <ErrorMessage>
+          {errorMessage}
+        </ErrorMessage>
       ) : null}
 
       <label

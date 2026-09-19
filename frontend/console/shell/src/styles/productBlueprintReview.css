@@ -1,42 +1,66 @@
 /* frontend/console/shell/src/styles/productBlueprintReview.css */
 
-/* Review Management */
+/* =========================================================
+ * Product Blueprint Brand Field
+ * ======================================================= */
+
+.pbc-brand-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.pbc-brand-field__trigger {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.pbc-brand-field__status {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.pbc-brand-field__error {
+  margin: 0;
+}
+
+/* =========================================================
+ * Review Management
+ * ======================================================= */
 
 .pbrm-row {
   cursor: pointer;
 }
 
-/* Review Detail */
-
-/* wrapper spacing like tokenBlueprintReview */
+/* =========================================================
+ * Review Detail
+ * ======================================================= */
 
 .pbrd-reviewcard-wrapper {
   margin-top: 16px;
   padding: 10px;
 }
 
-/* grid */
-
 .pbrd-grid {
   display: grid;
   gap: 10px;
 }
 
-/* toolbar */
-
 .pbrd-toolbar {
   display: flex;
-  gap: 10px;
   align-items: flex-start;
   justify-content: space-between;
+  gap: 10px;
   margin-bottom: 12px;
 }
 
 .pbrd-toolbar-right {
   display: flex;
-  gap: 8px;
-  align-items: center;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .pbrd-status-select {
@@ -47,13 +71,9 @@
   color: hsl(var(--foreground));
 }
 
-/* error */
-
 .pbrd-error {
   margin-bottom: 0.75rem;
 }
-
-/* card */
 
 .pbrd-review-item-card {
   padding: 10px;
@@ -63,13 +83,11 @@
   box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
-/* review item parts */
-
 .pbrd-author-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
 }
 
 .pbrd-author-icon {
@@ -80,8 +98,6 @@
   object-fit: cover;
 }
 
-/* body */
-
 .pbrd-body {
   margin-top: 6px;
 }
@@ -89,8 +105,6 @@
 .pbrd-datetime {
   margin-top: 6px;
 }
-
-/* report */
 
 .pbrd-report-actions {
   display: flex;
@@ -107,8 +121,6 @@
   background-color: #fef2f2;
   color: #b91c1c;
 }
-
-/* log */
 
 .pbrd-log-section {
   margin-top: 1rem;

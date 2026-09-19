@@ -1,8 +1,8 @@
 // frontend/console/shell/src/features/report/presentation/components/ReportModal.tsx
 
 import { Button } from "../../../../shared/ui/button";
+import { ErrorMessage } from "../../../../shared/ui/error";
 import Modal from "../../../../shared/ui/modal";
-import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 import type {
   ReportReason,
@@ -204,14 +204,9 @@ export default function ReportModal({
           ) : null}
 
           {errorMessage ? (
-            <Text
-              as="p"
-              tone="destructive"
-              className="report-modal__error"
-              role="alert"
-            >
+            <ErrorMessage as="p" variant="panel">
               {errorMessage}
-            </Text>
+            </ErrorMessage>
           ) : null}
         </div>
       )}

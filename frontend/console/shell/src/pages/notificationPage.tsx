@@ -11,6 +11,7 @@ import {
 } from "../features/notification/presentation/model/reportDecisionNotification";
 import List from "../layout/List/List";
 import type { News } from "../shared/types/news";
+import { ErrorMessage } from "../shared/ui/error";
 import { TableCell, TableRow } from "../shared/ui/table";
 import Text from "../shared/ui/text";
 
@@ -127,16 +128,14 @@ export default function NotificationPage() {
 
   return (
     <div className="notification-page">
-      {error ? (
-        <Text
-          as="div"
-          tone="destructive"
+      {error && (
+        <ErrorMessage
+          variant="panel"
           className="notification-page__error"
-          role="alert"
         >
           {error}
-        </Text>
-      ) : null}
+        </ErrorMessage>
+      )}
 
       <List
         title="通知"

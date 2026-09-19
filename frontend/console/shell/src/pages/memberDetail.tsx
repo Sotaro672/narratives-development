@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import Text from "../shared/ui/text";
 
 import "../styles/member.css";
@@ -68,14 +69,9 @@ export default function MemberDetail() {
   if (!memberId) {
     return (
       <PageStyle layout="single" title="メンバー詳細" onBack={handleBack}>
-        <Text
-          as="div"
-          tone="destructive"
-          className="member-detail__message"
-          role="alert"
-        >
+        <ErrorMessage className="member-detail__message">
           メンバーIDが指定されていません。
-        </Text>
+        </ErrorMessage>
       </PageStyle>
     );
   }

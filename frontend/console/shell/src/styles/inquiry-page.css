@@ -68,15 +68,88 @@
   width: fit-content;
   align-items: center;
   justify-content: center;
+  padding: 4px 10px;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
   border-radius: 999px;
   background: hsl(var(--muted, 210 40% 96.1%));
-  padding: 4px 10px;
   color: hsl(var(--foreground, 222.2 84% 4.9%));
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.4;
   white-space: nowrap;
+}
+
+/* =========================================================
+   Return refund
+========================================================= */
+
+.inq-return-refund {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.inq-return-refund__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.inq-return-refund__label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.inq-return-refund__amount-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.inq-return-refund__amount-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.inq-return-refund__amount-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.inq-return-refund__currency {
+  flex-shrink: 0;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.inq-return-refund__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.inq-return-refund__checkbox {
+  margin-top: 0.25rem;
+}
+
+.inq-return-refund__option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.inq-return-refund__option-title {
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
 }
 
 /* =========================================================
@@ -88,10 +161,10 @@
   height: 28px;
   align-items: center;
   justify-content: center;
+  padding: 0 10px;
   border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
   border-radius: 6px 6px 0 0;
   background: hsl(var(--muted, 210 40% 96.1%));
-  padding: 0 10px;
   color: hsl(var(--foreground, 222.2 84% 4.9%));
   font-size: 0.78rem;
   font-weight: 700;
@@ -242,8 +315,8 @@
   width: fit-content;
   max-width: 100%;
   margin: 0;
-  border-radius: 18px;
   padding: 10px 14px;
+  border-radius: 18px;
   font-size: 0.92rem;
   font-weight: 500;
   line-height: 1.65;
@@ -365,10 +438,10 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  padding: 16px;
   border: 1px dashed hsl(var(--border, 214.3 31.8% 91.4%));
   border-radius: 14px;
   background: hsl(var(--muted, 210 40% 96.1%));
-  padding: 16px;
   text-align: center;
   cursor: pointer;
   transition:

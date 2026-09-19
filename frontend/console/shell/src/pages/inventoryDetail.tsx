@@ -11,6 +11,7 @@ import InventoryListCard from "../features/inventory/presentation/components/Inv
 import TransportOptionCard from "../features/list/presentation/components/transportOptionCard";
 import TokenBlueprintCard, { type TokenBlueprintCardViewModel } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
+import { ErrorMessage } from "../shared/ui/error";
 
 import "../styles/inventory.css";
 
@@ -155,9 +156,9 @@ export default function InventoryDetail() {
         ) : null}
 
         {error ? (
-          <div className="inventory-detail__status inventory-detail__status--error">
+          <ErrorMessage>
             読み込みに失敗しました: {error}
-          </div>
+          </ErrorMessage>
         ) : null}
 
         <InventoryCard rows={rows} />
@@ -175,9 +176,9 @@ export default function InventoryDetail() {
         />
 
         {shippingAddressError ? (
-          <div className="inventory-detail__error">
+          <ErrorMessage>
             保存に失敗しました: {shippingAddressError}
-          </div>
+          </ErrorMessage>
         ) : null}
 
         <TransportOptionCard
@@ -192,9 +193,9 @@ export default function InventoryDetail() {
         />
 
         {transportationError ? (
-          <div className="inventory-detail__error">
+          <ErrorMessage>
             配送方法の保存に失敗しました: {transportationError}
-          </div>
+          </ErrorMessage>
         ) : null}
 
         {hasConfirmedShippingAddress && hasConfirmedTransportation ? (

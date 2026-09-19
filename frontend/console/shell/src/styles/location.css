@@ -1,5 +1,9 @@
 /* frontend/console/shell/src/styles/location.css */
 
+/* =========================================================
+ * Location Detail
+ * ======================================================= */
+
 .location-detail__main {
   display: flex;
   flex-direction: column;
@@ -17,26 +21,16 @@
   text-align: center;
 }
 
-.location-detail__error {
-  padding: 0.75rem 1rem;
-  border: 1px solid #fecaca;
-  border-radius: 0.5rem;
-  background-color: #fef2f2;
-}
-
-.location-detail__error-message {
-  margin: 0;
-  color: #dc2626;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
 .location-detail__status {
   margin: 0;
   color: #64748b;
   font-size: 0.875rem;
   line-height: 1.25rem;
 }
+
+/* =========================================================
+ * Location Create
+ * ======================================================= */
 
 .location-create {
   width: 100%;
@@ -47,17 +41,6 @@
 
 .location-create__error {
   margin-top: 1.25rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid #fecaca;
-  border-radius: 0.5rem;
-  background-color: #fef2f2;
-}
-
-.location-create__error-message {
-  margin: 0;
-  color: #dc2626;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
 }
 
 .location-create__status {
@@ -66,6 +49,31 @@
   font-size: 0.875rem;
   line-height: 1.25rem;
 }
+
+/* =========================================================
+ * Location Form Fields
+ * ======================================================= */
+
+.location-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.location-form-fields__error {
+  margin-top: 0.25rem;
+}
+
+.location-form-fields__status {
+  margin: 0.25rem 0 0;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+/* =========================================================
+ * Location Management
+ * ======================================================= */
 
 .location-management__row {
   cursor: pointer;

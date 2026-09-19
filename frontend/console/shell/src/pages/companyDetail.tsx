@@ -4,6 +4,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import CompanyNameCard from "../features/company/presentation/components/CompanyNameCard";
 import { useCompanyDetail } from "../features/company/presentation/hook/useCompanyDetail";
+import { ErrorMessage } from "../shared/ui/error";
 
 export default function CompanyDetail() {
   const {
@@ -33,7 +34,11 @@ export default function CompanyDetail() {
         disabled={loading || saving}
       />
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && (
+        <ErrorMessage>
+          {error}
+        </ErrorMessage>
+      )}
     </div>
   );
 

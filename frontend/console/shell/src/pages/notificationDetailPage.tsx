@@ -21,6 +21,7 @@ import {
 } from "../features/notification/presentation/model/reportDecisionNotification";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import type { News } from "../shared/types/news";
+import { ErrorMessage } from "../shared/ui/error";
 import Text from "../shared/ui/text";
 
 import "../styles/notificationDetail.css";
@@ -157,9 +158,9 @@ export default function NotificationDetailPage({
     return (
       <PageStyle layout="single" title="通知詳細" onBack={handleBack}>
         <div className="notification-detail">
-          <Text as="p" tone="destructive" role="alert">
+          <ErrorMessage as="p">
             {error}
-          </Text>
+          </ErrorMessage>
         </div>
       </PageStyle>
     );

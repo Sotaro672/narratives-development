@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../shared/ui/error";
 import {
   Table,
   TableBody,
@@ -49,15 +50,9 @@ export default function OrderBuyerCard({
               読み込み中...
             </Text>
           ) : error ? (
-            <Text
-              as="div"
-              tone="destructive"
-              wrap="pre-wrap"
-              className="order-detail__message"
-              role="alert"
-            >
+            <ErrorMessage className="order-detail__message">
               {error}
-            </Text>
+            </ErrorMessage>
           ) : !orderExists ? (
             <Text
               as="div"

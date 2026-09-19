@@ -11,6 +11,7 @@ import {
   CardLabel,
   CardTitle,
 } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Media } from "../shared/ui/media";
@@ -131,9 +132,13 @@ export default function BrandCreate() {
             </div>
 
             {brandBackgroundImageError && (
-              <p className="brand-create__error brand-create__error--media">
+              <ErrorMessage
+                as="p"
+                size="xs"
+                className="brand-create__error--media"
+              >
                 {brandBackgroundImageError}
-              </p>
+              </ErrorMessage>
             )}
 
             <div className="brand-hero__header">
@@ -198,9 +203,13 @@ export default function BrandCreate() {
                 </div>
 
                 {brandIconError && (
-                  <p className="brand-create__error brand-create__error--media">
+                  <ErrorMessage
+                    as="p"
+                    size="xs"
+                    className="brand-create__error--media"
+                  >
                     {brandIconError}
-                  </p>
+                  </ErrorMessage>
                 )}
               </div>
 
@@ -233,9 +242,13 @@ export default function BrandCreate() {
           />
 
           {nameError && (
-            <p className="brand-create__error brand-create__error--field">
+            <ErrorMessage
+              as="p"
+              size="xs"
+              className="brand-create__error--field"
+            >
               {nameError}
-            </p>
+            </ErrorMessage>
           )}
 
           <CardLabel htmlFor="description">説明</CardLabel>
@@ -275,7 +288,9 @@ export default function BrandCreate() {
       />
 
       {managerIdError && (
-        <p className="brand-create__error">{managerIdError}</p>
+        <ErrorMessage as="p" size="xs">
+          {managerIdError}
+        </ErrorMessage>
       )}
 
       <AccountSelectCard

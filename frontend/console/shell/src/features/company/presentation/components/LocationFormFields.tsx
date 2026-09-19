@@ -4,6 +4,9 @@ import {
   CardInput,
   CardLabel,
 } from "../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../shared/ui/error";
+
+import "../../../../styles/location.css";
 
 export type LocationFormValue = {
   name: string;
@@ -27,7 +30,6 @@ export type LocationFormFieldsProps = {
   errors: LocationFormErrors;
   disabled?: boolean;
   addressSearching?: boolean;
-
   onChangeName: (value: string) => void;
   onChangeZipCode: (value: string) => void;
   onChangeState: (value: string) => void;
@@ -49,7 +51,7 @@ export default function LocationFormFields({
   onChangeStreet2,
 }: LocationFormFieldsProps) {
   return (
-    <div className="space-y-5">
+    <div className="location-form-fields">
       <div>
         <CardLabel htmlFor="location-name">
           保管場所名（必須）
@@ -66,9 +68,9 @@ export default function LocationFormFields({
         />
 
         {errors.name && (
-          <p className="mt-1 text-xs text-red-500">
+          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
             {errors.name}
-          </p>
+          </ErrorMessage>
         )}
       </div>
 
@@ -91,7 +93,7 @@ export default function LocationFormFields({
 
         {addressSearching && (
           <p
-            className="mt-1 text-xs text-slate-500"
+            className="location-form-fields__status"
             role="status"
             aria-live="polite"
           >
@@ -100,9 +102,9 @@ export default function LocationFormFields({
         )}
 
         {!addressSearching && errors.zipCode && (
-          <p className="mt-1 text-xs text-red-500">
+          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
             {errors.zipCode}
-          </p>
+          </ErrorMessage>
         )}
       </div>
 
@@ -123,9 +125,9 @@ export default function LocationFormFields({
         />
 
         {errors.state && (
-          <p className="mt-1 text-xs text-red-500">
+          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
             {errors.state}
-          </p>
+          </ErrorMessage>
         )}
       </div>
 
@@ -146,9 +148,9 @@ export default function LocationFormFields({
         />
 
         {errors.city && (
-          <p className="mt-1 text-xs text-red-500">
+          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
             {errors.city}
-          </p>
+          </ErrorMessage>
         )}
       </div>
 
@@ -169,9 +171,9 @@ export default function LocationFormFields({
         />
 
         {errors.street && (
-          <p className="mt-1 text-xs text-red-500">
+          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
             {errors.street}
-          </p>
+          </ErrorMessage>
         )}
       </div>
 

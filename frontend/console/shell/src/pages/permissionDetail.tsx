@@ -1,3 +1,5 @@
+// frontend/console/shell/src/pages/permissionDetail.tsx
+
 import PageStyle from "../layout/PageStyle/PageStyle";
 import {
   Card,
@@ -7,8 +9,11 @@ import {
   CardLabel,
   CardReadonly,
 } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 
 import { usePermissionDetail } from "../features/permission/presentation/hook/usePermissionDetail";
+
+import "../styles/permission.css";
 
 export default function PermissionDetail() {
   const {
@@ -21,12 +26,8 @@ export default function PermissionDetail() {
 
   if (loading) {
     return (
-      <PageStyle
-        layout="single"
-        title={title}
-        onBack={handleBack}
-      >
-        <div className="text-sm text-[hsl(var(--muted-foreground))]">
+      <PageStyle layout="single" title={title} onBack={handleBack}>
+        <div className="permission-detail__message">
           読み込み中...
         </div>
       </PageStyle>
@@ -35,26 +36,18 @@ export default function PermissionDetail() {
 
   if (error) {
     return (
-      <PageStyle
-        layout="single"
-        title={title}
-        onBack={handleBack}
-      >
-        <div className="text-sm text-red-600">
+      <PageStyle layout="single" title={title} onBack={handleBack}>
+        <ErrorMessage>
           {error}
-        </div>
+        </ErrorMessage>
       </PageStyle>
     );
   }
 
   if (!permission) {
     return (
-      <PageStyle
-        layout="single"
-        title={title}
-        onBack={handleBack}
-      >
-        <div className="text-sm text-[hsl(var(--muted-foreground))]">
+      <PageStyle layout="single" title={title} onBack={handleBack}>
+        <div className="permission-detail__message">
           権限情報が見つかりません。
         </div>
       </PageStyle>
@@ -62,12 +55,8 @@ export default function PermissionDetail() {
   }
 
   return (
-    <PageStyle
-      layout="single"
-      title={title}
-      onBack={handleBack}
-    >
-      <div className="space-y-4 max-w-3xl">
+    <PageStyle layout="single" title={title} onBack={handleBack}>
+      <div className="permission-detail">
         <Card>
           <CardHeader>
             <CardTitle>基本情報</CardTitle>
@@ -84,7 +73,7 @@ export default function PermissionDetail() {
             <CardReadonly>{permission.category}</CardReadonly>
 
             <CardLabel>説明</CardLabel>
-            <div className="mt-1 rounded-lg border px-3 py-2 text-sm bg-[hsl(var(--muted-bg))] text-[hsl(var(--muted-foreground))]">
+            <div className="permission-detail__description">
               {permission.description}
             </div>
           </CardContent>

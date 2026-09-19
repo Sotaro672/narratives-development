@@ -186,13 +186,6 @@
   box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.3);
 }
 
-/* エラー */
-
-.auth-error {
-  color: #d32f2f;
-  font-size: 0.8rem;
-}
-
 /* ボタン配置 */
 
 .auth-actions {

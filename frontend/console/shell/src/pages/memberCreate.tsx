@@ -7,8 +7,8 @@ import { BrandSelect } from "../features/member/presentation/components/BrandSel
 import { PermissionSelect } from "../features/member/presentation/components/PermissionSelect";
 import { useMemberCreate } from "../features/member/presentation/hooks/useMemberCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
+import { ErrorMessage } from "../shared/ui/error";
 import { Input } from "../shared/ui/input";
-import Text from "../shared/ui/text";
 
 import "../styles/member.css";
 
@@ -18,14 +18,12 @@ export default function MemberCreatePage() {
 
   const {
     email,
-    // ▼ 役割（Permission Category）
     category,
     setCategory,
     submitting,
     error,
     setEmail,
     handleSubmit,
-    // ▼ 表示用
     permissionCategories,
     permissionCategoryList,
     brandRows,
@@ -36,7 +34,6 @@ export default function MemberCreatePage() {
   const handleBack = () => navigate(-1);
   const handleCreate = () => formRef.current?.requestSubmit();
 
-  // ========= 権限選択状態 ==========
   const [selectedPermIds, setSelectedPermIds] = React.useState<Set<string>>(
     new Set(),
   );
@@ -51,7 +48,6 @@ export default function MemberCreatePage() {
     [allPerms, selectedPermIds],
   );
 
-  // ========= ブランド選択（BrandSelect コンポーネントに委譲） ==========
   const [selectedBrandIds, setSelectedBrandIds] = React.useState<Set<string>>(
     new Set(),
   );
@@ -71,7 +67,6 @@ export default function MemberCreatePage() {
     });
   };
 
-  // ========= 送信処理 ==========
   const onSubmit = (e: React.FormEvent) => {
     const permissionNames = selectedPerms.map((p: any) => p.name as string);
     const brandIdsArray = Array.from(selectedBrandIds);
@@ -89,16 +84,11 @@ export default function MemberCreatePage() {
       onCreate={handleCreate}
     >
       <div className="member-create">
-        {error ? (
-          <Text
-            as="div"
-            tone="destructive"
-            className="member-create__error"
-            role="alert"
-          >
+        {error && (
+          <ErrorMessage className="member-create__error">
             エラー: {error}
-          </Text>
-        ) : null}
+          </ErrorMessage>
+        )}
 
         <form
           ref={formRef}
@@ -106,14 +96,12 @@ export default function MemberCreatePage() {
           className="member-create__form"
           noValidate
         >
-          {/* ===== ブランド選択 ===== */}
           <BrandSelect
             brandRows={brandRows}
             selectedBrandIds={selectedBrandIds}
             onToggleBrand={toggleBrand}
           />
 
-          {/* ===== メールアドレス（必須） ===== */}
           <div>
             <label className="card__label">
               メールアドレス（必須）
@@ -132,7 +120,6 @@ export default function MemberCreatePage() {
             />
           </div>
 
-          {/* ===== 役割 + 権限カード（PermissionSelect に委譲） ===== */}
           <PermissionSelect
             category={category}
             setCategory={setCategory}

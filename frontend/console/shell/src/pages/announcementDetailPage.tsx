@@ -8,6 +8,7 @@ import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import InputCard from "../features/announcement/presentation/components/inputCard";
 import AnnouncementCreateProgressModal from "../features/announcement/presentation/components/announcementCreateProgressModal";
+import { ErrorMessage } from "../shared/ui/error";
 
 import type {
   AnnouncementInputAttachment,
@@ -94,8 +95,7 @@ export default function AnnouncementDetailPage() {
     [announcementId],
   );
 
-  const progressOpen =
-    isAnnouncementCreateProgressVisible(progress);
+  const progressOpen = isAnnouncementCreateProgressVisible(progress);
 
   const resetFormFromAnnouncement = useCallback(
     (source: AnnouncementDetail) => {
@@ -390,8 +390,7 @@ export default function AnnouncementDetailPage() {
             completedUploadCount,
             expectedUploadCount,
             title: "告知を保存中",
-            message:
-              "画像転送が完了しました。告知情報を保存しています。",
+            message: "画像転送が完了しました。告知情報を保存しています。",
           }),
         );
       }
@@ -504,8 +503,7 @@ export default function AnnouncementDetailPage() {
     }
 
     const payload = buildSubmitPayload();
-    const includesNewImages =
-      isEditMode && hasNewImages(payload);
+    const includesNewImages = isEditMode && hasNewImages(payload);
 
     setIsSendingInput(true);
 
@@ -595,9 +593,7 @@ export default function AnnouncementDetailPage() {
       return;
     }
 
-    setProgress(
-      createInitialAnnouncementCreateProgress(),
-    );
+    setProgress(createInitialAnnouncementCreateProgress());
   }, [
     isSavingInput,
     isSendingInput,
@@ -646,9 +642,9 @@ export default function AnnouncementDetailPage() {
         title="告知詳細"
         onBack={handleBack}
       >
-        <p className="p-4 text-sm text-red-600">
+        <ErrorMessage className="p-4">
           {errorMessage}
-        </p>
+        </ErrorMessage>
       </PageStyle>
     );
   }

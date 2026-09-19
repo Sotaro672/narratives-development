@@ -1,7 +1,10 @@
+// frontend/console/shell/src/pages/locationCreate.tsx
+
 import {
   Card,
   CardContent,
 } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import LocationFormFields from "../features/company/presentation/components/LocationFormFields";
 import { useLocationCreate } from "../features/company/presentation/hook/useLocationCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
@@ -51,14 +54,12 @@ export default function LocationCreate() {
             />
 
             {vm.error && (
-              <div
-                role="alert"
+              <ErrorMessage
+                variant="panel"
                 className="location-create__error"
               >
-                <p className="location-create__error-message">
-                  {vm.error}
-                </p>
-              </div>
+                {vm.error}
+              </ErrorMessage>
             )}
 
             {vm.saving && (

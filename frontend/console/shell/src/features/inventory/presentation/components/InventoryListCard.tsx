@@ -10,7 +10,10 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../shared/ui/error";
 import Text from "../../../../shared/ui/text";
+
+import "../../../../styles/inventory.css";
 
 export type InventoryListCardItem = {
   id: string;
@@ -36,7 +39,7 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
 }) => {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardHeader className="inventory-list-card__header">
         <CardTitle>出品</CardTitle>
 
         {onList ? (
@@ -53,19 +56,19 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
             出品情報を読み込み中です...
           </Text>
         ) : error ? (
-          <Text as="div" tone="destructive" role="alert">
+          <ErrorMessage>
             出品情報の取得に失敗しました: {error}
-          </Text>
+          </ErrorMessage>
         ) : items.length === 0 ? (
           <Text as="div" tone="muted">
             この在庫の出品はまだありません。
           </Text>
         ) : (
-          <div className="divide-y divide-slate-200 rounded-md border border-slate-200">
+          <div className="inventory-list-card__list">
             {items.map((item) => (
               <div
                 key={item.id}
-                className="px-3 py-3"
+                className="inventory-list-card__item"
               >
                 <Button
                   type="button"
@@ -75,7 +78,7 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
                   {item.readableId || item.id}
                 </Button>
 
-                <div className="mt-2 grid grid-cols-2 gap-3">
+                <div className="inventory-list-card__metrics">
                   <div>
                     <Text as="div" tone="muted">
                       累計注文数
@@ -83,7 +86,7 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
                     <Text
                       as="div"
                       weight="medium"
-                      className="mt-1"
+                      className="inventory-list-card__metric-value"
                     >
                       {item.totalOrderCount.toLocaleString()}件
                     </Text>
@@ -96,7 +99,7 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
                     <Text
                       as="div"
                       weight="medium"
-                      className="mt-1"
+                      className="inventory-list-card__metric-value"
                     >
                       ¥{item.totalSalesAmount.toLocaleString()}
                     </Text>

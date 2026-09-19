@@ -3,6 +3,7 @@
 import PageStyle from "../layout/PageStyle/PageStyle";
 
 import { Card, CardContent } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import { Input } from "../shared/ui/input";
 import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
@@ -96,15 +97,15 @@ export default function ListDetail() {
           )}
 
           {vm.error && (
-            <Text as="div" size="sm" tone="destructive">
+            <ErrorMessage>
               読み込みに失敗しました: {vm.error}
-            </Text>
+            </ErrorMessage>
           )}
 
           {isEdit && vm.deleteError && (
-            <Text as="div" size="sm" tone="destructive">
+            <ErrorMessage>
               削除に失敗しました: {vm.deleteError}
-            </Text>
+            </ErrorMessage>
           )}
 
           {isEdit && vm.deleting && (
@@ -114,9 +115,9 @@ export default function ListDetail() {
           )}
 
           {vm.saveError && (
-            <Text as="div" size="sm" tone="destructive">
+            <ErrorMessage>
               保存に失敗しました: {vm.saveError}
-            </Text>
+            </ErrorMessage>
           )}
 
           <ListImageCard

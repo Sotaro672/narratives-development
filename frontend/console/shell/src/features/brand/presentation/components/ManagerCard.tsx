@@ -8,9 +8,8 @@ import {
   CardTitle,
   CardContent,
 } from "../../../../shared/ui/card";
-
 import { Button } from "../../../../shared/ui/button";
-
+import { ErrorMessage } from "../../../../shared/ui/error";
 import {
   Popover,
   PopoverTrigger,
@@ -26,43 +25,31 @@ export type ManagerCandidate = {
 
 export type ManagerCardProps = {
   title?: string;
-
   managerName?: string;
   managerId?: string | null;
-
   managerCandidates?: ManagerCandidate[];
   loadingMembers?: boolean;
   memberError?: string | null;
-
   onSelectManager?: (id: string) => void;
-
   registeredAt?: string | null;
   updatedAt?: string | null;
-
   onEditManager?: () => void;
   onClickManager?: () => void;
-
   mode?: "edit" | "view";
 };
 
 export const ManagerCard: React.FC<ManagerCardProps> = ({
   title = "管理情報",
-
   managerName,
   managerId,
-
   managerCandidates,
   loadingMembers,
   memberError,
-
   onSelectManager,
-
   registeredAt,
   updatedAt,
-
   onEditManager,
   onClickManager,
-
   mode = "view",
 }) => {
   const isEdit = mode === "edit";
@@ -71,7 +58,6 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
     managerName || managerId || "未設定";
 
   const effectiveCandidates = managerCandidates ?? [];
-
   const effectiveLoading = Boolean(loadingMembers);
 
   const handleTriggerClick = () => {
@@ -99,14 +85,14 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="admin-card__body space-y-4">
+      <CardContent className="admin-card__body manager-card__body">
         <div className="admin-card__section">
-          <div className="admin-card__label mb-1 text-xs text-slate-500">
+          <div className="admin-card__label manager-card__label">
             責任者
           </div>
 
           {!isEdit && (
-            <div className="py-1 text-sm text-slate-800">
+            <div className="manager-card__value">
               {effectiveManagerName}
             </div>
           )}
@@ -118,34 +104,37 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="admin-card__assignee-btn w-full justify-between"
+                  className="admin-card__assignee-btn manager-card__trigger"
                   onClick={handleTriggerClick}
                 >
                   <span>{effectiveManagerName}</span>
-
-                  <span className="text-[11px] text-slate-400">
+                  <span className="manager-card__trigger-label">
                     選択
                   </span>
                 </Button>
               </PopoverTrigger>
 
-              <PopoverContent className="admin-card__popover space-y-1 p-2">
+              <PopoverContent className="admin-card__popover manager-card__popover">
                 {effectiveLoading && (
-                  <p className="text-xs text-slate-400">
+                  <p className="manager-card__message">
                     責任者を読み込み中です…
                   </p>
                 )}
 
                 {!effectiveLoading && memberError && (
-                  <p className="whitespace-pre-wrap text-xs text-red-500">
+                  <ErrorMessage
+                    as="p"
+                    size="xs"
+                    className="manager-card__error"
+                  >
                     {memberError}
-                  </p>
+                  </ErrorMessage>
                 )}
 
                 {!effectiveLoading &&
                   !memberError &&
                   effectiveCandidates.length > 0 && (
-                    <div className="space-y-1">
+                    <div className="manager-card__candidate-list">
                       {effectiveCandidates.map((candidate) => {
                         const isSelected =
                           candidate.id === managerId;
@@ -155,12 +144,13 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
                             key={candidate.id}
                             type="button"
                             className={[
-                              "block w-full rounded px-2 py-1 text-left text-sm",
-                              "hover:bg-slate-100",
+                              "manager-card__candidate",
                               isSelected
-                                ? "bg-slate-100 font-semibold"
+                                ? "manager-card__candidate--selected"
                                 : "",
-                            ].join(" ")}
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
                             onClick={() =>
                               handleSelect(candidate.id)
                             }
@@ -175,7 +165,7 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
                 {!effectiveLoading &&
                   !memberError &&
                   effectiveCandidates.length === 0 && (
-                    <p className="text-xs text-slate-400">
+                    <p className="manager-card__message">
                       責任者候補がありません。
                     </p>
                   )}
@@ -185,7 +175,7 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
         </div>
 
         {(registeredAt || updatedAt) && (
-          <div className="admin-card__section space-y-1 text-xs text-slate-500">
+          <div className="admin-card__section manager-card__dates">
             {registeredAt && (
               <div>登録日: {registeredAt}</div>
             )}

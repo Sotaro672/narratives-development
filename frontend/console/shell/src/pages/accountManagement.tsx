@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAccountManagement } from "../features/account/presentation/hook/useAccountManagement";
 import List from "../layout/List/List";
+import { ErrorMessage } from "../shared/ui/error";
 import { TableCell, TableRow } from "../shared/ui/table";
 
 import "../styles/account.css";
@@ -25,8 +26,10 @@ export default function AccountManagementPage() {
 
   if (error) {
     return (
-      <div className="p-4 text-red-500">
-        データ取得エラー: {error.message}
+      <div className="p-4">
+        <ErrorMessage>
+          データ取得エラー: {error.message}
+        </ErrorMessage>
       </div>
     );
   }

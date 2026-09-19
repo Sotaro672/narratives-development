@@ -4,6 +4,7 @@ import * as React from "react";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import { Select } from "../shared/ui/select";
 import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
@@ -175,9 +176,9 @@ export default function InventoryListCreate() {
           )}
 
           {missingModelIdCount > 0 && (
-            <Text as="div" size="xs" tone="destructive">
+            <ErrorMessage size="xs">
               modelId が未設定の価格行があります: {missingModelIdCount} 件
-            </Text>
+            </ErrorMessage>
           )}
         </div>
 
@@ -190,9 +191,9 @@ export default function InventoryListCreate() {
           )}
 
           {dtoError && (
-            <Text as="div" size="sm" tone="destructive">
+            <ErrorMessage>
               読み込みに失敗しました: {dtoError}
-            </Text>
+            </ErrorMessage>
           )}
 
           <Card>

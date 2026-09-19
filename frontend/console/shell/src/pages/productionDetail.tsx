@@ -9,6 +9,7 @@ import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
 import { useProductionDetail } from "../features/production/presentation/hook/useProductionDetail";
 import { usePrintCard } from "../features/print/presentation/hook/usePrintCard";
+import { ErrorMessage } from "../shared/ui/error";
 
 import "../styles/production.css";
 
@@ -178,9 +179,9 @@ export default function ProductionDetail() {
         )}
 
         {!loading && error && (
-          <div className="production-detail__state production-detail__state--error">
+          <ErrorMessage>
             {error}
-          </div>
+          </ErrorMessage>
         )}
 
         {!loading && !error && !production && (

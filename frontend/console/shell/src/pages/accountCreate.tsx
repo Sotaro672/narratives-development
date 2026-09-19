@@ -3,6 +3,7 @@
 import { useAccountConnect } from "../features/account/presentation/hook/useAccountCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 
 import "../styles/account.css";
 
@@ -11,16 +12,13 @@ export default function AccountConnectPage() {
     bankName,
     branchName,
     accountNumber,
-
     submitting,
     error,
     completed,
     canConnect,
-
     handleBankNameChange,
     handleBranchNameChange,
     handleAccountNumberChange,
-
     handleBack,
     handleConnect,
   } = useAccountConnect();
@@ -52,12 +50,12 @@ export default function AccountConnectPage() {
                 )}
 
                 {error && (
-                  <div
-                    role="alert"
+                  <ErrorMessage
+                    variant="panel"
                     className="account-connect-error"
                   >
                     {error}
-                  </div>
+                  </ErrorMessage>
                 )}
 
                 <div className="account-connect-field">
@@ -74,9 +72,7 @@ export default function AccountConnectPage() {
                     className="account-connect-input"
                     value={bankName}
                     onChange={(event) => {
-                      handleBankNameChange(
-                        event.target.value,
-                      );
+                      handleBankNameChange(event.target.value);
                     }}
                     disabled={submitting}
                     required
@@ -97,9 +93,7 @@ export default function AccountConnectPage() {
                     className="account-connect-input"
                     value={branchName}
                     onChange={(event) => {
-                      handleBranchNameChange(
-                        event.target.value,
-                      );
+                      handleBranchNameChange(event.target.value);
                     }}
                     disabled={submitting}
                     required
@@ -121,9 +115,7 @@ export default function AccountConnectPage() {
                     className="account-connect-input"
                     value={accountNumber}
                     onChange={(event) => {
-                      handleAccountNumberChange(
-                        event.target.value,
-                      );
+                      handleAccountNumberChange(event.target.value);
                     }}
                     disabled={submitting}
                     maxLength={8}

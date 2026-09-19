@@ -11,6 +11,7 @@ import ReportModal from "../features/report/presentation/components/ReportModal"
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
 import { Button } from "../shared/ui/button";
 import Empty from "../shared/ui/empty";
+import { ErrorMessage } from "../shared/ui/error";
 import Pagination from "../shared/ui/pagination";
 import RefreshButton from "../shared/ui/refresh";
 import Text from "../shared/ui/text";
@@ -61,7 +62,7 @@ export default function ProductBlueprintReviewDetail() {
     Items,
     TotalPages,
     IsLoading,
-    ErrorMessage,
+    ErrorMessage: ErrorMessageText,
     IsReportOpen,
     ReportReason,
     ReportDetail,
@@ -210,15 +211,10 @@ export default function ProductBlueprintReviewDetail() {
             </div>
           </div>
 
-          {ErrorMessage ? (
-            <Text
-              as="div"
-              tone="destructive"
-              className="pbrd-error"
-              role="alert"
-            >
-              {ErrorMessage}
-            </Text>
+          {ErrorMessageText ? (
+            <ErrorMessage className="pbrd-error">
+              {ErrorMessageText}
+            </ErrorMessage>
           ) : null}
 
           <div className="pbrd-reviewcard-wrapper">

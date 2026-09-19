@@ -8,6 +8,7 @@ import LocationFormFields from "../features/company/presentation/components/Loca
 import { useLocationDetail } from "../features/company/presentation/hook/useLocationDetail";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
+import { ErrorMessage } from "../shared/ui/error";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 import "../styles/location.css";
@@ -83,11 +84,12 @@ export default function LocationDetail() {
           </Card>
 
           {vm.error && (
-            <div role="alert" className="location-detail__error">
-              <p className="location-detail__error-message">
-                {vm.error}
-              </p>
-            </div>
+            <ErrorMessage
+              variant="panel"
+              className="location-detail__error"
+            >
+              {vm.error}
+            </ErrorMessage>
           )}
 
           {vm.deleting && (

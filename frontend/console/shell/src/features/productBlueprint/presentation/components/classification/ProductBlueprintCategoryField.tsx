@@ -1,9 +1,10 @@
-// frontend/console/shell/src/features/productBlueprint/presentation/cards/classification/ProductBlueprintCategoryField.tsx
+// frontend/console/shell/src/features/productBlueprint/presentation/components/classification/ProductBlueprintCategoryField.tsx
 
 import * as React from "react";
 
 import { Button } from "../../../../../shared/ui/button";
 import { CardField } from "../../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../../shared/ui/error";
 import { Input } from "../../../../../shared/ui/input";
 import { Label } from "../../../../../shared/ui/label";
 import {
@@ -22,6 +23,8 @@ import {
   toProductBlueprintCategoryPathKey,
   type ProductBlueprintCategoryPath,
 } from "../../../domain/productBlueprintCategory";
+
+import "../../../../../styles/productBlueprint.css";
 
 export type ProductBlueprintCategoryOption = ProductBlueprintCategoryPath;
 
@@ -358,8 +361,8 @@ const ProductBlueprintCategoryField: React.FC<
   );
 
   return (
-    <div className="flex flex-col gap-1">
-      <div className="grid grid-cols-2 gap-3">
+    <div className="product-blueprint-category-field">
+      <div className="product-blueprint-category-field__grid">
         <CardField>
           <Label htmlFor="product-blueprint-category">
             商品カテゴリ
@@ -372,7 +375,7 @@ const ProductBlueprintCategoryField: React.FC<
                   id="product-blueprint-category"
                   type="button"
                   variant="outline"
-                  className="w-full justify-between pbc-select-trigger"
+                  className="product-blueprint-category-field__trigger"
                   aria-label="商品カテゴリを選択"
                   disabled={
                     productBlueprintCategoryLoading ||
@@ -385,7 +388,7 @@ const ProductBlueprintCategoryField: React.FC<
 
               <PopoverContent
                 align="start"
-                className="w-64 popover__content--compact"
+                className="popover__content--compact product-blueprint-category-field__popover"
               >
                 {parentCategories.length === 0 ? (
                   <div className="popover__empty">
@@ -446,7 +449,7 @@ const ProductBlueprintCategoryField: React.FC<
                     id="product-blueprint-detail-category"
                     type="button"
                     variant="outline"
-                    className="w-full justify-between pbc-select-trigger"
+                    className="product-blueprint-category-field__trigger"
                     aria-label="詳細カテゴリを選択"
                     disabled={
                       productBlueprintCategoryLoading ||
@@ -459,7 +462,7 @@ const ProductBlueprintCategoryField: React.FC<
 
                 <PopoverContent
                   align="start"
-                  className="w-64 popover__content--compact"
+                  className="popover__content--compact product-blueprint-category-field__popover"
                 >
                   {childCategories.length === 0 ? (
                     <div className="popover__empty">
@@ -522,15 +525,19 @@ const ProductBlueprintCategoryField: React.FC<
       </div>
 
       {canEditCategory && productBlueprintCategoryLoading && (
-        <p className="text-xs text-slate-400">
+        <p className="product-blueprint-category-field__status">
           商品カテゴリを取得中…
         </p>
       )}
 
       {canEditCategory && productBlueprintCategoryError && (
-        <p className="text-xs text-red-500">
+        <ErrorMessage
+          as="p"
+          size="xs"
+          className="product-blueprint-category-field__error"
+        >
           商品カテゴリ一覧の取得に失敗しました。
-        </p>
+        </ErrorMessage>
       )}
     </div>
   );

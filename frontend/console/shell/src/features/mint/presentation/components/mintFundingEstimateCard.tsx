@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ErrorMessage } from "../../../../shared/ui/error";
 import Text from "../../../../shared/ui/text";
 
 import type { MintFundingEstimate } from "../../infrastructure/dto/MintRequestRepository";
@@ -68,9 +69,9 @@ export default function MintFundingEstimateCard({
               </Text>
             </div>
           ) : error ? (
-            <Text as="div" tone="destructive" role="alert">
+            <ErrorMessage>
               {error}
-            </Text>
+            </ErrorMessage>
           ) : estimate ? (
             <div className="mint-funding__estimate">
               <div className="mint-funding__rows">
