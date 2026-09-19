@@ -29,7 +29,9 @@
   text-align: left;
 }
 
-.order-detail__table .table__row {
+.order-detail__table .table__row,
+.order-detail__table .table__head,
+.order-detail__table .table__cell {
   border-bottom: 0;
 }
 
