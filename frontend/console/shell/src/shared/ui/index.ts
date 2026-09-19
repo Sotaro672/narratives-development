@@ -10,6 +10,7 @@ export * from "./input";
 export * from "./label";
 export * from "./pagination";
 export * from "./popover";
+export * from "./progress";
 export * from "./refresh";
 export * from "./separator";
 export * from "./sortable-table-header";

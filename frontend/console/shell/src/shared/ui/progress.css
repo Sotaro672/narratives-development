@@ -1,0 +1,226 @@
+/* frontend/console/shell/src/shared/ui/progress.css */
+
+/* =========================================================
+ * Determinate Progress
+ * ======================================================= */
+
+.progress {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.progress__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.progress__label {
+  min-width: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.progress__percentage {
+  flex: 0 0 auto;
+  color: hsl(var(--primary));
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.progress__track {
+  position: relative;
+  width: 100%;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+
+.progress__bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: hsl(var(--primary));
+  transition: width 180ms ease;
+}
+
+.progress__details {
+  color: hsl(var(--muted-foreground));
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================
+ * Indeterminate Progress
+ * ======================================================= */
+
+.progress-indeterminate {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: hsl(var(--muted));
+}
+
+.progress-indeterminate__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  border-radius: inherit;
+  background: hsl(var(--primary));
+  animation: progress-indeterminate 1.15s ease-in-out infinite;
+}
+
+@keyframes progress-indeterminate {
+  0% {
+    left: -40%;
+  }
+
+  50% {
+    left: 35%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+/* =========================================================
+ * Current Item
+ * ======================================================= */
+
+.progress-current {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 10px;
+  background: hsl(var(--muted) / 0.55);
+  padding: 10px 12px;
+}
+
+.progress-current__label {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border-radius: 999px;
+  background: hsl(var(--primary) / 0.08);
+  padding: 3px 8px;
+  color: hsl(var(--primary));
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.progress-current__value {
+  min-width: 0;
+  overflow: hidden;
+  color: hsl(var(--foreground) / 0.76);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* =========================================================
+ * Metric
+ * ======================================================= */
+
+.progress-metric {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: hsl(var(--muted-foreground));
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.progress-metric__label {
+  min-width: 0;
+}
+
+.progress-metric__value {
+  flex: 0 0 auto;
+  color: hsl(var(--foreground));
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================
+ * Messages
+ * ======================================================= */
+
+.progress-message {
+  overflow-wrap: anywhere;
+  border: 1px solid;
+  border-radius: 10px;
+  padding: 11px 12px;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+.progress-message--warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.progress-message--notice {
+  border-color: hsl(var(--primary) / 0.24);
+  background: hsl(var(--primary) / 0.08);
+  color: hsl(var(--primary));
+}
+
+.progress-message--error {
+  border-color: hsl(var(--destructive) / 0.24);
+  background: hsl(var(--destructive) / 0.08);
+  color: hsl(var(--destructive));
+  font-weight: 600;
+}
+
+/* =========================================================
+ * Dark mode
+ * ======================================================= */
+
+@media (prefers-color-scheme: dark) {
+  .progress-message--warning {
+    border-color: rgba(251, 191, 36, 0.34);
+    background: rgba(217, 119, 6, 0.14);
+    color: #fcd34d;
+  }
+}
+
+/* =========================================================
+ * Reduced Motion
+ * ======================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-indeterminate__bar {
+    animation-duration: 2.4s;
+  }
+
+  .progress__bar {
+    transition: none;
+  }
+}
