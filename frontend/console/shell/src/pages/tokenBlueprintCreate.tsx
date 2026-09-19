@@ -5,8 +5,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import TokenBlueprintCard from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+import TokenBlueprintProgressModal from "../features/tokenBlueprint/presentation/components/tokenBlueprintProgressModal";
 import TokenContentsCard from "../features/tokenBlueprint/presentation/components/tokenContentsCard";
-import TokenBlueprintCreateProgressModal from "../features/tokenBlueprint/presentation/components/tokenBlueprintCreateProgressModal";
 import { useTokenBlueprintCard } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCard";
 import { useTokenBlueprintCreate } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintCreate";
 import { createTokenBlueprintContentId } from "../features/tokenBlueprint/application/tokenBlueprintContentService";
@@ -248,7 +248,8 @@ export default function TokenBlueprintCreate() {
         />
       </PageStyle>
 
-      <TokenBlueprintCreateProgressModal
+      <TokenBlueprintProgressModal
+        variant="create"
         open={progressOpen}
         progress={progress}
         onClose={progressCanClose ? onCloseProgress : undefined}

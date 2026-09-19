@@ -19,7 +19,7 @@ import {
   createTokenBlueprintCreateProgressFromOperation,
   createUploadingTokenBlueprintCreateProgress,
   type TokenBlueprintCreateProgress,
-} from "../model/tokenBlueprintCreateProgress";
+} from "../model/tokenBlueprintProgress";
 
 const CREATE_OPERATION_ID_KEY = "tokenBlueprint.create.operationId";
 const CREATE_IDEMPOTENCY_KEY = "tokenBlueprint.create.idempotencyKey";
@@ -69,6 +69,7 @@ function calculateTotalUploadBytes(input: SaveTokenBlueprintInput): number {
     (total, content) => total + content.file.size,
     0,
   );
+
   return iconSize + contentSize;
 }
 
@@ -96,7 +97,9 @@ function calculateUploadedBytes(
   return uploadedBytes;
 }
 
-function shouldPollOperation(status: TokenBlueprintCreateOperation["status"]): boolean {
+function shouldPollOperation(
+  status: TokenBlueprintCreateOperation["status"],
+): boolean {
   return (
     status === "queued" ||
     status === "processing" ||
@@ -133,36 +136,46 @@ export function useTokenBlueprintCreate() {
     handleSelectAssignee,
   } = useAssigneeSelection({ defaultToCurrentMember: true });
 
-  const [operation, setOperation] = React.useState<TokenBlueprintCreateOperation | null>(null);
-  const operationRef = React.useRef<TokenBlueprintCreateOperation | null>(null);
+  const [operation, setOperation] =
+    React.useState<TokenBlueprintCreateOperation | null>(null);
+  const operationRef =
+    React.useRef<TokenBlueprintCreateOperation | null>(null);
 
-  const [progress, setProgress] = React.useState<TokenBlueprintCreateProgress>(
-    createInitialTokenBlueprintCreateProgress,
-  );
+  const [progress, setProgress] =
+    React.useState<TokenBlueprintCreateProgress>(
+      createInitialTokenBlueprintCreateProgress,
+    );
   const [saving, setSaving] = React.useState(false);
-  const [createError, setCreateError] = React.useState<string | null>(null);
+  const [createError, setCreateError] =
+    React.useState<string | null>(null);
 
-  const isUploading = progress.phase === "uploading" && saving;
+  const isUploading =
+    progress.phase === "uploading" && saving;
   const progressOpen = progress.phase !== "idle";
 
-  const updateOperation = React.useCallback((next: TokenBlueprintCreateOperation) => {
-    operationRef.current = next;
-    setOperation(next);
-    writeSessionValue(CREATE_OPERATION_ID_KEY, next.id);
+  const updateOperation = React.useCallback(
+    (next: TokenBlueprintCreateOperation) => {
+      operationRef.current = next;
+      setOperation(next);
+      writeSessionValue(CREATE_OPERATION_ID_KEY, next.id);
 
-    if (next.status !== "waiting_upload") {
-      setProgress(createTokenBlueprintCreateProgressFromOperation(next));
-      return;
-    }
+      if (next.status !== "waiting_upload") {
+        setProgress(
+          createTokenBlueprintCreateProgressFromOperation(next),
+        );
+        return;
+      }
 
-    if (next.expectedUploadCount > 0) {
-      setProgress((current) =>
-        current.phase === "starting"
-          ? createTokenBlueprintCreateProgressFromOperation(next)
-          : current,
-      );
-    }
-  }, []);
+      if (next.expectedUploadCount > 0) {
+        setProgress((current: TokenBlueprintCreateProgress) =>
+          current.phase === "starting"
+            ? createTokenBlueprintCreateProgressFromOperation(next)
+            : current,
+        );
+      }
+    },
+    [],
+  );
 
   React.useEffect(() => {
     if (!isUploading) return;
@@ -173,18 +186,27 @@ export function useTokenBlueprintCreate() {
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+
+    return () =>
+      window.removeEventListener(
+        "beforeunload",
+        handleBeforeUnload,
+      );
   }, [isUploading]);
 
   React.useEffect(() => {
-    const operationId = readSessionValue(CREATE_OPERATION_ID_KEY);
+    const operationId =
+      readSessionValue(CREATE_OPERATION_ID_KEY);
+
     if (!operationId) return;
 
     let cancelled = false;
 
     void (async () => {
       try {
-        const restored = await fetchTokenBlueprintCreateOperation(operationId);
+        const restored =
+          await fetchTokenBlueprintCreateOperation(operationId);
+
         if (cancelled) return;
 
         operationRef.current = restored;
@@ -192,21 +214,32 @@ export function useTokenBlueprintCreate() {
 
         if (restored.status === "completed") {
           clearCreateOperationSession();
-          setProgress(createTokenBlueprintCreateProgressFromOperation(restored));
-          navigate(`/tokenBlueprint/${encodeURIComponent(restored.tokenBlueprintId)}`, {
-            replace: true,
-          });
+
+          setProgress(
+            createTokenBlueprintCreateProgressFromOperation(restored),
+          );
+
+          navigate(
+            `/tokenBlueprint/${encodeURIComponent(
+              restored.tokenBlueprintId,
+            )}`,
+            { replace: true },
+          );
           return;
         }
 
         if (restored.status === "waiting_upload") {
           // Reload後はlocal Fileを復元できないため、
           // 実際にuploadを再開するまでは画面離脱を禁止しない。
-          setProgress(createInitialTokenBlueprintCreateProgress());
+          setProgress(
+            createInitialTokenBlueprintCreateProgress(),
+          );
           return;
         }
 
-        setProgress(createTokenBlueprintCreateProgressFromOperation(restored));
+        setProgress(
+          createTokenBlueprintCreateProgressFromOperation(restored),
+        );
       } catch {
         // 一時的な取得失敗ではsessionを削除しない。
       }
@@ -218,24 +251,37 @@ export function useTokenBlueprintCreate() {
   }, [navigate]);
 
   React.useEffect(() => {
-    if (!operation || !shouldPollOperation(operation.status)) return;
+    if (
+      !operation ||
+      !shouldPollOperation(operation.status)
+    ) {
+      return;
+    }
 
     let cancelled = false;
 
     const poll = async () => {
       try {
-        const next = await fetchTokenBlueprintCreateOperation(operation.id);
+        const next =
+          await fetchTokenBlueprintCreateOperation(operation.id);
+
         if (cancelled) return;
 
         operationRef.current = next;
         setOperation(next);
-        setProgress(createTokenBlueprintCreateProgressFromOperation(next));
+        setProgress(
+          createTokenBlueprintCreateProgressFromOperation(next),
+        );
 
         if (next.status === "completed") {
           clearCreateOperationSession();
-          navigate(`/tokenBlueprint/${encodeURIComponent(next.tokenBlueprintId)}`, {
-            replace: true,
-          });
+
+          navigate(
+            `/tokenBlueprint/${encodeURIComponent(
+              next.tokenBlueprintId,
+            )}`,
+            { replace: true },
+          );
         }
       } catch {
         // polling中の一時的な通信失敗では状態を変更しない。
@@ -255,7 +301,10 @@ export function useTokenBlueprintCreate() {
 
   const onBack = React.useCallback(() => {
     if (isUploading) return;
-    navigate("/tokenBlueprint", { replace: true });
+
+    navigate("/tokenBlueprint", {
+      replace: true,
+    });
   }, [isUploading, navigate]);
 
   const onCloseProgress = React.useCallback(() => {
@@ -265,105 +314,147 @@ export function useTokenBlueprintCreate() {
       progress.phase === "failed_retryable" ||
       progress.phase === "failed_fatal"
     ) {
-      setProgress(createInitialTokenBlueprintCreateProgress());
+      setProgress(
+        createInitialTokenBlueprintCreateProgress(),
+      );
     }
   }, [progress]);
 
   const onSave = React.useCallback(
-    async (input: SaveTokenBlueprintInput): Promise<TokenBlueprintCreateOperation> => {
+    async (
+      input: SaveTokenBlueprintInput,
+    ): Promise<TokenBlueprintCreateOperation> => {
       if (!input.assigneeId) {
         throw new Error("assigneeId is required");
       }
 
       if (saving) {
-        throw new Error("token blueprint create operation is already running");
+        throw new Error(
+          "token blueprint create operation is already running",
+        );
       }
 
       setSaving(true);
       setCreateError(null);
-      setProgress(createStartingTokenBlueprintCreateProgress());
+      setProgress(
+        createStartingTokenBlueprintCreateProgress(),
+      );
 
-      let idempotencyKey = readSessionValue(CREATE_IDEMPOTENCY_KEY);
+      let idempotencyKey =
+        readSessionValue(CREATE_IDEMPOTENCY_KEY);
+
       if (!idempotencyKey) {
-        idempotencyKey = createTokenBlueprintCreateOperationIdempotencyKey();
-        writeSessionValue(CREATE_IDEMPOTENCY_KEY, idempotencyKey);
+        idempotencyKey =
+          createTokenBlueprintCreateOperationIdempotencyKey();
+
+        writeSessionValue(
+          CREATE_IDEMPOTENCY_KEY,
+          idempotencyKey,
+        );
       }
 
-      const savedOperationId = readSessionValue(CREATE_OPERATION_ID_KEY);
-      const totalUploadBytes = calculateTotalUploadBytes(input);
+      const savedOperationId =
+        readSessionValue(CREATE_OPERATION_ID_KEY);
+
+      const totalUploadBytes =
+        calculateTotalUploadBytes(input);
 
       try {
-        const result = await createTokenBlueprintWithOptionalIcon({
-          ...input,
-          idempotencyKey,
-          operationId: savedOperationId || undefined,
+        const result =
+          await createTokenBlueprintWithOptionalIcon({
+            ...input,
+            idempotencyKey,
+            operationId:
+              savedOperationId || undefined,
 
-          onOperationChange: (next) => {
-            updateOperation(next);
-          },
+            onOperationChange: (next) => {
+              updateOperation(next);
+            },
 
-          onIconProgress: (uploadProgress) => {
-            const currentOperation = operationRef.current;
-            if (!currentOperation) return;
+            onIconProgress: (uploadProgress) => {
+              const currentOperation =
+                operationRef.current;
 
-            const alreadyUploadedBytes = calculateUploadedBytes(
-              currentOperation,
-              input,
-            );
+              if (!currentOperation) return;
 
-            setProgress(
-              createUploadingTokenBlueprintCreateProgress({
-                operation: currentOperation,
-                target: "icon",
-                fileName: input.iconFile?.name ?? "",
-                transferredBytes:
-                  alreadyUploadedBytes + uploadProgress.transferredBytes,
-                totalBytes: totalUploadBytes,
-                completedUploadCount: currentOperation.completedUploadCount,
-                expectedUploadCount: currentOperation.expectedUploadCount,
-              }),
-            );
-          },
+              const alreadyUploadedBytes =
+                calculateUploadedBytes(
+                  currentOperation,
+                  input,
+                );
 
-          onContentProgress: (uploadProgress) => {
-            const currentOperation = operationRef.current;
-            if (!currentOperation) return;
+              setProgress(
+                createUploadingTokenBlueprintCreateProgress({
+                  operation: currentOperation,
+                  target: "icon",
+                  fileName:
+                    input.iconFile?.name ?? "",
+                  transferredBytes:
+                    alreadyUploadedBytes +
+                    uploadProgress.transferredBytes,
+                  totalBytes: totalUploadBytes,
+                  completedUploadCount:
+                    currentOperation.completedUploadCount,
+                  expectedUploadCount:
+                    currentOperation.expectedUploadCount,
+                }),
+              );
+            },
 
-            const alreadyUploadedBytes = Math.max(
-              0,
-              totalUploadBytes - uploadProgress.totalBytes,
-            );
+            onContentProgress: (uploadProgress) => {
+              const currentOperation =
+                operationRef.current;
 
-            const alreadyCompletedCount = Math.max(
-              0,
-              currentOperation.expectedUploadCount - uploadProgress.totalCount,
-            );
+              if (!currentOperation) return;
 
-            setProgress(
-              createUploadingTokenBlueprintCreateProgress({
-                operation: currentOperation,
-                target: "content",
-                fileName: uploadProgress.fileName,
-                transferredBytes:
-                  alreadyUploadedBytes + uploadProgress.transferredBytes,
-                totalBytes: totalUploadBytes,
-                completedUploadCount:
-                  alreadyCompletedCount + uploadProgress.completedCount,
-                expectedUploadCount: currentOperation.expectedUploadCount,
-              }),
-            );
-          },
-        });
+              const alreadyUploadedBytes = Math.max(
+                0,
+                totalUploadBytes -
+                  uploadProgress.totalBytes,
+              );
+
+              const alreadyCompletedCount = Math.max(
+                0,
+                currentOperation.expectedUploadCount -
+                  uploadProgress.totalCount,
+              );
+
+              setProgress(
+                createUploadingTokenBlueprintCreateProgress({
+                  operation: currentOperation,
+                  target: "content",
+                  fileName:
+                    uploadProgress.fileName,
+                  transferredBytes:
+                    alreadyUploadedBytes +
+                    uploadProgress.transferredBytes,
+                  totalBytes: totalUploadBytes,
+                  completedUploadCount:
+                    alreadyCompletedCount +
+                    uploadProgress.completedCount,
+                  expectedUploadCount:
+                    currentOperation.expectedUploadCount,
+                }),
+              );
+            },
+          });
 
         operationRef.current = result;
         setOperation(result);
-        setProgress(createTokenBlueprintCreateProgressFromOperation(result));
+
+        setProgress(
+          createTokenBlueprintCreateProgressFromOperation(result),
+        );
 
         if (result.status === "completed") {
           clearCreateOperationSession();
-          navigate(`/tokenBlueprint/${encodeURIComponent(result.tokenBlueprintId)}`, {
-            replace: true,
-          });
+
+          navigate(
+            `/tokenBlueprint/${encodeURIComponent(
+              result.tokenBlueprintId,
+            )}`,
+            { replace: true },
+          );
         }
 
         return result;
@@ -377,7 +468,9 @@ export function useTokenBlueprintCreate() {
 
         // Storage upload失敗時にuploadingのまま残すと
         // navigation guardを解除できなくなるためidleへ戻す。
-        setProgress(createInitialTokenBlueprintCreateProgress());
+        setProgress(
+          createInitialTokenBlueprintCreateProgress(),
+        );
 
         throw error;
       } finally {
@@ -401,8 +494,10 @@ export function useTokenBlueprintCreate() {
     [assigneeId],
   );
 
-  const onEditAssignee = React.useCallback(() => {}, []);
-  const onClickAssignee = React.useCallback(() => {}, []);
+  const onEditAssignee =
+    React.useCallback(() => {}, []);
+  const onClickAssignee =
+    React.useCallback(() => {}, []);
 
   return {
     initialTokenBlueprint,

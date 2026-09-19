@@ -22,7 +22,7 @@ import Textarea from "../shared/ui/textarea";
 import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
 import { ManagerCard } from "../features/brand/presentation/components/ManagerCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
-import BrandCreateProgressModal from "../features/brand/presentation/components/brandCreateProgressModal";
+import BrandCreateProgressModal from "../features/brand/presentation/components/brandProgressModal";
 
 export default function BrandDetail() {
   const {

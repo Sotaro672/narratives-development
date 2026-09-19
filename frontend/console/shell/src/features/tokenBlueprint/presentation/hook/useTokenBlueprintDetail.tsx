@@ -102,7 +102,10 @@ async function uploadAndAppendExistingTokenBlueprintContents(params: {
   progressHandlers?: ExistingTokenBlueprintContentsProgressHandlers;
 }): Promise<TokenBlueprint> {
   for (const file of params.files) {
-    const validation = validateImageForStorage(file, "tokenBlueprintContentImage");
+    const validation = validateImageForStorage(
+      file,
+      "tokenBlueprintContentImage",
+    );
 
     if (!validation.valid) {
       throw new Error(validation.reason);
@@ -286,6 +289,7 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
 
   const isEditMode = cardVm.isEditMode;
   const progressOpen = isTokenBlueprintProgressVisible(progress);
+
   const isUploadingContents =
     progress.phase === "uploading" &&
     progress.currentUploadTarget === "content";
@@ -515,32 +519,34 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
           }),
         );
 
-        const updated = await uploadAndAppendExistingTokenBlueprintContents({
-          companyId: blueprint.companyId,
-          tokenBlueprintId: id,
-          actorId: memberId,
-          files,
-          existingContentFiles: blueprint.contentFiles,
-          progressHandlers: {
-            onUploadProgress: (uploadProgress) => {
-              setProgress(
-                createUploadingTokenBlueprintProgress(
-                  uploadProgress,
-                ),
-              );
-            },
+        const updated =
+          await uploadAndAppendExistingTokenBlueprintContents({
+            companyId: blueprint.companyId,
+            tokenBlueprintId: id,
+            actorId: memberId,
+            files,
+            existingContentFiles: blueprint.contentFiles,
+            progressHandlers: {
+              onUploadProgress: (uploadProgress) => {
+                setProgress(
+                  createUploadingTokenBlueprintProgress(
+                    uploadProgress,
+                  ),
+                );
+              },
 
-            onSaving: (savingProgress) => {
-              setProgress(
-                createSavingTokenBlueprintProgress({
-                  ...savingProgress,
-                  title: "コンテンツを保存中",
-                  message: "転送したコンテンツ情報を保存しています。",
-                }),
-              );
+              onSaving: (savingProgress) => {
+                setProgress(
+                  createSavingTokenBlueprintProgress({
+                    ...savingProgress,
+                    title: "コンテンツを保存中",
+                    message:
+                      "転送したコンテンツ情報を保存しています。",
+                  }),
+                );
+              },
             },
-          },
-        });
+          });
 
         setBlueprint(updated);
 
@@ -551,7 +557,8 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
             completedUploadCount: files.length,
             expectedUploadCount: files.length,
             title: "コンテンツの追加が完了しました",
-            message: "選択したコンテンツの保存が完了しました。",
+            message:
+              "選択したコンテンツの保存が完了しました。",
           }),
         );
       } catch (error) {
@@ -559,8 +566,10 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
           createFailedTokenBlueprintProgress(
             errorMessageFromUnknown(error),
             {
-              title: "コンテンツを追加できませんでした",
-              message: "コンテンツの保存中にエラーが発生しました。",
+              title:
+                "コンテンツを追加できませんでした",
+              message:
+                "コンテンツの保存中にエラーが発生しました。",
             },
           ),
         );
@@ -597,14 +606,16 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
         setProgress(
           createSavingTokenBlueprintProgress({
             title: "コンテンツを削除中",
-            message: "トークン設計からコンテンツを削除しています。",
+            message:
+              "トークン設計からコンテンツを削除しています。",
           }),
         );
 
-        const updated = await patchTokenBlueprintContentFiles({
-          tokenBlueprintId: id,
-          contentFiles: nextContentFiles,
-        });
+        const updated =
+          await patchTokenBlueprintContentFiles({
+            tokenBlueprintId: id,
+            contentFiles: nextContentFiles,
+          });
 
         setBlueprint(updated);
 
@@ -619,8 +630,10 @@ export function useTokenBlueprintDetail(): UseTokenBlueprintDetailResult {
           createFailedTokenBlueprintProgress(
             errorMessageFromUnknown(error),
             {
-              title: "コンテンツを削除できませんでした",
-              message: "コンテンツの削除中にエラーが発生しました。",
+              title:
+                "コンテンツを削除できませんでした",
+              message:
+                "コンテンツの削除中にエラーが発生しました。",
             },
           ),
         );

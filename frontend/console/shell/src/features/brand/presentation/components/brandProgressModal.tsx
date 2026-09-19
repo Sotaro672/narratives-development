@@ -9,20 +9,20 @@ import {
   ProgressMessage,
   ProgressMetric,
 } from "../../../../shared/ui/progress";
-import type { BrandCreateProgress } from "../model/brandCreateProgress";
+import type { BrandProgress } from "../model/brandProgress";
 
-export type BrandCreateProgressModalProps = {
+export type BrandProgressModalProps = {
   open: boolean;
-  progress: BrandCreateProgress;
+  progress: BrandProgress;
   onClose?: () => void;
 };
 
-function phaseStatusLabel(progress: BrandCreateProgress): string {
+function phaseStatusLabel(progress: BrandProgress): string {
   switch (progress.phase) {
     case "idle":
       return "";
-    case "creating":
-      return "登録中";
+    case "preparing":
+      return progress.variant === "update" ? "更新中" : "登録中";
     case "uploading":
       return "転送中";
     case "saving":
@@ -34,9 +34,9 @@ function phaseStatusLabel(progress: BrandCreateProgress): string {
   }
 }
 
-function phaseStatusVariant(progress: BrandCreateProgress): BadgeVariant {
+function phaseStatusVariant(progress: BrandProgress): BadgeVariant {
   switch (progress.phase) {
-    case "creating":
+    case "preparing":
       return "secondary";
     case "uploading":
       return "info";
@@ -52,14 +52,14 @@ function phaseStatusVariant(progress: BrandCreateProgress): BadgeVariant {
   }
 }
 
-function shouldShowIndeterminate(progress: BrandCreateProgress): boolean {
+function shouldShowIndeterminate(progress: BrandProgress): boolean {
   return (
-    progress.phase === "creating" ||
+    progress.phase === "preparing" ||
     (progress.phase === "saving" && progress.totalBytes <= 0)
   );
 }
 
-function shouldShowProgressBar(progress: BrandCreateProgress): boolean {
+function shouldShowProgressBar(progress: BrandProgress): boolean {
   if (progress.totalBytes <= 0) {
     return false;
   }
@@ -71,7 +71,7 @@ function shouldShowProgressBar(progress: BrandCreateProgress): boolean {
   );
 }
 
-function shouldShowUploadCount(progress: BrandCreateProgress): boolean {
+function shouldShowUploadCount(progress: BrandProgress): boolean {
   return (
     progress.expectedUploadCount > 0 &&
     (progress.phase === "uploading" ||
@@ -80,16 +80,26 @@ function shouldShowUploadCount(progress: BrandCreateProgress): boolean {
   );
 }
 
-export default function BrandCreateProgressModal({
+function indeterminateLabel(progress: BrandProgress): string {
+  if (progress.phase === "preparing") {
+    return progress.variant === "update"
+      ? "ブランド更新中"
+      : "ブランド登録中";
+  }
+
+  return "ブランド情報保存中";
+}
+
+export default function BrandProgressModal({
   open,
   progress,
   onClose,
-}: BrandCreateProgressModalProps) {
+}: BrandProgressModalProps) {
   const canClose = !progress.isBlockingNavigation && Boolean(onClose);
   const statusLabel = phaseStatusLabel(progress);
 
   const ariaBusy =
-    progress.phase === "creating" ||
+    progress.phase === "preparing" ||
     progress.phase === "uploading" ||
     progress.phase === "saving";
 
@@ -125,13 +135,7 @@ export default function BrandCreateProgressModal({
       }
     >
       {shouldShowIndeterminate(progress) ? (
-        <ProgressIndeterminate
-          ariaLabel={
-            progress.phase === "creating"
-              ? "ブランド登録中"
-              : "ブランド情報保存中"
-          }
-        />
+        <ProgressIndeterminate ariaLabel={indeterminateLabel(progress)} />
       ) : null}
 
       {shouldShowProgressBar(progress) ? (

@@ -18,7 +18,7 @@ import Textarea from "../shared/ui/textarea";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
-import BrandCreateProgressModal from "../features/brand/presentation/components/brandCreateProgressModal";
+import BrandCreateProgressModal from "../features/brand/presentation/components/brandProgressModal";
 import { useBrandCreate } from "../features/brand/presentation/hook/useBrandCreate";
 
 import "../styles/brand.css";

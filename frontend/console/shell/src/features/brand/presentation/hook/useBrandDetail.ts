@@ -26,15 +26,15 @@ import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssign
 import { brandRepositoryHTTP } from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 import {
-  createCompletedBrandCreateProgress,
-  createCreatingBrandCreateProgress,
-  createFailedBrandCreateProgress,
-  createInitialBrandCreateProgress,
-  createSavingBrandCreateProgress,
-  createUploadingBrandCreateProgress,
-  isBrandCreateProgressVisible,
-  type BrandCreateProgress,
-} from "../model/brandCreateProgress";
+  createCompletedBrandProgress,
+  createFailedBrandProgress,
+  createInitialBrandProgress,
+  createPreparingBrandProgress,
+  createSavingBrandProgress,
+  createUploadingBrandProgress,
+  isBrandProgressVisible,
+  type BrandProgress,
+} from "../model/brandProgress";
 
 type BrandImageTarget = Extract<
   ImageStorageTarget,
@@ -140,12 +140,13 @@ export function useBrandDetail() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<Error | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [progress, setProgress] = useState<BrandCreateProgress>(
-    createInitialBrandCreateProgress,
+  const [progress, setProgress] = useState<BrandProgress>(
+    () => createInitialBrandProgress("update"),
   );
 
   const [accountId, setAccountId] = useState("");
-  const [accountCandidates, setAccountCandidates] = useState<BrandAccountCandidate[]>([]);
+  const [accountCandidates, setAccountCandidates] =
+    useState<BrandAccountCandidate[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
 
@@ -170,7 +171,8 @@ export function useBrandDetail() {
   const brandBackgroundInputRef = useRef<HTMLInputElement | null>(null);
 
   const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
-  const [brandBackgroundFile, setBrandBackgroundFile] = useState<File | null>(null);
+  const [brandBackgroundFile, setBrandBackgroundFile] =
+    useState<File | null>(null);
   const [brandIconCropPosition, setBrandIconCropPosition] =
     useState<IconCropPosition>(INITIAL_BRAND_ICON_CROP_POSITION);
   const [brandIconCropScale, setBrandIconCropScale] =
@@ -178,10 +180,11 @@ export function useBrandDetail() {
   const [brandIconCropViewportSize, setBrandIconCropViewportSize] = useState(0);
 
   const [brandIconPreviewUrl, setBrandIconPreviewUrl] = useState("");
-  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] = useState("");
+  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] =
+    useState("");
 
   const isUploading = progress.phase === "uploading" && saving;
-  const progressOpen = isBrandCreateProgressVisible(progress);
+  const progressOpen = isBrandProgressVisible(progress);
 
   const resetBrandIconCrop = useCallback(() => {
     setBrandIconCropPosition(INITIAL_BRAND_ICON_CROP_POSITION);
@@ -367,7 +370,7 @@ export function useBrandDetail() {
     setAccountError(null);
     setError(null);
     resetBrandIconCrop();
-    setProgress(createInitialBrandCreateProgress());
+    setProgress(createInitialBrandProgress("update"));
 
     if (brandIconInputRef.current) {
       brandIconInputRef.current.value = "";
@@ -393,7 +396,7 @@ export function useBrandDetail() {
     setAccountError(null);
     setError(null);
     resetBrandIconCrop();
-    setProgress(createInitialBrandCreateProgress());
+    setProgress(createInitialBrandProgress("update"));
 
     if (brandIconInputRef.current) {
       brandIconInputRef.current.value = "";
@@ -622,7 +625,8 @@ export function useBrandDetail() {
           file: currentFile,
           onProgress: (uploadProgress) => {
             setProgress(
-              createUploadingBrandCreateProgress({
+              createUploadingBrandProgress({
+                variant: "update",
                 fileName: currentFile.name,
                 transferredBytes:
                   completedBytes +
@@ -653,7 +657,8 @@ export function useBrandDetail() {
           file: currentFile,
           onProgress: (uploadProgress) => {
             setProgress(
-              createUploadingBrandCreateProgress({
+              createUploadingBrandProgress({
+                variant: "update",
                 fileName: currentFile.name,
                 transferredBytes:
                   completedBytes +
@@ -729,7 +734,8 @@ export function useBrandDetail() {
       setAccountError(null);
 
       setProgress(
-        createCreatingBrandCreateProgress({
+        createPreparingBrandProgress({
+          variant: "update",
           title: "ブランド情報を更新中",
           message: "ブランド情報の更新準備をしています。",
         }),
@@ -748,7 +754,8 @@ export function useBrandDetail() {
       } = await uploadBrandAssets(croppedBrandIconFile);
 
       setProgress(
-        createSavingBrandCreateProgress({
+        createSavingBrandProgress({
+          variant: "update",
           transferredBytes,
           totalBytes,
           completedUploadCount,
@@ -801,7 +808,8 @@ export function useBrandDetail() {
       setIsEditing(false);
 
       setProgress(
-        createCompletedBrandCreateProgress({
+        createCompletedBrandProgress({
+          variant: "update",
           transferredBytes,
           totalBytes,
           completedUploadCount,
@@ -820,9 +828,10 @@ export function useBrandDetail() {
       }
 
       setProgress(
-        createFailedBrandCreateProgress(
+        createFailedBrandProgress(
           message,
           {
+            variant: "update",
             title: "ブランド更新に失敗しました",
             message:
               "ブランド情報または画像の保存中にエラーが発生しました。",
@@ -850,7 +859,7 @@ export function useBrandDetail() {
       return;
     }
 
-    setProgress(createInitialBrandCreateProgress());
+    setProgress(createInitialBrandProgress("update"));
   }, [progress.isBlockingNavigation]);
 
   const statusBadgeClass = useMemo(

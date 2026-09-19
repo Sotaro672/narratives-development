@@ -19,23 +19,23 @@ import {
 import type { Account } from "../../../../shared/types/account";
 import type { IconCropPosition } from "../../../../shared/types/iconCrop";
 import { cropIconImage } from "../../../../shared/util/cropIconImage";
-import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import { accountRepositoryHTTP } from "../../../account/infrastructure/http/accountRepositoryHTTP";
+import { useAssigneeSelection } from "../../../admin/presentation/hook/useAssigneeSelection";
 import {
   brandRepositoryHTTP,
   type CreateBrandInput,
 } from "../../infrastructure/http/brandRepositoryHTTP";
 import { uploadBrandAssetToFirebaseStorage } from "../../infrastructure/storage/brandAssetStorage";
 import {
-  createCompletedBrandCreateProgress,
-  createCreatingBrandCreateProgress,
-  createFailedBrandCreateProgress,
-  createInitialBrandCreateProgress,
-  createSavingBrandCreateProgress,
-  createUploadingBrandCreateProgress,
-  isBrandCreateProgressVisible,
-  type BrandCreateProgress,
-} from "../model/brandCreateProgress";
+  createCompletedBrandProgress,
+  createFailedBrandProgress,
+  createInitialBrandProgress,
+  createPreparingBrandProgress,
+  createSavingBrandProgress,
+  createUploadingBrandProgress,
+  isBrandProgressVisible,
+  type BrandProgress,
+} from "../model/brandProgress";
 
 type BrandImageTarget = Extract<
   ImageStorageTarget,
@@ -91,7 +91,8 @@ export function useBrandCreate() {
   );
 
   const [accountId, setAccountId] = useState("");
-  const [accountCandidates, setAccountCandidates] = useState<BrandAccountCandidate[]>([]);
+  const [accountCandidates, setAccountCandidates] =
+    useState<BrandAccountCandidate[]>([]);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [accountIdError, setAccountIdError] = useState<string | null>(null);
   const [accountLoadError, setAccountLoadError] = useState<string | null>(null);
@@ -114,11 +115,12 @@ export function useBrandCreate() {
   const [nameError, setNameError] = useState<string | null>(null);
   const [managerIdError, setManagerIdError] = useState<string | null>(null);
   const [brandIconError, setBrandIconError] = useState<string | null>(null);
-  const [brandBackgroundImageError, setBrandBackgroundImageError] = useState<string | null>(null);
+  const [brandBackgroundImageError, setBrandBackgroundImageError] =
+    useState<string | null>(null);
 
   const [saving, setSaving] = useState(false);
-  const [progress, setProgress] = useState<BrandCreateProgress>(
-    createInitialBrandCreateProgress,
+  const [progress, setProgress] = useState<BrandProgress>(
+    () => createInitialBrandProgress("create"),
   );
   const [createdBrandId, setCreatedBrandId] = useState("");
 
@@ -126,19 +128,21 @@ export function useBrandCreate() {
   const brandBackgroundInputRef = useRef<HTMLInputElement | null>(null);
 
   const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
-  const [brandBackgroundFile, setBrandBackgroundFile] = useState<File | null>(null);
-  const [brandIconCropPosition, setBrandIconCropPosition] = useState<IconCropPosition>(
-    INITIAL_BRAND_ICON_CROP_POSITION,
-  );
-  const [brandIconCropScale, setBrandIconCropScale] = useState(INITIAL_BRAND_ICON_CROP_SCALE);
+  const [brandBackgroundFile, setBrandBackgroundFile] =
+    useState<File | null>(null);
+  const [brandIconCropPosition, setBrandIconCropPosition] =
+    useState<IconCropPosition>(INITIAL_BRAND_ICON_CROP_POSITION);
+  const [brandIconCropScale, setBrandIconCropScale] =
+    useState(INITIAL_BRAND_ICON_CROP_SCALE);
   const [brandIconCropViewportSize, setBrandIconCropViewportSize] = useState(0);
 
   const [brandIconPreviewUrl, setBrandIconPreviewUrl] = useState("");
-  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] = useState("");
+  const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] =
+    useState("");
 
   const isActive = true;
   const isUploading = progress.phase === "uploading" && saving;
-  const progressOpen = isBrandCreateProgressVisible(progress);
+  const progressOpen = isBrandProgressVisible(progress);
 
   const resetBrandIconCrop = useCallback(() => {
     setBrandIconCropPosition(INITIAL_BRAND_ICON_CROP_POSITION);
@@ -166,7 +170,10 @@ export function useBrandCreate() {
           }));
 
         setAccountCandidates(candidates);
-        if (candidates.length === 1) setAccountId(candidates[0].id);
+
+        if (candidates.length === 1) {
+          setAccountId(candidates[0].id);
+        }
       } catch (error: unknown) {
         if (cancelled) return;
 
@@ -174,7 +181,9 @@ export function useBrandCreate() {
         setAccountId("");
         setAccountLoadError(getErrorMessage(error));
       } finally {
-        if (!cancelled) setLoadingAccounts(false);
+        if (!cancelled) {
+          setLoadingAccounts(false);
+        }
       }
     };
 
@@ -294,9 +303,7 @@ export function useBrandCreate() {
       const file = event.currentTarget.files?.[0] ?? null;
       event.currentTarget.value = "";
 
-      if (!file) {
-        return;
-      }
+      if (!file) return;
 
       const validationError = validateSelectedImage(file, "brandIcon");
 
@@ -327,7 +334,10 @@ export function useBrandCreate() {
         return;
       }
 
-      const validationError = validateSelectedImage(file, "brandBackgroundImage");
+      const validationError = validateSelectedImage(
+        file,
+        "brandBackgroundImage",
+      );
 
       if (validationError) {
         setBrandBackgroundFile(null);
@@ -368,7 +378,10 @@ export function useBrandCreate() {
 
   const validateSelectedImagesBeforeSave = useCallback((): boolean => {
     if (brandIconFile) {
-      const validationError = validateSelectedImage(brandIconFile, "brandIcon");
+      const validationError = validateSelectedImage(
+        brandIconFile,
+        "brandIcon",
+      );
 
       if (validationError) {
         setBrandIconError(validationError);
@@ -399,37 +412,43 @@ export function useBrandCreate() {
     validateSelectedImage,
   ]);
 
-  const buildBrandIconFileForUpload = useCallback(async (): Promise<File | null> => {
-    if (!brandIconFile) {
-      return null;
-    }
+  const buildBrandIconFileForUpload = useCallback(
+    async (): Promise<File | null> => {
+      if (!brandIconFile) {
+        return null;
+      }
 
-    if (brandIconCropViewportSize <= 0) {
-      throw new Error(
-        "ブランドアイコンの切り抜き領域を取得できませんでした。画像を選択し直してください。",
+      if (brandIconCropViewportSize <= 0) {
+        throw new Error(
+          "ブランドアイコンの切り抜き領域を取得できませんでした。画像を選択し直してください。",
+        );
+      }
+
+      const croppedFile = await cropIconImage({
+        file: brandIconFile,
+        position: brandIconCropPosition,
+        scale: brandIconCropScale,
+        viewportSize: brandIconCropViewportSize,
+      });
+
+      const validation = validateImageForStorage(
+        croppedFile,
+        "brandIcon",
       );
-    }
 
-    const croppedFile = await cropIconImage({
-      file: brandIconFile,
-      position: brandIconCropPosition,
-      scale: brandIconCropScale,
-      viewportSize: brandIconCropViewportSize,
-    });
+      if (!validation.valid) {
+        throw new Error(validation.reason);
+      }
 
-    const validation = validateImageForStorage(croppedFile, "brandIcon");
-
-    if (!validation.valid) {
-      throw new Error(validation.reason);
-    }
-
-    return croppedFile;
-  }, [
-    brandIconFile,
-    brandIconCropPosition,
-    brandIconCropScale,
-    brandIconCropViewportSize,
-  ]);
+      return croppedFile;
+    },
+    [
+      brandIconFile,
+      brandIconCropPosition,
+      brandIconCropScale,
+      brandIconCropViewportSize,
+    ],
+  );
 
   const uploadBrandAssets = useCallback(
     async (
@@ -459,9 +478,12 @@ export function useBrandCreate() {
           file: currentFile,
           onProgress: (uploadProgress) => {
             setProgress(
-              createUploadingBrandCreateProgress({
+              createUploadingBrandProgress({
+                variant: "create",
                 fileName: currentFile.name,
-                transferredBytes: completedBytes + uploadProgress.transferredBytes,
+                transferredBytes:
+                  completedBytes +
+                  uploadProgress.transferredBytes,
                 totalBytes,
                 completedUploadCount,
                 expectedUploadCount,
@@ -485,9 +507,12 @@ export function useBrandCreate() {
           file: currentFile,
           onProgress: (uploadProgress) => {
             setProgress(
-              createUploadingBrandCreateProgress({
+              createUploadingBrandProgress({
+                variant: "create",
                 fileName: currentFile.name,
-                transferredBytes: completedBytes + uploadProgress.transferredBytes,
+                transferredBytes:
+                  completedBytes +
+                  uploadProgress.transferredBytes,
                 totalBytes,
                 completedUploadCount,
                 expectedUploadCount,
@@ -522,16 +547,17 @@ export function useBrandCreate() {
     if (saving || progress.isBlockingNavigation) return;
 
     if (
-      (progress.phase === "completed" || progress.phase === "failed") &&
+      (progress.phase === "completed" ||
+        progress.phase === "failed") &&
       createdBrandId
     ) {
-      setProgress(createInitialBrandCreateProgress());
+      setProgress(createInitialBrandProgress("create"));
       setCreatedBrandId("");
       navigate("/brand");
       return;
     }
 
-    setProgress(createInitialBrandCreateProgress());
+    setProgress(createInitialBrandProgress("create"));
   }, [
     saving,
     progress.isBlockingNavigation,
@@ -585,12 +611,14 @@ export function useBrandCreate() {
     let localCreatedBrandId = "";
 
     try {
-      const croppedBrandIconFile = await buildBrandIconFileForUpload();
+      const croppedBrandIconFile =
+        await buildBrandIconFileForUpload();
 
       setSaving(true);
       setCreatedBrandId("");
       setProgress(
-        createCreatingBrandCreateProgress({
+        createPreparingBrandProgress({
+          variant: "create",
           title: "ブランドを登録中",
           message: "ブランド情報を登録しています。",
         }),
@@ -608,7 +636,9 @@ export function useBrandCreate() {
         createdBy: currentMember?.id ?? null,
       };
 
-      const created = await brandRepositoryHTTP.create(createPayload);
+      const created =
+        await brandRepositoryHTTP.create(createPayload);
+
       localCreatedBrandId = String(created.id ?? "");
 
       if (!localCreatedBrandId) {
@@ -629,26 +659,36 @@ export function useBrandCreate() {
         croppedBrandIconFile,
       );
 
-      if (uploadedBrandIcon || uploadedBrandBackgroundImage) {
+      if (
+        uploadedBrandIcon ||
+        uploadedBrandBackgroundImage
+      ) {
         setProgress(
-          createSavingBrandCreateProgress({
+          createSavingBrandProgress({
+            variant: "create",
             transferredBytes,
             totalBytes,
             completedUploadCount,
             expectedUploadCount,
             title: "ブランド情報を保存中",
-            message: "画像転送が完了しました。ブランド情報を更新しています。",
+            message:
+              "画像転送が完了しました。ブランド情報を更新しています。",
           }),
         );
 
-        await brandRepositoryHTTP.update(localCreatedBrandId, {
-          brandIcon: uploadedBrandIcon,
-          brandBackgroundImage: uploadedBrandBackgroundImage,
-        });
+        await brandRepositoryHTTP.update(
+          localCreatedBrandId,
+          {
+            brandIcon: uploadedBrandIcon,
+            brandBackgroundImage:
+              uploadedBrandBackgroundImage,
+          },
+        );
       }
 
       setProgress(
-        createCompletedBrandCreateProgress({
+        createCompletedBrandProgress({
+          variant: "create",
           transferredBytes,
           totalBytes,
           completedUploadCount,
@@ -662,10 +702,12 @@ export function useBrandCreate() {
 
       if (localCreatedBrandId) {
         setCreatedBrandId(localCreatedBrandId);
+
         setProgress(
-          createFailedBrandCreateProgress(
+          createFailedBrandProgress(
             message,
             {
+              variant: "create",
               title: "画像の保存に失敗しました",
               message:
                 "ブランド本体は登録されましたが、画像のアップロードまたはURL保存に失敗しました。",
@@ -680,11 +722,13 @@ export function useBrandCreate() {
         );
 
         setProgress(
-          createFailedBrandCreateProgress(
+          createFailedBrandProgress(
             message,
             {
+              variant: "create",
               title: "ブランド登録に失敗しました",
-              message: "ブランド情報の登録中にエラーが発生しました。",
+              message:
+                "ブランド情報の登録中にエラーが発生しました。",
             },
           ),
         );
@@ -760,9 +804,12 @@ export function useBrandCreate() {
 
     brandIconCropPosition,
     brandIconCropScale,
-    handleBrandIconCropPositionChange: setBrandIconCropPosition,
-    handleBrandIconCropScaleChange: setBrandIconCropScale,
-    handleBrandIconCropViewportSizeChange: setBrandIconCropViewportSize,
+    handleBrandIconCropPositionChange:
+      setBrandIconCropPosition,
+    handleBrandIconCropScaleChange:
+      setBrandIconCropScale,
+    handleBrandIconCropViewportSizeChange:
+      setBrandIconCropViewportSize,
 
     brandIconError,
     brandBackgroundImageError,
