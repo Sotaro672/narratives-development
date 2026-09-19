@@ -3,7 +3,7 @@ import React, { useMemo, useState } from "react";
 import List, {
   SortableTableHeader,
 } from "../layout/List/List";
-import FilterableTableHeader from "../shared/ui/filterable-table-header";
+import FilterableTableHeader from "../shared/ui/filter-able-table-header";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 import { useAnnouncementManagement } from "../features/announcement/presentation/hook/useAnnouncementManagement";
 

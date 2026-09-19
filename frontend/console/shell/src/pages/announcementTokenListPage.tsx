@@ -11,7 +11,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import List, {
   SortableTableHeader,
 } from "../layout/List/List";
-import FilterableTableHeader from "../shared/ui/filterable-table-header";
+import FilterableTableHeader from "../shared/ui/filter-able-table-header";
 
 import { buildAnnouncementTokenListNavigateState } from "../features/announcement/application/announcement_token_list_service";
 import { useAnnouncementTokenListPage } from "../features/announcement/presentation/hook/useAnnouncementTokenListPage";
