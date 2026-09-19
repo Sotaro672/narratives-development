@@ -1,10 +1,13 @@
 // frontend/console/shell/src/pages/inventoryManagement.tsx
 
-import List from "../layout/List/List";
-import "../styles/inventory.css";
+import type { KeyboardEvent } from "react";
 
-import { useInventoryManagement } from "../features/inventory/presentation/hook/useInventoryManagement";
 import { buildInventoryHeaders } from "../features/inventory/application/inventoryManagementService";
+import { useInventoryManagement } from "../features/inventory/presentation/hook/useInventoryManagement";
+import List from "../layout/List/List";
+import { TableCell, TableRow } from "../shared/ui/table";
+
+import "../styles/inventory.css";
 
 /** 在庫管理ページ（スタイル＋レイアウト中心） */
 export default function InventoryManagementPage() {
@@ -43,38 +46,29 @@ export default function InventoryManagementPage() {
         onReset={handleReset}
       >
         {rows.map((row) => (
-          <tr
+          <TableRow
             key={row.id}
             className="inv__clickable-row"
             role="button"
             tabIndex={0}
             onClick={() => handleRowClick(row)}
-            onKeyDown={(e) => {
+            onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 handleRowClick(row);
               }
             }}
           >
-            {/* プロダクト名 */}
-            <td>{row.productName}</td>
-
-            {/* トークン名 */}
-            <td>{row.tokenName || "-"}</td>
-
-            {/* 保管場所 */}
-            <td>{row.shippingAddressName || "-"}</td>
-
-            {/* 在庫数 */}
-            <td>
+            <TableCell>{row.productName}</TableCell>
+            <TableCell>{row.tokenName || "-"}</TableCell>
+            <TableCell>{row.shippingAddressName || "-"}</TableCell>
+            <TableCell>
               <span className="inv__total-pill">{row.availableStock}</span>
-            </td>
-
-            {/* 注文数 */}
-            <td>
+            </TableCell>
+            <TableCell>
               <span className="inv__total-pill">{row.reservedCount}</span>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ))}
       </List>
     </div>

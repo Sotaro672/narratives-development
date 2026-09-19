@@ -1,9 +1,11 @@
-// frontend\console\shell\src\pages\productBlueprintManagement.tsx
+// frontend/console/shell/src/pages/productBlueprintManagement.tsx
+
+import { useProductBlueprintManagement } from "../features/productBlueprint/presentation/hooks/useProductBlueprintManagement";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
-import { useProductBlueprintManagement } from "../features/productBlueprint/presentation/hooks/useProductBlueprintManagement";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 export default function ProductBlueprintManagement() {
   const {
@@ -21,7 +23,6 @@ export default function ProductBlueprintManagement() {
     isResetting,
   } = useProductBlueprintManagement();
 
-  // rows からオプションを動的生成
   const brandOptions = Array.from(
     new Set(rows.map((r) => r.brandName).filter(Boolean)),
   ).map((name) => ({ value: name, label: name }));
@@ -30,7 +31,6 @@ export default function ProductBlueprintManagement() {
     new Set(rows.map((r) => r.assigneeName).filter(Boolean)),
   ).map((name) => ({ value: name, label: name }));
 
-  // printed のフィルタ選択肢（固定）
   const printedOptions = [
     { value: "未印刷", label: "未印刷" },
     { value: "印刷済み", label: "印刷済み" },
@@ -89,18 +89,18 @@ export default function ProductBlueprintManagement() {
       onReset={handleReset}
     >
       {rows.map((r) => (
-        <tr
+        <TableRow
           key={r.id}
-          className="cursor-pointer hover:bg-[rgba(0,0,0,0.03)] transition"
+          className="cursor-pointer"
           onClick={() => handleRowClick(r)}
         >
-          <td>{r.productName}</td>
-          <td>{r.brandName}</td>
-          <td>{r.assigneeName}</td>
-          <td>{r.printed ? "印刷済み" : "未印刷"}</td>
-          <td>{r.createdAt}</td>
-          <td>{r.updatedAt}</td>
-        </tr>
+          <TableCell>{r.productName}</TableCell>
+          <TableCell>{r.brandName}</TableCell>
+          <TableCell>{r.assigneeName}</TableCell>
+          <TableCell>{r.printed ? "印刷済み" : "未印刷"}</TableCell>
+          <TableCell>{r.createdAt}</TableCell>
+          <TableCell>{r.updatedAt}</TableCell>
+        </TableRow>
       ))}
     </List>
   );

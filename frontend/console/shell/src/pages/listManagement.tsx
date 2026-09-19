@@ -1,9 +1,11 @@
 // frontend/console/shell/src/pages/listManagement.tsx
 
-import List from "../layout/List/List";
-import { Badge } from "../shared/ui/badge";
+import type { KeyboardEvent } from "react";
 
 import { useListManagement } from "../features/list/presentation/hook/useListManagement";
+import List from "../layout/List/List";
+import { Badge } from "../shared/ui/badge";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 export default function ListManagementPage() {
   const { vm, handlers, isResetting } = useListManagement();
@@ -18,27 +20,29 @@ export default function ListManagementPage() {
         onReset={handlers.onReset}
       >
         {vm.rows.map((l) => (
-          <tr
+          <TableRow
             key={l.id}
             role="button"
             tabIndex={0}
             className="cursor-pointer"
             onClick={() => handlers.onRowClick(l.id)}
-            onKeyDown={(e) => handlers.onRowKeyDown(e, l.id)}
+            onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) =>
+              handlers.onRowKeyDown(e, l.id)
+            }
           >
-            <td>{l.readableId || l.id}</td>
-            <td>{l.productName}</td>
-            <td>{l.tokenName}</td>
-            <td>¥{l.totalSalesAmount.toLocaleString()}</td>
-            <td>{l.totalOrderCount}</td>
-            <td>{l.assigneeName}</td>
-            <td>
+            <TableCell>{l.readableId || l.id}</TableCell>
+            <TableCell>{l.productName}</TableCell>
+            <TableCell>{l.tokenName}</TableCell>
+            <TableCell>¥{l.totalSalesAmount.toLocaleString()}</TableCell>
+            <TableCell>{l.totalOrderCount}</TableCell>
+            <TableCell>{l.assigneeName}</TableCell>
+            <TableCell>
               <Badge variant={l.status === "listing" ? "active" : "danger"}>
                 {l.statusBadgeText}
               </Badge>
-            </td>
-            <td>{l.createdAt}</td>
-          </tr>
+            </TableCell>
+            <TableCell>{l.createdAt}</TableCell>
+          </TableRow>
         ))}
       </List>
     </div>

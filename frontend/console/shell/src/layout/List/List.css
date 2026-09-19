@@ -13,7 +13,9 @@
   padding: 1.5rem;
 }
 
-/* タイトル */
+/* ========================================
+   タイトル
+   ======================================== */
 
 .list-title {
   margin: 0;
@@ -41,7 +43,7 @@
 }
 
 /* ========================================
-   テーブルスタイル
+   リストカード
    ======================================== */
 
 .lp-card {
@@ -51,45 +53,17 @@
   background: #fff;
 }
 
-.lp-table {
-  width: 100%;
-  border-collapse: collapse;
-}
+/* ========================================
+   テーブルヘッダー固有スタイル
+   ======================================== */
 
 .lp-thead {
-  border-bottom: 1px solid #ddd;
   background-color: #f6f7fb;
-  text-align: left;
 }
 
-.lp-row-head {
-  height: 40px;
-}
-
-.lp-th {
-  border-bottom: 1px solid #e3e3e3;
-  padding: 0.75rem 1rem;
-  color: #333;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-
-.lp-tbody tr {
-  transition: background-color 0.2s ease;
-}
-
-.lp-tbody tr:hover {
-  background-color: #f9fafb;
-}
-
-.lp-tbody td {
-  border-bottom: 1px solid #eee;
-  padding: 0.75rem 1rem;
-  color: #444;
-  font-size: 0.9rem;
-}
-
-/* 空リスト用メッセージ */
+/* ========================================
+   空リスト用メッセージ
+   ======================================== */
 
 .lp-empty-row {
   height: 180px;

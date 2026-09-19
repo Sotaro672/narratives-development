@@ -5,6 +5,7 @@ import React from "react";
 import { useTransactionList } from "../features/transaction/presentation/hook/useTransactionList";
 import List from "../layout/List/List";
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
+import { TableCell, TableRow } from "../shared/ui/table";
 import Text from "../shared/ui/text";
 
 function getTransactionTypeBadgeVariant(
@@ -42,9 +43,7 @@ export default function TransactionListPage() {
   if (loading) {
     return (
       <div className="p-4">
-        <Text tone="muted">
-          読み込み中...
-        </Text>
+        <Text tone="muted">読み込み中...</Text>
       </div>
     );
   }
@@ -79,33 +78,41 @@ export default function TransactionListPage() {
         onReset={reload}
       >
         {transactions.length === 0 ? (
-          <tr>
-            <td colSpan={6}>
+          <TableRow>
+            <TableCell colSpan={headers.length}>
               <div className="py-4 text-center">
                 <Text tone="muted">
                   取引履歴はありません。
                 </Text>
               </div>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ) : (
           transactions.map((transaction) => (
-            <tr key={transaction.id}>
-              <td>{transaction.timestampLabel}</td>
-              <td>{transaction.accountLabel}</td>
-              <td>
-                <Badge variant={getTransactionTypeBadgeVariant(transaction.type)}>
+            <TableRow key={transaction.id}>
+              <TableCell>{transaction.timestampLabel}</TableCell>
+              <TableCell>{transaction.accountLabel}</TableCell>
+              <TableCell>
+                <Badge
+                  variant={getTransactionTypeBadgeVariant(
+                    transaction.type,
+                  )}
+                >
                   {transaction.typeLabel}
                 </Badge>
-              </td>
-              <td>{transaction.description}</td>
-              <td>{transaction.amountLabel}</td>
-              <td>
-                <Badge variant={getTransactionStatusBadgeVariant(transaction.status)}>
+              </TableCell>
+              <TableCell>{transaction.description}</TableCell>
+              <TableCell>{transaction.amountLabel}</TableCell>
+              <TableCell>
+                <Badge
+                  variant={getTransactionStatusBadgeVariant(
+                    transaction.status,
+                  )}
+                >
                   {transaction.statusLabel}
                 </Badge>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ))
         )}
       </List>

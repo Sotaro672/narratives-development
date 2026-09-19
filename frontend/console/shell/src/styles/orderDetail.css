@@ -26,13 +26,19 @@
 }
 
 .order-detail__table {
-  width: 100%;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
   text-align: left;
 }
 
+.order-detail__table .table__row {
+  border-bottom: 0;
+}
+
+.order-detail__table .table__row:hover {
+  background-color: transparent;
+}
+
 .order-detail__label-cell {
+  height: auto;
   padding: 8px 16px 8px 0;
   color: hsl(var(--muted-foreground));
   font-weight: 500;

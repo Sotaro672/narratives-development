@@ -1,8 +1,11 @@
 // frontend/console/shell/src/pages/mintManagement.tsx
 
+import type { KeyboardEvent } from "react";
+
+import { useMintRequestManagement } from "../features/mint/presentation/hook/useMintRequestManagement";
 import List from "../layout/List/List";
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
-import { useMintRequestManagement } from "../features/mint/presentation/hook/useMintRequestManagement";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 function getMintStatusBadgeVariant(status: string): BadgeVariant {
   switch (status) {
@@ -39,27 +42,23 @@ export default function MintRequestManagementPage() {
       >
         {rows.map((row) => {
           const requesterName = row.createdByName ?? "-";
-
           const mintedAtLabel =
             row.status === "minted"
               ? row.mintedAt ?? "-"
               : "-";
-
           const tokenLabel =
             row.tokenName ??
             row.tokenBlueprintId ??
             "-";
-
-          const productName =
-            row.productName ?? "-";
+          const productName = row.productName ?? "-";
 
           return (
-            <tr
+            <TableRow
               key={row.productionId}
               onClick={() => handleRowClick(row.productionId)}
               className="cursor-pointer"
               tabIndex={0}
-              onKeyDown={(event) =>
+              onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) =>
                 handleRowKeyDown(
                   event,
                   row.productionId,
@@ -67,30 +66,30 @@ export default function MintRequestManagementPage() {
               }
               aria-label={`ミント申請 ${productName} の詳細へ`}
             >
-              <td>
+              <TableCell>
                 <span className="truncate">
                   {tokenLabel}
                 </span>
-              </td>
+              </TableCell>
 
-              <td>
+              <TableCell>
                 <span className="truncate">
                   {productName}
                 </span>
-              </td>
+              </TableCell>
 
-              <td>{row.mintQuantity}</td>
-              <td>{row.productionQuantity}</td>
+              <TableCell>{row.mintQuantity}</TableCell>
+              <TableCell>{row.productionQuantity}</TableCell>
 
-              <td>
+              <TableCell>
                 <Badge variant={getMintStatusBadgeVariant(row.status)}>
                   {row.statusLabel}
                 </Badge>
-              </td>
+              </TableCell>
 
-              <td>{requesterName}</td>
-              <td>{mintedAtLabel}</td>
-            </tr>
+              <TableCell>{requesterName}</TableCell>
+              <TableCell>{mintedAtLabel}</TableCell>
+            </TableRow>
           );
         })}
       </List>

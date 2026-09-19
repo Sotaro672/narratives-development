@@ -1,13 +1,20 @@
 // frontend/console/shell/src/pages/orderDetail.tsx
 
-import PageStyle from "../layout/PageStyle/PageStyle";
-import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
-import Text from "../shared/ui/text";
-import { coerceRgbInt, rgbIntToHex } from "../shared/util/color";
-import { safeDateTimeLabelJa } from "../shared/util/dateJa";
-import { getOrderStatusLabel } from "../shared/types/order";
 import { formatJPY, useOrderDetail } from "../features/order/presentation/hooks/useOrderDetail";
 import type { OrderDetailItemDTO } from "../features/order/presentation/hooks/useOrderDetail";
+import PageStyle from "../layout/PageStyle/PageStyle";
+import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+} from "../shared/ui/table";
+import Text from "../shared/ui/text";
+import { getOrderStatusLabel } from "../shared/types/order";
+import { coerceRgbInt, rgbIntToHex } from "../shared/util/color";
+import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 import "../styles/orderDetail.css";
 
@@ -130,22 +137,22 @@ export default function OrderDetail() {
                 基本情報
               </Text>
 
-              <table className="order-detail__table">
-                <tbody>
-                  <tr>
-                    <th className="order-detail__label-cell">
+              <Table className="order-detail__table">
+                <TableBody>
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       注文日
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {createdAt}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       リストID
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {lists.length > 0 ? (
                         <div className="order-detail__list-links">
                           {lists.map((list) => (
@@ -162,64 +169,64 @@ export default function OrderDetail() {
                       ) : (
                         "-"
                       )}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       アイテム数
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {items.length} 点
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       数量合計
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {quantity} 点
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       商品小計
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {formatJPY(subtotal)}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       配送料
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {formatJPY(shippingAmount)}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       消費税
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {formatJPY(consumptionTax)}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       合計金額
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {formatJPY(totalPrice)}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </div>
 
             <div>
@@ -231,50 +238,50 @@ export default function OrderDetail() {
                 配送先
               </Text>
 
-              <table className="order-detail__table">
-                <tbody>
-                  <tr>
-                    <th className="order-detail__label-cell">
+              <Table className="order-detail__table">
+                <TableBody>
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       郵便番号
-                    </th>
-                    <td className="order-detail__value-cell order-detail__value-cell--spaced">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell order-detail__value-cell--spaced">
                       {shipping?.zipCode ?? "-"}
-                    </td>
+                    </TableCell>
 
-                    <th className="order-detail__label-cell">
+                    <TableHead scope="row" className="order-detail__label-cell">
                       都道府県
-                    </th>
-                    <td className="order-detail__value-cell order-detail__value-cell--spaced">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell order-detail__value-cell--spaced">
                       {shipping?.state ?? "-"}
-                    </td>
+                    </TableCell>
 
-                    <th className="order-detail__label-cell">
+                    <TableHead scope="row" className="order-detail__label-cell">
                       市町村
-                    </th>
-                    <td className="order-detail__value-cell">
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell">
                       {shipping?.city ?? "-"}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       住所1
-                    </th>
-                    <td className="order-detail__value-cell" colSpan={5}>
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell" colSpan={5}>
                       {shipping?.street ?? "-"}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
 
-                  <tr>
-                    <th className="order-detail__label-cell">
+                  <TableRow>
+                    <TableHead scope="row" className="order-detail__label-cell">
                       住所2
-                    </th>
-                    <td className="order-detail__value-cell" colSpan={5}>
+                    </TableHead>
+                    <TableCell className="order-detail__value-cell" colSpan={5}>
                       {shipping?.street2 ?? "-"}
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
+                    </TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
             </div>
 
             <div>
@@ -315,71 +322,92 @@ export default function OrderDetail() {
                         </CardHeader>
 
                         <CardContent className="order-detail__item-content">
-                          <table className="order-detail__table">
-                            <tbody>
+                          <Table className="order-detail__table">
+                            <TableBody>
                               {alcohol ? (
                                 <>
-                                  <tr>
-                                    <th className="order-detail__label-cell">
+                                  <TableRow>
+                                    <TableHead
+                                      scope="row"
+                                      className="order-detail__label-cell"
+                                    >
                                       容量
-                                    </th>
-                                    <td className="order-detail__value-cell">
+                                    </TableHead>
+                                    <TableCell className="order-detail__value-cell">
                                       {formatVolume(item)}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
 
-                                  <tr>
-                                    <th className="order-detail__label-cell">
+                                  <TableRow>
+                                    <TableHead
+                                      scope="row"
+                                      className="order-detail__label-cell"
+                                    >
                                       ヴィンテージ
-                                    </th>
-                                    <td className="order-detail__value-cell">
+                                    </TableHead>
+                                    <TableCell className="order-detail__value-cell">
                                       {formatDisplayValue(vintage)}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
 
-                                  <tr>
-                                    <th className="order-detail__label-cell">
+                                  <TableRow>
+                                    <TableHead
+                                      scope="row"
+                                      className="order-detail__label-cell"
+                                    >
                                       地域・産地
-                                    </th>
-                                    <td className="order-detail__value-cell">
+                                    </TableHead>
+                                    <TableCell className="order-detail__value-cell">
                                       {formatDisplayValue(region)}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
 
-                                  <tr>
-                                    <th className="order-detail__label-cell">
+                                  <TableRow>
+                                    <TableHead
+                                      scope="row"
+                                      className="order-detail__label-cell"
+                                    >
                                       素材
-                                    </th>
-                                    <td className="order-detail__value-cell">
+                                    </TableHead>
+                                    <TableCell className="order-detail__value-cell">
                                       {formatDisplayValue(material)}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
 
-                                  <tr>
-                                    <th className="order-detail__label-cell">
+                                  <TableRow>
+                                    <TableHead
+                                      scope="row"
+                                      className="order-detail__label-cell"
+                                    >
                                       アルコール度数
-                                    </th>
-                                    <td className="order-detail__value-cell">
+                                    </TableHead>
+                                    <TableCell className="order-detail__value-cell">
                                       {formatDisplayValue(alcoholContent, "%")}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
                                 </>
                               ) : (
                                 <>
-                                  <tr>
-                                    <th className="order-detail__label-cell">
+                                  <TableRow>
+                                    <TableHead
+                                      scope="row"
+                                      className="order-detail__label-cell"
+                                    >
                                       サイズ
-                                    </th>
-                                    <td className="order-detail__value-cell">
+                                    </TableHead>
+                                    <TableCell className="order-detail__value-cell">
                                       {item.size ?? "-"}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
 
-                                  <tr>
-                                    <th className="order-detail__label-cell">
+                                  <TableRow>
+                                    <TableHead
+                                      scope="row"
+                                      className="order-detail__label-cell"
+                                    >
                                       カラー
-                                    </th>
-                                    <td className="order-detail__value-cell">
+                                    </TableHead>
+                                    <TableCell className="order-detail__value-cell">
                                       {(() => {
                                         const name = item.color?.trim() ?? "";
                                         const rgbInt = coerceRgbInt(item.rgb);
@@ -403,66 +431,84 @@ export default function OrderDetail() {
                                           </div>
                                         );
                                       })()}
-                                    </td>
-                                  </tr>
+                                    </TableCell>
+                                  </TableRow>
                                 </>
                               )}
 
-                              <tr>
-                                <th className="order-detail__label-cell">
+                              <TableRow>
+                                <TableHead
+                                  scope="row"
+                                  className="order-detail__label-cell"
+                                >
                                   型番
-                                </th>
-                                <td className="order-detail__value-cell">
+                                </TableHead>
+                                <TableCell className="order-detail__value-cell">
                                   {item.modelNumber ?? "-"}
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
 
-                              <tr>
-                                <th className="order-detail__label-cell">
+                              <TableRow>
+                                <TableHead
+                                  scope="row"
+                                  className="order-detail__label-cell"
+                                >
                                   商品名
-                                </th>
-                                <td className="order-detail__value-cell">
+                                </TableHead>
+                                <TableCell className="order-detail__value-cell">
                                   {item.productName ?? "-"}
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
 
-                              <tr>
-                                <th className="order-detail__label-cell">
+                              <TableRow>
+                                <TableHead
+                                  scope="row"
+                                  className="order-detail__label-cell"
+                                >
                                   トークン名
-                                </th>
-                                <td className="order-detail__value-cell">
+                                </TableHead>
+                                <TableCell className="order-detail__value-cell">
                                   {item.tokenName ?? "-"}
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
 
-                              <tr>
-                                <th className="order-detail__label-cell">
+                              <TableRow>
+                                <TableHead
+                                  scope="row"
+                                  className="order-detail__label-cell"
+                                >
                                   数量
-                                </th>
-                                <td className="order-detail__value-cell">
+                                </TableHead>
+                                <TableCell className="order-detail__value-cell">
                                   {item.qty}
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
 
-                              <tr>
-                                <th className="order-detail__label-cell">
+                              <TableRow>
+                                <TableHead
+                                  scope="row"
+                                  className="order-detail__label-cell"
+                                >
                                   金額
-                                </th>
-                                <td className="order-detail__value-cell">
+                                </TableHead>
+                                <TableCell className="order-detail__value-cell">
                                   {formatJPY(item.price)}
-                                </td>
-                              </tr>
+                                </TableCell>
+                              </TableRow>
 
-                              <tr>
-                                <th className="order-detail__label-cell">
+                              <TableRow>
+                                <TableHead
+                                  scope="row"
+                                  className="order-detail__label-cell"
+                                >
                                   移譲日
-                                </th>
-                                <td className="order-detail__value-cell">
+                                </TableHead>
+                                <TableCell className="order-detail__value-cell">
                                   {transferredAt}
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
                         </CardContent>
                       </Card>
                     );
@@ -505,27 +551,27 @@ export default function OrderDetail() {
               -
             </Text>
           ) : (
-            <table className="order-detail__table">
-              <tbody>
-                <tr>
-                  <th className="order-detail__label-cell">
+            <Table className="order-detail__table">
+              <TableBody>
+                <TableRow>
+                  <TableHead scope="row" className="order-detail__label-cell">
                     ユーザー名
-                  </th>
-                  <td className="order-detail__value-cell">
+                  </TableHead>
+                  <TableCell className="order-detail__value-cell">
                     {userName}
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
 
-                <tr>
-                  <th className="order-detail__label-cell">
+                <TableRow>
+                  <TableHead scope="row" className="order-detail__label-cell">
                     メールアドレス
-                  </th>
-                  <td className="order-detail__value-cell">
+                  </TableHead>
+                  <TableCell className="order-detail__value-cell">
                     {email}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>

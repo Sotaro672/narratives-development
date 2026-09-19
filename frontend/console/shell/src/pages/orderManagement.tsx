@@ -1,10 +1,12 @@
 // frontend/console/shell/src/pages/orderManagement.tsx
 
-import List from "../layout/List/List";
+import type { KeyboardEvent } from "react";
 
 import { getOrderManagementStatus } from "../features/order/application/orderManagementFilter";
 import { useOrderManagement } from "../features/order/presentation/hooks/useOrderManagement";
+import List from "../layout/List/List";
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
+import { TableCell, TableRow } from "../shared/ui/table";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 function getOrderStatusBadgeVariant(status: string): BadgeVariant {
@@ -46,20 +48,20 @@ export default function OrderManagementPage() {
         onReset={reset}
       >
         {errorMsg ? (
-          <tr>
-            <td colSpan={headers.length} style={{ padding: 16 }}>
+          <TableRow>
+            <TableCell colSpan={headers.length}>
               {errorMsg}
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ) : (
           rows.map((order) => {
             const status = getOrderManagementStatus(order);
 
             return (
-              <tr
+              <TableRow
                 key={`${order.orderId}__${order.inventoryId}__${order.listReadableId ?? ""}`}
                 onClick={() => goDetail(order.orderId)}
-                onKeyDown={(event) => {
+                onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
                   if (event.key !== "Enter" && event.key !== " ") {
                     return;
                   }
@@ -67,26 +69,28 @@ export default function OrderManagementPage() {
                   event.preventDefault();
                   goDetail(order.orderId);
                 }}
-                className="is-rowlink cursor-pointer hover:bg-slate-50 transition-colors"
+                className="is-rowlink cursor-pointer"
                 tabIndex={0}
                 role="button"
               >
-                <td>
+                <TableCell>
                   <span className="text-blue-600 hover:underline">
                     {order.orderId}
                   </span>
-                </td>
-                <td>{order.listReadableId || "-"}</td>
-                <td>{order.productName || "-"}</td>
-                <td>{order.tokenName || "-"}</td>
-                <td>{order.userName || "-"}</td>
-                <td>{safeDateTimeLabelJa(order.createdAt, "-")}</td>
-                <td>
+                </TableCell>
+                <TableCell>{order.listReadableId || "-"}</TableCell>
+                <TableCell>{order.productName || "-"}</TableCell>
+                <TableCell>{order.tokenName || "-"}</TableCell>
+                <TableCell>{order.userName || "-"}</TableCell>
+                <TableCell>
+                  {safeDateTimeLabelJa(order.createdAt, "-")}
+                </TableCell>
+                <TableCell>
                   <Badge variant={getOrderStatusBadgeVariant(status)}>
                     {status}
                   </Badge>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             );
           })
         )}

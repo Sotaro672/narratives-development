@@ -3,18 +3,17 @@
 import {
   useMemo,
   useState,
+  type KeyboardEvent,
   type ReactNode,
 } from "react";
 import { useNavigate } from "react-router-dom";
 
-import PageStyle from "../layout/PageStyle/PageStyle";
-import List, {
-  SortableTableHeader,
-} from "../layout/List/List";
-import FilterableTableHeader from "../shared/ui/filter-able-table-header";
-
 import { buildAnnouncementTokenListNavigateState } from "../features/announcement/application/announcement_token_list_service";
 import { useAnnouncementTokenListPage } from "../features/announcement/presentation/hook/useAnnouncementTokenListPage";
+import List, { SortableTableHeader } from "../layout/List/List";
+import PageStyle from "../layout/PageStyle/PageStyle";
+import FilterableTableHeader from "../shared/ui/filter-able-table-header";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 export default function AnnouncementTokenListPage() {
   const navigate = useNavigate();
@@ -28,10 +27,7 @@ export default function AnnouncementTokenListPage() {
     isResetting,
   } = useAnnouncementTokenListPage();
 
-  const [
-    selectedBrandNames,
-    setSelectedBrandNames,
-  ] = useState<string[]>([]);
+  const [selectedBrandNames, setSelectedBrandNames] = useState<string[]>([]);
 
   const brandOptions = useMemo(() => {
     const brandNames = rows
@@ -41,9 +37,7 @@ export default function AnnouncementTokenListPage() {
           Boolean(brandName),
       );
 
-    return Array.from(
-      new Set(brandNames),
-    ).map((brandName) => ({
+    return Array.from(new Set(brandNames)).map((brandName) => ({
       label: brandName,
       value: brandName,
     }));
@@ -55,21 +49,16 @@ export default function AnnouncementTokenListPage() {
     }
 
     return rows.filter((row) =>
-      selectedBrandNames.includes(
-        row.brandName,
-      ),
+      selectedBrandNames.includes(row.brandName),
     );
   }, [rows, selectedBrandNames]);
 
-  const handleBrandFilterChange = (
-    next: string[],
-  ) => {
+  const handleBrandFilterChange = (next: string[]) => {
     setSelectedBrandNames(next);
   };
 
   const handlePageReset = async () => {
     setSelectedBrandNames([]);
-
     await handleReset();
   };
 
@@ -79,46 +68,34 @@ export default function AnnouncementTokenListPage() {
     });
   };
 
-  const handleRowClick = (
-    tokenBlueprintId: string,
-  ) => {
-    const id = String(
-      tokenBlueprintId ?? "",
-    ).trim();
+  const handleRowClick = (tokenBlueprintId: string) => {
+    const id = String(tokenBlueprintId ?? "").trim();
 
     if (!id) {
       return;
     }
 
     const row = rows.find(
-      (item) =>
-        item.tokenBlueprintId === id,
+      (item) => item.tokenBlueprintId === id,
     );
 
     navigate(
       `/sales/${encodeURIComponent(id)}/create`,
       {
-        state:
-          buildAnnouncementTokenListNavigateState(
-            row,
-          ),
+        state: buildAnnouncementTokenListNavigateState(row),
       },
     );
   };
 
   const headers: ReactNode[] = [
-    <span key="tokenName">
-      トークン名
-    </span>,
+    <span key="tokenName">トークン名</span>,
 
     <FilterableTableHeader
       key="brandName"
       label="ブランド名"
       options={brandOptions}
       selected={selectedBrandNames}
-      onChange={
-        handleBrandFilterChange
-      }
+      onChange={handleBrandFilterChange}
     />,
 
     <SortableTableHeader
@@ -154,39 +131,31 @@ export default function AnnouncementTokenListPage() {
           showResetButton={false}
         >
           {filteredRows.map((row) => (
-            <tr
-              key={
-                row.tokenBlueprintId
-              }
+            <TableRow
+              key={row.tokenBlueprintId}
               role="button"
               tabIndex={0}
-              className="cursor-pointer transition-colors hover:bg-slate-50"
+              className="cursor-pointer"
               onClick={() =>
-                handleRowClick(
-                  row.tokenBlueprintId,
-                )
+                handleRowClick(row.tokenBlueprintId)
               }
-              onKeyDown={(event) => {
+              onKeyDown={(
+                event: KeyboardEvent<HTMLTableRowElement>,
+              ) => {
                 if (
-                  event.key ===
-                    "Enter" ||
+                  event.key === "Enter" ||
                   event.key === " "
                 ) {
                   event.preventDefault();
-
-                  handleRowClick(
-                    row.tokenBlueprintId,
-                  );
+                  handleRowClick(row.tokenBlueprintId);
                 }
               }}
             >
-              <td>{row.tokenName}</td>
-              <td>{row.brandName}</td>
-              <td>{row.issueCount}</td>
-              <td>
-                {row.distributionCount}
-              </td>
-            </tr>
+              <TableCell>{row.tokenName}</TableCell>
+              <TableCell>{row.brandName}</TableCell>
+              <TableCell>{row.issueCount}</TableCell>
+              <TableCell>{row.distributionCount}</TableCell>
+            </TableRow>
           ))}
         </List>
       </div>

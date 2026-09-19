@@ -11,6 +11,7 @@ import {
 } from "../features/notification/presentation/model/reportDecisionNotification";
 import List from "../layout/List/List";
 import type { News } from "../shared/types/news";
+import { TableCell, TableRow } from "../shared/ui/table";
 import Text from "../shared/ui/text";
 
 import "../styles/notification.css";
@@ -151,7 +152,7 @@ export default function NotificationPage() {
           const isUnread = !feedItem.item.isRead;
 
           return (
-            <tr
+            <TableRow
               key={feedItem.key}
               role="button"
               tabIndex={0}
@@ -165,11 +166,11 @@ export default function NotificationPage() {
               onClick={() => {
                 openNotification(feedItem);
               }}
-              onKeyDown={(event) =>
+              onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) =>
                 handleNotificationKeyDown(event, feedItem)
               }
             >
-              <td className="notification-page__title-cell">
+              <TableCell className="notification-page__title-cell">
                 <div className="notification-page__title-row">
                   {isUnread ? (
                     <span
@@ -187,8 +188,8 @@ export default function NotificationPage() {
                     {title}
                   </Text>
                 </div>
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           );
         })}
       </List>

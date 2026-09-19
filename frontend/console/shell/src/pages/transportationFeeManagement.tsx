@@ -1,7 +1,10 @@
 // frontend/console/shell/src/pages/transportationFeeManagement.tsx
 
-import List from "../layout/List/List";
+import type { KeyboardEvent } from "react";
+
 import { useTransportationFeeManagement } from "../features/transportation/presentation/hook/useTransportationFeeManagement";
+import List from "../layout/List/List";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 export default function TransportationFeeManagement() {
   const {
@@ -34,25 +37,25 @@ export default function TransportationFeeManagement() {
       onReset={handleReset}
     >
       {rows.map((row) => (
-        <tr
+        <TableRow
           key={row.id}
-          className="cursor-pointer hover:bg-[rgba(0,0,0,0.03)] transition"
+          className="cursor-pointer"
           role="button"
           tabIndex={0}
           onClick={() => handleRowClick(row)}
-          onKeyDown={(event) => {
+          onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
               handleRowClick(row);
             }
           }}
         >
-          <td>{row.name || "-"}</td>
-          <td>{row.createdByName || "-"}</td>
-          <td>{row.createdAt || "-"}</td>
-          <td>{row.updatedByName || "-"}</td>
-          <td>{row.updatedAt || "-"}</td>
-        </tr>
+          <TableCell>{row.name || "-"}</TableCell>
+          <TableCell>{row.createdByName || "-"}</TableCell>
+          <TableCell>{row.createdAt || "-"}</TableCell>
+          <TableCell>{row.updatedByName || "-"}</TableCell>
+          <TableCell>{row.updatedAt || "-"}</TableCell>
+        </TableRow>
       ))}
     </List>
   );

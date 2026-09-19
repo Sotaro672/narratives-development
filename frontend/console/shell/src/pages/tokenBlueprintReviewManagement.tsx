@@ -1,13 +1,15 @@
-// frontend\console\shell\src\pages\tokenBlueprintReviewManagement.tsx
+// frontend/console/shell/src/pages/tokenBlueprintReviewManagement.tsx
 
-import React from "react";
-import List, {
-  SortableTableHeader,
-  FilterableTableHeader,
-} from "../layout/List/List";
-import { safeDateTimeLabelJa } from "../shared/util/dateJa";
+import React, { type KeyboardEvent } from "react";
+
 import { useTokenBlueprintReviewManagement } from "../features/tokenBlueprintReview/presentation/hook/use_tokenBlueprintReviewManagement";
+import List, {
+  FilterableTableHeader,
+  SortableTableHeader,
+} from "../layout/List/List";
 import type { TokenBlueprintReviewAggregate } from "../shared/types/tokenBlueprintReview";
+import { TableCell, TableRow } from "../shared/ui/table";
+import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 export default function TokenBlueprintReviewManagementPage() {
   const {
@@ -63,27 +65,31 @@ export default function TokenBlueprintReviewManagementPage() {
         onReset={handleReset}
       >
         {rows.map((t: TokenBlueprintReviewAggregate) => (
-          <tr
+          <TableRow
             key={t.tokenBlueprintId}
             role="button"
             tabIndex={0}
-            className="cursor-pointer hover:bg-slate-50 transition-colors"
+            className="cursor-pointer"
             onClick={() => handleRowClick(t.tokenBlueprintId)}
-            onKeyDown={(e) => {
+            onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 handleRowClick(t.tokenBlueprintId);
               }
             }}
           >
-            <td>{t.tokenBlueprintName ?? "-"}</td>
-            <td>{t.brandName ?? "-"}</td>
-            <td>{t.topLevelCommentCount}</td>
-            <td>{t.likeCount}</td>
-            <td>{t.dislikeCount}</td>
-            <td>{safeDateTimeLabelJa(t.createdAt, t.createdAt || "-")}</td>
-            <td>{safeDateTimeLabelJa(t.updatedAt, t.updatedAt || "-")}</td>
-          </tr>
+            <TableCell>{t.tokenBlueprintName ?? "-"}</TableCell>
+            <TableCell>{t.brandName ?? "-"}</TableCell>
+            <TableCell>{t.topLevelCommentCount}</TableCell>
+            <TableCell>{t.likeCount}</TableCell>
+            <TableCell>{t.dislikeCount}</TableCell>
+            <TableCell>
+              {safeDateTimeLabelJa(t.createdAt, t.createdAt || "-")}
+            </TableCell>
+            <TableCell>
+              {safeDateTimeLabelJa(t.updatedAt, t.updatedAt || "-")}
+            </TableCell>
+          </TableRow>
         ))}
       </List>
     </div>

@@ -1,15 +1,14 @@
 // frontend/console/shell/src/pages/tokenBlueprintManagement.tsx
 
-import React from "react";
+import React, { type KeyboardEvent } from "react";
 
+import { useTokenBlueprintManagement } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintManagement";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
-
 import type { TokenBlueprint } from "../shared/types/tokenBlueprint";
-
-import { useTokenBlueprintManagement } from "../features/tokenBlueprint/presentation/hook/useTokenBlueprintManagement";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 export default function TokenBlueprintManagementPage() {
   const {
@@ -90,61 +89,30 @@ export default function TokenBlueprintManagementPage() {
         onCreate={handleCreate}
         onReset={handleReset}
       >
-        {rows.map((tokenBlueprint: TokenBlueprint) => {
-          return (
-            <tr
-              key={tokenBlueprint.id}
-              role="button"
-              tabIndex={0}
-              className="cursor-pointer hover:bg-slate-50 transition-colors"
-              onClick={() => {
-                handleRowClick(
-                  tokenBlueprint.id,
-                );
-              }}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" ||
-                  event.key === " "
-                ) {
-                  event.preventDefault();
-
-                  handleRowClick(
-                    tokenBlueprint.id,
-                  );
-                }
-              }}
-            >
-              <td>
-                {tokenBlueprint.name}
-              </td>
-
-              <td>
-                {tokenBlueprint.brandName ||
-                  tokenBlueprint.brandId}
-              </td>
-
-              <td>
-                {tokenBlueprint.assigneeName ||
-                  ""}
-              </td>
-
-              <td>
-                {String(
-                  tokenBlueprint.minted,
-                )}
-              </td>
-
-              <td>
-                {tokenBlueprint.createdAt}
-              </td>
-
-              <td>
-                {tokenBlueprint.updatedAt}
-              </td>
-            </tr>
-          );
-        })}
+        {rows.map((tokenBlueprint: TokenBlueprint) => (
+          <TableRow
+            key={tokenBlueprint.id}
+            role="button"
+            tabIndex={0}
+            className="cursor-pointer"
+            onClick={() => handleRowClick(tokenBlueprint.id)}
+            onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                handleRowClick(tokenBlueprint.id);
+              }
+            }}
+          >
+            <TableCell>{tokenBlueprint.name}</TableCell>
+            <TableCell>
+              {tokenBlueprint.brandName || tokenBlueprint.brandId}
+            </TableCell>
+            <TableCell>{tokenBlueprint.assigneeName || ""}</TableCell>
+            <TableCell>{String(tokenBlueprint.minted)}</TableCell>
+            <TableCell>{tokenBlueprint.createdAt}</TableCell>
+            <TableCell>{tokenBlueprint.updatedAt}</TableCell>
+          </TableRow>
+        ))}
       </List>
     </div>
   );

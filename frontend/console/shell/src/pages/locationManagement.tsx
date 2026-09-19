@@ -1,5 +1,10 @@
-import List from "../layout/List/List";
+// frontend/console/shell/src/pages/locationManagement.tsx
+
+import type { KeyboardEvent } from "react";
+
 import { useLocationManagement } from "../features/company/presentation/hook/useLocationManagement";
+import List from "../layout/List/List";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 import "../styles/location.css";
 
@@ -35,26 +40,26 @@ export default function LocationManagement() {
       onReset={handleReset}
     >
       {rows.map((row) => (
-        <tr
+        <TableRow
           key={row.id}
           className="location-management__row"
           role="button"
           tabIndex={0}
           onClick={() => handleRowClick(row)}
-          onKeyDown={(event) => {
+          onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
             if (event.key === "Enter" || event.key === " ") {
               event.preventDefault();
               handleRowClick(row);
             }
           }}
         >
-          <td>{row.name || "-"}</td>
-          <td>{row.address || "-"}</td>
-          <td>{row.createdByName || "-"}</td>
-          <td>{row.createdAt || "-"}</td>
-          <td>{row.updatedByName || "-"}</td>
-          <td>{row.updatedAt || "-"}</td>
-        </tr>
+          <TableCell>{row.name || "-"}</TableCell>
+          <TableCell>{row.address || "-"}</TableCell>
+          <TableCell>{row.createdByName || "-"}</TableCell>
+          <TableCell>{row.createdAt || "-"}</TableCell>
+          <TableCell>{row.updatedByName || "-"}</TableCell>
+          <TableCell>{row.updatedAt || "-"}</TableCell>
+        </TableRow>
       ))}
     </List>
   );

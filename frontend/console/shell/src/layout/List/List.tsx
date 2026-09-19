@@ -12,6 +12,7 @@ import {
   Table,
   TableBody,
   TableCaption,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -99,11 +100,7 @@ export default function List({
 
           <div className="list-actions-right">
             {showCreateButton && (
-              <Button
-                variant="default"
-                size="sm"
-                onClick={onCreate}
-              >
+              <Button variant="default" size="sm" onClick={onCreate}>
                 <Plus aria-hidden="true" />
                 <span>{createLabel}</span>
               </Button>
@@ -151,34 +148,29 @@ export default function List({
         </CardHeader>
 
         <CardContent>
-          <Table role="table" aria-label={tableLabel} className="lp-table">
+          <Table aria-label={tableLabel}>
             <TableHeader className="lp-thead">
-              <TableRow className="lp-row-head" role="row">
+              <TableRow>
                 {headerCells.map((cell, i) => (
-                  <TableHead
-                    key={i}
-                    className="lp-th"
-                    scope="col"
-                    role="columnheader"
-                  >
+                  <TableHead key={i} scope="col">
                     {cell}
                   </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
 
-            <TableBody className="lp-tbody">
+            <TableBody>
               {isBusy ? (
                 <TableRow className="lp-empty-row">
-                  <td className="lp-empty-cell" colSpan={colSpan}>
+                  <TableCell className="lp-empty-cell" colSpan={colSpan}>
                     読み込み中...
-                  </td>
+                  </TableCell>
                 </TableRow>
               ) : totalItems === 0 ? (
                 <TableRow className="lp-empty-row">
-                  <td className="lp-empty-cell" colSpan={colSpan}>
+                  <TableCell className="lp-empty-cell" colSpan={colSpan}>
                     現在登録されている項目はございません。
-                  </td>
+                  </TableCell>
                 </TableRow>
               ) : (
                 paginatedRows

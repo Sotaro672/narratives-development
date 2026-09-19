@@ -1,13 +1,17 @@
 // frontend/console/shell/src/pages/memberManagement.tsx
 
+import type { KeyboardEvent } from "react";
 import { useNavigate } from "react-router-dom";
+
+import { useMemberList } from "../features/member/presentation/hooks/useMemberList";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
-import "../styles/member.css";
-import { useMemberList } from "../features/member/presentation/hooks/useMemberList";
 import Pagination from "../shared/ui/pagination";
+import { TableCell, TableRow } from "../shared/ui/table";
+
+import "../styles/member.css";
 
 export default function MemberManagementPage() {
   const navigate = useNavigate();
@@ -34,7 +38,9 @@ export default function MemberManagementPage() {
     formatYmd,
   } = useMemberList();
 
-  if (loading) return <div className="p-4">読み込み中...</div>;
+  if (loading) {
+    return <div className="p-4">読み込み中...</div>;
+  }
 
   if (error) {
     return (
@@ -108,23 +114,23 @@ export default function MemberManagementPage() {
           );
 
           return (
-            <tr
+            <TableRow
               key={m.id}
               role="button"
               tabIndex={0}
               className="cursor-pointer"
               onClick={() => goDetail(m.id)}
-              onKeyDown={(e) => {
+              onKeyDown={(e: KeyboardEvent<HTMLTableRowElement>) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   goDetail(m.id);
                 }
               }}
             >
-              <td>{name}</td>
-              <td>{m.email}</td>
+              <TableCell>{name}</TableCell>
+              <TableCell>{m.email}</TableCell>
 
-              <td>
+              <TableCell>
                 {assigned.map((brandId) => {
                   const label = brandMap[brandId] ?? brandId;
 
@@ -137,9 +143,9 @@ export default function MemberManagementPage() {
                     </span>
                   );
                 })}
-              </td>
+              </TableCell>
 
-              <td className="mm-permission-col">
+              <TableCell className="mm-permission-col">
                 {categories.length === 0 ? (
                   <span className="text-sm text-[hsl(var(--muted-foreground))]">
                     なし
@@ -154,11 +160,11 @@ export default function MemberManagementPage() {
                     </span>
                   ))
                 )}
-              </td>
+              </TableCell>
 
-              <td>{formatYmd((m as any).createdAt)}</td>
-              <td>{formatYmd((m as any).updatedAt)}</td>
-            </tr>
+              <TableCell>{formatYmd((m as any).createdAt)}</TableCell>
+              <TableCell>{formatYmd((m as any).updatedAt)}</TableCell>
+            </TableRow>
           );
         })}
       </List>

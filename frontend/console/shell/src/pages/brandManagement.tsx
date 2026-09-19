@@ -1,12 +1,16 @@
-// frontend\console\shell\src\pages\brandManagement.tsx
+// frontend/console/shell/src/pages/brandManagement.tsx
+
 import React from "react";
 import { useNavigate } from "react-router-dom";
+
+import { useBrandManagement } from "../features/brand/presentation/hook/useBrandManagement";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
 } from "../layout/List/List";
+import { TableCell, TableRow } from "../shared/ui/table";
+
 import "../styles/brand.css";
-import { useBrandManagement } from "../features/brand/presentation/hook/useBrandManagement";
 
 export default function BrandManagementPage() {
   const navigate = useNavigate();
@@ -14,15 +18,12 @@ export default function BrandManagementPage() {
   const {
     rows,
     managerOptions,
-
     managerFilter,
     activeKey,
     direction,
-
     setManagerFilter,
     setActiveKey,
     setDirection,
-
     resetFilters,
     isResetting,
   } = useBrandManagement();
@@ -35,11 +36,9 @@ export default function BrandManagementPage() {
     navigate(`/brand/${encodeURIComponent(brandId)}`);
   };
 
-  // ---------- テーブルヘッダー ----------
   const headers: React.ReactNode[] = [
     "ブランド名",
 
-    // 責任者フィルタ（ラベルは memberName / managerName）
     <FilterableTableHeader
       key="manager"
       label="責任者"
@@ -48,7 +47,6 @@ export default function BrandManagementPage() {
       onChange={setManagerFilter}
     />,
 
-    // 登録日（ソート可能）
     <SortableTableHeader
       key="registeredAt"
       label="登録日"
@@ -61,7 +59,6 @@ export default function BrandManagementPage() {
       }}
     />,
 
-    // 更新日（ソート可能）
     <SortableTableHeader
       key="updatedAt"
       label="更新日"
@@ -88,31 +85,24 @@ export default function BrandManagementPage() {
         onReset={resetFilters}
       >
         {rows.map((b) => (
-          <tr
+          <TableRow
             key={b.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer hover:bg-slate-50 transition-colors"
+            className="cursor-pointer"
             onClick={() => goDetail(b.id)}
-            onKeyDown={(e) => {
+            onKeyDown={(e: React.KeyboardEvent<HTMLTableRowElement>) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 goDetail(b.id);
               }
             }}
           >
-            {/* ブランド名 */}
-            <td>{b.name}</td>
-
-            {/* 責任者名：backend の memberName をそのまま表示 */}
-            <td>{b.memberName ?? ""}</td>
-
-            {/* 登録日 */}
-            <td>{b.registeredAt}</td>
-
-            {/* 更新日 */}
-            <td>{b.updatedAt}</td>
-          </tr>
+            <TableCell>{b.name}</TableCell>
+            <TableCell>{b.memberName ?? ""}</TableCell>
+            <TableCell>{b.registeredAt}</TableCell>
+            <TableCell>{b.updatedAt}</TableCell>
+          </TableRow>
         ))}
       </List>
     </div>

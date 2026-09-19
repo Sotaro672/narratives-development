@@ -1,11 +1,12 @@
-// frontend\console\shell\src\pages\announcementManagement.tsx
+// frontend/console/shell/src/pages/announcementManagement.tsx
+
 import React, { useMemo, useState } from "react";
-import List, {
-  SortableTableHeader,
-} from "../layout/List/List";
-import FilterableTableHeader from "../shared/ui/filter-able-table-header";
-import { safeDateTimeLabelJa } from "../shared/util/dateJa";
+
 import { useAnnouncementManagement } from "../features/announcement/presentation/hook/useAnnouncementManagement";
+import List, { SortableTableHeader } from "../layout/List/List";
+import FilterableTableHeader from "../shared/ui/filter-able-table-header";
+import { TableCell, TableRow } from "../shared/ui/table";
+import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 export default function AnnouncementManagementPage() {
   const {
@@ -20,9 +21,7 @@ export default function AnnouncementManagementPage() {
     isLoading,
   } = useAnnouncementManagement();
 
-  const [selectedPublishedValues, setSelectedPublishedValues] = useState<
-    string[]
-  >([]);
+  const [selectedPublishedValues, setSelectedPublishedValues] = useState<string[]>([]);
 
   const publishedOptions = useMemo(
     () => [
@@ -121,26 +120,26 @@ export default function AnnouncementManagementPage() {
         onReset={handlePageReset}
       >
         {filteredRows.map((row) => (
-          <tr
+          <TableRow
             key={row.id}
             role="button"
             tabIndex={0}
-            className="cursor-pointer hover:bg-slate-50 transition-colors"
+            className="cursor-pointer"
             onClick={() => handleRowClick(row.id)}
-            onKeyDown={(e) => {
+            onKeyDown={(e: React.KeyboardEvent<HTMLTableRowElement>) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
                 handleRowClick(row.id);
               }
             }}
           >
-            <td>{row.title}</td>
-            <td>{row.tokenName ?? row.targetToken ?? ""}</td>
-            <td>{row.published ? "公開済み" : "下書き"}</td>
-            <td>{row.targetAvatarCount}</td>
-            <td>{safeDateTimeLabelJa(row.createdAt, "")}</td>
-            <td>{safeDateTimeLabelJa(row.updatedAt, "")}</td>
-          </tr>
+            <TableCell>{row.title}</TableCell>
+            <TableCell>{row.tokenName ?? row.targetToken ?? ""}</TableCell>
+            <TableCell>{row.published ? "公開済み" : "下書き"}</TableCell>
+            <TableCell>{row.targetAvatarCount}</TableCell>
+            <TableCell>{safeDateTimeLabelJa(row.createdAt, "")}</TableCell>
+            <TableCell>{safeDateTimeLabelJa(row.updatedAt, "")}</TableCell>
+          </TableRow>
         ))}
       </List>
     </div>

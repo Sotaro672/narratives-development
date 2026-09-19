@@ -1,14 +1,20 @@
 // frontend/console/shell/src/pages/inquiryManagement.tsx
 
-import { useMemo } from "react";
+import {
+  useMemo,
+  type KeyboardEvent,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useInquiryManagementPage } from "../features/inquiry/presentation/hooks/useInquiryManagementPage";
 import List, {
   FilterableTableHeader,
   SortableTableHeader,
-} from "../../../shell/src/layout/List/List";
-
-import { useInquiryManagementPage } from "../features/inquiry/presentation/hooks/useInquiryManagementPage";
+} from "../layout/List/List";
+import {
+  TableCell,
+  TableRow,
+} from "../shared/ui/table";
 
 export default function InquiryManagementPage() {
   const navigate = useNavigate();
@@ -36,27 +42,27 @@ export default function InquiryManagementPage() {
 
   const rowElements = useMemo(() => {
     return rows.map((row) => (
-      <tr
+      <TableRow
         key={row.inquiryId}
         role="button"
         tabIndex={0}
-        style={{ cursor: "pointer" }}
+        className="cursor-pointer"
         onClick={() => handleClickRow(row.inquiryId)}
-        onKeyDown={(event) => {
+        onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             handleClickRow(row.inquiryId);
           }
         }}
       >
-        <td>{row.inquiryType}</td>
-        <td>{row.customerName}</td>
-        <td>{row.status}</td>
-        <td>{row.productName}</td>
-        <td>{row.brandName}</td>
-        <td>{row.createdAt}</td>
-        <td>{row.updatedAt}</td>
-      </tr>
+        <TableCell>{row.inquiryType}</TableCell>
+        <TableCell>{row.customerName}</TableCell>
+        <TableCell>{row.status}</TableCell>
+        <TableCell>{row.productName}</TableCell>
+        <TableCell>{row.brandName}</TableCell>
+        <TableCell>{row.createdAt}</TableCell>
+        <TableCell>{row.updatedAt}</TableCell>
+      </TableRow>
     ));
   }, [handleClickRow, rows]);
 
@@ -135,29 +141,31 @@ export default function InquiryManagementPage() {
         isResetting={isResetting}
       >
         {loading ? (
-          <tr>
-            <td colSpan={7}>
+          <TableRow>
+            <TableCell colSpan={headers.length}>
               <div className="inq__empty">
                 問い合わせ一覧を読み込み中です。
               </div>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         ) : errorMessage ? (
-          <tr>
-            <td colSpan={7}>
-              <div className="inq__empty">{errorMessage}</div>
-            </td>
-          </tr>
+          <TableRow>
+            <TableCell colSpan={headers.length}>
+              <div className="inq__empty">
+                {errorMessage}
+              </div>
+            </TableCell>
+          </TableRow>
         ) : rowElements.length > 0 ? (
           rowElements
         ) : (
-          <tr>
-            <td colSpan={7}>
+          <TableRow>
+            <TableCell colSpan={headers.length}>
               <div className="inq__empty">
                 問い合わせはありません。
               </div>
-            </td>
-          </tr>
+            </TableCell>
+          </TableRow>
         )}
       </List>
     </div>

@@ -1,10 +1,12 @@
 // frontend/console/shell/src/pages/productBlueprintReviewManagement.tsx
 
+import type { KeyboardEvent } from "react";
+
+import { useProductBlueprintReviewManagement } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement";
 import List, {
   FilterableTableHeader,
 } from "../layout/List/List";
-
-import { useProductBlueprintReviewManagement } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewManagement";
+import { TableCell, TableRow } from "../shared/ui/table";
 
 import "../styles/productBlueprintReview.css";
 
@@ -76,20 +78,28 @@ export default function ProductBlueprintReviewManagement() {
       onReset={HandleReset}
     >
       {Rows.map((Row) => (
-        <tr
+        <TableRow
           key={Row.ID || Row.ProductBlueprintID}
           className="pbrm-row"
+          role="button"
+          tabIndex={0}
           onClick={() => HandleRowClick(Row)}
+          onKeyDown={(event: KeyboardEvent<HTMLTableRowElement>) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              HandleRowClick(Row);
+            }
+          }}
         >
-          <td>{Row.ProductName}</td>
-          <td>{Row.Rating1Count}</td>
-          <td>{Row.Rating2Count}</td>
-          <td>{Row.Rating3Count}</td>
-          <td>{Row.Rating4Count}</td>
-          <td>{Row.Rating5Count}</td>
-          <td>{Row.BrandName}</td>
-          <td>{Row.AssigneeName}</td>
-        </tr>
+          <TableCell>{Row.ProductName}</TableCell>
+          <TableCell>{Row.Rating1Count}</TableCell>
+          <TableCell>{Row.Rating2Count}</TableCell>
+          <TableCell>{Row.Rating3Count}</TableCell>
+          <TableCell>{Row.Rating4Count}</TableCell>
+          <TableCell>{Row.Rating5Count}</TableCell>
+          <TableCell>{Row.BrandName}</TableCell>
+          <TableCell>{Row.AssigneeName}</TableCell>
+        </TableRow>
       ))}
     </List>
   );

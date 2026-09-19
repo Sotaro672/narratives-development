@@ -15,11 +15,6 @@
 
 .notification-page__row {
   cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.notification-page__row:hover {
-  background-color: #f8fafc;
 }
 
 .notification-page__row:focus-visible {
