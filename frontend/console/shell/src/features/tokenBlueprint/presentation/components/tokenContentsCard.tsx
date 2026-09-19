@@ -11,6 +11,7 @@ import {
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import type { ContentFile } from "../../../../shared/types/tokenBlueprint";
+import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardButton,
@@ -272,49 +273,55 @@ export default function TokenContentsCard({
 
       <CardContent size="large">
         <div className="token-contents-card__viewer">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="icon"
             className="token-contents-card__nav token-contents-card__nav--left"
             onClick={prev}
             aria-label="前のコンテンツ"
             disabled={!hasItems}
           >
             <ChevronLeft className="token-contents-card__nav-icon" />
-          </button>
+          </Button>
 
           <div className="token-contents-card__image-main-wrap">
             <ContentMainMedia item={currentItem} />
 
             {currentItem && isEditMode && (
-              <button
+              <Button
                 type="button"
+                variant="destructive-outline"
+                size="icon"
                 className="token-contents-card__delete-btn"
                 onClick={() => {
                   void handleDelete(safeIndex);
                 }}
                 aria-label="このコンテンツを削除"
+                title="削除"
               >
                 <Trash2 className="token-contents-card__delete-icon" />
-              </button>
+              </Button>
             )}
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="icon"
             className="token-contents-card__nav token-contents-card__nav--right"
             onClick={next}
             aria-label="次のコンテンツ"
             disabled={!hasItems}
           >
             <ChevronRight className="token-contents-card__nav-icon" />
-          </button>
+          </Button>
         </div>
 
         {contents.length > 1 && (
           <div className="token-contents-card__thumbs">
             {contents.map((item, itemIndex) => {
-              const isActive =
-                itemIndex === safeIndex;
+              const isActive = itemIndex === safeIndex;
 
               return (
                 <div
@@ -332,16 +339,19 @@ export default function TokenContentsCard({
                   />
 
                   {isEditMode && (
-                    <button
+                    <Button
                       type="button"
+                      variant="destructive-outline"
+                      size="icon"
                       className="token-contents-card__thumb-delete-btn"
                       onClick={() => {
                         void handleDelete(itemIndex);
                       }}
                       aria-label={`コンテンツ ${itemIndex + 1}を削除`}
+                      title="削除"
                     >
                       <Trash2 className="token-contents-card__thumb-delete-icon" />
-                    </button>
+                    </Button>
                   )}
                 </div>
               );

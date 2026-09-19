@@ -56,7 +56,7 @@ export default function MintRequestDetail() {
 
   return (
     <PageStyle layout="grid-2" title={title} onBack={onBack}>
-      <div className="mint-detail__column">
+      <div className="page-column page-column--offset-top">
         {productBlueprintLoading ? (
           <Card className="mint-request-card">
             <CardContent className="mint-request-card__body">
@@ -103,7 +103,6 @@ export default function MintRequestDetail() {
         ) : (
           <>
             <InspectionResultCard data={inspectionCardData} />
-
             {showCompleteInspectionButton && (
               <MintInspectionCompleteCard
                 completing={isCompletingInspection}
@@ -128,7 +127,7 @@ export default function MintRequestDetail() {
         )}
       </div>
 
-      <div className="mint-detail__column">
+      <div className="page-column page-column--offset-top">
         {hasMint && mintRequestRow && (
           <MintInfoCard
             mintRequestRow={mintRequestRow}

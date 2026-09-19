@@ -89,12 +89,6 @@
   padding: 16px;
 }
 
-.member-detail__aside {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .member-permissions {
   display: flex;
   flex-direction: column;

@@ -22,10 +22,7 @@ function SimpleSlot(
 
     return React.cloneElement(children as React.ReactElement<any>, {
       ...rest,
-      className: cn(
-        previousClassName,
-        rest.className,
-      ),
+      className: cn(previousClassName, rest.className),
     });
   }
 
@@ -39,6 +36,7 @@ function SimpleSlot(
 export type BtnVariant =
   | "default"
   | "destructive"
+  | "destructive-outline"
   | "outline"
   | "secondary"
   | "ghost"

@@ -31,6 +31,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
+import Text from "../../../../shared/ui/text";
 
 export type TokenBlueprintCardViewModel = {
   id: string;
@@ -144,17 +145,7 @@ export default function TokenBlueprintCard({
                 name={vm.name}
                 alt="トークンアイコン"
                 size="fluid"
-                className="token-blueprint-card__icon"
-                imageClassName={
-                  canEditIcon
-                    ? "token-blueprint-card__icon-image is-clickable"
-                    : "token-blueprint-card__icon-image"
-                }
-                fallbackClassName={
-                  canEditIcon
-                    ? "token-blueprint-card__icon-placeholder token-blueprint-card__icon-placeholder-button"
-                    : "token-blueprint-card__icon-placeholder token-blueprint-card__icon-placeholder-view"
-                }
+                variant="upload"
                 fallback={
                   canEditIcon ? (
                     <>
@@ -182,7 +173,7 @@ export default function TokenBlueprintCard({
                   ref={handlers.iconInputRef ?? undefined}
                   type="file"
                   accept={IMAGE_STORAGE_ACCEPT}
-                  className="token-blueprint-card__icon-input"
+                  hidden
                   onChange={handlers.onIconInputChange}
                 />
 
@@ -304,7 +295,7 @@ export default function TokenBlueprintCard({
 
                   <PopoverContent
                     align="start"
-                    className="popover__content--compact token-blueprint-card__popover"
+                    className="popover__content--compact popover__content--medium"
                   >
                     {vm.brandOptions.length === 0 ? (
                       <div className="popover__empty">
@@ -339,14 +330,19 @@ export default function TokenBlueprintCard({
             </CardField>
 
             {isIdentityLocked ? (
-              <div className="token-blueprint-card__identity-lock-message">
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                className="token-blueprint-card__identity-lock-message"
+              >
                 このトークン設計はmint済みのため、トークン名・シンボル・ブランドは変更できません。
-              </div>
+              </Text>
             ) : null}
           </CardFields>
         </div>
 
-        <div className="token-blueprint-card__description">
+        <CardField className="token-blueprint-card__description">
           <CardLabel strong>
             説明
           </CardLabel>
@@ -365,7 +361,7 @@ export default function TokenBlueprintCard({
               {vm.description || "未設定"}
             </CardViewValue>
           )}
-        </div>
+        </CardField>
       </CardContent>
     </Card>
   );

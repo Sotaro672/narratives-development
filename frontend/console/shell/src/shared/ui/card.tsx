@@ -240,13 +240,19 @@ export const CardReadonly = React.forwardRef<HTMLDivElement, CardReadonlyProps>(
 );
 CardReadonly.displayName = "CardReadonly";
 
-export type CardViewValueProps = React.HTMLAttributes<HTMLDivElement>;
+export type CardViewValueProps = React.HTMLAttributes<HTMLDivElement> & {
+  multiline?: boolean;
+};
 
 export const CardViewValue = React.forwardRef<HTMLDivElement, CardViewValueProps>(
-  ({ className, ...props }, ref) => (
+  ({ className, multiline = false, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("card__view-value", className)}
+      className={cn(
+        "card__view-value",
+        multiline && "card__view-value--multiline",
+        className,
+      )}
       {...props}
     />
   ),

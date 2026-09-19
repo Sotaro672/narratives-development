@@ -287,6 +287,12 @@
   overflow-wrap: anywhere;
 }
 
+.card__view-value--multiline {
+  min-height: 132px;
+  align-items: flex-start;
+  white-space: pre-wrap;
+}
+
 /* =========================================================
  * Textarea
  * ======================================================= */

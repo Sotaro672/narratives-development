@@ -129,37 +129,26 @@ export default function ProductionDetail() {
       statusButtonLabel="印刷"
       statusButtonBusyLabel="発行中..."
       onStatusButtonClick={
-        isViewMode &&
-        production &&
-        !isPrinted
+        isViewMode && production && !isPrinted
           ? handlePrint
           : undefined
       }
       isStatusButtonLoading={printing}
-      statusButtonDisabled={
-        loading ||
-        !productionId
-      }
+      statusButtonDisabled={loading || !productionId}
       onQrOutput={
         isViewMode && isPrinted
           ? handleQrOutput
           : undefined
       }
       isQrOutputting={qrOutputting}
-      qrOutputDisabled={
-        loading ||
-        !productionId
-      }
+      qrOutputDisabled={loading || !productionId}
       onCsvOutput={
         isViewMode && isPrinted
           ? handleCsvOutput
           : undefined
       }
       isCsvOutputting={csvOutputting}
-      csvOutputDisabled={
-        loading ||
-        !productionId
-      }
+      csvOutputDisabled={loading || !productionId}
       onEdit={
         isViewMode && canEdit
           ? switchToEdit
@@ -181,7 +170,7 @@ export default function ProductionDetail() {
           : undefined
       }
     >
-      <div className="production-detail__column">
+      <div className="page-column">
         {loading && (
           <div className="production-detail__state">
             生産情報を読み込み中です…
@@ -214,9 +203,7 @@ export default function ProductionDetail() {
             <ProductionQuantityCard
               title="モデル別 生産数一覧"
               rows={quantityRows}
-              productBlueprintCategory={
-                productBlueprintCategoryCode
-              }
+              productBlueprintCategory={productBlueprintCategoryCode}
               mode={isEditMode ? "edit" : "view"}
               onChangeRows={
                 isEditMode
@@ -228,7 +215,7 @@ export default function ProductionDetail() {
         )}
       </div>
 
-      <div className="production-detail__column">
+      <div className="page-column">
         <AdminCard
           title="管理情報"
           assigneeId={assigneeId || undefined}

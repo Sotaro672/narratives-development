@@ -88,7 +88,7 @@ export default function ListDetail() {
         isSaving={vm.saving}
         onCreate={undefined}
       >
-        <div className="list-detail__column">
+        <div className="page-column">
           {vm.loading && (
             <Text as="div" size="sm" tone="muted">
               読み込み中...
@@ -122,11 +122,7 @@ export default function ListDetail() {
           <ListImageCard
             isEdit={isEdit}
             saving={vm.saving}
-            imageUrls={
-              Array.isArray(vm.imageUrls)
-                ? vm.imageUrls
-                : []
-            }
+            imageUrls={Array.isArray(vm.imageUrls) ? vm.imageUrls : []}
             mainImageIndex={vm.mainImageIndex}
             setMainImageIndex={vm.setMainImageIndex}
             onAddImages={(files) => vm.onAddImages(files)}
@@ -186,22 +182,17 @@ export default function ListDetail() {
             rows={effectivePriceRows}
             mode={isEdit ? "edit" : "view"}
             currencySymbol="¥"
-            onChangePrice={
-              isEdit
-                ? vm.onChangePrice
-                : undefined
-            }
+            onChangePrice={isEdit ? vm.onChangePrice : undefined}
           />
 
-          {Array.isArray(effectivePriceRows) &&
-            effectivePriceRows.length === 0 && (
-              <Text as="div" size="xs" tone="muted">
-                価格情報がありません。
-              </Text>
-            )}
+          {Array.isArray(effectivePriceRows) && effectivePriceRows.length === 0 && (
+            <Text as="div" size="xs" tone="muted">
+              価格情報がありません。
+            </Text>
+          )}
         </div>
 
-        <div className="list-detail__column">
+        <div className="page-column">
           <AdminCard
             title="担当者"
             mode={isEdit ? "edit" : "view"}
@@ -209,11 +200,7 @@ export default function ListDetail() {
             assigneeName={effectiveAssigneeName}
             assigneeCandidates={vm.assigneeCandidates}
             loadingMembers={vm.loadingMembers}
-            onSelectAssignee={
-              isEdit
-                ? vm.onSelectAssignee
-                : undefined
-            }
+            onSelectAssignee={isEdit ? vm.onSelectAssignee : undefined}
             createdByName={vm.createdByName}
             createdAt={vm.createdAt}
             updatedByName={vm.updatedByName}

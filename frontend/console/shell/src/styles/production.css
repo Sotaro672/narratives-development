@@ -4,12 +4,6 @@
  * 生産計画作成
  * ======================================================= */
 
-.production-create__column {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .production-create__product-empty {
   display: flex;
   height: 100%;
@@ -43,12 +37,6 @@
 /* =========================================================
  * 生産詳細
  * ======================================================= */
-
-.production-detail__column {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
 
 .production-detail__state {
   display: flex;

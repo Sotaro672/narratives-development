@@ -95,7 +95,7 @@ export default function MemberDetail() {
         />
       </div>
 
-      <div className="member-detail__aside">
+      <div className="page-column">
         <BrandCard
           assignedBrands={assignedBrands}
           brandRows={brandRows}

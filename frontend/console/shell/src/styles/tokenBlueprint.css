@@ -1,35 +1,8 @@
 /* frontend/console/shell/src/styles/tokenBlueprint.css */
 
 /* =========================================================
- * TokenBlueprint-specific design tokens
- * =======================================================*/
-
-:root {
-  --token-blueprint-surface: #ffffff;
-  --token-blueprint-surface-subtle: #f8fafc;
-  --token-blueprint-surface-muted: #f1f5f9;
-
-  --token-blueprint-border: #e2e8f0;
-  --token-blueprint-border-strong: #cbd5e1;
-
-  --token-blueprint-text: #0f172a;
-  --token-blueprint-text-subtle: #475569;
-  --token-blueprint-text-muted: #64748b;
-
-  --token-blueprint-primary: #4f46e5;
-  --token-blueprint-primary-soft: #eef2ff;
-  --token-blueprint-primary-border: #c7d2fe;
-
-  --token-blueprint-danger: #dc2626;
-  --token-blueprint-danger-soft: #fef2f2;
-  --token-blueprint-danger-border: #fecaca;
-
-  --token-blueprint-focus-ring: rgba(79, 70, 229, 0.2);
-}
-
-/* =========================================================
- * TokenBlueprintCard-specific layout
- * =======================================================*/
+ * TokenBlueprintCard
+ * ======================================================= */
 
 .token-blueprint-card__top {
   display: grid;
@@ -55,56 +28,6 @@
   aspect-ratio: 1 / 1;
 }
 
-/* -------------------------
- * Token icon
- * ---------------------- */
-
-.token-blueprint-card__icon {
-  border-style: dashed;
-  border-color: var(--token-blueprint-border-strong);
-  background:
-    linear-gradient(
-      135deg,
-      rgba(79, 70, 229, 0.04),
-      rgba(99, 102, 241, 0)
-    ),
-    var(--token-blueprint-surface-subtle);
-}
-
-.token-blueprint-card__icon-image {
-  transition:
-    opacity 160ms ease,
-    transform 160ms ease;
-}
-
-.token-blueprint-card__icon-image.is-clickable:hover {
-  opacity: 0.92;
-  transform: scale(1.015);
-}
-
-.token-blueprint-card__icon-placeholder {
-  background: transparent;
-  padding: 16px;
-  color: var(--token-blueprint-text-muted);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.7;
-  text-align: center;
-}
-
-.token-blueprint-card__icon-placeholder-button:hover {
-  background: var(--token-blueprint-primary-soft);
-  color: var(--token-blueprint-primary);
-}
-
-.token-blueprint-card__icon-placeholder-view {
-  opacity: 0.72;
-}
-
-.token-blueprint-card__icon-input {
-  display: none;
-}
-
 .token-blueprint-card__upload-btn {
   width: 100%;
 }
@@ -115,7 +38,7 @@
   align-items: center;
   gap: 8px;
   margin-top: 8px;
-  color: var(--token-blueprint-text-muted);
+  color: hsl(var(--muted-foreground));
   font-size: 12px;
   line-height: 1.5;
   opacity: 0.85;
@@ -126,60 +49,20 @@
   overflow-wrap: anywhere;
 }
 
-/* -------------------------
- * Identity lock
- * ---------------------- */
-
 .token-blueprint-card__identity-lock-message {
   grid-column: 1 / -1;
   margin-top: 4px;
-  color: var(--token-blueprint-text-muted);
-  font-size: 12px;
-  line-height: 1.6;
 }
-
-/* -------------------------
- * Brand popover
- * 共通レイアウトはshared/ui/popover.cssを利用
- * ---------------------- */
-
-.token-blueprint-card__popover {
-  width: var(--radix-popover-trigger-width, 300px);
-  max-width: min(360px, calc(100vw - 32px));
-
-  --popover-muted-color: var(--token-blueprint-text-muted);
-  --popover-item-color: var(--token-blueprint-text);
-  --popover-item-hover-bg: var(--token-blueprint-surface-muted);
-  --popover-item-active-bg: var(--token-blueprint-primary-soft);
-  --popover-item-active-color: var(--token-blueprint-primary);
-}
-
-/* -------------------------
- * Description
- * ---------------------- */
 
 .token-blueprint-card__description {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
   margin-top: 20px;
-}
-
-.token-blueprint-card__description-value {
-  display: block;
-  min-height: 132px;
-  padding: 11px 12px;
-  white-space: pre-wrap;
 }
 
 /* =========================================================
  * TokenContentsCard
- * メディア本体の表示はshared/ui/mediaを利用
- * =======================================================*/
-
-/* -------------------------
- * Viewer
- * ---------------------- */
+ * メディア本体は shared/ui/media を利用
+ * ボタン本体は shared/ui/button を利用
+ * ======================================================= */
 
 .token-contents-card__viewer {
   display: grid;
@@ -189,42 +72,10 @@
 }
 
 .token-contents-card__nav {
-  display: inline-flex;
   width: 42px;
   height: 42px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--token-blueprint-border);
+  min-height: 42px;
   border-radius: 50%;
-  background: var(--token-blueprint-surface);
-  color: var(--token-blueprint-text-subtle);
-  cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.token-contents-card__nav:hover:not(:disabled) {
-  border-color: var(--token-blueprint-primary-border);
-  background: var(--token-blueprint-primary-soft);
-  color: var(--token-blueprint-primary);
-}
-
-.token-contents-card__nav:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px var(--token-blueprint-focus-ring);
-}
-
-.token-contents-card__nav:disabled {
-  cursor: default;
-  opacity: 0.32;
-}
-
-.token-contents-card__nav-icon {
-  width: 20px;
-  height: 20px;
 }
 
 .token-contents-card__image-main-wrap {
@@ -238,47 +89,14 @@
   top: 12px;
   right: 12px;
   z-index: 2;
-  display: inline-flex;
   width: 38px;
   height: 38px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--token-blueprint-danger-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--token-blueprint-danger);
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(6px);
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+  min-height: 38px;
 }
 
-.token-contents-card__delete-btn:hover {
-  border-color: var(--token-blueprint-danger);
-  background: var(--token-blueprint-danger);
-  color: #ffffff;
-  transform: translateY(-1px);
-}
-
-.token-contents-card__delete-btn:focus-visible {
-  outline: none;
-  box-shadow:
-    0 0 0 3px rgba(220, 38, 38, 0.18),
-    0 4px 14px rgba(15, 23, 42, 0.12);
-}
-
-.token-contents-card__delete-icon {
-  width: 17px;
-  height: 17px;
-}
-
-/* -------------------------
+/* =========================================================
  * Thumbnails
- * ---------------------- */
+ * ======================================================= */
 
 .token-contents-card__thumbs {
   display: grid;
@@ -293,7 +111,7 @@
   overflow: hidden;
   border: 2px solid transparent;
   border-radius: 11px;
-  background: var(--token-blueprint-surface-muted);
+  background: hsl(var(--muted));
   transition:
     border-color 160ms ease,
     box-shadow 160ms ease,
@@ -305,8 +123,8 @@
 }
 
 .token-contents-card__thumb-wrap.is-active {
-  border-color: var(--token-blueprint-primary);
-  box-shadow: 0 0 0 2px var(--token-blueprint-focus-ring);
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.18);
 }
 
 .token-contents-card__thumb-delete-btn {
@@ -314,42 +132,15 @@
   top: 4px;
   right: 4px;
   z-index: 2;
-  display: inline-flex;
   width: 25px;
   height: 25px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--token-blueprint-danger-border);
+  min-height: 25px;
   border-radius: 7px;
-  background: rgba(255, 255, 255, 0.94);
-  color: var(--token-blueprint-danger);
-  cursor: pointer;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
-  transition:
-    background-color 140ms ease,
-    color 140ms ease,
-    transform 140ms ease;
-}
-
-.token-contents-card__thumb-delete-btn:hover {
-  background: var(--token-blueprint-danger);
-  color: #ffffff;
-  transform: scale(1.04);
-}
-
-.token-contents-card__thumb-delete-btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18);
-}
-
-.token-contents-card__thumb-delete-icon {
-  width: 13px;
-  height: 13px;
 }
 
 /* =========================================================
  * Responsive
- * =======================================================*/
+ * ======================================================= */
 
 @media (max-width: 900px) {
   .token-blueprint-card__top {
@@ -381,11 +172,7 @@
   .token-contents-card__nav {
     width: 34px;
     height: 34px;
-  }
-
-  .token-contents-card__nav-icon {
-    width: 17px;
-    height: 17px;
+    min-height: 34px;
   }
 
   .token-contents-card__delete-btn {
@@ -393,6 +180,7 @@
     right: 8px;
     width: 34px;
     height: 34px;
+    min-height: 34px;
   }
 
   .token-contents-card__thumbs {
@@ -411,7 +199,7 @@
     position: absolute;
     top: 50%;
     z-index: 3;
-    background: rgba(255, 255, 255, 0.92);
+    background: hsl(var(--background) / 0.92);
     box-shadow: 0 3px 12px rgba(15, 23, 42, 0.12);
     transform: translateY(-50%);
     backdrop-filter: blur(6px);
@@ -427,43 +215,11 @@
 }
 
 /* =========================================================
- * Dark mode
- * =======================================================*/
+ * Reduced motion
+ * ======================================================= */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --token-blueprint-surface: #171717;
-    --token-blueprint-surface-subtle: #111827;
-    --token-blueprint-surface-muted: #262626;
-
-    --token-blueprint-border: rgba(255, 255, 255, 0.12);
-    --token-blueprint-border-strong: rgba(255, 255, 255, 0.2);
-
-    --token-blueprint-text: rgba(255, 255, 255, 0.94);
-    --token-blueprint-text-subtle: rgba(255, 255, 255, 0.76);
-    --token-blueprint-text-muted: rgba(255, 255, 255, 0.58);
-
-    --token-blueprint-primary: #a5b4fc;
-    --token-blueprint-primary-soft: rgba(99, 102, 241, 0.16);
-    --token-blueprint-primary-border: rgba(129, 140, 248, 0.4);
-
-    --token-blueprint-danger: #fca5a5;
-    --token-blueprint-danger-soft: rgba(220, 38, 38, 0.16);
-    --token-blueprint-danger-border: rgba(248, 113, 113, 0.36);
-  }
-
-  .token-contents-card__delete-btn,
-  .token-contents-card__thumb-delete-btn {
-    background: rgba(23, 23, 23, 0.92);
-  }
-
-  .token-contents-card__nav {
-    background: var(--token-blueprint-surface);
-  }
-
-  @media (max-width: 420px) {
-    .token-contents-card__nav {
-      background: rgba(23, 23, 23, 0.92);
-    }
+@media (prefers-reduced-motion: reduce) {
+  .token-contents-card__thumb-wrap {
+    transition: none;
   }
 }

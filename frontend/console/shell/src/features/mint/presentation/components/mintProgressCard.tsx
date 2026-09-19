@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Progress } from "../../../../shared/ui/progress";
 import Text from "../../../../shared/ui/text";
 
 import type { MintTaskProgressDTO } from "../../infrastructure/dto/mintRequestManagementRow";
@@ -20,17 +21,8 @@ export type MintProgressCardProps = {
 export default function MintProgressCard({
   progress,
 }: MintProgressCardProps) {
-  const percentage = Math.min(
-    100,
-    Math.max(0, progress.percentage),
-  );
-
   return (
-    <Card
-      className="pb-select"
-      role="status"
-      aria-live="polite"
-    >
+    <Card className="pb-select" role="status" aria-live="polite">
       <CardHeader>
         <CardTitle>ミント進捗</CardTitle>
       </CardHeader>
@@ -38,18 +30,10 @@ export default function MintProgressCard({
       <CardContent>
         <div className="mint-progress">
           <div className="mint-progress__progress">
-            <div className="mint-progress__row">
-              <Text tone="muted">進捗</Text>
-              <Text weight="semibold">
-                {percentage}%
-              </Text>
-            </div>
-
-            <progress
-              className="mint-progress__bar"
-              value={percentage}
-              max={100}
-              aria-label="ミント進捗"
+            <Progress
+              value={progress.percentage}
+              label="進捗"
+              ariaLabel="ミント進捗"
             />
 
             <Text
@@ -69,29 +53,21 @@ export default function MintProgressCard({
             <div className="mint-progress__rows">
               <div className="mint-progress__row">
                 <Text tone="muted">待機中</Text>
-                <Text weight="semibold">
-                  {progress.pending}
-                </Text>
+                <Text weight="semibold">{progress.pending}</Text>
               </div>
 
               <div className="mint-progress__row">
                 <Text tone="muted">ミント中</Text>
-                <Text weight="semibold">
-                  {progress.minting}
-                </Text>
+                <Text weight="semibold">{progress.minting}</Text>
               </div>
 
               <div className="mint-progress__row">
                 <Text tone="muted">完了</Text>
-                <Text weight="semibold">
-                  {progress.minted}
-                </Text>
+                <Text weight="semibold">{progress.minted}</Text>
               </div>
 
               <div className="mint-progress__row">
-                <Text tone="muted">
-                  再試行待ち
-                </Text>
+                <Text tone="muted">再試行待ち</Text>
                 <Text
                   weight="semibold"
                   className={

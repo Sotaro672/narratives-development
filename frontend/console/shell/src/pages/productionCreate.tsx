@@ -55,7 +55,7 @@ export default function ProductionCreate() {
       onBack={onBack}
       onSave={onSave}
     >
-      <div className="production-create__column">
+      <div className="page-column">
         {selectedProductBlueprint ? (
           <ProductBlueprintCard
             mode="view"
@@ -78,7 +78,7 @@ export default function ProductionCreate() {
         )}
       </div>
 
-      <div className="production-create__column">
+      <div className="page-column">
         <AdminCard
           mode="edit"
           title="管理情報"

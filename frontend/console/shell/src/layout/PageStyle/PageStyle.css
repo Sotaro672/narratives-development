@@ -71,6 +71,19 @@
   }
 }
 
+/* 2カラム内の縦積みコンテンツ */
+
+.page-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.page-column--offset-top {
+  margin-top: 16px;
+}
+
 /* 右ペインのカードをスクロール追従させる */
 
 .sticky-aside {

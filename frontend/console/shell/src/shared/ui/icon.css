@@ -35,10 +35,49 @@
   aspect-ratio: 1 / 1;
 }
 
+/* =========================================================
+ * Variants
+ * ======================================================= */
+
+.entity-icon--upload {
+  border-style: dashed;
+  border-color: hsl(var(--border));
+  background: hsl(var(--muted) / 0.45);
+}
+
+.entity-icon--upload .entity-icon__fallback {
+  background: transparent;
+  padding: 16px;
+  color: hsl(var(--muted-foreground));
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.7;
+}
+
+.entity-icon--upload.entity-icon--interactive:hover:not(:disabled) {
+  border-color: hsl(var(--primary) / 0.5);
+  background: hsl(var(--primary) / 0.08);
+}
+
+.entity-icon--upload.entity-icon--interactive:hover:not(:disabled)
+  .entity-icon__fallback {
+  color: hsl(var(--primary));
+}
+
+.entity-icon--upload.entity-icon--interactive:hover:not(:disabled)
+  .entity-icon__image {
+  transform: scale(1.015);
+}
+
+/* =========================================================
+ * Interactive
+ * ======================================================= */
+
 .entity-icon--interactive {
   cursor: pointer;
   transition:
     border-color 160ms ease,
+    background-color 160ms ease,
     box-shadow 160ms ease,
     opacity 160ms ease,
     transform 160ms ease;
@@ -50,6 +89,7 @@
 
 .entity-icon--interactive:focus-visible {
   outline: none;
+  border-color: hsl(var(--primary));
   box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
 }
 
@@ -58,11 +98,18 @@
   opacity: 0.55;
 }
 
+/* =========================================================
+ * Content
+ * ======================================================= */
+
 .entity-icon__image {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
 }
 
 .entity-icon__fallback {
@@ -77,10 +124,19 @@
   font-weight: 600;
   line-height: 1;
   text-align: center;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
 }
 
+/* =========================================================
+ * Reduced motion
+ * ======================================================= */
+
 @media (prefers-reduced-motion: reduce) {
-  .entity-icon {
+  .entity-icon,
+  .entity-icon__image,
+  .entity-icon__fallback {
     transition: none;
   }
 }
