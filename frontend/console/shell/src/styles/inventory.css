@@ -4,10 +4,6 @@
  * Inventory Detail
  * ======================================================= */
 
-.inventory-detail__token {
-  margin-top: 0.75rem;
-}
-
 .inventory-detail__status {
   margin-top: 0.5rem;
   color: hsl(var(--muted-foreground));
@@ -17,12 +13,6 @@
 
 .inventory-detail__status--error {
   color: #dc2626;
-}
-
-.inventory-detail__aside {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
 }
 
 .inventory-detail__error {

@@ -1,4 +1,5 @@
-//frontend\console\shell\src\pages\locationDetail.tsx
+// frontend/console/shell/src/pages/locationDetail.tsx
+
 import { useCallback, useState } from "react";
 import { useParams } from "react-router-dom";
 
@@ -82,10 +83,7 @@ export default function LocationDetail() {
           </Card>
 
           {vm.error && (
-            <div
-              role="alert"
-              className="location-detail__error"
-            >
+            <div role="alert" className="location-detail__error">
               <p className="location-detail__error-message">
                 {vm.error}
               </p>
@@ -107,7 +105,7 @@ export default function LocationDetail() {
   );
 
   const right = (
-    <div className="location-detail__aside">
+    <div className="page-column">
       {vm.loading ? (
         <div className="location-detail__state">
           管理情報を読み込んでいます...

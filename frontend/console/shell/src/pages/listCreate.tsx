@@ -116,7 +116,7 @@ export default function InventoryListCreate() {
         isSaving={saving}
       >
         {/* 左カラム */}
-        <div className="list-create__column">
+        <div className="page-column">
           <ListImageCard
             isEdit={true}
             saving={saving}
@@ -182,7 +182,7 @@ export default function InventoryListCreate() {
         </div>
 
         {/* 右カラム */}
-        <div className="list-create__column">
+        <div className="page-column">
           {loadingDTO && (
             <Text as="div" size="sm" tone="muted">
               読み込み中...

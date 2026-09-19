@@ -77,10 +77,7 @@ export default function InventoryDetail() {
   const handleSave = React.useCallback(async () => {
     await handleSaveShippingAddress();
     await handleSaveTransportation();
-  }, [
-    handleSaveShippingAddress,
-    handleSaveTransportation,
-  ]);
+  }, [handleSaveShippingAddress, handleSaveTransportation]);
 
   /**
    * 在庫保管場所は選択しただけでは決定済みとしない。
@@ -99,10 +96,7 @@ export default function InventoryDetail() {
   const hasConfirmedTransportation =
     Boolean(vm?.transportationOption) &&
     vm?.transportationOption === transportationOption &&
-    (
-      transportationOption !== "custom" ||
-      vm?.transportationId === transportationId
-    );
+    (transportationOption !== "custom" || vm?.transportationId === transportationId);
 
   const productBlueprintPatchForCard: ProductBlueprintPatchInput | undefined =
     vm?.productBlueprintPatch;
@@ -149,7 +143,7 @@ export default function InventoryDetail() {
         />
 
         {tokenBlueprintId ? (
-          <div className="inventory-detail__token">
+          <div className="section-gap">
             <TokenBlueprintCard vm={tokenCardVM} />
           </div>
         ) : null}
@@ -170,7 +164,7 @@ export default function InventoryDetail() {
       </div>
 
       {/* 右カラム */}
-      <div className="inventory-detail__aside">
+      <div className="page-column">
         <InventoryShippingAddressCard
           shippingAddressId={selectedShippingAddressId}
           shippingAddressOptions={shippingAddressOptions}

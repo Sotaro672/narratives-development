@@ -1,14 +1,9 @@
-/*frontend\console\shell\src\styles\location.css*/
+/* frontend/console/shell/src/styles/location.css */
+
 .location-detail__main {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
-}
-
-.location-detail__aside {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
 }
 
 .location-detail__state {

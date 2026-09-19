@@ -30,59 +30,44 @@ export default function BrandDetail() {
     registeredAt,
     updatedAt,
     handleBack,
-
     isEditing,
     draft,
     setDraft,
-
     handleEdit,
     handleCancelEdit,
     handleSave,
-
     loading,
     saving,
     error,
-
     progress,
     progressOpen,
     onCloseProgress,
-
     managerId,
     managerCandidates,
     loadingMembers,
     editingManagerName,
     handleSelectManager,
-
     accountCandidates,
     loadingAccounts,
     accountError,
-
     brandImageAccept,
-
     brandIconInputRef,
     brandBackgroundInputRef,
-
     brandIconFile,
     brandBackgroundFile,
-
     brandIconPreviewUrl,
     brandBackgroundPreviewUrl,
-
     brandIconCropPosition,
     brandIconCropScale,
     handleBrandIconCropPositionChange,
     handleBrandIconCropScaleChange,
     handleBrandIconCropViewportSizeChange,
-
     brandIconError,
     brandBackgroundImageError,
-
     handlePickBrandIcon,
     handlePickBrandBackground,
-
     handleBrandIconChange,
     handleBrandBackgroundChange,
-
     handleClearBrandIcon,
     handleClearBrandBackground,
   } = useBrandDetail();
@@ -90,15 +75,12 @@ export default function BrandDetail() {
   const canEditImage = isEditing && !saving;
 
   const isCroppingBrandIcon = Boolean(
-    isEditing &&
-    brandIconFile &&
-    brandIconPreviewUrl,
+    isEditing && brandIconFile && brandIconPreviewUrl,
   );
 
   const accountLabel =
-    accountCandidates.find(
-      (candidate) => candidate.id === brand.accountId,
-    )?.label ?? null;
+    accountCandidates.find((candidate) => candidate.id === brand.accountId)
+      ?.label ?? null;
 
   const displayBrandName = isEditing
     ? draft.name || "ブランド名未入力"
@@ -124,20 +106,14 @@ export default function BrandDetail() {
               variant="cover"
               fit="cover"
               bordered={false}
-              emptyText={
-                isEditing
-                  ? "背景画像を選択"
-                  : "背景画像未設定"
-              }
+              emptyText={isEditing ? "背景画像を選択" : "背景画像未設定"}
               emptyDescription={
                 canEditImage
                   ? "クリックして背景画像を選択できます"
                   : undefined
               }
               onActivate={
-                canEditImage
-                  ? handlePickBrandBackground
-                  : undefined
+                canEditImage ? handlePickBrandBackground : undefined
               }
               disabled={saving}
             />
@@ -209,16 +185,8 @@ export default function BrandDetail() {
                     className="brand-hero__avatar"
                     imageClassName="brand-hero__avatar-image"
                     fallbackClassName="brand-hero__avatar-empty"
-                    fallback={
-                      isEditing
-                        ? "アイコンを選択"
-                        : "アイコン未設定"
-                    }
-                    onClick={
-                      canEditImage
-                        ? handlePickBrandIcon
-                        : undefined
-                    }
+                    fallback={isEditing ? "アイコンを選択" : "アイコン未設定"}
+                    onClick={canEditImage ? handlePickBrandIcon : undefined}
                     disabled={saving}
                   />
                 )}
@@ -270,16 +238,12 @@ export default function BrandDetail() {
               </div>
 
               <div className="brand-hero__meta">
-                <div className="brand-hero__title">
-                  {displayBrandName}
-                </div>
-
+                <div className="brand-hero__title">{displayBrandName}</div>
                 <div className="brand-hero__sub">
                   {isEditing
                     ? editingManagerName
                     : brand.memberName || "責任者未設定"}
                 </div>
-
                 <div className="brand-hero__sub">
                   {isEditing
                     ? draft.websiteUrl || "Webサイト未設定"
@@ -294,37 +258,27 @@ export default function BrandDetail() {
   );
 
   const left = (
-    <div className="brand-detail__column">
+    <div className="page-column">
       {hero}
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            基本情報
-          </CardTitle>
+          <CardTitle>基本情報</CardTitle>
         </CardHeader>
 
         <CardContent>
           {loading ? (
-            <div className="brand-detail__state">
-              読み込み中...
-            </div>
+            <div className="brand-detail__state">読み込み中...</div>
           ) : (
             <>
               {error && isEditing && (
-                <div className="brand-detail__form-error">
-                  {error.message}
-                </div>
+                <div className="brand-detail__form-error">{error.message}</div>
               )}
 
-              <CardLabel htmlFor="brand-name">
-                ブランド名
-              </CardLabel>
+              <CardLabel htmlFor="brand-name">ブランド名</CardLabel>
 
               {!isEditing ? (
-                <div className="brand-view-plain">
-                  {brand.name}
-                </div>
+                <div className="brand-view-plain">{brand.name}</div>
               ) : (
                 <Input
                   id="brand-name"
@@ -341,9 +295,7 @@ export default function BrandDetail() {
                 />
               )}
 
-              <CardLabel htmlFor="brand-description">
-                説明
-              </CardLabel>
+              <CardLabel htmlFor="brand-description">説明</CardLabel>
 
               {!isEditing ? (
                 <div className="brand-detail__desc-box">
@@ -395,28 +347,18 @@ export default function BrandDetail() {
   );
 
   const right = (
-    <div className="brand-detail__column">
+    <div className="page-column">
       <ManagerCard
         managerName={
-          isEditing
-            ? editingManagerName
-            : brand.memberName ?? ""
+          isEditing ? editingManagerName : brand.memberName ?? ""
         }
-        managerId={
-          isEditing
-            ? managerId
-            : brand.managerId
-        }
+        managerId={isEditing ? managerId : brand.managerId}
         managerCandidates={managerCandidates}
         loadingMembers={loadingMembers}
         onSelectManager={handleSelectManager}
         registeredAt={registeredAt}
         updatedAt={updatedAt}
-        mode={
-          isEditing
-            ? "edit"
-            : "view"
-        }
+        mode={isEditing ? "edit" : "view"}
       />
 
       <AccountSelectCard
@@ -434,21 +376,9 @@ export default function BrandDetail() {
         layout="grid-2"
         title={brand.name || "ブランド詳細"}
         onBack={handleBack}
-        onEdit={
-          !isEditing && !loading
-            ? handleEdit
-            : undefined
-        }
-        onSave={
-          isEditing && !saving
-            ? handleSave
-            : undefined
-        }
-        onCancel={
-          isEditing && !saving
-            ? handleCancelEdit
-            : undefined
-        }
+        onEdit={!isEditing && !loading ? handleEdit : undefined}
+        onSave={isEditing && !saving ? handleSave : undefined}
+        onCancel={isEditing && !saving ? handleCancelEdit : undefined}
         className={
           isEditing
             ? "brand-detail is-edit"

@@ -30,78 +30,57 @@ export default function BrandCreate() {
     accountCandidates,
     loadingAccounts,
     accountLoadError,
-
     name,
     setName,
     nameError,
-
     description,
     setDescription,
-
     websiteUrl,
     setWebsiteUrl,
-
     managerId,
     managerIdError,
     managerDisplayName,
     managerCandidates,
     loadingManagers,
     handleSelectManager,
-
     displayBrandName,
     displayWebsiteUrl,
-
     brandImageAccept,
-
     hasBrandIconSelection,
     hasBrandBackgroundSelection,
-
     brandIconInputRef,
     brandBackgroundInputRef,
-
     brandIconFile,
     brandIconPreviewUrl,
     brandBackgroundPreviewUrl,
-
     brandIconCropPosition,
     brandIconCropScale,
     handleBrandIconCropPositionChange,
     handleBrandIconCropScaleChange,
     handleBrandIconCropViewportSizeChange,
-
     brandIconError,
     brandBackgroundImageError,
-
     handlePickBrandIcon,
     handlePickBrandBackground,
-
     handleBrandIconChange,
     handleBrandBackgroundChange,
-
     handleClearBrandIcon,
     handleClearBrandBackground,
-
     saving,
-
     progress,
     progressOpen,
     onCloseProgress,
-
     handleBack,
     handleSave,
   } = useBrandCreate();
 
   const accountLabel =
-    accountCandidates.find(
-      (candidate) => candidate.id === accountId,
-    )?.label ?? null;
+    accountCandidates.find((candidate) => candidate.id === accountId)?.label ?? null;
 
-  const isCroppingBrandIcon = Boolean(
-    brandIconFile && brandIconPreviewUrl,
-  );
+  const isCroppingBrandIcon = Boolean(brandIconFile && brandIconPreviewUrl);
 
   const left = (
-    <div className="brand-create__column">
+    <div className="page-column">
       <Card>
         <CardContent>
           <div className="brand-hero">
@@ -113,16 +92,8 @@ export default function BrandCreate() {
               fit="cover"
               bordered={false}
               emptyText="背景画像を選択"
-              emptyDescription={
-                saving
-                  ? undefined
-                  : "クリックして背景画像を選択できます"
-              }
-              onActivate={
-                saving
-                  ? undefined
-                  : handlePickBrandBackground
-              }
+              emptyDescription={saving ? undefined : "クリックして背景画像を選択できます"}
+              onActivate={saving ? undefined : handlePickBrandBackground}
               disabled={saving}
             />
 
@@ -188,11 +159,7 @@ export default function BrandCreate() {
                     imageClassName="brand-hero__avatar-image"
                     fallbackClassName="brand-hero__avatar-empty"
                     fallback="アイコンを選択"
-                    onClick={
-                      saving
-                        ? undefined
-                        : handlePickBrandIcon
-                    }
+                    onClick={saving ? undefined : handlePickBrandIcon}
                     disabled={saving}
                   />
                 )}
@@ -238,17 +205,11 @@ export default function BrandCreate() {
               </div>
 
               <div className="brand-hero__meta">
-                <div className="brand-hero__title">
-                  {displayBrandName}
-                </div>
-
+                <div className="brand-hero__title">{displayBrandName}</div>
                 <div className="brand-hero__sub">
                   {managerDisplayName || "責任者未設定"}
                 </div>
-
-                <div className="brand-hero__sub">
-                  {displayWebsiteUrl}
-                </div>
+                <div className="brand-hero__sub">{displayWebsiteUrl}</div>
               </div>
             </div>
           </div>
@@ -257,23 +218,17 @@ export default function BrandCreate() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            ブランド情報
-          </CardTitle>
+          <CardTitle>ブランド情報</CardTitle>
         </CardHeader>
 
         <CardContent>
-          <CardLabel htmlFor="name">
-            ブランド名（必須）
-          </CardLabel>
+          <CardLabel htmlFor="name">ブランド名（必須）</CardLabel>
 
           <CardInput
             id="name"
             placeholder="ブランド名"
             value={name}
-            onChange={(event) =>
-              setName(event.target.value)
-            }
+            onChange={(event) => setName(event.target.value)}
             disabled={saving}
           />
 
@@ -283,32 +238,24 @@ export default function BrandCreate() {
             </p>
           )}
 
-          <CardLabel htmlFor="description">
-            説明
-          </CardLabel>
+          <CardLabel htmlFor="description">説明</CardLabel>
 
           <Textarea
             id="description"
             value={description}
             placeholder="ブランドの説明を入力してください"
             className="brand-create__textarea"
-            onChange={(event) =>
-              setDescription(event.target.value)
-            }
+            onChange={(event) => setDescription(event.target.value)}
             disabled={saving}
           />
 
-          <CardLabel htmlFor="websiteUrl">
-            WebサイトURL
-          </CardLabel>
+          <CardLabel htmlFor="websiteUrl">WebサイトURL</CardLabel>
 
           <CardInput
             id="websiteUrl"
             placeholder="https://example.com"
             value={websiteUrl}
-            onChange={(event) =>
-              setWebsiteUrl(event.target.value)
-            }
+            onChange={(event) => setWebsiteUrl(event.target.value)}
             disabled={saving}
           />
         </CardContent>
@@ -317,7 +264,7 @@ export default function BrandCreate() {
   );
 
   const right = (
-    <div className="brand-create__column">
+    <div className="page-column">
       <AdminCard
         mode="edit"
         assigneeId={managerId}
@@ -328,18 +275,14 @@ export default function BrandCreate() {
       />
 
       {managerIdError && (
-        <p className="brand-create__error">
-          {managerIdError}
-        </p>
+        <p className="brand-create__error">{managerIdError}</p>
       )}
 
       <AccountSelectCard
         accountLabel={accountLabel}
         accountCandidates={accountCandidates}
         loadingAccounts={loadingAccounts}
-        accountError={
-          accountLoadError || accountIdError
-        }
+        accountError={accountLoadError || accountIdError}
       />
     </div>
   );
@@ -359,11 +302,7 @@ export default function BrandCreate() {
       <BrandCreateProgressModal
         open={progressOpen}
         progress={progress}
-        onClose={
-          progress.isBlockingNavigation
-            ? undefined
-            : onCloseProgress
-        }
+        onClose={progress.isBlockingNavigation ? undefined : onCloseProgress}
       />
     </>
   );

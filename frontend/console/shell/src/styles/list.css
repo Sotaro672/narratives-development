@@ -22,12 +22,6 @@
  * List Create
  * ======================================================= */
 
-.list-create__column {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .list-create__card-content {
   padding: 1rem;
 }

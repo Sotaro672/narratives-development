@@ -4,12 +4,6 @@
  * Brand Create
  * ======================================================= */
 
-.brand-create__column {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .brand-create__error {
   margin: 0;
   color: #ef4444;
@@ -48,12 +42,6 @@
 /* =========================================================
  * Brand Detail
  * ======================================================= */
-
-.brand-detail__column {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
 
 .brand-detail__state {
   color: hsl(var(--muted-foreground));
