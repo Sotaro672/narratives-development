@@ -1,0 +1,26 @@
+/* frontend/console/shell/src/shared/ui/sort-able-table-header.css */
+
+.sth-btn {
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.sth-btn:hover,
+.sth-btn--active {
+  border-color: #d9dde3;
+  background: #eef1f4;
+}
+
+.sth-btn__icon {
+  display: inline-flex;
+  align-items: center;
+  opacity: 0.3;
+  transition: opacity 120ms ease;
+}
+
+.sth-btn:hover .sth-btn__icon,
+.sth-btn--active .sth-btn__icon {
+  opacity: 1;
+}

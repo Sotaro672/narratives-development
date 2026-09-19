@@ -183,4 +183,4 @@ export default function List({
 }
 
 export { default as FilterableTableHeader } from "../../shared/ui/filter-able-table-header";
-export { default as SortableTableHeader } from "../../shared/ui/sortable-table-header";
+export { default as SortableTableHeader } from "../../shared/ui/sort-able-table-header";
