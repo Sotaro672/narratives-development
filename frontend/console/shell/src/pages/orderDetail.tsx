@@ -4,6 +4,7 @@ import { formatJPY, useOrderDetail } from "../features/order/presentation/hooks/
 import type { OrderDetailItemDTO } from "../features/order/presentation/hooks/useOrderDetail";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import Link from "../shared/ui/link";
 import {
   Table,
   TableBody,
@@ -156,14 +157,12 @@ export default function OrderDetail() {
                       {lists.length > 0 ? (
                         <div className="order-detail__list-links">
                           {lists.map((list) => (
-                            <button
+                            <Link
                               key={list.id}
-                              type="button"
-                              className="order-detail__list-link"
                               onClick={() => goListDetail(list.id)}
                             >
                               {list.readableId}
-                            </button>
+                            </Link>
                           ))}
                         </div>
                       ) : (

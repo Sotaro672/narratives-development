@@ -353,8 +353,8 @@ export default function PageStyle({
 
   const header = (
     <header className="page-header">
-      <div className="px-4 py-3">
-        <div className="flex items-center justify-between">
+      <div className="page-header__inner">
+        <div className="page-header__row">
           <div className="page-header__left">
             {hasBack && (
               <Button
@@ -367,7 +367,7 @@ export default function PageStyle({
               </Button>
             )}
 
-            <div className="flex items-center gap-2">
+            <div className="page-header__title-group">
               <h1 className="page-header__title">{title ?? ""}</h1>
               {badge}
             </div>

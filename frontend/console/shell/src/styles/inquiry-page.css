@@ -48,17 +48,6 @@
   word-break: break-word;
 }
 
-.inq-detail__value--link {
-  color: #2563eb;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.inq-detail__value--link:hover {
-  color: #1d4ed8;
-  text-decoration: underline;
-}
-
 .inq-detail__body {
   display: flex;
   flex-direction: column;
@@ -346,59 +335,10 @@
    Reply modal
 ========================================================= */
 
-.inq-reply-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 2147483647;
-  display: flex;
-  width: 100vw;
-  height: 100vh;
-  min-height: 100dvh;
-  align-items: center;
-  justify-content: center;
-  background: rgba(15, 23, 42, 0.48);
-  padding: 24px;
-  backdrop-filter: blur(4px);
-}
-
-.inq-reply-modal__panel {
+.modal__panel.inq-reply-modal__panel {
   width: min(640px, 100%);
   max-height: min(760px, calc(100vh - 48px));
-  overflow: auto;
-  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  border-radius: 20px;
-  background: hsl(var(--background, 0 0% 100%));
-  box-shadow:
-    0 24px 64px rgba(15, 23, 42, 0.22),
-    0 8px 24px rgba(15, 23, 42, 0.12);
-}
-
-.inq-reply-modal__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  padding: 20px 22px 18px;
-}
-
-.inq-reply-modal__title {
-  margin: 0;
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font-size: 1.1rem;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
-.inq-reply-modal__description {
-  margin: 6px 0 0;
-}
-
-.inq-reply-modal__body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 20px 22px;
+  overflow-y: auto;
 }
 
 .inq-reply-modal__label {
@@ -410,14 +350,6 @@
 
 .inq-reply-modal__counter {
   text-align: right;
-}
-
-.inq-reply-modal__actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  border-top: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  padding: 16px 22px 20px;
 }
 
 /* =========================================================
@@ -517,5 +449,10 @@
 
   .inq-reply-item .inq-detail__image-grid {
     width: min(280px, 100%);
+  }
+
+  .modal__panel.inq-reply-modal__panel {
+    width: 100%;
+    max-height: calc(100dvh - 24px);
   }
 }

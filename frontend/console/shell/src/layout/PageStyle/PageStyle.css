@@ -1,19 +1,9 @@
 /* frontend/console/shell/src/layout/PageStyle/PageStyle.css */
 
-/* カラートークン（ライト／ダーク） */
+/* カラートークン */
 
 :root {
   --pbp-bg: #f8f8f8;
-  --pbp-surface: #ffffff;
-  --pbp-border: rgba(0, 0, 0, 0.08);
-  --pbp-border-soft: rgba(0, 0, 0, 0.06);
-  --pbp-border-strong: rgba(0, 0, 0, 0.12);
-  --pbp-text: rgba(0, 0, 0, 0.86);
-  --pbp-text-dim: rgba(0, 0, 0, 0.70);
-  --pbp-text-soft: rgba(0, 0, 0, 0.55);
-  --pbp-muted-bg: rgba(0, 0, 0, 0.02);
-  --pbp-primary: #4f46e5;
-  --pbp-primary-hover: #6366f1;
   --pbp-header-height: 56px;
 }
 
@@ -22,14 +12,6 @@
 @media (prefers-color-scheme: dark) {
   :root {
     --pbp-bg: #0c0c0c;
-    --pbp-surface: #161616;
-    --pbp-border: rgba(255, 255, 255, 0.12);
-    --pbp-border-soft: rgba(255, 255, 255, 0.08);
-    --pbp-border-strong: rgba(255, 255, 255, 0.16);
-    --pbp-text: rgba(255, 255, 255, 0.92);
-    --pbp-text-dim: rgba(255, 255, 255, 0.78);
-    --pbp-text-soft: rgba(255, 255, 255, 0.60);
-    --pbp-muted-bg: rgba(255, 255, 255, 0.04);
   }
 }
 
@@ -38,7 +20,7 @@
 .pbp {
   min-height: calc(100vh - var(--pbp-header-height));
   background: var(--pbp-bg);
-  color: var(--pbp-text);
+  color: hsl(var(--foreground));
 }
 
 /* ページ内の水平パディングとセンタリング */
@@ -109,14 +91,38 @@
   z-index: 10;
   width: 100%;
   height: var(--pbp-header-height);
-  border-bottom: 1px solid var(--pbp-border);
-  background-color: var(--pbp-surface);
+  border-bottom: 1px solid hsl(var(--border));
+  background-color: hsl(var(--background));
+}
+
+/* ヘッダー内側 */
+
+.page-header__inner {
+  padding: 12px 16px;
+}
+
+/* ヘッダー左右レイアウト */
+
+.page-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
 /* 左側：タイトル＋戻るボタン */
 
 .page-header__left {
   display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+/* タイトル＋バッジ */
+
+.page-header__title-group {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
 }
@@ -124,8 +130,9 @@
 /* タイトル */
 
 .page-header__title {
+  min-width: 0;
   margin: 0;
-  color: var(--pbp-text);
+  color: hsl(var(--foreground));
   font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0.02em;

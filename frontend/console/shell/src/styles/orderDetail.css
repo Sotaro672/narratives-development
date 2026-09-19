@@ -65,20 +65,6 @@
   row-gap: 4px;
 }
 
-.order-detail__list-link {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: #2563eb;
-  font: inherit;
-  cursor: pointer;
-}
-
-.order-detail__list-link:hover {
-  text-decoration: underline;
-}
-
 .order-detail__items {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,32 @@
+/* frontend/console/shell/src/shared/ui/link.css */
+
+.link {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2563eb;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.link:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+
+.link:disabled,
+.link[aria-disabled="true"] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.link:disabled:hover,
+.link[aria-disabled="true"]:hover {
+  text-decoration: none;
+}

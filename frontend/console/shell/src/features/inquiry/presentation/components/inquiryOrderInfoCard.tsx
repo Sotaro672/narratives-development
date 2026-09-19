@@ -1,18 +1,16 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/inquiryOrderInfoCard.tsx
 
-import { Link } from "react-router-dom";
+import { Link as RouterLink } from "react-router-dom";
 
-import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
-
-import type {
-  InquiryOrderSummary,
-} from "../../../../shared/types/inquiry";
+import Link from "../../../../shared/ui/link";
+import type { InquiryOrderSummary } from "../../../../shared/types/inquiry";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 export type InquiryOrderInfoCardProps = {
   productName?: string | null;
@@ -21,9 +19,7 @@ export type InquiryOrderInfoCardProps = {
   isUnopenedReturn?: boolean;
 };
 
-function textOrDash(
-  value: string | null | undefined,
-): string {
+function textOrDash(value: string | null | undefined): string {
   const normalized = String(value ?? "").trim();
   return normalized || "-";
 }
@@ -35,9 +31,7 @@ export default function InquiryOrderInfoCard({
   isUnopenedReturn = false,
 }: InquiryOrderInfoCardProps) {
   const targetOrderItem =
-    orders.flatMap(
-      (order: InquiryOrderSummary) => order.items,
-    )[0] ?? null;
+    orders.flatMap((order: InquiryOrderSummary) => order.items)[0] ?? null;
 
   const productDisplayName =
     `${textOrDash(productName)} / ${textOrDash(brandName)}`;
@@ -47,8 +41,7 @@ export default function InquiryOrderInfoCard({
       targetOrderItem?.tokenBrandName,
     )}`;
 
-  const quantity =
-    targetOrderItem?.qty ?? 0;
+  const quantity = targetOrderItem?.qty ?? 0;
 
   const returnStatus =
     targetOrderItem?.isReturnCompleted
@@ -57,89 +50,55 @@ export default function InquiryOrderInfoCard({
         ? "返品対応中"
         : "-";
 
-  const returnRequestedAt =
-    safeDateTimeLabelJa(
-      targetOrderItem?.returnRequestedAt,
-      "-",
-    );
+  const returnRequestedAt = safeDateTimeLabelJa(
+    targetOrderItem?.returnRequestedAt,
+    "-",
+  );
 
-  const returnCompletedAt =
-    safeDateTimeLabelJa(
-      targetOrderItem?.returnCompletedAt,
-      "-",
-    );
+  const returnCompletedAt = safeDateTimeLabelJa(
+    targetOrderItem?.returnCompletedAt,
+    "-",
+  );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          商品・注文情報
-        </CardTitle>
+        <CardTitle>商品・注文情報</CardTitle>
       </CardHeader>
 
       <CardContent>
         <div className="inq-detail">
           <div className="inq-detail__meta">
             <div>
-              <span className="inq-detail__label">
-                商品名
-              </span>
-
-              <span className="inq-detail__value">
-                {productDisplayName}
-              </span>
+              <span className="inq-detail__label">商品名</span>
+              <span className="inq-detail__value">{productDisplayName}</span>
             </div>
 
             <div>
-              <span className="inq-detail__label">
-                トークン名
-              </span>
-
-              <span className="inq-detail__value">
-                {tokenDisplayName}
-              </span>
+              <span className="inq-detail__label">トークン名</span>
+              <span className="inq-detail__value">{tokenDisplayName}</span>
             </div>
 
             <div>
-              <span className="inq-detail__label">
-                数量
-              </span>
-
-              <span className="inq-detail__value">
-                {quantity}
-              </span>
+              <span className="inq-detail__label">数量</span>
+              <span className="inq-detail__value">{quantity}</span>
             </div>
 
             {isUnopenedReturn ? (
               <>
                 <div>
-                  <span className="inq-detail__label">
-                    返品ステータス
-                  </span>
-
-                  <span className="inq-detail__value">
-                    {returnStatus}
-                  </span>
+                  <span className="inq-detail__label">返品ステータス</span>
+                  <span className="inq-detail__value">{returnStatus}</span>
                 </div>
 
                 <div>
-                  <span className="inq-detail__label">
-                    返品申請日
-                  </span>
-
-                  <span className="inq-detail__value">
-                    {returnRequestedAt}
-                  </span>
+                  <span className="inq-detail__label">返品申請日</span>
+                  <span className="inq-detail__value">{returnRequestedAt}</span>
                 </div>
 
                 <div>
-                  <span className="inq-detail__label">
-                    返品完了日
-                  </span>
-
-                  <span className="inq-detail__value">
-                    {returnCompletedAt}
-                  </span>
+                  <span className="inq-detail__label">返品完了日</span>
+                  <span className="inq-detail__value">{returnCompletedAt}</span>
                 </div>
               </>
             ) : null}
@@ -150,45 +109,30 @@ export default function InquiryOrderInfoCard({
                   order: InquiryOrderSummary,
                   index: number,
                 ) => [
-                  <div
-                    key={`${order.id}-id-${index}`}
-                  >
-                    <span className="inq-detail__label">
-                      注文ID
-                    </span>
-
-                    <Link
-                      to={`/order/${encodeURIComponent(
-                        order.id,
-                      )}`}
-                      className="inq-detail__value inq-detail__value--link"
-                    >
-                      {textOrDash(
-                        order.id,
-                      )}
-                    </Link>
-                  </div>,
-
-                  <div
-                    key={`${order.id}-created-at-${index}`}
-                  >
-                    <span className="inq-detail__label">
-                      発注日時
-                    </span>
+                  <div key={`${order.id}-id-${index}`}>
+                    <span className="inq-detail__label">注文ID</span>
 
                     <span className="inq-detail__value">
-                      {safeDateTimeLabelJa(
-                        order.createdAt,
-                        "-",
-                      )}
+                      <Link asChild>
+                        <RouterLink
+                          to={`/order/${encodeURIComponent(order.id)}`}
+                        >
+                          {textOrDash(order.id)}
+                        </RouterLink>
+                      </Link>
+                    </span>
+                  </div>,
+
+                  <div key={`${order.id}-created-at-${index}`}>
+                    <span className="inq-detail__label">発注日時</span>
+                    <span className="inq-detail__value">
+                      {safeDateTimeLabelJa(order.createdAt, "-")}
                     </span>
                   </div>,
                 ],
               )
             ) : (
-              <div className="inq__empty">
-                注文情報はありません。
-              </div>
+              <div className="inq__empty">注文情報はありません。</div>
             )}
           </div>
         </div>
