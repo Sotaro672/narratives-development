@@ -32,10 +32,8 @@ type PermissionCategoryView = {
 export type PermissionSelectProps = {
   category: PermissionCategory;
   setCategory: (c: PermissionCategory) => void;
-
   permissionCategories: PermissionCategoryView[];
   permissionCategoryList: PermissionCategory[];
-
   selectedPermIds: Set<string>;
   setSelectedPermIds: React.Dispatch<React.SetStateAction<Set<string>>>;
 };
@@ -152,7 +150,7 @@ export function PermissionSelect({
             <Button
               type="button"
               variant="outline"
-              className="role-button w-full justify-start text-left"
+              className="w-full justify-start text-left"
             >
               {category ? (
                 categoryLabel(category)
