@@ -12,16 +12,15 @@ import {
   type OrderDetailItemDTO,
 } from "../../infrastructure/repository";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+import { getOrderStatusLabel } from "../../../../shared/types/order";
 import {
   calculateOrderQuantity,
   calculateOrderTotalPrice,
   extractListLinks,
-  formatJPY,
   hasTransferredItem,
   type OrderDetailListLink,
 } from "../../application/orderDetailCalculations";
 
-export { formatJPY };
 export type { OrderDetailDTO, OrderDetailItemDTO };
 
 const CURRENT_COMPANY_ID_ROUTE_PLACEHOLDER = "current";
@@ -36,6 +35,7 @@ export type UseOrderDetailReturn = {
   canDispatch: boolean;
   returnInquiryId: string | null;
   hasReturnInProgress: boolean;
+  isCancelled: boolean;
   items: OrderDetailItemDTO[];
   quantity: number;
   subtotal: number;
@@ -49,6 +49,11 @@ export type UseOrderDetailReturn = {
   email: string;
   lists: OrderDetailListLink[];
   pageTitle: string;
+  statusButtonLabel: string | undefined;
+  statusButtonBusyLabel: string;
+  onStatusButtonClick: (() => void | Promise<void>) | undefined;
+  isStatusButtonLoading: boolean;
+  statusButtonDisabled: boolean;
   onBack: () => void;
   goListDetail: (listId: string) => void;
   goReturnInquiryDetail: () => void;
@@ -144,7 +149,10 @@ export function useOrderDetail(): UseOrderDetailReturn {
 
   const goListDetail = React.useCallback(
     (listId: string) => {
-      if (!listId) return;
+      if (!listId) {
+        return;
+      }
+
       navigate(`/list/${encodeURIComponent(listId)}`);
     },
     [navigate],
@@ -159,12 +167,18 @@ export function useOrderDetail(): UseOrderDetailReturn {
   }, [navigate, returnInquiryId]);
 
   const items = React.useMemo<OrderDetailItemDTO[]>(
-    () => (
+    () =>
       order
         ? order.items.filter((item) => item.type === "list")
-        : []
-    ),
+        : [],
     [order],
+  );
+
+  const isCancelled = React.useMemo(
+    () =>
+      items.length > 0 &&
+      items.every((item) => item.isCancelled),
+    [items],
   );
 
   const canDispatch = React.useMemo(
@@ -236,7 +250,11 @@ export function useOrderDetail(): UseOrderDetailReturn {
     [items],
   );
 
-  const createdAt = safeDateTimeLabelJa(order?.createdAt, "-");
+  const createdAt = safeDateTimeLabelJa(
+    order?.createdAt,
+    "-",
+  );
+
   const shipping = order?.shippingSnapshot;
   const userName = order?.userName || "-";
   const email = order?.email || "-";
@@ -248,6 +266,62 @@ export function useOrderDetail(): UseOrderDetailReturn {
 
   const pageTitle = `注文詳細：${order?.id || orderId || "不明ID"}`;
 
+  const statusButtonLabel = React.useMemo(() => {
+    if (isCancelled) {
+      return undefined;
+    }
+
+    if (hasReturnInProgress) {
+      return "返品対応";
+    }
+
+    if (canDispatch) {
+      return "発送";
+    }
+
+    return getOrderStatusLabel(order?.paid ?? true);
+  }, [
+    isCancelled,
+    hasReturnInProgress,
+    canDispatch,
+    order?.paid,
+  ]);
+
+  const statusButtonBusyLabel = "発送中...";
+
+  const onStatusButtonClick = React.useMemo<
+    (() => void | Promise<void>) | undefined
+  >(() => {
+    if (isCancelled) {
+      return undefined;
+    }
+
+    if (hasReturnInProgress) {
+      return goReturnInquiryDetail;
+    }
+
+    return onDispatch;
+  }, [
+    isCancelled,
+    hasReturnInProgress,
+    goReturnInquiryDetail,
+    onDispatch,
+  ]);
+
+  const isStatusButtonLoading =
+    !hasReturnInProgress &&
+    dispatching;
+
+  const statusButtonDisabled =
+    loading ||
+    (
+      !hasReturnInProgress &&
+      (
+        dispatching ||
+        !canDispatch
+      )
+    );
+
   return {
     orderId,
     order,
@@ -258,6 +332,7 @@ export function useOrderDetail(): UseOrderDetailReturn {
     canDispatch,
     returnInquiryId,
     hasReturnInProgress,
+    isCancelled,
     items,
     quantity,
     subtotal,
@@ -271,6 +346,11 @@ export function useOrderDetail(): UseOrderDetailReturn {
     email,
     lists,
     pageTitle,
+    statusButtonLabel,
+    statusButtonBusyLabel,
+    onStatusButtonClick,
+    isStatusButtonLoading,
+    statusButtonDisabled,
     onBack,
     goListDetail,
     goReturnInquiryDetail,
