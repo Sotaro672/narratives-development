@@ -5,7 +5,6 @@ import { Upload, X } from "lucide-react";
 import "../styles/brand.css";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-
 import {
   Card,
   CardContent,
@@ -18,6 +17,7 @@ import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
 import { Media } from "../shared/ui/media";
+import { Text } from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
 import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
@@ -74,7 +74,6 @@ export default function BrandDetail() {
   } = useBrandDetail();
 
   const canEditImage = isEditing && !saving;
-
   const isCroppingBrandIcon = Boolean(
     isEditing && brandIconFile && brandIconPreviewUrl,
   );
@@ -91,9 +90,14 @@ export default function BrandDetail() {
     <Card>
       <CardContent>
         {loading ? (
-          <div className="brand-detail__state brand-detail__state--padded">
+          <Text
+            as="div"
+            size="sm"
+            tone="muted"
+            className="brand-detail__state--padded"
+          >
             読み込み中...
-          </div>
+          </Text>
         ) : error && !isEditing ? (
           <ErrorMessage className="brand-detail__state--padded">
             {error.message}
@@ -277,7 +281,9 @@ export default function BrandDetail() {
 
         <CardContent>
           {loading ? (
-            <div className="brand-detail__state">読み込み中...</div>
+            <Text as="div" size="sm" tone="muted">
+              読み込み中...
+            </Text>
           ) : (
             <>
               {error && isEditing && (
@@ -289,7 +295,9 @@ export default function BrandDetail() {
               <CardLabel htmlFor="brand-name">ブランド名</CardLabel>
 
               {!isEditing ? (
-                <div className="brand-view-plain">{brand.name}</div>
+                <Text as="div" size="sm" wrap="anywhere">
+                  {brand.name || "（未設定）"}
+                </Text>
               ) : (
                 <Input
                   id="brand-name"
@@ -301,7 +309,6 @@ export default function BrandDetail() {
                       name: event.target.value,
                     }))
                   }
-                  className="brand-detail__input"
                   disabled={saving}
                 />
               )}
@@ -309,9 +316,9 @@ export default function BrandDetail() {
               <CardLabel htmlFor="brand-description">説明</CardLabel>
 
               {!isEditing ? (
-                <div className="brand-detail__desc-box">
+                <Text as="div" size="sm" wrap="anywhere">
                   {brand.description || "（未設定）"}
-                </div>
+                </Text>
               ) : (
                 <Textarea
                   id="brand-description"
@@ -332,9 +339,9 @@ export default function BrandDetail() {
               </CardLabel>
 
               {!isEditing ? (
-                <div className="brand-view-plain">
+                <Text as="div" size="sm" wrap="anywhere">
                   {brand.websiteUrl || "（未設定）"}
-                </div>
+                </Text>
               ) : (
                 <Input
                   id="brand-website-url"
@@ -346,7 +353,6 @@ export default function BrandDetail() {
                       websiteUrl: event.target.value,
                     }))
                   }
-                  className="brand-detail__input"
                   disabled={saving}
                 />
               )}
@@ -390,11 +396,6 @@ export default function BrandDetail() {
         onEdit={!isEditing && !loading ? handleEdit : undefined}
         onSave={isEditing && !saving ? handleSave : undefined}
         onCancel={isEditing && !saving ? handleCancelEdit : undefined}
-        className={
-          isEditing
-            ? "brand-detail is-edit"
-            : "brand-detail is-view"
-        }
       >
         {[left, right]}
       </PageStyle>

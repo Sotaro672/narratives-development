@@ -18,30 +18,8 @@
 }
 
 /* =========================================================
- * Brand Common
- * ======================================================= */
-
-.brand-date-row {
-  display: flex;
-  gap: 12px;
-  margin-top: 4px;
-}
-
-.brand-date-col {
-  flex: 1;
-  min-width: 0;
-}
-
-/* =========================================================
  * Brand Detail
  * ======================================================= */
-
-.brand-detail__state {
-  color: hsl(var(--muted-foreground));
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  text-align: left;
-}
 
 .brand-detail__state--padded {
   padding-top: 1.5rem;
@@ -56,31 +34,6 @@
   margin-top: 0.5rem;
 }
 
-.brand-detail.is-view .brand-detail__desc-box {
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: hsl(var(--foreground));
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.brand-detail.is-edit .brand-detail__desc-box {
-  display: none;
-}
-
-.brand-detail.is-edit .brand-detail__input {
-  border-color: hsl(var(--border));
-}
-
-.brand-view-plain {
-  color: hsl(var(--foreground));
-  font-size: 14px;
-  line-height: 1.6;
-  word-break: break-word;
-}
-
 /* =========================================================
  * Account Select Card
  * ======================================================= */
@@ -93,39 +46,17 @@
 
 .account-select-card__label {
   margin-bottom: 0.25rem;
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1rem;
 }
 
-.account-select-card__loading {
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-  color: #94a3b8;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.account-select-card__error {
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-}
-
-.account-select-card__value {
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-  color: #1e293b;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
+.account-select-card__loading,
+.account-select-card__error,
+.account-select-card__value,
 .account-select-card__id {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1rem;
-  overflow-wrap: anywhere;
+}
+
+.account-select-card__id {
   word-break: break-all;
 }
 
@@ -163,54 +94,6 @@
   color: #94a3b8;
   font-size: 11px;
   line-height: 1rem;
-}
-
-.manager-card__popover {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  padding: 0.5rem;
-}
-
-.manager-card__message {
-  margin: 0;
-  color: #94a3b8;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-.manager-card__error {
-  margin: 0;
-}
-
-.manager-card__candidate-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.manager-card__candidate {
-  display: block;
-  width: 100%;
-  padding: 0.25rem 0.5rem;
-  border: 0;
-  border-radius: 0.25rem;
-  background: transparent;
-  color: inherit;
-  font-family: inherit;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.manager-card__candidate:hover {
-  background-color: #f1f5f9;
-}
-
-.manager-card__candidate--selected {
-  background-color: #f1f5f9;
-  font-weight: 600;
 }
 
 .manager-card__dates {

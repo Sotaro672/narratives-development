@@ -4,11 +4,12 @@ import * as React from "react";
 
 import {
   Card,
+  CardContent,
   CardHeader,
   CardTitle,
-  CardContent,
 } from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import { Text } from "../../../../shared/ui/text";
 
 import "../../../../styles/brand.css";
 
@@ -58,41 +59,67 @@ export const AccountSelectCard: React.FC<AccountSelectCardProps> = ({
   return (
     <Card className="admin-card">
       <CardHeader className="admin-card__header">
-        <CardTitle className="admin-card__title">
-          {title}
-        </CardTitle>
+        <CardTitle className="admin-card__title">{title}</CardTitle>
       </CardHeader>
 
       <CardContent className="admin-card__body account-select-card__body">
         <div className="admin-card__section">
-          <div className="admin-card__label account-select-card__label">
+          <Text
+            as="div"
+            size="xs"
+            tone="muted"
+            className="account-select-card__label"
+          >
             接続口座
-          </div>
+          </Text>
 
           {loading ? (
-            <div className="account-select-card__loading">
+            <Text
+              as="div"
+              size="sm"
+              tone="muted"
+              className="account-select-card__loading"
+            >
               口座を読み込み中です…
-            </div>
+            </Text>
           ) : accountError ? (
-            <ErrorMessage size="xs" className="account-select-card__error">
+            <ErrorMessage
+              size="xs"
+              className="account-select-card__error"
+            >
               {accountError}
             </ErrorMessage>
           ) : (
-            <div className="account-select-card__value">
+            <Text
+              as="div"
+              size="sm"
+              className="account-select-card__value"
+            >
               {displayLabel}
-            </div>
+            </Text>
           )}
         </div>
 
         {accountId && (
           <div className="admin-card__section">
-            <div className="admin-card__label account-select-card__label">
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              className="account-select-card__label"
+            >
               Account ID
-            </div>
+            </Text>
 
-            <div className="account-select-card__id">
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              wrap="anywhere"
+              className="account-select-card__id"
+            >
               {accountId}
-            </div>
+            </Text>
           </div>
         )}
       </CardContent>
