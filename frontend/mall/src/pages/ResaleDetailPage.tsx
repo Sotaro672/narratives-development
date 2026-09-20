@@ -1,9 +1,12 @@
-// frontend/amol/src/pages/ResaleDetailPage.tsx
+// frontend/mall/src/pages/ResaleDetailPage.tsx
 
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
 import SectionHeader from "../components/ui/SectionHeader";
+import TextState from "../components/ui/TextState";
 
 import AvatarSummaryCard from "../features/shared/presentation/components/AvatarSummaryCard";
 import ProductDescription from "../features/shared/presentation/components/ProductDescription";
@@ -99,35 +102,35 @@ export default function ResaleDetailPage() {
     >
       <div className="page-layout resale-detail-page">
         {loading ? (
-          <div className="resale-detail-page__state">
-            <p>読み込み中です...</p>
-          </div>
+          <TextState variant="loading">
+            読み込み中です...
+          </TextState>
         ) : null}
 
         {showLoadError ? (
-          <div className="resale-detail-page__state resale-detail-page__state--error">
+          <Alert variant="error">
             <SectionHeader title="出品情報を表示できません" titleAs="h2">
               <p>{errorMessage}</p>
             </SectionHeader>
 
             <div className="page-actions">
-              <button
-                type="button"
-                className="page-button page-button--secondary"
+              <Button
+                variant="secondary"
+                size="md"
                 onClick={() => void handleReload()}
               >
                 再読み込み
-              </button>
+              </Button>
 
-              <button
-                type="button"
-                className="page-button page-button--primary"
+              <Button
+                variant="primary"
+                size="md"
                 onClick={handleBackToWallet}
               >
                 ウォレットへ戻る
-              </button>
+              </Button>
             </div>
-          </div>
+          </Alert>
         ) : null}
 
         {showDetail ? (
@@ -186,7 +189,9 @@ export default function ResaleDetailPage() {
 
                 {!isEditing ? (
                   <ProductDescription
-                    description={readonlyInfoProps.description || "説明文はありません。"}
+                    description={
+                      readonlyInfoProps.description || "説明文はありません。"
+                    }
                     className="product-detail__description--standalone"
                   />
                 ) : null}
@@ -225,21 +230,15 @@ export default function ResaleDetailPage() {
             )}
 
             {errorMessage ? (
-              <p
-                className="resale-detail-page__message resale-detail-page__message--error"
-                role="alert"
-              >
+              <Alert variant="error">
                 {errorMessage}
-              </p>
+              </Alert>
             ) : null}
 
             {saveMessage ? (
-              <p
-                className="resale-detail-page__message resale-detail-page__message--success"
-                role="status"
-              >
+              <Alert variant="success" role="status">
                 {saveMessage}
-              </p>
+              </Alert>
             ) : null}
           </ProductDetailLayout>
         ) : null}

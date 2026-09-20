@@ -7,7 +7,6 @@ import Input from "../../../../components/ui/Input";
 import Textbox from "../../../../components/ui/Textbox";
 
 import ProductMetaList from "../../../shared/presentation/components/ProductMetaList";
-
 import {
   RESALE_CONDITION_OPTIONS,
   RESALE_STATUS_OPTIONS,
@@ -72,9 +71,7 @@ export default function ResaleDetailEditForm({
           helperText="半角数字で入力してください。"
           required
           disabled={saving}
-          onChange={(event) => {
-            onPriceChange(event.currentTarget.value);
-          }}
+          onChange={(event) => onPriceChange(event.currentTarget.value)}
         />
 
         <div className="page-form__field">
@@ -122,23 +119,15 @@ export default function ResaleDetailEditForm({
           helperText="購入者が商品の状態を判断しやすい内容を入力してください。"
           counterText={`${description.length}/${DESCRIPTION_MAX_LENGTH}`}
           disabled={saving}
-          onChange={(event) => {
-            onDescriptionChange(event.currentTarget.value);
-          }}
+          onChange={(event) => onDescriptionChange(event.currentTarget.value)}
         />
       </div>
 
       <ProductMetaList
         className="resale-detail-page__edit-meta"
         items={[
-          {
-            label: "出品日時",
-            value: createdAtLabel,
-          },
-          {
-            label: "更新日時",
-            value: updatedAtLabel,
-          },
+          { label: "出品日時", value: createdAtLabel },
+          { label: "更新日時", value: updatedAtLabel },
         ]}
       />
     </div>

@@ -1,5 +1,7 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleDetailReadonlyInfo.tsx
 
+import Badge from "../../../../components/ui/Badge";
+
 import ProductMetaList from "../../../shared/presentation/components/ProductMetaList";
 import type { ResaleDetailReadonlyInfoProps } from "../types/resaleDetailPageTypes";
 
@@ -15,9 +17,7 @@ export default function ResaleDetailReadonlyInfo({
 }: ResaleDetailReadonlyInfoViewProps) {
   return (
     <div className="resale-detail-page__listing-meta-card">
-      <div className="resale-detail-page__listing-status-tab">
-        {statusLabel}
-      </div>
+      <Badge variant="neutral">{statusLabel}</Badge>
 
       <ProductMetaList
         className="resale-detail-page__listing-meta"

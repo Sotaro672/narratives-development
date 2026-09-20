@@ -6,25 +6,6 @@
   padding: 24px 20px calc(var(--footer-action-height, 76px) + 24px);
 }
 
-.resale-detail-page__state {
-  padding: 24px;
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
-  background: #fff;
-  color: #555;
-  font-size: 14px;
-}
-
-.resale-detail-page__state p {
-  margin: 0;
-}
-
-.resale-detail-page__state--error {
-  border-color: #f1c8c8;
-  background: #fff7f7;
-  color: #b42318;
-}
-
 .resale-detail-page__image-wrap--editing {
   overflow: visible;
   padding: 20px;
@@ -100,21 +81,6 @@
   font-size: 13px;
   font-weight: 800;
   line-height: 1.4;
-}
-
-.resale-detail-page__message {
-  margin: 20px 0 0;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.6;
-}
-
-.resale-detail-page__message--error {
-  color: #b42318;
-}
-
-.resale-detail-page__message--success {
-  color: #157347;
 }
 
 @media (max-width: 760px) {

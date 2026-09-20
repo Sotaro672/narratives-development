@@ -15,16 +15,6 @@
   margin: 16px 0;
 }
 
-.chat-detail-page__error:not(.ui-alert) {
-  padding: 12px 14px;
-  border: 1px solid rgba(239, 68, 68, 0.24);
-  border-radius: 12px;
-  background: rgba(254, 242, 242, 0.96);
-  color: #b91c1c;
-  font-size: 0.9rem;
-  line-height: 1.6;
-}
-
 .chat-detail-page__state,
 .chat-detail-page__empty {
   margin: 16px 0;
@@ -33,13 +23,6 @@
   background: #ffffff;
   text-align: center;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-}
-
-.chat-detail-page__state:not(.ui-text-state),
-.chat-detail-page__empty:not(.ui-text-state) {
-  color: rgba(15, 23, 42, 0.62);
-  font-size: 0.95rem;
-  line-height: 1.7;
 }
 
 .chat-detail-page__thread {
@@ -103,22 +86,6 @@
   font-size: 0.72rem;
   font-weight: 650;
   line-height: 1.4;
-}
-
-.chat-detail-page__status {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  min-height: 24px;
-  padding: 4px 9px;
-  border-radius: 999px;
-  background: rgba(37, 99, 235, 0.09);
-  color: #1d4ed8;
-  font-size: 0.72rem;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 .chat-detail-page__subject {
@@ -234,12 +201,6 @@
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.72);
   text-align: center;
-}
-
-.chat-detail-page__no-replies:not(.ui-text-state) {
-  color: rgba(15, 23, 42, 0.52);
-  font-size: 0.9rem;
-  line-height: 1.7;
 }
 
 .chat-detail-page__replies {
@@ -618,12 +579,6 @@
     width: 30px;
     height: 30px;
     font-size: 0.72rem;
-  }
-
-  .chat-detail-page__status {
-    padding-right: 8px;
-    padding-left: 8px;
-    font-size: 0.68rem;
   }
 
   .chat-detail-page__product-meta-row {

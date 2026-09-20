@@ -7,8 +7,8 @@ import MediaIcon from "../../../components/ui/MediaIcon";
 import { formatDateTime } from "../../../components/utils/date";
 import type { OrderDetailItem as OrderDetailItemType } from "../../shared/types/orderDetailTypes";
 import { formatAmount } from "../../wallet/utils/format";
-import { getFallbackInitial, getProductTitle } from "../utils/orderItemDisplay";
-import { getItemStatusLabel } from "../utils/orderStatus";
+import { getFallbackInitial, getProductTitle } from "../util/orderItemDisplay";
+import { getItemStatusLabel } from "../util/orderStatus";
 import OrderItemMeta from "./OrderItemMeta";
 
 type OrderDetailItemProps = {

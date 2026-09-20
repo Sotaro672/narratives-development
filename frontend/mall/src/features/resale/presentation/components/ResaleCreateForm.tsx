@@ -1,6 +1,7 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleCreateForm.tsx
 
 import Input from "../../../../components/ui/Input";
+import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Textbox from "../../../../components/ui/Textbox";
 
@@ -31,7 +32,7 @@ export default function ResaleCreateForm({
   onDescriptionChange,
 }: ResaleCreateFormProps) {
   return (
-    <section className="page-card">
+    <SectionCard>
       <SectionHeader title="販売情報" titleAs="h2" />
 
       <div className="page-form">
@@ -77,6 +78,6 @@ export default function ResaleCreateForm({
           onChange={(event) => onDescriptionChange(event.currentTarget.value)}
         />
       </div>
-    </section>
+    </SectionCard>
   );
 }

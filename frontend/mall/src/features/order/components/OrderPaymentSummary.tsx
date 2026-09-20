@@ -7,7 +7,7 @@ import SectionHeader from "../../../components/ui/SectionHeader";
 import { formatDateTime } from "../../../components/utils/date";
 import type { OrderDetail } from "../../shared/types/orderDetailTypes";
 import { formatAmount } from "../../wallet/utils/format";
-import { getRefundStatusLabel } from "../utils/orderStatus";
+import { getRefundStatusLabel } from "../util/orderStatus";
 
 type OrderPaymentSummaryProps = {
   order: OrderDetail;

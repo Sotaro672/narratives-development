@@ -6,7 +6,7 @@ import Card from "../../../components/ui/Card";
 import SectionHeader from "../../../components/ui/SectionHeader";
 import { formatDateTime } from "../../../components/utils/date";
 import type { OrderDetail } from "../../shared/types/orderDetailTypes";
-import { getOrderStatusLabel } from "../utils/orderStatus";
+import { getOrderStatusLabel } from "../util/orderStatus";
 
 type OrderDetailSummaryProps = {
   order: OrderDetail;

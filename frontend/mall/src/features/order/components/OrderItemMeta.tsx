@@ -6,7 +6,7 @@ import {
   getMeasurementEntries,
   getMeasurementLabel,
   getModelMetaItems,
-} from "../utils/orderItemDisplay";
+} from "../util/orderItemDisplay";
 
 type OrderItemMetaProps = {
   item: OrderDetailItem;

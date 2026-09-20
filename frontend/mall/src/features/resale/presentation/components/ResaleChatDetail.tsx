@@ -4,6 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
+import Alert from "../../../../components/ui/Alert";
+import Badge from "../../../../components/ui/Badge";
+import Button from "../../../../components/ui/Button";
+import TextState from "../../../../components/ui/TextState";
 
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
 
@@ -65,10 +69,7 @@ type ResaleChatDetailProps = {
   onBack: () => void;
 };
 
-function getErrorMessage(
-  error: unknown,
-  fallbackMessage: string,
-): string {
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message !== "") {
     return error.message;
   }
@@ -80,10 +81,8 @@ function getResaleStatusLabel(status: ResaleStatus): string {
   switch (status) {
     case "listing":
       return "出品中";
-
     case "suspended":
       return "公開停止";
-
     case "sold":
       return "売却済み";
   }
@@ -147,9 +146,7 @@ function getProductMetaItems(item: ResaleChatItem): ChatMetaItem[] {
   return items;
 }
 
-function sortComments(
-  comments: ResaleReviewComment[],
-): ResaleReviewComment[] {
+function sortComments(comments: ResaleReviewComment[]): ResaleReviewComment[] {
   return [...comments].sort(
     (firstComment, secondComment) =>
       new Date(firstComment.createdAt).getTime() -
@@ -190,9 +187,7 @@ async function fetchAllComments(
   return sortComments(comments);
 }
 
-async function loadOwnerChat(
-  resaleId: string,
-): Promise<ResaleChatData> {
+async function loadOwnerChat(resaleId: string): Promise<ResaleChatData> {
   const [item, images, comments] = await Promise.all([
     getMyResaleListing(resaleId),
     listMyResaleConditionImages(resaleId),
@@ -207,9 +202,7 @@ async function loadOwnerChat(
   };
 }
 
-async function loadMarketChat(
-  resaleId: string,
-): Promise<ResaleChatData> {
+async function loadMarketChat(resaleId: string): Promise<ResaleChatData> {
   const [item, images, comments] = await Promise.all([
     fetchMarketResaleById(resaleId),
     fetchMarketResaleConditionImages(resaleId),
@@ -249,10 +242,7 @@ export default function ResaleChatDetail({
 }: ResaleChatDetailProps) {
   const location = useLocation();
   const navigate = useNavigate();
-
-  const routeState =
-    location.state as ResaleChatRouteState | null;
-
+  const routeState = location.state as ResaleChatRouteState | null;
   const preferredSource = routeState?.source;
   const normalizedResaleId = resaleId.trim();
 
@@ -289,10 +279,7 @@ export default function ResaleChatDetail({
 
     try {
       const [chatData, myAvatar] = await Promise.all([
-        loadResaleChat(
-          normalizedResaleId,
-          preferredSource,
-        ),
+        loadResaleChat(normalizedResaleId, preferredSource),
         getMyAvatar().catch(() => null),
       ]);
 
@@ -321,11 +308,7 @@ export default function ResaleChatDetail({
       setComments(chatData.comments);
       setViewerAvatarId(
         myAvatar?.avatarId ||
-          (
-            chatData.source === "owner"
-              ? chatData.item.avatarId
-              : ""
-          ),
+          (chatData.source === "owner" ? chatData.item.avatarId : ""),
       );
 
       if (readError) {
@@ -346,10 +329,7 @@ export default function ResaleChatDetail({
     } finally {
       setLoading(false);
     }
-  }, [
-    normalizedResaleId,
-    preferredSource,
-  ]);
+  }, [normalizedResaleId, preferredSource]);
 
   useEffect(() => {
     void loadThread();
@@ -361,29 +341,18 @@ export default function ResaleChatDetail({
   );
 
   const productMetaItems = useMemo(
-    () =>
-      item
-        ? getProductMetaItems(item)
-        : [],
+    () => (item ? getProductMetaItems(item) : []),
     [item],
   );
 
   const handleOpenMarketDetail = useCallback(() => {
     if (!normalizedResaleId) return;
 
-    navigate(
-      `/market/${encodeURIComponent(normalizedResaleId)}`,
-    );
+    navigate(`/market/${encodeURIComponent(normalizedResaleId)}`);
   }, [navigate, normalizedResaleId]);
 
-  const title =
-    item?.productName ||
-    item?.tokenName ||
-    "コメント";
-
-  const canSubmitReply =
-    /\S/u.test(replyContent);
-
+  const title = item?.productName || item?.tokenName || "コメント";
+  const canSubmitReply = /\S/u.test(replyContent);
   const replyActionDisabled =
     loading ||
     !item ||
@@ -410,11 +379,7 @@ export default function ResaleChatDetail({
   }, [postingReply]);
 
   const submitReply = useCallback(async (): Promise<void> => {
-    if (
-      postingReply ||
-      !source ||
-      !normalizedResaleId
-    ) {
+    if (postingReply || !source || !normalizedResaleId) {
       return;
     }
 
@@ -424,9 +389,7 @@ export default function ResaleChatDetail({
     }
 
     if (!item || item.status !== "listing") {
-      setReplyError(
-        "現在の出品状態ではコメントできません。",
-      );
+      setReplyError("現在の出品状態ではコメントできません。");
       return;
     }
 
@@ -449,8 +412,7 @@ export default function ResaleChatDetail({
         sortComments([
           ...currentComments.filter(
             (comment) =>
-              comment.commentId !==
-              result.comment.commentId,
+              comment.commentId !== result.comment.commentId,
           ),
           result.comment,
         ]),
@@ -520,8 +482,7 @@ export default function ResaleChatDetail({
         setComments((currentComments) =>
           currentComments.filter(
             (currentComment) =>
-              currentComment.commentId !==
-              comment.commentId,
+              currentComment.commentId !== comment.commentId,
           ),
         );
       } catch (caught) {
@@ -565,24 +526,27 @@ export default function ResaleChatDetail({
       >
         <section className="page-section content-page-section chat-detail-page">
           {error ? (
-            <div
-              className="chat-detail-page__error"
-              role="alert"
-            >
+            <Alert variant="error" className="chat-detail-page__error">
               {error}
-            </div>
+            </Alert>
           ) : null}
 
           {loading ? (
-            <div className="chat-detail-page__state">
+            <TextState
+              variant="loading"
+              className="chat-detail-page__state"
+            >
               読み込み中...
-            </div>
+            </TextState>
           ) : null}
 
           {!loading && !item ? (
-            <div className="chat-detail-page__empty">
+            <TextState
+              variant="empty"
+              className="chat-detail-page__empty"
+            >
               出品情報が見つかりません。
-            </div>
+            </TextState>
           ) : null}
 
           {!loading && item ? (
@@ -592,8 +556,7 @@ export default function ResaleChatDetail({
                 images={images}
                 productMetaItems={productMetaItems}
                 onOpenMarketDetail={
-                  source === "market" &&
-                  item.status === "listing"
+                  source === "market" && item.status === "listing"
                     ? handleOpenMarketDetail
                     : undefined
                 }
@@ -605,16 +568,18 @@ export default function ResaleChatDetail({
                 </h3>
 
                 {sortedComments.length === 0 ? (
-                  <div className="chat-detail-page__no-replies">
+                  <TextState
+                    variant="empty"
+                    className="chat-detail-page__no-replies"
+                  >
                     まだコメントはありません。
-                  </div>
+                  </TextState>
                 ) : (
                   <div className="chat-detail-page__replies">
                     {sortedComments.map((comment) => {
                       const isMine =
                         Boolean(viewerAvatarId) &&
-                        comment.avatarId ===
-                          viewerAvatarId;
+                        comment.avatarId === viewerAvatarId;
 
                       const canDelete =
                         item.status === "listing" &&
@@ -628,13 +593,10 @@ export default function ResaleChatDetail({
                           isMine={isMine}
                           canDelete={canDelete}
                           deleting={
-                            deletingCommentId ===
-                            comment.commentId
+                            deletingCommentId === comment.commentId
                           }
                           onDelete={() => {
-                            void handleDeleteComment(
-                              comment,
-                            );
+                            void handleDeleteComment(comment);
                           }}
                         />
                       );
@@ -678,10 +640,7 @@ function ResaleThreadHeader({
   productMetaItems: ChatMetaItem[];
   onOpenMarketDetail?: () => void;
 }) {
-  const sellerName =
-    item.avatarName ||
-    "出品者";
-
+  const sellerName = item.avatarName || "出品者";
   const productTitle =
     item.productName ||
     item.tokenName ||
@@ -694,9 +653,9 @@ function ResaleThreadHeader({
         icon={item.avatarIcon}
         createdAt={item.createdAt}
         action={
-          <span className="chat-detail-page__status">
+          <Badge variant="info" size="md">
             {getResaleStatusLabel(item.status)}
-          </span>
+          </Badge>
         }
       />
 
@@ -733,12 +692,13 @@ function ResaleThreadHeader({
 
       {onOpenMarketDetail ? (
         <div className="chat-detail-page__close-prompt-actions">
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={onOpenMarketDetail}
           >
             商品ページを見る
-          </button>
+          </Button>
         </div>
       ) : null}
     </ChatThreadCard>
@@ -758,9 +718,7 @@ function ResaleCommentMessage({
   deleting: boolean;
   onDelete: () => void;
 }) {
-  const avatarName =
-    comment.avatarName ||
-    "ユーザー";
+  const avatarName = comment.avatarName || "ユーザー";
 
   return (
     <ChatMessageBubble
@@ -771,22 +729,15 @@ function ResaleCommentMessage({
       isMine={isMine}
       action={
         canDelete ? (
-          <button
-            type="button"
-            className="chat-detail-page__status"
+          <Button
+            variant="ghost"
+            size="sm"
             disabled={deleting}
+            aria-busy={deleting || undefined}
             onClick={onDelete}
-            style={{
-              border: 0,
-              cursor: deleting
-                ? "not-allowed"
-                : "pointer",
-            }}
           >
-            {deleting
-              ? "削除中"
-              : "削除"}
-          </button>
+            {deleting ? "削除中" : "削除"}
+          </Button>
         ) : undefined
       }
     />

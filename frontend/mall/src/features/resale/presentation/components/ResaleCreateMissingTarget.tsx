@@ -1,5 +1,6 @@
 // frontend/amol/src/features/resale/presentation/components/ResaleCreateMissingTarget.tsx
 
+import Button from "../../../../components/ui/Button";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 
 export type ResaleCreateMissingTargetProps = {
@@ -11,23 +12,15 @@ export default function ResaleCreateMissingTarget({
 }: ResaleCreateMissingTargetProps) {
   return (
     <div className="page-card">
-      <SectionHeader
-        title="出品情報が見つかりません"
-        titleAs="h2"
-      >
+      <SectionHeader title="出品情報が見つかりません" titleAs="h2">
         <p className="page-card__text">
-          ウォレットまたはトークン詳細から、
-          もう一度出品ボタンを押してください。
+          ウォレットまたはトークン詳細から、もう一度出品ボタンを押してください。
         </p>
       </SectionHeader>
 
-      <button
-        type="button"
-        className="page-button page-button--primary"
-        onClick={onBackToWallet}
-      >
+      <Button variant="primary" onClick={onBackToWallet}>
         ウォレットへ戻る
-      </button>
+      </Button>
     </div>
   );
 }

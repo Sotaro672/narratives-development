@@ -1,5 +1,7 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryMessageCard.tsx
 
+import Badge from "../../../../components/ui/Badge";
+
 import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
@@ -12,10 +14,13 @@ type InquiryMessageCardProps = {
   inquiry: InquiryDetail;
 };
 
+type InquiryStatusBadgeVariant = "neutral" | "info" | "success" | "warning";
+
 export default function InquiryMessageCard({
   inquiry,
 }: InquiryMessageCardProps) {
   const statusLabel = getInquiryStatusLabel(inquiry.status);
+  const statusVariant = getInquiryStatusBadgeVariant(inquiry.status);
   const title = getInquiryTitle(inquiry);
 
   const images = inquiry.images?.map((image) => ({
@@ -31,9 +36,9 @@ export default function InquiryMessageCard({
         icon={inquiry.avatarIcon}
         createdAt={inquiry.createdAt}
         action={
-          <span className="chat-detail-page__status">
+          <Badge variant={statusVariant}>
             {statusLabel}
-          </span>
+          </Badge>
         }
       />
 
@@ -54,9 +59,7 @@ export default function InquiryMessageCard({
   );
 }
 
-function getInquiryTitle(
-  inquiry: InquiryDetail,
-): string {
+function getInquiryTitle(inquiry: InquiryDetail): string {
   const inquiryLabel =
     inquiry.inquiryType === "product"
       ? inquiry.subject || getInquiryTypeLabel(inquiry.inquiryType)
@@ -71,14 +74,26 @@ function getInquiryStatusLabel(
   switch (status) {
     case "open":
       return "未対応";
-
     case "in_progress":
       return "対応中";
-
     case "resolved":
       return "解決済み";
-
     case "closed":
       return "クローズ";
+  }
+}
+
+function getInquiryStatusBadgeVariant(
+  status: InquiryDetail["status"],
+): InquiryStatusBadgeVariant {
+  switch (status) {
+    case "open":
+      return "warning";
+    case "in_progress":
+      return "info";
+    case "resolved":
+      return "success";
+    case "closed":
+      return "neutral";
   }
 }
