@@ -1,13 +1,15 @@
 // frontend/amol/src/pages/CartPage.tsx
 
 import { useNavigate } from "react-router-dom";
-import Layout from "../components/layout/Layout";
+
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
+import Layout from "../components/layout/Layout";
 import CartContent from "../features/cart/presentation/components/CartContent";
 import CartPageEmpty from "../features/cart/presentation/components/CartPageEmpty";
 import CartPageError from "../features/cart/presentation/components/CartPageError";
 import CartPageLoading from "../features/cart/presentation/components/CartPageLoading";
 import { useCartPage } from "../features/cart/presentation/hooks/useCartPage";
+
 import "../styles/cart-page.css";
 
 export default function CartPage() {

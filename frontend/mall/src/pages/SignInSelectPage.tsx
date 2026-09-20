@@ -3,7 +3,9 @@
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
 
 import "../styles/page-layout.css";
 import "../styles/sign-up-select-page.css";
@@ -75,7 +77,12 @@ export default function SignInSelectPage() {
 
           <div className="sign-up-select-page__grid sign-up-select-page__grid--three">
             {signInTargets.map((target) => (
-              <article key={target.title} className="sign-up-select-card">
+              <Card
+                key={target.title}
+                as="article"
+                padding="lg"
+                className="sign-up-select-card"
+              >
                 <div className="sign-up-select-card__body">
                   <div className="sign-up-select-card__header">
                     <h2 className="sign-up-select-card__title">
@@ -84,9 +91,9 @@ export default function SignInSelectPage() {
 
                     <div className="sign-up-select-card__tags">
                       {target.deviceTags.map((tag) => (
-                        <span key={tag} className="sign-up-select-card__tag">
+                        <Badge key={tag} variant="info" size="sm">
                           {tag}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   </div>
@@ -98,11 +105,12 @@ export default function SignInSelectPage() {
 
                 <Button
                   variant={target.variant}
+                  fullWidth
                   onClick={() => handleSignInTargetClick(target)}
                 >
                   {target.buttonLabel}
                 </Button>
-              </article>
+              </Card>
             ))}
           </div>
 

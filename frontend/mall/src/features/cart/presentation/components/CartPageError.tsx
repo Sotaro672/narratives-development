@@ -1,10 +1,10 @@
 // frontend/amol/src/features/cart/presentation/components/CartPageError.tsx
 
+import Button from "../../../../components/ui/Button";
+
 type CartPageErrorProps = {
   error: string;
-  onRetry: () =>
-    | void
-    | Promise<void>;
+  onRetry: () => void | Promise<void>;
 };
 
 export default function CartPageError({
@@ -16,14 +16,8 @@ export default function CartPageError({
     "カートの取得中にエラーが発生しました。";
 
   return (
-    <div
-      className="cart-page-empty"
-      role="alert"
-    >
-      <div
-        className="cart-page-empty__icon"
-        aria-hidden="true"
-      >
+    <div className="cart-page-empty" role="alert">
+      <div className="cart-page-empty__icon" aria-hidden="true">
         ⚠️
       </div>
 
@@ -35,15 +29,15 @@ export default function CartPageError({
         {message}
       </p>
 
-      <button
+      <Button
         type="button"
-        className="cart-page-empty__retry-button"
+        variant="primary"
         onClick={() => {
           void onRetry();
         }}
       >
         再読み込み
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,4 +1,6 @@
-// frontend/amol/src/features/order-confirmed/components/OrderConfirmedActions.tsx
+// frontend/mall/src/features/order-confirmed/components/OrderConfirmedActions.tsx
+
+import Button from "../../../components/ui/Button";
 
 type OrderConfirmedActionsProps = {
   onGoToOrderDetail: () => void;
@@ -10,13 +12,15 @@ export function OrderConfirmedActions({
 }: OrderConfirmedActionsProps) {
   return (
     <div className="order-confirmed-page__actions">
-      <button
+      <Button
         type="button"
-        className="order-confirmed-page__primary-button"
+        variant="primary"
+        size="lg"
+        fullWidth
         onClick={onGoToOrderDetail}
       >
         注文詳細へ
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,5 +1,7 @@
 // frontend/mall/src/features/cart/presentation/components/CartItemCard.tsx
 
+import Card from "../../../../components/ui/Card";
+import IconButton from "../../../../components/ui/IconButton";
 import Media from "../../../../components/ui/Media";
 import { formatPrice } from "../../../../components/utils/price";
 import type { CartDisplayItem } from "../../../shared/types/cart";
@@ -54,20 +56,22 @@ export default function CartItemCard({
   }
 
   return (
-    <article className="cart-page-item">
-      <button
+    <Card as="article" variant="panel" className="cart-page-item">
+      <IconButton
         type="button"
+        variant="danger"
+        size="sm"
         className="cart-page-item__remove-button"
         aria-label={`${productName}をカートから削除`}
         aria-busy={removing}
-        disabled={removalDisabled}
+        disabled={removalDisabled || removing}
         onClick={(event) => {
           event.stopPropagation();
           handleRemove();
         }}
       >
         {removing ? "…" : "×"}
-      </button>
+      </IconButton>
 
       <button
         type="button"
@@ -97,9 +101,8 @@ export default function CartItemCard({
         ) : null}
 
         <CartItemMeta item={item} />
-
         <p className="cart-page-item__price">{formatPrice(lineAmount)}</p>
       </div>
-    </article>
+    </Card>
   );
 }

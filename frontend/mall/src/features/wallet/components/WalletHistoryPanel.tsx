@@ -1,7 +1,11 @@
 // frontend/mall/src/features/wallet/components/WalletHistoryPanel.tsx
 
+import Alert from "../../../components/ui/Alert";
+import Badge from "../../../components/ui/Badge";
+import Card from "../../../components/ui/Card";
 import Media from "../../../components/ui/Media";
 import MediaIcon from "../../../components/ui/MediaIcon";
+import TextState from "../../../components/ui/TextState";
 import { formatDateTime } from "../../../components/utils/date";
 import type {
   WalletOrder,
@@ -19,15 +23,11 @@ type WalletHistoryPanelProps = {
 };
 
 function getOrderTotal(order: WalletOrder): number {
-  return order.items.reduce((sum, item) => {
-    return sum + item.price * item.qty;
-  }, 0);
+  return order.items.reduce((sum, item) => sum + item.price * item.qty, 0);
 }
 
 function getOrderItemCount(order: WalletOrder): number {
-  return order.items.reduce((sum, item) => {
-    return sum + item.qty;
-  }, 0);
+  return order.items.reduce((sum, item) => sum + item.qty, 0);
 }
 
 function getOrderStatusLabel(order: WalletOrder): string {
@@ -45,9 +45,7 @@ function getOrderStatusLabel(order: WalletOrder): string {
     return "一部キャンセル済み";
   }
 
-  const allReturnCompleted = activeItems.every(
-    (item) => item.isReturnCompleted,
-  );
+  const allReturnCompleted = activeItems.every((item) => item.isReturnCompleted);
 
   if (allReturnCompleted) {
     return "返品済";
@@ -88,6 +86,30 @@ function getOrderStatusLabel(order: WalletOrder): string {
   return "発送前";
 }
 
+function getOrderStatusVariant(
+  order: WalletOrder,
+): "neutral" | "info" | "success" | "warning" | "danger" {
+  const status = getOrderStatusLabel(order);
+
+  if (status.includes("キャンセル")) {
+    return "danger";
+  }
+
+  if (status.includes("返品")) {
+    return "warning";
+  }
+
+  if (status.includes("受け取り")) {
+    return "success";
+  }
+
+  if (status.includes("発送")) {
+    return "info";
+  }
+
+  return "neutral";
+}
+
 function getOrderSummary(order: WalletOrder): string {
   const itemCount = getOrderItemCount(order);
   const total = getOrderTotal(order);
@@ -114,15 +136,11 @@ function getFallbackInitial(value?: string): string {
 }
 
 function getItemMetaItems(item: WalletOrderItemSnapshot): string[] {
-  const cancellationLabel = item.isCancelled
-    ? "キャンセル済み"
-    : "";
-
+  const cancellationLabel = item.isCancelled ? "キャンセル済み" : "";
   const returnCompletedAtLabel =
     item.isReturnCompleted && item.returnCompletedAt
       ? `返品完了日時: ${formatDateTime(item.returnCompletedAt)}`
       : "";
-
   const transferredAtLabel = item.transferredAt
     ? `受取日時: ${formatDateTime(item.transferredAt)}`
     : "";
@@ -140,21 +158,10 @@ function renderImage(
   fallbackText: string,
 ) {
   if (!src) {
-    return (
-      <span className="ui-media-fallback">
-        {fallbackText}
-      </span>
-    );
+    return <span className="ui-media-fallback">{fallbackText}</span>;
   }
 
-  return (
-    <Media
-      src={src}
-      alt={alt}
-      loading="lazy"
-      fit="cover"
-    />
-  );
+  return <Media src={src} alt={alt} loading="lazy" fit="cover" />;
 }
 
 function renderItemMeta(item: WalletOrderItemSnapshot) {
@@ -167,9 +174,13 @@ function renderItemMeta(item: WalletOrderItemSnapshot) {
   return (
     <div className="wallet-page-history__meta-list">
       {metaItems.map((meta) => (
-        <span key={meta} className="wallet-page-history__meta-item">
+        <Badge
+          key={meta}
+          variant={item.isCancelled ? "danger" : "neutral"}
+          size="sm"
+        >
           {meta}
-        </span>
+        </Badge>
       ))}
     </div>
   );
@@ -193,7 +204,6 @@ function renderBrandLabel(
         shape="circle"
         className="wallet-page-history__brand-icon"
       />
-
       <span className="wallet-page-history__brand-name">{brandName}</span>
     </>
   );
@@ -234,37 +244,36 @@ export default function WalletHistoryPanel({
   onOrderClick,
 }: WalletHistoryPanelProps) {
   if (loading) {
-    return <p className="wallet-page__message">読み込み中です...</p>;
+    return <TextState variant="loading">読み込み中です...</TextState>;
   }
 
   if (error) {
-    return (
-      <div role="alert" className="wallet-page__message">
-        <p>{error}</p>
-      </div>
-    );
+    return <Alert variant="error">{error}</Alert>;
   }
 
   if (!hasItems || orderHistory.length === 0) {
-    return <p className="wallet-page__message">取引履歴はまだありません。</p>;
+    return <TextState variant="empty">取引履歴はまだありません。</TextState>;
   }
 
   return (
     <div className="wallet-page-history">
       {orderHistory.map((order) => (
-        <article
+        <Card
           key={order.id}
+          as="article"
+          variant="panel"
+          interactive={Boolean(onOrderClick)}
           className="wallet-page-history__item"
-          role="button"
-          tabIndex={0}
-          aria-label={`注文 ${order.id} の詳細を表示`}
-          onClick={() => onOrderClick?.(order.id)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onOrderClick?.(order.id);
-            }
-          }}
+          aria-label={
+            onOrderClick ? `注文 ${order.id} の詳細を表示` : undefined
+          }
+          onClick={
+            onOrderClick
+              ? () => {
+                  onOrderClick(order.id);
+                }
+              : undefined
+          }
         >
           <div className="wallet-page-history__main">
             <div className="wallet-page-history__header">
@@ -272,9 +281,12 @@ export default function WalletHistoryPanel({
                 {formatDateTime(order.createdAt)}
               </p>
 
-              <span className="wallet-page-history__status">
+              <Badge
+                variant={getOrderStatusVariant(order)}
+                size="sm"
+              >
                 {getOrderStatusLabel(order)}
-              </span>
+              </Badge>
             </div>
 
             <p className="wallet-page-history__title">
@@ -331,7 +343,7 @@ export default function WalletHistoryPanel({
               })}
             </ul>
           ) : null}
-        </article>
+        </Card>
       ))}
     </div>
   );

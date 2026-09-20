@@ -1,8 +1,8 @@
-// frontend/amol/src/features/order-confirmed/components/OrderConfirmedPaymentCard.tsx
+// frontend/mall/src/features/order-confirmed/components/OrderConfirmedPaymentCard.tsx
 
-import {
-  formatPrice,
-} from "../../../components/utils/price";
+import Card from "../../../components/ui/Card";
+import InfoList from "../../../components/ui/InfoList";
+import { formatPrice } from "../../../components/utils/price";
 
 type OrderConfirmedPaymentCardProps = {
   statusLabel: string;
@@ -15,30 +15,35 @@ export function OrderConfirmedPaymentCard({
   amount,
   orderId,
 }: OrderConfirmedPaymentCardProps) {
+  const rows = [
+    {
+      key: "status",
+      label: "ステータス",
+      value: statusLabel,
+    },
+    {
+      key: "amount",
+      label: "金額",
+      value: formatPrice(amount),
+    },
+    ...(orderId
+      ? [
+          {
+            key: "orderId",
+            label: "注文ID",
+            value: orderId,
+          },
+        ]
+      : []),
+  ];
+
   return (
-    <section className="order-confirmed-page__card">
+    <Card as="section" variant="panel">
       <h2 className="order-confirmed-page__card-title">
         決済情報
       </h2>
 
-      <dl className="order-confirmed-page__details">
-        <div className="order-confirmed-page__detail-row">
-          <dt>ステータス</dt>
-          <dd>{statusLabel}</dd>
-        </div>
-
-        <div className="order-confirmed-page__detail-row">
-          <dt>金額</dt>
-          <dd>{formatPrice(amount)}</dd>
-        </div>
-
-        {orderId ? (
-          <div className="order-confirmed-page__detail-row">
-            <dt>注文ID</dt>
-            <dd>{orderId}</dd>
-          </div>
-        ) : null}
-      </dl>
-    </section>
+      <InfoList rows={rows} />
+    </Card>
   );
 }

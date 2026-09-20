@@ -11,11 +11,8 @@
 }
 
 .order-confirmed-page__hero {
-  border-radius: 24px;
-  background: #ffffff;
   padding: 32px 20px;
   text-align: center;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
 }
 
 .order-confirmed-page__check {
@@ -34,17 +31,18 @@
 
 .order-confirmed-page__title {
   margin: 20px 0 8px;
+  color: #111827;
   font-size: 24px;
   font-weight: 900;
-  color: #111827;
+  line-height: 1.4;
   letter-spacing: -0.02em;
 }
 
 .order-confirmed-page__description {
   margin: 0;
+  color: #4b5563;
   font-size: 14px;
   line-height: 1.7;
-  color: #4b5563;
 }
 
 .order-confirmed-page__content {
@@ -53,54 +51,11 @@
   margin-top: 20px;
 }
 
-.order-confirmed-page__card {
-  border-radius: 20px;
-  background: #ffffff;
-  padding: 20px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
-}
-
 .order-confirmed-page__card-title {
   margin: 0 0 16px;
+  color: #111827;
   font-size: 18px;
   font-weight: 800;
-  color: #111827;
-}
-
-.order-confirmed-page__details {
-  display: grid;
-  gap: 12px;
-  margin: 0;
-}
-
-.order-confirmed-page__detail-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  border-bottom: 1px solid #f3f4f6;
-  padding-bottom: 12px;
-}
-
-.order-confirmed-page__detail-row:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-
-.order-confirmed-page__detail-row dt {
-  flex: 0 0 auto;
-  font-size: 13px;
-  font-weight: 700;
-  color: #6b7280;
-}
-
-.order-confirmed-page__detail-row dd {
-  min-width: 0;
-  margin: 0;
-  text-align: right;
-  font-size: 14px;
-  font-weight: 800;
-  color: #111827;
-  word-break: break-word;
 }
 
 .order-confirmed-page__items {
@@ -115,35 +70,35 @@
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  border-bottom: 1px solid #f3f4f6;
   padding-bottom: 12px;
+  border-bottom: 1px solid #f3f4f6;
 }
 
 .order-confirmed-page__item:last-child {
-  border-bottom: 0;
   padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .order-confirmed-page__item-title {
   margin: 0;
+  color: #111827;
   font-size: 14px;
   font-weight: 800;
-  color: #111827;
 }
 
 .order-confirmed-page__item-meta {
   margin: 6px 0 0;
+  color: #6b7280;
   font-size: 12px;
   line-height: 1.5;
-  color: #6b7280;
 }
 
 .order-confirmed-page__item-price {
   flex: 0 0 auto;
   margin: 0;
+  color: #111827;
   font-size: 14px;
   font-weight: 800;
-  color: #111827;
   white-space: nowrap;
 }
 
@@ -154,17 +109,10 @@
 
 .order-confirmed-page__shipping-address-line {
   margin: 0;
-  font-size: 14px;
-  line-height: 1.7;
   color: #374151;
-  word-break: break-word;
-}
-
-.order-confirmed-page__empty {
-  margin: 0;
   font-size: 14px;
   line-height: 1.7;
-  color: #6b7280;
+  word-break: break-word;
 }
 
 .order-confirmed-page__actions {
@@ -173,45 +121,8 @@
   margin-top: 4px;
 }
 
-.order-confirmed-page__primary-button,
-.order-confirmed-page__secondary-button {
-  width: 100%;
-  min-height: 48px;
-  border-radius: 999px;
-  font-size: 15px;
-  font-weight: 800;
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease,
-    background-color 0.15s ease,
-    border-color 0.15s ease;
-}
+/* Mobile: 注文完了画面ではアクションボタンを非表示 */
 
-.order-confirmed-page__primary-button {
-  border: 0;
-  background: #111827;
-  color: #ffffff;
-  box-shadow: 0 12px 24px rgba(17, 24, 39, 0.16);
-}
-
-.order-confirmed-page__secondary-button {
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  color: #111827;
-}
-
-.order-confirmed-page__primary-button:hover,
-.order-confirmed-page__secondary-button:hover {
-  transform: translateY(-1px);
-}
-
-.order-confirmed-page__primary-button:active,
-.order-confirmed-page__secondary-button:active {
-  transform: translateY(0);
-}
-
-/* Mobile: 注文完了画面では「ウォレットへ」「商品一覧へ」ボタンを非表示 */
 @media (max-width: 959px) {
   .order-confirmed-page__actions {
     display: none;
@@ -236,12 +147,7 @@
     margin-top: 24px;
   }
 
-  .order-confirmed-page__card {
-    padding: 24px;
-  }
-
   .order-confirmed-page__actions {
-    display: grid;
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -252,7 +158,6 @@
   }
 
   .order-confirmed-page__hero {
-    border-radius: 20px;
     padding: 28px 16px;
   }
 
@@ -264,11 +169,6 @@
 
   .order-confirmed-page__title {
     font-size: 22px;
-  }
-
-  .order-confirmed-page__card {
-    border-radius: 18px;
-    padding: 16px;
   }
 
   .order-confirmed-page__detail-row,

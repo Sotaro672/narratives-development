@@ -10,23 +10,6 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 16px;
-  background: var(--color-surface, #ffffff);
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.wallet-page-history__item:hover {
-  border-color: var(--color-text-muted, #9ca3af);
-  box-shadow: 0 4px 14px rgb(0 0 0 / 6%);
-  transform: translateY(-1px);
-}
-
-.wallet-page-history__item:focus-visible {
-  outline: 2px solid var(--color-text, #111827);
-  outline-offset: 2px;
 }
 
 .wallet-page-history__main {
@@ -47,18 +30,6 @@
   color: var(--color-text-muted, #6b7280);
   font-size: 0.82rem;
   line-height: 1.4;
-}
-
-.wallet-page-history__status {
-  flex: 0 0 auto;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--color-muted-surface, #f3f4f6);
-  color: var(--color-text-muted, #4b5563);
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1.2;
-  white-space: nowrap;
 }
 
 .wallet-page-history__title {
@@ -129,21 +100,21 @@
 
 .wallet-page-history__product-name {
   min-width: 0;
+  overflow: hidden;
   color: var(--color-text, #111827);
   font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.4;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .wallet-page-history__product-subtitle {
   min-width: 0;
+  overflow: hidden;
   color: var(--color-text-muted, #6b7280);
   font-size: 0.8rem;
   line-height: 1.4;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -181,11 +152,11 @@
 
 .wallet-page-history__brand-name {
   min-width: 0;
+  overflow: hidden;
   color: var(--color-text, #111827);
   font-size: 0.78rem;
   font-weight: 700;
   line-height: 1.3;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -196,22 +167,7 @@
   gap: 6px;
 }
 
-.wallet-page-history__meta-item {
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: var(--color-surface, #ffffff);
-  color: var(--color-text-muted, #4b5563);
-  font-size: 0.75rem;
-  font-weight: 600;
-  line-height: 1.2;
-}
-
 @media (max-width: 640px) {
-  .wallet-page-history__item {
-    padding: 12px;
-    border-radius: 14px;
-  }
-
   .wallet-page-history__header {
     align-items: flex-start;
     flex-direction: column;
