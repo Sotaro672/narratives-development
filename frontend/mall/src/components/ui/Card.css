@@ -1,0 +1,77 @@
+/*frontend\mall\src\components\ui\Card.css*/
+.ui-card {
+  width: 100%;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  border-radius: 18px;
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #111827);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  box-sizing: border-box;
+}
+
+.ui-card--padding-sm {
+  padding: 12px;
+}
+
+.ui-card--padding-md {
+  padding: 16px;
+}
+
+.ui-card--padding-lg {
+  padding: 24px;
+}
+
+.ui-card--interactive {
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    opacity 160ms ease;
+}
+
+.ui-card--interactive:hover {
+  border-color: rgba(17, 24, 39, 0.16);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  transform: translateY(-1px);
+}
+
+.ui-card--interactive:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.24);
+  outline-offset: 3px;
+}
+
+.ui-card--highlighted {
+  border-color: rgba(37, 99, 235, 0.28);
+  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12);
+}
+
+.ui-card--busy {
+  cursor: progress;
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+@media (max-width: 520px) {
+  .ui-card {
+    border-radius: 16px;
+  }
+
+  .ui-card--padding-md {
+    padding: 14px;
+  }
+
+  .ui-card--padding-lg {
+    padding: 18px 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-card--interactive {
+    transition: none;
+  }
+
+  .ui-card--interactive:hover {
+    transform: none;
+  }
+}
