@@ -1,0 +1,88 @@
+/*frontend\mall\src\components\ui\Chip.css*/
+.ui-chip {
+  appearance: none;
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    color 160ms ease,
+    opacity 160ms ease;
+}
+
+.ui-chip--sm {
+  min-height: 28px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.ui-chip--md {
+  min-height: 34px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
+.ui-chip--neutral {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.ui-chip--info {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.ui-chip--success {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.ui-chip--warning {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.ui-chip--danger {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.ui-chip:hover:not(:disabled) {
+  filter: brightness(0.97);
+}
+
+.ui-chip:focus-visible {
+  outline: 2px solid var(--color-primary, #2563eb);
+  outline-offset: 2px;
+}
+
+.ui-chip--selected {
+  border-color: var(--color-primary, #2563eb);
+  box-shadow: 0 0 0 1px var(--color-primary, #2563eb);
+}
+
+.ui-chip:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-chip {
+    transition: none;
+  }
+}
