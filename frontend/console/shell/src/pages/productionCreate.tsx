@@ -2,13 +2,24 @@
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
-import ProductBlueprintCard from "../features/productBlueprint/presentation/components/productBlueprintForm";
 import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/domain/productBlueprintCategory";
-import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
+import ProductBlueprintCard from "../features/productBlueprint/presentation/components/productBlueprintForm";
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
-import { Card, CardContent, CardHeader, CardTitle } from "../shared/ui/card";
+import { useProductionCreate } from "../features/production/presentation/hook/useProductionCreate";
+import { Button } from "../shared/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../shared/ui/card";
+import { Empty } from "../shared/ui/empty";
 import { ErrorMessage } from "../shared/ui/error";
-import { Popover, PopoverContent, PopoverTrigger } from "../shared/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "../shared/ui/popover";
 import {
   Table,
   TableBody,
@@ -17,8 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "../shared/ui/table";
-
-import "../styles/production.css";
+import { Text } from "../shared/ui/text";
 
 export default function ProductionCreate() {
   const {
@@ -63,9 +73,10 @@ export default function ProductionCreate() {
             productBlueprintPatch={selectedProductBlueprint}
           />
         ) : (
-          <div className="production-create__product-empty">
-            商品設計を選択してください
-          </div>
+          <Empty
+            compact
+            description="商品設計を選択してください"
+          />
         )}
 
         {selectedProductBlueprint && (
@@ -89,7 +100,7 @@ export default function ProductionCreate() {
           onSelectAssignee={onSelectAssignee}
         />
 
-        <Card className="pb-select">
+        <Card>
           <CardHeader>
             <CardTitle>ブランド選択</CardTitle>
           </CardHeader>
@@ -97,47 +108,51 @@ export default function ProductionCreate() {
           <CardContent>
             <Popover>
               <PopoverTrigger>
-                <div className="pb-select__trigger">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={loadingBrands && brandOptions.length === 0}
+                >
                   {selectedBrandName || "ブランドを選択してください"}
-                </div>
+                </Button>
               </PopoverTrigger>
 
-              <PopoverContent>
-                <div className="pb-select__list">
-                  {brandOptions.map((brand) => (
-                    <button
-                      key={brand.id}
-                      type="button"
-                      className={`pb-select__row${
-                        selectedBrandId === brand.id ? " is-active" : ""
-                      }`}
-                      onClick={() => selectBrand(brand.id)}
-                    >
-                      {brand.name}
-                    </button>
-                  ))}
+              <PopoverContent
+                align="start"
+                className="popover__content--compact popover__content--medium"
+              >
+                {brandOptions.length > 0 ? (
+                  <div className="popover__list">
+                    {brandOptions.map((brand) => {
+                      const isSelected = selectedBrandId === brand.id;
 
-                  {loadingBrands && (
-                    <div className="pb-select__empty">
-                      ブランドを読み込み中です。
-                    </div>
-                  )}
+                      return (
+                        <button
+                          key={brand.id}
+                          type="button"
+                          className={`popover__item${isSelected ? " is-active" : ""}`}
+                          onClick={() => selectBrand(brand.id)}
+                        >
+                          {brand.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : loadingBrands ? (
+                  <div className="popover__empty">
+                    ブランドを読み込み中です。
+                  </div>
+                ) : (
+                  <div className="popover__empty">
+                    ブランドが登録されていません。
+                  </div>
+                )}
 
-                  {!loadingBrands && brandOptions.length === 0 && (
-                    <div className="pb-select__empty">
-                      ブランドが登録されていません。
-                    </div>
-                  )}
-
-                  {brandError && (
-                    <ErrorMessage
-                      size="xs"
-                      className="pb-select__error"
-                    >
-                      ブランド一覧の取得に失敗しました。
-                    </ErrorMessage>
-                  )}
-                </div>
+                {brandError && (
+                  <ErrorMessage size="xs">
+                    ブランド一覧の取得に失敗しました。
+                  </ErrorMessage>
+                )}
               </PopoverContent>
             </Popover>
           </CardContent>
@@ -149,7 +164,7 @@ export default function ProductionCreate() {
           </CardHeader>
 
           <CardContent>
-            <Table className="production-create__product-table">
+            <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>商品名</TableHead>
@@ -157,22 +172,27 @@ export default function ProductionCreate() {
               </TableHeader>
 
               <TableBody>
-                {productRows.map((product) => (
-                  <TableRow
-                    key={product.id}
-                    className={`production-create__product-row${
-                      selectedProductId === product.id ? " is-active" : ""
-                    }`}
-                    onClick={() => selectProductById(product.id)}
-                  >
-                    <TableCell>{product.name}</TableCell>
-                  </TableRow>
-                ))}
+                {productRows.map((product) => {
+                  const isSelected = selectedProductId === product.id;
+
+                  return (
+                    <TableRow
+                      key={product.id}
+                      interactive
+                      data-state={isSelected ? "selected" : undefined}
+                      onClick={() => selectProductById(product.id)}
+                    >
+                      <TableCell>{product.name}</TableCell>
+                    </TableRow>
+                  );
+                })}
 
                 {productRows.length === 0 && (
                   <TableRow>
-                    <TableCell className="production-create__product-empty-cell">
-                      対象の商品設計がありません
+                    <TableCell align="center">
+                      <Text as="span" size="sm" tone="muted">
+                        対象の商品設計がありません
+                      </Text>
                     </TableCell>
                   </TableRow>
                 )}

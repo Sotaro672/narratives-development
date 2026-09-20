@@ -36,10 +36,6 @@
   transition: background-color 0.2s ease;
 }
 
-.table__body .table__row:hover {
-  background-color: #f9fafb;
-}
-
 /* =========================================================
  * Footer
  * ======================================================= */
@@ -63,7 +59,11 @@
 }
 
 .table__row:hover {
-  background-color: #f9fafb;
+  background-color: hsl(var(--muted) / 0.35);
+}
+
+.table__row--interactive {
+  cursor: pointer;
 }
 
 .table__row[data-state="selected"] {
@@ -76,13 +76,24 @@
 
 .table__head {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #e3e3e3;
-  color: #333;
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
   font-size: 0.9rem;
   font-weight: 600;
-  text-align: left;
   vertical-align: middle;
   white-space: nowrap;
+}
+
+.table__head--left {
+  text-align: left;
+}
+
+.table__head--center {
+  text-align: center;
+}
+
+.table__head--right {
+  text-align: right;
 }
 
 .table__head:has([role="checkbox"]) {
@@ -99,11 +110,23 @@
 
 .table__cell {
   padding: 0.75rem 1rem;
-  border-bottom: 1px solid #eee;
-  color: #444;
+  border-bottom: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
   font-size: 0.9rem;
   vertical-align: middle;
   white-space: nowrap;
+}
+
+.table__cell--left {
+  text-align: left;
+}
+
+.table__cell--center {
+  text-align: center;
+}
+
+.table__cell--right {
+  text-align: right;
 }
 
 .table__cell:has([role="checkbox"]) {
