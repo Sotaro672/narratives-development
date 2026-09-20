@@ -1,9 +1,15 @@
 // frontend/mall/src/features/order/components/OrderDetailItem.tsx
 
+import Badge from "../../../components/ui/Badge";
+import Button from "../../../components/ui/Button";
+import InfoList, { InfoRow } from "../../../components/ui/InfoList";
 import MediaIcon from "../../../components/ui/MediaIcon";
 import { formatDateTime } from "../../../components/utils/date";
 import type { OrderDetailItem as OrderDetailItemType } from "../../shared/types/orderDetailTypes";
 import { formatAmount } from "../../wallet/utils/format";
+import { getFallbackInitial, getProductTitle } from "../utils/orderItemDisplay";
+import { getItemStatusLabel } from "../utils/orderStatus";
+import OrderItemMeta from "./OrderItemMeta";
 
 type OrderDetailItemProps = {
   orderId: string;
@@ -18,107 +24,15 @@ type OrderDetailItemProps = {
   onOpenBrand: (brandId?: string) => void;
 };
 
-function getItemStatusLabel(item: OrderDetailItemType): string {
-  if (item.isCancelled) return "キャンセル済み";
-  if (item.isReturnCompleted) return "返品済み";
-  if (item.isReturnRequested) return "返品申請済み";
-  if (item.transferred) return "受け取り済み";
-  if (item.isDispatched) return "発送済み";
-  return "発送前";
-}
+type StatusBadgeVariant = "neutral" | "info" | "success" | "warning" | "danger";
 
-function getProductTitle(item: OrderDetailItemType): string {
-  return item.productName || item.tokenName || "商品";
-}
-
-function getFallbackInitial(value?: string): string {
-  const trimmed = value?.trim() || "";
-  if (!trimmed) return "?";
-  return trimmed.slice(0, 1).toUpperCase();
-}
-
-function getModelMetaItems(
-  item: OrderDetailItemType,
-): Array<{ label: string; value: string }> {
-  const metaItems: Array<{ label: string; value: string }> = [];
-
-  if (item.modelNumber) {
-    metaItems.push({ label: "モデル番号", value: item.modelNumber });
-  }
-
-  if (item.size) {
-    metaItems.push({ label: "サイズ", value: item.size });
-  }
-
-  if (item.color?.name) {
-    metaItems.push({ label: "カラー", value: item.color.name });
-  }
-
-  if (item.volumeValue !== undefined && item.volumeValue !== null) {
-    metaItems.push({
-      label: "容量",
-      value: `${item.volumeValue}${item.volumeUnit || ""}`,
-    });
-  }
-
-  return metaItems;
-}
-
-function getMeasurementLabel(key: string): string {
-  switch (key) {
-    case "length":
-      return "着丈";
-    case "shoulder":
-      return "肩幅";
-    case "chest":
-      return "身幅";
-    case "sleeve":
-      return "袖丈";
-    case "waist":
-      return "ウエスト";
-    case "rise":
-      return "股上";
-    case "inseam":
-      return "股下";
-    case "hem":
-      return "裾幅";
-    default:
-      return key;
-  }
-}
-
-function OrderItemModelMeta({ item }: { item: OrderDetailItemType }) {
-  const metaItems = getModelMetaItems(item);
-  const measurements =
-    item.measurements && typeof item.measurements === "object"
-      ? Object.entries(item.measurements).filter(([, value]) =>
-          Number.isFinite(value),
-        )
-      : [];
-
-  if (metaItems.length === 0 && measurements.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="order-detail-page__model-meta">
-      <dl className="order-detail-page__item-meta">
-        {metaItems.map((meta) => (
-          <div key={meta.label} className="order-detail-page__item-meta-row">
-            <dt>{meta.label}</dt>
-            <dd>{meta.value}</dd>
-          </div>
-        ))}
-
-        {measurements.map(([key, value]) => (
-          <div key={key} className="order-detail-page__item-meta-row">
-            <dt>{getMeasurementLabel(key)}</dt>
-            <dd>{value} mm</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
+function getItemStatusVariant(item: OrderDetailItemType): StatusBadgeVariant {
+  if (item.isCancelled) return "danger";
+  if (item.isReturnCompleted) return "neutral";
+  if (item.isReturnRequested) return "warning";
+  if (item.transferred) return "success";
+  if (item.isDispatched) return "info";
+  return "neutral";
 }
 
 export default function OrderDetailItem({
@@ -158,144 +72,105 @@ export default function OrderDetailItem({
 
   return (
     <li className="order-detail-page__item">
-      <div className="order-detail-page__item-image">
-        {item.tokenIcon ? (
-          <img
-            src={item.tokenIcon}
-            alt={item.tokenName || productTitle}
-            loading="lazy"
-          />
-        ) : (
-          <span className="order-detail-page__item-image-fallback">
-            {getFallbackInitial(item.tokenName || productTitle)}
-          </span>
-        )}
-      </div>
+      <MediaIcon
+        src={item.tokenIcon}
+        alt={item.tokenName || productTitle}
+        fallback={getFallbackInitial(item.tokenName || productTitle)}
+        size="lg"
+        shape="rounded"
+      />
 
       <div className="order-detail-page__item-body">
         <div className="order-detail-page__item-heading">
           <div className="order-detail-page__item-title-area">
-            <span className="order-detail-page__item-title">
-              {productTitle}
-            </span>
-
-            {item.tokenName ? (
-              <span className="order-detail-page__item-token-name">
-                {item.tokenName}
-              </span>
-            ) : null}
+            <span className="order-detail-page__item-title">{productTitle}</span>
+            {item.tokenName ? <span className="order-detail-page__item-token-name">{item.tokenName}</span> : null}
           </div>
 
-          <span className="order-detail-page__item-price">
-            {formatAmount(item.price)}
-          </span>
+          <span className="order-detail-page__item-price">{formatAmount(item.price)}</span>
         </div>
 
-        <button
-          type="button"
-          className="order-detail-page__brand"
-          disabled={!item.brandId}
-          onClick={() => onOpenBrand(item.brandId)}
-        >
-          <MediaIcon
-            src={item.brandIcon}
-            alt={brandName}
-            fallback={getFallbackInitial(brandName)}
-            size="xs"
-            shape="circle"
-          />
-          <span>{brandName}</span>
-        </button>
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!item.brandId}
+            onClick={() => onOpenBrand(item.brandId)}
+          >
+            <MediaIcon
+              src={item.brandIcon}
+              alt={brandName}
+              fallback={getFallbackInitial(brandName)}
+              size="xs"
+              shape="circle"
+            />
+            {brandName}
+          </Button>
+        </div>
 
-        <OrderItemModelMeta item={item} />
+        <OrderItemMeta item={item} />
 
-        <dl className="order-detail-page__item-meta">
-          <div className="order-detail-page__item-meta-row">
-            <dt>数量</dt>
-            <dd>{item.qty}点</dd>
-          </div>
-
-          <div className="order-detail-page__item-meta-row">
-            <dt>小計</dt>
-            <dd>{formatAmount(item.price * item.qty)}</dd>
-          </div>
-
-          <div className="order-detail-page__item-meta-row">
-            <dt>消費税率</dt>
-            <dd>{item.consumptionTaxRate}%</dd>
-          </div>
-
-          <div className="order-detail-page__item-meta-row">
-            <dt>発送状況</dt>
-            <dd>{getItemStatusLabel(item)}</dd>
-          </div>
+        <InfoList>
+          <InfoRow label="数量">{item.qty}点</InfoRow>
+          <InfoRow label="小計">{formatAmount(item.price * item.qty)}</InfoRow>
+          <InfoRow label="消費税率">{item.consumptionTaxRate}%</InfoRow>
+          <InfoRow label="発送状況">
+            <Badge variant={getItemStatusVariant(item)} size="sm">
+              {getItemStatusLabel(item)}
+            </Badge>
+          </InfoRow>
 
           {item.returnRequestedAt ? (
-            <div className="order-detail-page__item-meta-row">
-              <dt>返品申請日時</dt>
-              <dd>{formatDateTime(item.returnRequestedAt)}</dd>
-            </div>
+            <InfoRow label="返品申請日時">{formatDateTime(item.returnRequestedAt)}</InfoRow>
           ) : null}
 
           {item.returnCompletedAt ? (
-            <div className="order-detail-page__item-meta-row">
-              <dt>返品完了日時</dt>
-              <dd>{formatDateTime(item.returnCompletedAt)}</dd>
-            </div>
+            <InfoRow label="返品完了日時">{formatDateTime(item.returnCompletedAt)}</InfoRow>
           ) : null}
 
           {item.transferredAt ? (
-            <div className="order-detail-page__item-meta-row">
-              <dt>受取日時</dt>
-              <dd>{formatDateTime(item.transferredAt)}</dd>
-            </div>
+            <InfoRow label="受取日時">{formatDateTime(item.transferredAt)}</InfoRow>
           ) : null}
-        </dl>
+        </InfoList>
 
         {isResaleItem ? (
           <div className="page-actions order-detail-page__cancel-actions">
-            <button
+            <Button
               type="button"
-              className="order-detail-page__trade-button"
+              variant="primary"
+              size="sm"
               disabled={tradeNavigatingIndex !== null}
               onClick={() => void onOpenTrade(orderId, index)}
             >
               {isOpeningTrade ? "移動中..." : "取引画面"}
-            </button>
+            </Button>
           </div>
-        ) : item.transferred &&
-          !item.isReturnRequested &&
-          !item.isReturnCompleted ? null : (
+        ) : item.transferred && !item.isReturnRequested && !item.isReturnCompleted ? null : (
           <div className="page-actions order-detail-page__cancel-actions">
             {item.isReturnCompleted ? (
-              <button
-                type="button"
-                className="order-detail-page__cancel-button order-detail-page__return-button"
-                disabled
-              >
+              <Button type="button" variant="secondary" size="sm" disabled>
                 返品済み
-              </button>
+              </Button>
             ) : item.isReturnRequested ? (
-              <button
-                type="button"
-                className="order-detail-page__cancel-button order-detail-page__return-button"
-                disabled
-              >
+              <Button type="button" variant="secondary" size="sm" disabled>
                 返品申請済み
-              </button>
+              </Button>
             ) : showReturnButton ? (
-              <button
+              <Button
                 type="button"
-                className="order-detail-page__cancel-button order-detail-page__return-button"
+                variant="secondary"
+                size="sm"
                 disabled={isReturning || cancellingItemIndex !== null}
                 onClick={() => onReturnItem(index)}
               >
                 {isReturning ? "返品申請中..." : "返品"}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
-                className="order-detail-page__cancel-button"
+                variant="secondary"
+                size="sm"
                 disabled={cancelDisabled}
                 onClick={() => void onCancelItem(index)}
               >
@@ -304,7 +179,7 @@ export default function OrderDetailItem({
                   : isCancelling
                     ? "キャンセル中..."
                     : "商品をキャンセル"}
-              </button>
+              </Button>
             )}
           </div>
         )}

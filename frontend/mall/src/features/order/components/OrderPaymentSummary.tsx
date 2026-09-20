@@ -1,42 +1,46 @@
 // frontend/mall/src/features/order/components/OrderPaymentSummary.tsx
 
+import Badge from "../../../components/ui/Badge";
+import Card from "../../../components/ui/Card";
+import InfoList, { InfoRow } from "../../../components/ui/InfoList";
 import SectionHeader from "../../../components/ui/SectionHeader";
 import { formatDateTime } from "../../../components/utils/date";
 import type { OrderDetail } from "../../shared/types/orderDetailTypes";
 import { formatAmount } from "../../wallet/utils/format";
+import { getRefundStatusLabel } from "../utils/orderStatus";
 
 type OrderPaymentSummaryProps = {
   order: OrderDetail;
 };
 
-function getRefundStatusLabel(order: OrderDetail): string {
+type BadgeVariant = "neutral" | "info" | "success" | "warning" | "danger";
+
+function getRefundStatusVariant(order: OrderDetail): BadgeVariant {
   const activeItems = order.items.filter((item) => !item.isCancelled);
-  const allReturnCompleted =
+
+  if (
     activeItems.length > 0 &&
-    activeItems.every((item) => item.isReturnCompleted);
+    activeItems.every((item) => item.isReturnCompleted)
+  ) {
+    return "success";
+  }
 
-  if (allReturnCompleted) return "返金済み";
-
-  const partiallyReturnCompleted = activeItems.some(
-    (item) => item.isReturnCompleted,
-  );
-
-  if (partiallyReturnCompleted) return "一部返金済み";
+  if (activeItems.some((item) => item.isReturnCompleted)) {
+    return "warning";
+  }
 
   switch (order.refundStatus) {
-    case "pending":
-      return "返金処理中";
-    case "requires_action":
-      return "返金対応待ち";
     case "succeeded":
-      return "返金済み";
+      return "success";
+    case "pending":
+    case "requires_action":
+      return "warning";
     case "failed":
-      return "返金失敗";
     case "canceled":
-      return "返金キャンセル";
+      return "danger";
     case "none":
     default:
-      return "未返金";
+      return "neutral";
   }
 }
 
@@ -51,56 +55,52 @@ export default function OrderPaymentSummary({
   );
 
   return (
-    <div className="page-card">
+    <Card as="section">
       <SectionHeader title="お支払い" titleAs="h2" />
 
-      <dl className="order-detail-page__detail-list">
-        <div className="order-detail-page__detail-row">
-          <dt>商品小計</dt>
-          <dd>{formatAmount(order.subtotalAmount)}</dd>
-        </div>
+      <InfoList>
+        <InfoRow label="商品小計">
+          {formatAmount(order.subtotalAmount)}
+        </InfoRow>
 
-        <div className="order-detail-page__detail-row">
-          <dt>配送料</dt>
-          <dd>{formatAmount(order.shippingAmount)}</dd>
-        </div>
+        <InfoRow label="配送料">
+          {formatAmount(order.shippingAmount)}
+        </InfoRow>
 
-        <div className="order-detail-page__detail-row">
-          <dt>消費税</dt>
-          <dd>{formatAmount(order.consumptionTax)}</dd>
-        </div>
+        <InfoRow label="消費税">
+          {formatAmount(order.consumptionTax)}
+        </InfoRow>
 
-        <div className="order-detail-page__detail-row order-detail-page__detail-row--total">
-          <dt>合計</dt>
-          <dd>{formatAmount(order.totalAmount)}</dd>
-        </div>
+        <InfoRow label="合計" className="order-detail-page__payment-total">
+          {formatAmount(order.totalAmount)}
+        </InfoRow>
 
-        <div className="order-detail-page__detail-row">
-          <dt>決済状況</dt>
-          <dd>{order.paid ? "決済済み" : "未決済"}</dd>
-        </div>
+        <InfoRow label="決済状況">
+          <Badge variant={order.paid ? "success" : "warning"} size="sm">
+            {order.paid ? "決済済み" : "未決済"}
+          </Badge>
+        </InfoRow>
 
         {hasReturnInProgress ? (
-          <div className="order-detail-page__detail-row">
-            <dt>返金状況</dt>
-            <dd>{getRefundStatusLabel(order)}</dd>
-          </div>
+          <InfoRow label="返金状況">
+            <Badge variant={getRefundStatusVariant(order)} size="sm">
+              {getRefundStatusLabel(order)}
+            </Badge>
+          </InfoRow>
         ) : null}
 
         {order.refundedAmount > 0 ? (
-          <div className="order-detail-page__detail-row">
-            <dt>返金額</dt>
-            <dd>{formatAmount(order.refundedAmount)}</dd>
-          </div>
+          <InfoRow label="返金額">
+            {formatAmount(order.refundedAmount)}
+          </InfoRow>
         ) : null}
 
         {order.refundedAt ? (
-          <div className="order-detail-page__detail-row">
-            <dt>返金日時</dt>
-            <dd>{formatDateTime(order.refundedAt)}</dd>
-          </div>
+          <InfoRow label="返金日時">
+            {formatDateTime(order.refundedAt)}
+          </InfoRow>
         ) : null}
-      </dl>
-    </div>
+      </InfoList>
+    </Card>
   );
 }
