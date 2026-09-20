@@ -1,0 +1,265 @@
+/* frontend/mall/src/styles/payout.css */
+
+/* =========================================================
+ * Payout Page
+ * ======================================================= */
+
+.payout-page,
+.payout-select-page {
+  width: 100%;
+  padding-bottom: 104px;
+}
+
+.payout-page__description,
+.payout-select-page__description {
+  margin: 0 0 20px;
+}
+
+/* =========================================================
+ * Summary
+ * ======================================================= */
+
+.payout-summary__label {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.payout-summary__value {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  text-align: right;
+}
+
+.payout-summary__name {
+  max-width: 100%;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text);
+  overflow-wrap: anywhere;
+}
+
+.payout-summary__code {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+/* =========================================================
+ * Notice
+ * ======================================================= */
+
+.payout-notice {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 16px;
+  border-radius: 12px;
+  background: #f9fafb;
+}
+
+.payout-notice__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.payout-notice__text {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #6b7280;
+}
+
+/* =========================================================
+ * Payout Select
+ * ======================================================= */
+
+.payout-select__search {
+  position: relative;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.payout-select__search-icon {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  transform: translateY(-50%);
+  color: #6b7280;
+  pointer-events: none;
+}
+
+.payout-select__search-input {
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  padding: 11px 16px 11px 46px;
+  background: #fff;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1.5;
+  outline: none;
+  appearance: none;
+}
+
+.payout-select__search-input::placeholder {
+  color: #9ca3af;
+}
+
+.payout-select__search-input:focus {
+  border-color: #111827;
+  box-shadow: 0 0 0 1px #111827;
+}
+
+/* =========================================================
+ * Option List
+ * ======================================================= */
+
+.payout-select__list {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.payout-select__option {
+  width: 100%;
+  min-height: 68px;
+  box-sizing: border-box;
+  border: none;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 14px 16px;
+  background: #fff;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.payout-select__option:last-child {
+  border-bottom: none;
+}
+
+.payout-select__option:hover {
+  background: #f9fafb;
+}
+
+.payout-select__option--selected {
+  background: #f3f4f6;
+}
+
+.payout-select__option-content {
+  min-width: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.payout-select__option-name {
+  min-width: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.payout-select__option-code {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #6b7280;
+}
+
+/* =========================================================
+ * Check
+ * ======================================================= */
+
+.payout-select__check {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #fff;
+}
+
+.payout-select__check--selected {
+  border-color: #111827;
+  background: #111827;
+}
+
+/* =========================================================
+ * Empty
+ * ======================================================= */
+
+.payout-select__empty {
+  padding: 32px 20px;
+  text-align: center;
+}
+
+.payout-select__empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.payout-select__empty-description {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+/* =========================================================
+ * Note
+ * ======================================================= */
+
+.payout-select__note {
+  margin: 16px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b7280;
+}
+
+/* =========================================================
+ * Responsive
+ * ======================================================= */
+
+@media (min-width: 1024px) {
+  .payout-page,
+  .payout-select-page {
+    padding-bottom: 32px;
+  }
+}
+
+@media (max-width: 480px) {
+  .payout-select__search-input {
+    font-size: 16px;
+  }
+
+  .payout-select__option {
+    min-height: 64px;
+    padding: 13px 14px;
+  }
+}

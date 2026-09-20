@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/brand_page.css */
+/* frontend/mall/src/styles/brand_page.css */
 
 .brand-page-main {
   min-height: 100%;
@@ -84,10 +84,7 @@
   line-height: 1;
   text-decoration: none;
   cursor: pointer;
-  transition:
-    background-color 160ms ease,
-    border-color 160ms ease,
-    transform 160ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
 .brand-page-error-actions button:hover:not(:disabled),
@@ -124,13 +121,6 @@
   border-radius: 24px;
   background: #e5e7eb;
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-}
-
-.brand-page-hero-image {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
 }
 
 /* --------------------------------
@@ -194,9 +184,7 @@
   font-weight: 700;
   line-height: 1;
   text-decoration: none;
-  transition:
-    opacity 160ms ease,
-    transform 160ms ease;
+  transition: opacity 160ms ease, transform 160ms ease;
 }
 
 .brand-page-link:hover {

@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/PayoutBankSelectPage.tsx
+// frontend/mall/src/pages/PayoutBankSelectPage.tsx
 
 import { useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
+import "../styles/payout.css";
 import "../styles/payout-bank-select-page.css";
 
 import Layout from "../components/layout/Layout";
@@ -151,14 +152,14 @@ export default function PayoutBankSelectPage() {
       onActionButtonClick={isDesktop ? handleNext : undefined}
       actionButtonDisabled={actionButtonDisabled}
     >
-      <section className="page-section content-page-section settings-page payout-bank-select-page">
-        <p className="content-page-description payout-bank-select-page__description">
+      <section className="page-section content-page-section settings-page payout-select-page payout-bank-select-page">
+        <p className="content-page-description payout-select-page__description">
           売上の受取口座として使用する金融機関を選択してください。
         </p>
 
-        <div className="payout-bank-select-page__search">
+        <div className="payout-select__search">
           <Search
-            className="payout-bank-select-page__search-icon"
+            className="payout-select__search-icon"
             size={20}
             aria-hidden="true"
           />
@@ -168,13 +169,13 @@ export default function PayoutBankSelectPage() {
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
             placeholder="金融機関名・金融機関コードで検索"
-            className="payout-bank-select-page__search-input"
+            className="payout-select__search-input"
             aria-label="金融機関を検索"
             autoComplete="off"
           />
         </div>
 
-        <div className="payout-bank-select-page__list" role="list">
+        <div className="payout-select__list" role="list">
           {filteredBanks.map((bank) => {
             const selected = bank.bankCode === selectedBankCode;
 
@@ -183,10 +184,8 @@ export default function PayoutBankSelectPage() {
                 key={bank.bankCode}
                 type="button"
                 className={[
-                  "payout-bank-select-page__bank",
-                  selected
-                    ? "payout-bank-select-page__bank--selected"
-                    : "",
+                  "payout-select__option",
+                  selected ? "payout-select__option--selected" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -194,21 +193,19 @@ export default function PayoutBankSelectPage() {
                 aria-pressed={selected}
                 role="listitem"
               >
-                <span className="payout-bank-select-page__bank-content">
-                  <strong className="payout-bank-select-page__bank-name">
+                <span className="payout-select__option-content">
+                  <strong className="payout-select__option-name">
                     {bank.bankName}
                   </strong>
-                  <span className="payout-bank-select-page__bank-code">
+                  <span className="payout-select__option-code">
                     金融機関コード {bank.bankCode}
                   </span>
                 </span>
 
                 <span
                   className={[
-                    "payout-bank-select-page__check",
-                    selected
-                      ? "payout-bank-select-page__check--selected"
-                      : "",
+                    "payout-select__check",
+                    selected ? "payout-select__check--selected" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -221,18 +218,18 @@ export default function PayoutBankSelectPage() {
           })}
 
           {filteredBanks.length === 0 ? (
-            <div className="payout-bank-select-page__empty">
-              <p className="payout-bank-select-page__empty-title">
+            <div className="payout-select__empty">
+              <p className="payout-select__empty-title">
                 該当する金融機関が見つかりません
               </p>
-              <p className="payout-bank-select-page__empty-description">
+              <p className="payout-select__empty-description">
                 金融機関名または金融機関コードを確認して、もう一度検索してください。
               </p>
             </div>
           ) : null}
         </div>
 
-        <p className="payout-bank-select-page__note">
+        <p className="payout-select__note">
           金融機関一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
         </p>
       </section>

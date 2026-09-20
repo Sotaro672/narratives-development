@@ -1,4 +1,4 @@
-/* frontend/amol/src/components/ui/section-header.css */
+/* frontend/mall/src/components/ui/section-header.css */
 
 .ui-section-header {
   display: flex;
@@ -19,6 +19,13 @@
 
 .ui-section-header__title {
   overflow-wrap: anywhere;
+}
+
+/* Variations */
+.ui-section-header--title-sm .ui-section-header__title {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
 }
 
 .ui-section-header__right {

@@ -1,7 +1,8 @@
-// frontend/amol/src/features/wallet/components/WalletResalePanel.tsx
+// frontend/mall/src/features/wallet/components/WalletResalePanel.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import Media from "../../../components/ui/Media";
 import { formatDateTime } from "../../../components/utils/date";
 import { textOrEmpty } from "../../../components/utils/textOrEmpty";
 import {
@@ -276,15 +277,15 @@ export default function WalletResalePanel({
                 data-status-label={statusLabel}
               >
                 {imageUrl ? (
-                  <img
+                  <Media
                     src={imageUrl}
                     alt={productName || tokenName || brandName || "出品画像"}
-                    className="wallet-resale-card__image"
                     loading="lazy"
+                    fit="cover"
                   />
                 ) : (
                   <div
-                    className="wallet-resale-card__image-placeholder"
+                    className="ui-media-fallback"
                     aria-label="画像未設定"
                   >
                     画像未設定

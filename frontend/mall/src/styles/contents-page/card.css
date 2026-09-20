@@ -1,12 +1,4 @@
-/* frontend/amol/src/styles/contents-page/card.css */
-
-.contents-page-card {
-  box-sizing: border-box;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 20px;
-  background: #fff;
-}
+/* frontend/mall/src/styles/contents-page/card.css */
 
 .contents-page-card__header {
   display: grid;

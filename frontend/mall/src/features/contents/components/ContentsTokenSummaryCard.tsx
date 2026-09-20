@@ -1,5 +1,6 @@
-// frontend/amol/src/features/contents/components/ContentsTokenSummaryCard.tsx
+// frontend/mall/src/features/contents/components/ContentsTokenSummaryCard.tsx
 
+import Card from "../../../components/ui/Card";
 import Tab from "../../../components/ui/Tab";
 import TokenReviewAggregateCard from "../../token-commnet/components/TokenReviewAggregateCard";
 import type { ContentsSearchParams } from "../../shared/types/contents";
@@ -29,7 +30,7 @@ export default function ContentsTokenSummaryCard({
   const hasBrandName = Boolean(contents.brandName);
 
   return (
-    <div className="contents-page-card">
+    <Card variant="panel">
       <div className="contents-page-card__header">
         <div className="contents-page-card__icon-wrap">
           {tokenIconUrl ? (
@@ -83,6 +84,6 @@ export default function ContentsTokenSummaryCard({
         resaleLabel={resaleLabel}
         onResaleClick={onResaleClick}
       />
-    </div>
+    </Card>
   );
 }

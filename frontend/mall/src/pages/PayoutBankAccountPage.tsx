@@ -1,10 +1,11 @@
-// frontend/amol/src/pages/PayoutBankAccountPage.tsx
+// frontend/mall/src/pages/PayoutBankAccountPage.tsx
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
+import "../styles/payout.css";
 import "../styles/payout-bank-account-page.css";
 
 import Layout from "../components/layout/Layout";
@@ -32,7 +33,9 @@ export default function PayoutBankAccountPage() {
     draft.accountType || "ordinary",
   );
   const [accountNumber, setAccountNumber] = useState(draft.accountNumber);
-  const [accountHolderName, setAccountHolderName] = useState(draft.accountHolderName);
+  const [accountHolderName, setAccountHolderName] = useState(
+    draft.accountHolderName,
+  );
 
   useEffect(() => {
     if (validateBankCode(draft.bankCode) || !hasNonWhitespace(draft.bankName)) {
@@ -40,7 +43,10 @@ export default function PayoutBankAccountPage() {
       return;
     }
 
-    if (validateBranchCode(draft.branchCode) || !hasNonWhitespace(draft.branchName)) {
+    if (
+      validateBranchCode(draft.branchCode) ||
+      !hasNonWhitespace(draft.branchName)
+    ) {
       navigate("/settings/payout-account/branch", { replace: true });
     }
   }, [
@@ -124,29 +130,39 @@ export default function PayoutBankAccountPage() {
       onActionButtonClick={isDesktop ? handleNext : undefined}
       actionButtonDisabled={actionButtonDisabled}
     >
-      <section className="page-section content-page-section settings-page payout-bank-account-page">
-        <p className="content-page-description payout-bank-account-page__description">
+      <section className="page-section content-page-section settings-page payout-page payout-bank-account-page">
+        <p className="content-page-description payout-page__description">
           売上を受け取る銀行口座の情報を入力してください。
         </p>
 
         <div className="payout-bank-account-page__destination">
           <div className="payout-bank-account-page__destination-row">
-            <span className="payout-bank-account-page__destination-label">
+            <span className="payout-summary__label">
               金融機関
             </span>
-            <div className="payout-bank-account-page__destination-value">
-              <strong>{draft.bankName}</strong>
-              <span>金融機関コード {draft.bankCode}</span>
+
+            <div className="payout-summary__value">
+              <strong className="payout-summary__name">
+                {draft.bankName}
+              </strong>
+              <span className="payout-summary__code">
+                金融機関コード {draft.bankCode}
+              </span>
             </div>
           </div>
 
           <div className="payout-bank-account-page__destination-row">
-            <span className="payout-bank-account-page__destination-label">
+            <span className="payout-summary__label">
               支店
             </span>
-            <div className="payout-bank-account-page__destination-value">
-              <strong>{draft.branchName}</strong>
-              <span>支店コード {draft.branchCode}</span>
+
+            <div className="payout-summary__value">
+              <strong className="payout-summary__name">
+                {draft.branchName}
+              </strong>
+              <span className="payout-summary__code">
+                支店コード {draft.branchCode}
+              </span>
             </div>
           </div>
         </div>
@@ -275,11 +291,11 @@ export default function PayoutBankAccountPage() {
           </div>
         </div>
 
-        <div className="payout-bank-account-page__notice">
-          <p className="payout-bank-account-page__notice-title">
+        <div className="payout-notice payout-bank-account-page__notice">
+          <p className="payout-notice__title">
             口座情報の取り扱い
           </p>
-          <p className="payout-bank-account-page__notice-text">
+          <p className="payout-notice__text">
             入力した口座番号は登録処理のために使用します。登録後、AMOLの画面では口座番号の末尾4桁のみを表示します。
           </p>
         </div>

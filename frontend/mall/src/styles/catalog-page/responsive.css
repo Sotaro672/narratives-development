@@ -44,10 +44,6 @@
     bottom: 12px;
   }
 
-  .catalog-page-thumbnail-list {
-    display: none;
-  }
-
   .catalog-page-detail {
     height: auto;
     min-height: auto;

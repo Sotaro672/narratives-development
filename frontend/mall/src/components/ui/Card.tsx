@@ -10,10 +10,12 @@ import "./Card.css";
 
 type CardPadding = "sm" | "md" | "lg";
 type CardElement = "div" | "article" | "section";
+type CardVariant = "default" | "panel";
 
 type CardProps = HTMLAttributes<HTMLElement> & {
   children: ReactNode;
   as?: CardElement;
+  variant?: CardVariant;
   interactive?: boolean;
   highlighted?: boolean;
   busy?: boolean;
@@ -23,6 +25,7 @@ type CardProps = HTMLAttributes<HTMLElement> & {
 export default function Card({
   children,
   as: Component = "div",
+  variant = "default",
   interactive = false,
   highlighted = false,
   busy = false,
@@ -37,6 +40,7 @@ export default function Card({
   const classes = [
     "ui-card",
     `ui-card--padding-${padding}`,
+    variant === "panel" ? "ui-card--panel" : "",
     interactive ? "ui-card--interactive" : "",
     highlighted ? "ui-card--highlighted" : "",
     busy ? "ui-card--busy" : "",

@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/cart-page.css */
+/* frontend/mall/src/styles/cart-page.css */
 
 .cart-page-section-root {
   width: 100%;
@@ -180,13 +180,6 @@
 .cart-page-item__image-button:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 3px;
-}
-
-.cart-page-item__image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .cart-page-item__image-placeholder {

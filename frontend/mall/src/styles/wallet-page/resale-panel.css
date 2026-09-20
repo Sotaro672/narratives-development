@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/wallet-page/resale-panel.css */
+/* frontend/mall/src/styles/wallet-page/resale-panel.css */
 
 .wallet-resale-list {
   display: flex;
@@ -61,26 +61,6 @@
 
 .wallet-resale-card__media--sold::after {
   background-color: #111827;
-}
-
-.wallet-resale-card__image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.wallet-resale-card__image-placeholder {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  padding: 8px;
-  box-sizing: border-box;
-  color: #9ca3af;
-  font-size: 12px;
-  font-weight: 700;
-  text-align: center;
 }
 
 .wallet-resale-card__body {

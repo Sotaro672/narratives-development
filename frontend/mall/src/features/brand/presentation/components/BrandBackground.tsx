@@ -1,10 +1,11 @@
-// frontend/amol/src/features/brand/presentation/components/BrandBackground.tsx
+// frontend/mall/src/features/brand/presentation/components/BrandBackground.tsx
 
 import {
   useEffect,
   useState,
 } from "react";
 
+import Media from "../../../../components/ui/Media";
 import type {
   BrandDetail,
 } from "../../../shared/types/brand";
@@ -41,11 +42,11 @@ export default function BrandBackground({
 
   return (
     <div className="brand-page-hero">
-      <img
-        className="brand-page-hero-image"
+      <Media
         src={backgroundImage}
         alt={`${brandName}の背景画像`}
         loading="lazy"
+        fit="cover"
         onError={() => {
           setFailed(true);
         }}

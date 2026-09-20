@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/PayoutBranchSelectPage.tsx
+// frontend/mall/src/pages/PayoutBranchSelectPage.tsx
 
 import { useEffect, useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
+import "../styles/payout.css";
 import "../styles/payout-branch-select-page.css";
 
 import Layout from "../components/layout/Layout";
@@ -50,10 +51,8 @@ export default function PayoutBranchSelectPage() {
   const navigate = useNavigate();
   const { isDesktop } = useContactViewport();
   const { draft, setBranch } = usePayoutAccountRegistration();
-  const {
-    validateBankCode,
-    validateBranchCode,
-  } = usePayoutAccountRegistrationRules();
+  const { validateBankCode, validateBranchCode } =
+    usePayoutAccountRegistrationRules();
 
   const [searchText, setSearchText] = useState("");
   const [selectedBranchCode, setSelectedBranchCode] = useState(draft.branchCode);
@@ -150,8 +149,8 @@ export default function PayoutBranchSelectPage() {
       onActionButtonClick={isDesktop ? handleNext : undefined}
       actionButtonDisabled={actionButtonDisabled}
     >
-      <section className="page-section content-page-section settings-page payout-branch-select-page">
-        <p className="content-page-description payout-branch-select-page__description">
+      <section className="page-section content-page-section settings-page payout-select-page payout-branch-select-page">
+        <p className="content-page-description payout-select-page__description">
           売上の受取口座として使用する支店を選択してください。
         </p>
 
@@ -171,9 +170,9 @@ export default function PayoutBranchSelectPage() {
           </div>
         </div>
 
-        <div className="payout-branch-select-page__search">
+        <div className="payout-select__search">
           <Search
-            className="payout-branch-select-page__search-icon"
+            className="payout-select__search-icon"
             size={20}
             aria-hidden="true"
           />
@@ -183,13 +182,13 @@ export default function PayoutBranchSelectPage() {
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
             placeholder="支店名・支店コードで検索"
-            className="payout-branch-select-page__search-input"
+            className="payout-select__search-input"
             aria-label="支店を検索"
             autoComplete="off"
           />
         </div>
 
-        <div className="payout-branch-select-page__list" role="list">
+        <div className="payout-select__list" role="list">
           {filteredBranches.map((branch) => {
             const selected = branch.branchCode === selectedBranchCode;
 
@@ -198,10 +197,8 @@ export default function PayoutBranchSelectPage() {
                 key={branch.branchCode}
                 type="button"
                 className={[
-                  "payout-branch-select-page__branch",
-                  selected
-                    ? "payout-branch-select-page__branch--selected"
-                    : "",
+                  "payout-select__option",
+                  selected ? "payout-select__option--selected" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
@@ -209,22 +206,20 @@ export default function PayoutBranchSelectPage() {
                 aria-pressed={selected}
                 role="listitem"
               >
-                <span className="payout-branch-select-page__branch-content">
-                  <strong className="payout-branch-select-page__branch-name">
+                <span className="payout-select__option-content">
+                  <strong className="payout-select__option-name">
                     {branch.branchName}
                   </strong>
 
-                  <span className="payout-branch-select-page__branch-code">
+                  <span className="payout-select__option-code">
                     支店コード {branch.branchCode}
                   </span>
                 </span>
 
                 <span
                   className={[
-                    "payout-branch-select-page__check",
-                    selected
-                      ? "payout-branch-select-page__check--selected"
-                      : "",
+                    "payout-select__check",
+                    selected ? "payout-select__check--selected" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -237,19 +232,19 @@ export default function PayoutBranchSelectPage() {
           })}
 
           {filteredBranches.length === 0 ? (
-            <div className="payout-branch-select-page__empty">
-              <p className="payout-branch-select-page__empty-title">
+            <div className="payout-select__empty">
+              <p className="payout-select__empty-title">
                 該当する支店が見つかりません
               </p>
 
-              <p className="payout-branch-select-page__empty-description">
+              <p className="payout-select__empty-description">
                 支店名または支店コードを確認して、もう一度検索してください。
               </p>
             </div>
           ) : null}
         </div>
 
-        <p className="payout-branch-select-page__note">
+        <p className="payout-select__note">
           支店一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
         </p>
       </section>

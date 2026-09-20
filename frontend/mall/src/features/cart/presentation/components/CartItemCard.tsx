@@ -1,5 +1,6 @@
-// frontend/amol/src/features/cart/presentation/components/CartItemCard.tsx
+// frontend/mall/src/features/cart/presentation/components/CartItemCard.tsx
 
+import Media from "../../../../components/ui/Media";
 import { formatPrice } from "../../../../components/utils/price";
 import type { CartDisplayItem } from "../../../shared/types/cart";
 import {
@@ -76,11 +77,11 @@ export default function CartItemCard({
         onClick={handleOpen}
       >
         {imageUrl ? (
-          <img
+          <Media
             src={imageUrl}
             alt={productName}
-            className="cart-page-item__image"
             loading="lazy"
+            fit="cover"
           />
         ) : (
           <div className="cart-page-item__image-placeholder">No Image</div>
