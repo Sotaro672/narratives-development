@@ -30,19 +30,19 @@
  * Error
  * -------------------------------- */
 
-.brand-page-error-card {
+.brand-page-error-card.ui-alert {
   width: min(100%, 520px);
+  box-sizing: border-box;
 }
 
-.brand-page-error-card h1 {
+.brand-page-error-title {
   margin: 0 0 12px;
-  color: #111827;
   font-size: 20px;
   font-weight: 700;
   line-height: 1.4;
 }
 
-.brand-page-error-card p {
+.brand-page-error-message {
   margin: 0;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -84,9 +84,9 @@
 }
 
 .brand-page-icon {
-  flex: 0 0 auto;
   width: 96px;
   height: 96px;
+  flex: 0 0 auto;
   border: 4px solid #fff;
   background: #fff;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
@@ -159,17 +159,11 @@
   margin-bottom: 16px;
 }
 
-.brand-page-section > .ui-section-header .ui-section-header__title,
-.brand-page-section > h2 {
-  margin: 0;
+.brand-page-section > .ui-section-header .ui-section-header__title {
   color: #111827;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.4;
-}
-
-.brand-page-section > h2 {
-  margin-bottom: 12px;
 }
 
 .brand-page-description {
@@ -182,15 +176,13 @@
   word-break: break-word;
 }
 
-.brand-page-empty {
+.brand-page-empty.ui-text-state {
+  margin: 0;
   padding: 20px;
   border: 1px dashed #d7dce3;
   border-radius: 16px;
   background: #f9fafb;
-  color: #6b7280;
-  font-size: 14px;
   line-height: 1.7;
-  text-align: center;
 }
 
 /* --------------------------------

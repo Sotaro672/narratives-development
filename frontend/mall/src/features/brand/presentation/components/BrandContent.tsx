@@ -1,8 +1,9 @@
-// frontend\mall\src\features\brand\presentation\components\BrandContent.tsx
+// frontend/mall/src/features/brand/presentation/components/BrandContent.tsx
 
+import SectionHeader from "../../../../components/ui/SectionHeader";
+import ReportFlagButton from "../../../shared/presentation/components/ReportFlagButton";
 import type { BrandDetail } from "../../../shared/types/brand";
 import type { MallListItem } from "../../../shared/types/list";
-import ReportFlagButton from "../../../shared/presentation/components/ReportFlagButton";
 
 import BrandBackground from "./BrandBackground";
 import BrandIcon from "./BrandIcon";
@@ -37,40 +38,31 @@ export default function BrandContent({
         <div className="brand-page-profile-body">
           <h1>{brandName || "名称未設定のブランド"}</h1>
 
-          {companyName ? (
-            <p className="brand-page-company">
-              {companyName}
-            </p>
-          ) : null}
+          {companyName ? <p className="brand-page-company">{companyName}</p> : null}
 
-          {websiteUrl ? (
-            <BrandWebsiteLink url={websiteUrl} />
-          ) : null}
+          {websiteUrl ? <BrandWebsiteLink url={websiteUrl} /> : null}
         </div>
       </section>
 
       {description ? (
         <section className="brand-page-section">
-          <div className="brand-page-section-header">
-            <h2>説明</h2>
+          <SectionHeader
+            title="説明"
+            titleAs="h2"
+            right={
+              <ReportFlagButton
+                label="ブランドを通報"
+                disabled={!canReport}
+                onClick={onReport}
+              />
+            }
+          />
 
-            <ReportFlagButton
-              label="ブランドを通報"
-              disabled={!canReport}
-              onClick={onReport}
-            />
-          </div>
-
-          <p className="brand-page-description">
-            {description}
-          </p>
+          <p className="brand-page-description">{description}</p>
         </section>
       ) : null}
 
-      <BrandListSection
-        listIds={brand.listIds}
-        listItems={listItems}
-      />
+      <BrandListSection listIds={brand.listIds} listItems={listItems} />
     </div>
   );
 }

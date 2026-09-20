@@ -2,6 +2,8 @@
 
 import { useNavigate } from "react-router-dom";
 
+import SectionHeader from "../../../../components/ui/SectionHeader";
+import TextState from "../../../../components/ui/TextState";
 import ProductListingGrid, {
   type ProductListingCardViewModel,
 } from "../../../shared/presentation/components/ProductListingGrid";
@@ -23,11 +25,11 @@ export default function BrandListSection({
   if (listIds.length === 0) {
     return (
       <section className="brand-page-section">
-        <h2>出品中のリスト</h2>
+        <SectionHeader title="出品中のリスト" titleAs="h2" />
 
-        <div className="brand-page-empty">
+        <TextState variant="empty" className="brand-page-empty">
           現在このブランドの出品中リストはありません。
-        </div>
+        </TextState>
       </section>
     );
   }
@@ -35,14 +37,15 @@ export default function BrandListSection({
   if (listItems.length === 0) {
     return (
       <section className="brand-page-section">
-        <div className="brand-page-section-header">
-          <h2>出品中のリスト</h2>
-          <span>{listIds.length}件</span>
-        </div>
+        <SectionHeader
+          title="出品中のリスト"
+          titleAs="h2"
+          right={<span>{listIds.length}件</span>}
+        />
 
-        <div className="brand-page-empty">
+        <TextState variant="empty" className="brand-page-empty">
           リスト情報を取得できませんでした。
-        </div>
+        </TextState>
       </section>
     );
   }
@@ -56,6 +59,7 @@ export default function BrandListSection({
 
   const handleOpenItem = (listId: string) => {
     const normalizedListId = listId.trim();
+
     if (!normalizedListId) {
       return;
     }
@@ -65,10 +69,11 @@ export default function BrandListSection({
 
   return (
     <section className="brand-page-section">
-      <div className="brand-page-section-header">
-        <h2>出品中のリスト</h2>
-        <span>{listItems.length}件</span>
-      </div>
+      <SectionHeader
+        title="出品中のリスト"
+        titleAs="h2"
+        right={<span>{listItems.length}件</span>}
+      />
 
       <ProductListingGrid
         items={listingItems}

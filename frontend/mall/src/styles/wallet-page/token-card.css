@@ -18,6 +18,22 @@
   text-align: left;
   cursor: pointer;
   appearance: none;
+  transition:
+    background-color 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+
+.wallet-token-card:hover,
+.wallet-token-card:active {
+  background: #f9fafb;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.wallet-token-card:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: 2px;
 }
 
 .wallet-token-card__icon-wrap {

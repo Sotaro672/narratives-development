@@ -18,7 +18,6 @@ import {
 } from "../features/trade/infrastructure/tradeApi";
 
 import "../styles/page-layout.css";
-import "../styles/settings-page.css";
 import "../styles/dispatch-page.css";
 
 type DispatchRouteParams = {
@@ -171,7 +170,7 @@ export default function DispatchPage() {
       }
       actionButtonDisabled={actionButtonDisabled}
     >
-      <section className="page-section content-page-section settings-page dispatch-page">
+      <section className="page-section content-page-section dispatch-page">
         {!normalizedTradeId ? (
           <Alert variant="error" className="dispatch-page__alert">
             取引IDが見つかりません。
@@ -185,15 +184,21 @@ export default function DispatchPage() {
         <section>
           <SectionHeader title="配送会社" titleAs="h2" />
 
-          <div className="settings-list" role="list">
+          <div className="dispatch-page__option-list" role="radiogroup" aria-label="配送会社">
             {CARRIER_OPTIONS.map((option) => {
               const selected = carrier === option.value;
 
               return (
-                <button
+                <Card
                   key={option.value}
-                  type="button"
-                  className="settings-item"
+                  interactive
+                  highlighted={selected}
+                  busy={submitting}
+                  padding="md"
+                  className="dispatch-page__option"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-disabled={submitting || undefined}
                   onClick={() => {
                     if (submitting) {
                       return;
@@ -202,20 +207,20 @@ export default function DispatchPage() {
                     setCarrier(option.value);
                     setSubmissionError("");
                   }}
-                  disabled={submitting}
-                  aria-pressed={selected}
-                  role="listitem"
                 >
-                  <span>
-                    <strong>{option.label}</strong>
-                    <br />
-                    <span>{option.description}</span>
+                  <span className="dispatch-page__option-content">
+                    <strong className="dispatch-page__option-title">
+                      {option.label}
+                    </strong>
+                    <span className="dispatch-page__option-description">
+                      {option.description}
+                    </span>
                   </span>
 
-                  <span aria-hidden="true">
+                  <span className="dispatch-page__option-aside" aria-hidden="true">
                     {selected ? <Check size={20} strokeWidth={2.5} /> : null}
                   </span>
-                </button>
+                </Card>
               );
             })}
           </div>
@@ -228,16 +233,22 @@ export default function DispatchPage() {
             梱包後の箱の3辺合計に収まるサイズを選択してください。重量や配送地域による料金差はありません。
           </p>
 
-          <div className="settings-list" role="list">
+          <div className="dispatch-page__option-list" role="radiogroup" aria-label="箱のサイズ">
             {BOX_SIZES.map((size) => {
               const selected = boxSize === size;
               const fee = SHIPPING_FEE_BY_BOX_SIZE[size];
 
               return (
-                <button
+                <Card
                   key={size}
-                  type="button"
-                  className="settings-item"
+                  interactive
+                  highlighted={selected}
+                  busy={submitting}
+                  padding="md"
+                  className="dispatch-page__option"
+                  role="radio"
+                  aria-checked={selected}
+                  aria-disabled={submitting || undefined}
                   onClick={() => {
                     if (submitting) {
                       return;
@@ -246,23 +257,25 @@ export default function DispatchPage() {
                     setBoxSize(size);
                     setSubmissionError("");
                   }}
-                  disabled={submitting}
-                  aria-pressed={selected}
-                  role="listitem"
                 >
-                  <span>
-                    <strong>{size}サイズ</strong>
-                    <br />
-                    <span>3辺合計 {size}cm以内</span>
+                  <span className="dispatch-page__option-content">
+                    <strong className="dispatch-page__option-title">
+                      {size}サイズ
+                    </strong>
+                    <span className="dispatch-page__option-description">
+                      3辺合計 {size}cm以内
+                    </span>
                   </span>
 
-                  <span>
-                    <strong>{formatJPY(fee)}</strong>
+                  <span className="dispatch-page__option-aside">
+                    <strong className="dispatch-page__option-price">
+                      {formatJPY(fee)}
+                    </strong>
                     {selected ? (
                       <Check size={20} strokeWidth={2.5} aria-hidden="true" />
                     ) : null}
                   </span>
-                </button>
+                </Card>
               );
             })}
           </div>

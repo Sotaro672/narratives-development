@@ -1,15 +1,14 @@
 // frontend/amol/src/features/brand/presentation/components/BrandPageError.tsx
 
-import {
-  Link,
-} from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+
+import Alert from "../../../../components/ui/Alert";
+import Button from "../../../../components/ui/Button";
 
 type BrandPageErrorProps = {
   error: string;
   onBack: () => void;
-  onRetry?: () =>
-    | void
-    | Promise<void>;
+  onRetry?: () => void | Promise<void>;
 };
 
 export default function BrandPageError({
@@ -17,46 +16,40 @@ export default function BrandPageError({
   onBack,
   onRetry,
 }: BrandPageErrorProps) {
-  const message =
-    error.trim() ||
-    "ブランド情報の取得に失敗しました。";
+  const navigate = useNavigate();
+  const message = error.trim() || "ブランド情報の取得に失敗しました。";
 
   return (
     <div className="brand-page brand-page-centered">
-      <div
-        className="brand-page-error-card"
-        role="alert"
-      >
-        <h1>
+      <Alert variant="error" className="brand-page-error-card">
+        <h1 className="brand-page-error-title">
           ブランド情報を取得できませんでした
         </h1>
 
-        <p>{message}</p>
+        <p className="brand-page-error-message">{message}</p>
 
         <div className="brand-page-error-actions">
-          <button
-            type="button"
-            onClick={onBack}
-          >
+          <Button type="button" variant="secondary" onClick={onBack}>
             戻る
-          </button>
+          </Button>
 
           {onRetry ? (
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={() => {
                 void onRetry();
               }}
             >
               再読み込み
-            </button>
+            </Button>
           ) : null}
 
-          <Link to="/">
+          <Button type="button" variant="ghost" onClick={() => navigate("/")}>
             トップへ
-          </Link>
+          </Button>
         </div>
-      </div>
+      </Alert>
     </div>
   );
 }

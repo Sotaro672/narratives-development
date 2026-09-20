@@ -2,7 +2,9 @@
 
 import { useNavigate } from "react-router-dom";
 
+import Card from "../../../components/ui/Card";
 import Chip from "../../../components/ui/Chip";
+import Media from "../../../components/ui/Media";
 import { formatDateTime } from "../../../components/utils/date";
 import type {
   TokenComment,
@@ -55,9 +57,10 @@ function TokenCommentAuthor({ comment }: { comment: TokenComment }) {
     <>
       <span className="token-comment-author__icon-wrap">
         {iconUrl ? (
-          <img
+          <Media
             src={iconUrl}
             alt={displayName}
+            fit="cover"
             className="token-comment-author__icon"
           />
         ) : (
@@ -180,7 +183,7 @@ export default function TokenCommentItem({
       className="token-comment-item"
       style={{ marginLeft: `${indent}px` }}
     >
-      <div className="token-comment-item__body">
+      <Card padding="sm" className="token-comment-item__body">
         <div className="token-comment-item__header">
           <TokenCommentAuthor comment={comment} />
 
@@ -267,7 +270,7 @@ export default function TokenCommentItem({
             ))}
           </div>
         ) : null}
-      </div>
+      </Card>
     </div>
   );
 }
