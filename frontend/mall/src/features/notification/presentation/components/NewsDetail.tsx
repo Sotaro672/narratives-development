@@ -1,5 +1,7 @@
 // frontend/mall/src/features/notification/presentation/components/NewsDetail.tsx
 
+import Media from "../../../../components/ui/Media";
+import SectionHeader from "../../../../components/ui/SectionHeader";
 import { formatDateTime } from "../../../../components/utils/date";
 import type { News } from "../../../shared/types/news";
 
@@ -10,12 +12,8 @@ type NewsDetailProps = {
 export default function NewsDetail({
   news,
 }: NewsDetailProps) {
-  const occurredAt =
-    news.publishedAt ||
-    news.createdAt;
-
-  const occurredAtLabel =
-    formatDateTime(occurredAt);
+  const occurredAt = news.publishedAt || news.createdAt;
+  const occurredAtLabel = formatDateTime(occurredAt);
 
   return (
     <article className="announcement-page__detail">
@@ -23,7 +21,7 @@ export default function NewsDetail({
         {news.title}
       </h1>
 
-      <div className="announcement-page__card-head">
+      <SectionHeader>
         <div className="announcement-page__card-meta">
           <span className="announcement-page__token">
             システム通知
@@ -36,14 +34,14 @@ export default function NewsDetail({
             {occurredAtLabel}
           </time>
         </div>
-      </div>
+      </SectionHeader>
 
       {news.image ? (
         <div className="announcement-page__detail-news-image-wrap">
-          <img
-            className="announcement-page__detail-news-image"
+          <Media
             src={news.image.fileUrl}
             alt={news.image.alt || news.title}
+            fit="contain"
           />
         </div>
       ) : null}

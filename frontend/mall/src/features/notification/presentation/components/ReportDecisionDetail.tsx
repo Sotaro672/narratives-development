@@ -1,5 +1,6 @@
 // frontend/mall/src/features/notification/presentation/components/ReportDecisionDetail.tsx
 
+import SectionHeader from "../../../../components/ui/SectionHeader";
 import { formatDateTime } from "../../../../components/utils/date";
 
 import type { ReportDecisionNotification } from "../../infrastructure/reportDecisionNotificationApi";
@@ -12,11 +13,8 @@ type ReportDecisionDetailProps = {
 export default function ReportDecisionDetail({
   notification,
 }: ReportDecisionDetailProps) {
-  const presentation =
-    createReportDecisionPresentation(notification);
-
-  const occurredAtLabel =
-    formatDateTime(presentation.occurredAt);
+  const presentation = createReportDecisionPresentation(notification);
+  const occurredAtLabel = formatDateTime(presentation.occurredAt);
 
   return (
     <article className="announcement-page__detail">
@@ -24,7 +22,7 @@ export default function ReportDecisionDetail({
         {presentation.title}
       </h1>
 
-      <div className="announcement-page__card-head">
+      <SectionHeader>
         <div className="announcement-page__card-meta">
           <span className="announcement-page__token">
             {presentation.cardLabel}
@@ -37,7 +35,7 @@ export default function ReportDecisionDetail({
             {occurredAtLabel}
           </time>
         </div>
-      </div>
+      </SectionHeader>
 
       <div className="announcement-page__detail-content">
         {presentation.body}

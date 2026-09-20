@@ -7,6 +7,8 @@ import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import Badge from "../components/ui/Badge";
 import Card from "../components/ui/Card";
+import SectionHeader from "../components/ui/SectionHeader";
+import TextState from "../components/ui/TextState";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
@@ -278,15 +280,25 @@ export default function AnnouncementPage() {
         ) : null}
 
         {loading ? (
-          <div className="announcement-page__state">
-            読み込み中...
-          </div>
+          <Card padding="lg">
+            <TextState
+              variant="loading"
+              className="announcement-page__state-text"
+            >
+              読み込み中...
+            </TextState>
+          </Card>
         ) : null}
 
         {!loading && items.length === 0 ? (
-          <div className="announcement-page__empty">
-            現在、通知はありません。
-          </div>
+          <Card padding="lg">
+            <TextState
+              variant="empty"
+              className="announcement-page__state-text"
+            >
+              現在、通知はありません。
+            </TextState>
+          </Card>
         ) : null}
 
         {!loading && items.length > 0 ? (
@@ -314,7 +326,13 @@ export default function AnnouncementPage() {
                       handleOpenAnnouncement(announcement)
                     }
                   >
-                    <div className="announcement-page__card-head">
+                    <SectionHeader
+                      right={
+                        <Badge variant={isUnread ? "info" : "neutral"}>
+                          {isUnread ? "未読" : "既読"}
+                        </Badge>
+                      }
+                    >
                       <div className="announcement-page__card-meta">
                         <span className="announcement-page__token">
                           {tokenLabel}
@@ -327,11 +345,7 @@ export default function AnnouncementPage() {
                           {occurredAtLabel}
                         </time>
                       </div>
-
-                      <Badge variant={isUnread ? "info" : "neutral"}>
-                        {isUnread ? "未読" : "既読"}
-                      </Badge>
-                    </div>
+                    </SectionHeader>
 
                     <h2 className="announcement-page__card-title">
                       {announcement.title}
@@ -368,7 +382,13 @@ export default function AnnouncementPage() {
                     aria-label={`${newsItem.title} の詳細を開く`}
                     onClick={() => handleOpenNews(newsItem)}
                   >
-                    <div className="announcement-page__card-head">
+                    <SectionHeader
+                      right={
+                        <Badge variant={isUnread ? "info" : "neutral"}>
+                          {isUnread ? "未読" : "既読"}
+                        </Badge>
+                      }
+                    >
                       <div className="announcement-page__card-meta">
                         <span className="announcement-page__token">
                           システム通知
@@ -381,11 +401,7 @@ export default function AnnouncementPage() {
                           {occurredAtLabel}
                         </time>
                       </div>
-
-                      <Badge variant={isUnread ? "info" : "neutral"}>
-                        {isUnread ? "未読" : "既読"}
-                      </Badge>
-                    </div>
+                    </SectionHeader>
 
                     <h2 className="announcement-page__card-title">
                       {newsItem.title}
@@ -420,7 +436,13 @@ export default function AnnouncementPage() {
                     handleOpenDecisionNotification(notification)
                   }
                 >
-                  <div className="announcement-page__card-head">
+                  <SectionHeader
+                    right={
+                      <Badge variant={isUnread ? "info" : "neutral"}>
+                        {isUnread ? "未読" : "既読"}
+                      </Badge>
+                    }
+                  >
                     <div className="announcement-page__card-meta">
                       <span className="announcement-page__token">
                         {cardLabel}
@@ -433,11 +455,7 @@ export default function AnnouncementPage() {
                         {occurredAtLabel}
                       </time>
                     </div>
-
-                    <Badge variant={isUnread ? "info" : "neutral"}>
-                      {isUnread ? "未読" : "既読"}
-                    </Badge>
-                  </div>
+                  </SectionHeader>
 
                   <h2 className="announcement-page__card-title">
                     {cardTitle}

@@ -6,6 +6,9 @@ import { useLocation, useParams } from "react-router-dom";
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import Card from "../components/ui/Card";
+import Media from "../components/ui/Media";
+import SectionHeader from "../components/ui/SectionHeader";
+import TextState from "../components/ui/TextState";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementDetail } from "../features/announcement/hooks/useAnnouncementDetail";
@@ -226,35 +229,55 @@ export default function AnnouncementDetailPage() {
           ) : null}
 
           {loading ? (
-            <div className="announcement-page__state">
-              読み込み中...
-            </div>
+            <Card padding="lg">
+              <TextState
+                variant="loading"
+                className="announcement-page__state-text"
+              >
+                読み込み中...
+              </TextState>
+            </Card>
           ) : null}
 
           {!loading &&
           isNewsDetail &&
           newsNotFound &&
           !newsQueryError ? (
-            <div className="announcement-page__empty">
-              システム通知が見つかりません。
-            </div>
+            <Card padding="lg">
+              <TextState
+                variant="empty"
+                className="announcement-page__state-text"
+              >
+                システム通知が見つかりません。
+              </TextState>
+            </Card>
           ) : null}
 
           {!loading &&
           isReportDecisionDetail &&
           decisionNotFound ? (
-            <div className="announcement-page__empty">
-              通報結果通知が見つかりません。
-            </div>
+            <Card padding="lg">
+              <TextState
+                variant="empty"
+                className="announcement-page__state-text"
+              >
+                通報結果通知が見つかりません。
+              </TextState>
+            </Card>
           ) : null}
 
           {!loading &&
           !isNewsDetail &&
           !isReportDecisionDetail &&
           announcementNotFound ? (
-            <div className="announcement-page__empty">
-              お知らせが見つかりません。
-            </div>
+            <Card padding="lg">
+              <TextState
+                variant="empty"
+                className="announcement-page__state-text"
+              >
+                お知らせが見つかりません。
+              </TextState>
+            </Card>
           ) : null}
 
           {!loading && isNewsDetail && news ? (
@@ -276,7 +299,15 @@ export default function AnnouncementDetailPage() {
                 {announcement.title}
               </h1>
 
-              <div className="announcement-page__card-head">
+              <SectionHeader
+                right={
+                  <ReportFlagButton
+                    label="お知らせを通報"
+                    disabled={!announcement.id || report.submitting}
+                    onClick={handleOpenAnnouncementReport}
+                  />
+                }
+              >
                 <div className="announcement-page__card-meta">
                   <span className="announcement-page__token">
                     {tokenLabel}
@@ -289,13 +320,7 @@ export default function AnnouncementDetailPage() {
                     {publishedAtLabel}
                   </time>
                 </div>
-
-                <ReportFlagButton
-                  label="お知らせを通報"
-                  disabled={!announcement.id || report.submitting}
-                  onClick={handleOpenAnnouncementReport}
-                />
-              </div>
+              </SectionHeader>
 
               <div className="announcement-page__detail-content">
                 {announcement.content}
@@ -326,10 +351,11 @@ export default function AnnouncementDetailPage() {
                             rel="noreferrer"
                             aria-label={`${fileName} を開く`}
                           >
-                            <img
+                            <Media
                               className="announcement-page__attachment-image"
                               src={fileUrl}
                               alt={fileName}
+                              fit="contain"
                               loading="lazy"
                             />
                           </a>
