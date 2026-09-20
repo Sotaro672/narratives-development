@@ -1,4 +1,7 @@
-//frontend\amol\src\features\catalog\components\MeasurementTable.tsx
+// frontend/mall/src/features/catalog/presentation/components/MeasurementTable.tsx
+
+import SectionCard from "../../../../components/ui/SectionCard";
+import SectionHeader from "../../../../components/ui/SectionHeader";
 import type { MeasurementTableRow } from "../../../shared/types/catalog";
 
 type MeasurementTableProps = {
@@ -11,8 +14,12 @@ export default function MeasurementTable({
   measurementKeys,
 }: MeasurementTableProps) {
   return (
-    <section className="catalog-page-card">
-      <h2 className="catalog-page-card-title">採寸表</h2>
+    <SectionCard className="catalog-page-card">
+      <SectionHeader
+        title="採寸表"
+        titleAs="h2"
+        className="catalog-page-card-header"
+      />
 
       <div className="catalog-page-measurement-table-wrap">
         <table className="catalog-page-measurement-table">
@@ -20,9 +27,7 @@ export default function MeasurementTable({
             <tr>
               <th scope="col">サイズ</th>
               {measurementKeys.map((key) => (
-                <th key={key} scope="col">
-                  {key}
-                </th>
+                <th key={key} scope="col">{key}</th>
               ))}
             </tr>
           </thead>
@@ -43,6 +48,6 @@ export default function MeasurementTable({
           </tbody>
         </table>
       </div>
-    </section>
+    </SectionCard>
   );
 }

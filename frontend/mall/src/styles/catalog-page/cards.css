@@ -1,4 +1,4 @@
-/* frontend\mall\src\styles\catalog-page\cards.css */
+/* frontend/mall/src/styles/catalog-page/cards.css */
 
 /* ==============================
    Cards
@@ -6,10 +6,11 @@
 
 /*
   Common UI migration:
-  - .catalog-page-card is now used as an override class for <SectionCard />
-  - .catalog-page-card-header is now used as an override class for <SectionHeader />
-  - .catalog-page-definition-list is now used as an override class for <InfoList />
-  - rows inside .catalog-page-definition-list are now .ui-info-row / .ui-info-row__label / .ui-info-row__value
+  - .catalog-page-card overrides <SectionCard />
+  - .catalog-page-card-header overrides <SectionHeader />
+  - .catalog-page-definition-list overrides <InfoList />
+  - .catalog-page-brand-link overrides <TextButton />
+  - .catalog-page-chip overrides <Chip />
 */
 
 .catalog-page-card {
@@ -61,36 +62,13 @@
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--color-primary, #2563eb);
-  font: inherit;
   font-weight: 900;
-  line-height: inherit;
-  text-align: left;
-  text-decoration: underline;
   text-decoration-thickness: 1.5px;
   text-underline-offset: 4px;
-  cursor: pointer;
   word-break: break-word;
 }
 
-.catalog-page-brand-link:hover {
-  opacity: 0.75;
-}
-
-.catalog-page-brand-link:focus-visible {
-  outline: 2px solid var(--color-primary, #2563eb);
-  outline-offset: 3px;
-  border-radius: 6px;
-}
-
 .catalog-page-brand-link:disabled {
-  color: var(--color-text, #1f1f1f);
-  text-decoration: none;
-  cursor: default;
   opacity: 1;
 }
 
@@ -99,10 +77,6 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 16px;
-}
-
-.catalog-page-chip {
-  flex: 0 1 auto;
 }
 
 .catalog-page-chip:disabled {

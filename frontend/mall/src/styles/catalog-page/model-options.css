@@ -1,4 +1,4 @@
-/* frontend/src/styles/catalog-page/model-options.css */
+/* frontend/mall/src/styles/catalog-page/model-options.css */
 
 /* ==============================
    Model options
@@ -27,46 +27,10 @@
   gap: 10px;
 }
 
-.catalog-page-option-button {
-  appearance: none;
-  -webkit-appearance: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.catalog-page-option-list .ui-chip {
   min-height: 38px;
   padding: 8px 14px;
-  border: 1px solid var(--color-border, #d9d9d9);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--color-text, #1f1f1f);
-  font: inherit;
-  font-size: 13px;
   font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-  box-sizing: border-box;
-  box-shadow: none;
-}
-
-.catalog-page-option-button:hover {
-  border-color: #1f1f1f;
-  background: #fafafa;
-}
-
-.catalog-page-option-button:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-}
-
-.catalog-page-option-button--selected {
-  border-color: #1f1f1f;
-  background: #1f1f1f;
-  color: #fff;
-}
-
-.catalog-page-option-button--selected:hover {
-  background: #1f1f1f;
-  color: #fff;
 }
 
 .catalog-page-color-option-button {
@@ -78,7 +42,7 @@
   height: 18px;
 }
 
-.catalog-page-option-button--selected .catalog-page-color-swatch {
+.catalog-page-color-option-button.ui-chip--selected .catalog-page-color-swatch {
   border-color: rgb(255 255 255 / 64%);
 }
 

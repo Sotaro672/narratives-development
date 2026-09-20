@@ -1,10 +1,19 @@
-// frontend/amol/src/features/catalog/presentation/components/ModelSelector.tsx
+// frontend/mall/src/features/catalog/presentation/components/ModelSelector.tsx
 
+import Alert from "../../../../components/ui/Alert";
+import Chip from "../../../../components/ui/Chip";
+import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
+import SectionCard from "../../../../components/ui/SectionCard";
+import SectionHeader from "../../../../components/ui/SectionHeader";
 import { rgbToCssColor } from "../../../../components/utils/color";
 import { formatPrice } from "../../../../components/utils/price";
-import type { CatalogListPrice, CatalogModelVariation, ModelColorOption } from "../../../shared/types/catalog";
-import type { CatalogAlcoholOption } from "../../application/catalogSelectionFactory";
+import type {
+  CatalogListPrice,
+  CatalogModelVariation,
+  ModelColorOption,
+} from "../../../shared/types/catalog";
 import { formatAlcoholVolumeLabel } from "../../application/catalogModelMapper";
+import type { CatalogAlcoholOption } from "../../application/catalogSelectionFactory";
 
 type ModelSelectorProps = {
   alcoholOptions: CatalogAlcoholOption[];
@@ -44,8 +53,12 @@ export default function ModelSelector({
   const hasSizeOptions = sizeOptions.length > 0;
 
   return (
-    <section className="catalog-page-card">
-      <h2 className="catalog-page-card-title">モデル</h2>
+    <SectionCard className="catalog-page-card">
+      <SectionHeader
+        title="モデル"
+        titleAs="h2"
+        className="catalog-page-card-header"
+      />
 
       {isAlcoholCatalog ? (
         <div className="catalog-page-option-section">
@@ -56,17 +69,13 @@ export default function ModelSelector({
               const isSelected = selectedModelId === option.modelId;
 
               return (
-                <button
+                <Chip
                   key={option.modelId}
-                  type="button"
-                  className={[
-                    "catalog-page-option-button",
-                    isSelected ? "catalog-page-option-button--selected" : "",
-                  ].filter(Boolean).join(" ")}
+                  selected={isSelected}
                   onClick={() => onSelectModel(option.modelId)}
                 >
                   {option.label}
-                </button>
+                </Chip>
               );
             })}
           </div>
@@ -81,23 +90,21 @@ export default function ModelSelector({
                 const isSelected = selectedColorKey === option.key;
 
                 return (
-                  <button
+                  <Chip
                     key={option.key}
-                    type="button"
-                    className={[
-                      "catalog-page-option-button",
-                      "catalog-page-color-option-button",
-                      isSelected ? "catalog-page-option-button--selected" : "",
-                    ].filter(Boolean).join(" ")}
+                    selected={isSelected}
+                    className="catalog-page-color-option-button"
                     onClick={() => onSelectColor(option.key)}
                   >
                     <span
                       className="catalog-page-color-swatch"
-                      style={{ backgroundColor: rgbToCssColor(option.colorRGB) }}
+                      style={{
+                        backgroundColor: rgbToCssColor(option.colorRGB),
+                      }}
                       aria-hidden="true"
                     />
                     <span>{option.colorName}</span>
-                  </button>
+                  </Chip>
                 );
               })}
             </div>
@@ -111,17 +118,13 @@ export default function ModelSelector({
                 const isSelected = selectedSize === size;
 
                 return (
-                  <button
+                  <Chip
                     key={size}
-                    type="button"
-                    className={[
-                      "catalog-page-option-button",
-                      isSelected ? "catalog-page-option-button--selected" : "",
-                    ].filter(Boolean).join(" ")}
+                    selected={isSelected}
                     onClick={() => onSelectSize(size)}
                   >
                     {size}
-                  </button>
+                  </Chip>
                 );
               })}
             </div>
@@ -131,43 +134,36 @@ export default function ModelSelector({
 
       {selectedModel ? (
         <div className="catalog-page-selected-model">
-          <dl className="catalog-page-definition-list">
+          <InfoList className="catalog-page-definition-list">
             {isAlcoholCatalog ? (
               <>
-                <div>
-                  <dt>モデル番号</dt>
-                  <dd>{selectedModel.modelNumber.trim() || "-"}</dd>
-                </div>
-
-                <div>
-                  <dt>容量</dt>
-                  <dd>{formatAlcoholVolumeLabel(selectedModel) || "-"}</dd>
-                </div>
+                <InfoRow label="モデル番号">
+                  {selectedModel.modelNumber.trim() || "-"}
+                </InfoRow>
+                <InfoRow label="容量">
+                  {formatAlcoholVolumeLabel(selectedModel) || "-"}
+                </InfoRow>
               </>
             ) : (
               <>
-                <div>
-                  <dt>カラー</dt>
-                  <dd>{selectedModel.colorName || "-"}</dd>
-                </div>
-
-                <div>
-                  <dt>サイズ</dt>
-                  <dd>{selectedModel.size || "-"}</dd>
-                </div>
+                <InfoRow label="カラー">
+                  {selectedModel.colorName || "-"}
+                </InfoRow>
+                <InfoRow label="サイズ">
+                  {selectedModel.size || "-"}
+                </InfoRow>
               </>
             )}
 
-            <div>
-              <dt>価格</dt>
-              <dd>{formatPrice(selectedModelPrice?.price)}</dd>
-            </div>
-
-            <div>
-              <dt>在庫</dt>
-              <dd>{typeof selectedModelStock === "number" ? selectedModelStock : "-"}</dd>
-            </div>
-          </dl>
+            <InfoRow label="価格">
+              {formatPrice(selectedModelPrice?.price)}
+            </InfoRow>
+            <InfoRow label="在庫">
+              {typeof selectedModelStock === "number"
+                ? selectedModelStock
+                : "-"}
+            </InfoRow>
+          </InfoList>
         </div>
       ) : (
         <p className="catalog-page-model-help">
@@ -182,10 +178,10 @@ export default function ModelSelector({
       )}
 
       {cartErrorMessage ? (
-        <p className="catalog-page-cart-error" role="alert">
+        <Alert variant="error" className="catalog-page-cart-error">
           {cartErrorMessage}
-        </p>
+        </Alert>
       ) : null}
-    </section>
+    </SectionCard>
   );
 }

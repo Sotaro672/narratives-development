@@ -1,4 +1,4 @@
-/* frontend/src/styles/catalog-page/responsive.css */
+/* frontend/mall/src/styles/catalog-page/responsive.css */
 
 /* ==============================
    Tablet / Mobile
@@ -84,7 +84,7 @@
     border-radius: 16px;
   }
 
-  .catalog-page-definition-list > div {
+  .catalog-page-definition-list .ui-info-row {
     grid-template-columns: 92px minmax(0, 1fr);
     gap: 10px;
   }
@@ -105,7 +105,7 @@
     gap: 8px;
   }
 
-  .catalog-page-option-button {
+  .catalog-page-option-list .ui-chip {
     min-height: 36px;
     padding: 8px 12px;
     font-size: 12px;

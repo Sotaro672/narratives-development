@@ -1,14 +1,15 @@
-// frontend/amol/src/features/catalog/presentation/components/ProductInfoCard.tsx
+// frontend/mall/src/features/catalog/presentation/components/ProductInfoCard.tsx
 
+import Chip from "../../../../components/ui/Chip";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
 import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
-import Tab from "../../../../components/ui/Tab";
+import TextButton from "../../../../components/ui/TextButton";
+import type { CatalogProductBlueprint } from "../../../shared/types/catalog";
 import {
   createProductInfoCardViewModel,
   type ProductCategoryKind,
 } from "../../application/catalogProductInfoViewModelFactory";
-import type { CatalogProductBlueprint } from "../../../shared/types/catalog";
 
 type ProductInfoCardProps = {
   productBlueprint: CatalogProductBlueprint;
@@ -41,15 +42,14 @@ export default function ProductInfoCard({
           return (
             <InfoRow key={row.key} label={row.label}>
               {isBrandRow ? (
-                <button
-                  type="button"
+                <TextButton
                   className="catalog-page-brand-link"
                   onClick={onBrandClick}
                   disabled={!onBrandClick}
                   aria-label={`${productBlueprint.brandName}のブランドページへ移動`}
                 >
                   {row.value}
-                </button>
+                </TextButton>
               ) : (
                 row.value
               )}
@@ -61,9 +61,14 @@ export default function ProductInfoCard({
       {viewModel.qualityAssuranceItems.length > 0 ? (
         <div className="catalog-page-chip-list">
           {viewModel.qualityAssuranceItems.map((item) => (
-            <Tab key={item} className="catalog-page-chip" disabled>
+            <Chip
+              key={item}
+              className="catalog-page-chip"
+              size="sm"
+              disabled
+            >
               {item}
-            </Tab>
+            </Chip>
           ))}
         </div>
       ) : null}
