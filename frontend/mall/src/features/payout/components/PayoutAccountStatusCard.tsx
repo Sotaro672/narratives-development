@@ -1,4 +1,6 @@
-// frontend/amol/src/features/payout/components/PayoutAccountStatusCard.tsx
+// frontend/mall/src/features/payout/components/PayoutAccountStatusCard.tsx
+
+import Card from "../../../components/ui/Card";
 
 type PayoutAccountStatusCardProps = {
   statusLabel: string;
@@ -14,7 +16,10 @@ export default function PayoutAccountStatusCard({
   const hasBankAccount = Boolean(bankName || bankLast4);
 
   return (
-    <div className="payout-account-page__status-card">
+    <Card
+      variant="panel"
+      className="payout-account-page__status-card"
+    >
       <div className="payout-account-page__status-row">
         <span className="payout-account-page__label">
           登録状況
@@ -52,6 +57,6 @@ export default function PayoutAccountStatusCard({
           ) : null}
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }

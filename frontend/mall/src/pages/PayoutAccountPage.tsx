@@ -1,12 +1,15 @@
-// frontend/amol/src/pages/PayoutAccountPage.tsx
+// frontend/mall/src/pages/PayoutAccountPage.tsx
+
+import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
+import TextState from "../components/ui/TextState";
+import PayoutAccountStatusCard from "../features/payout/components/PayoutAccountStatusCard";
+import { usePayoutAccountPage } from "../features/payout/hooks/usePayoutAccountPage";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/payoutAccount-page.css";
-
-import Layout from "../components/layout/Layout";
-import PayoutAccountStatusCard from "../features/payout/components/PayoutAccountStatusCard";
-import { usePayoutAccountPage } from "../features/payout/hooks/usePayoutAccountPage";
 
 export default function PayoutAccountPage() {
   const {
@@ -41,23 +44,25 @@ export default function PayoutAccountPage() {
           />
 
           {errorMessage ? (
-            <p className="payout-account-page__error">
+            <Alert variant="error" className="payout-account-page__error">
               {errorMessage}
-            </p>
+            </Alert>
           ) : null}
 
-          <button
+          <Button
             type="button"
+            size="lg"
+            fullWidth
+            className="payout-account-page__action"
             onClick={handleOpenRegistration}
             disabled={isLoading}
-            className="payout-account-page__action-button"
           >
             {actionLabel}
-          </button>
+          </Button>
 
-          <p className="payout-account-page__note">
+          <TextState variant="muted" className="payout-account-page__note">
             登録後の画面では、口座番号は末尾4桁のみ表示します。
-          </p>
+          </TextState>
         </div>
       </section>
     </Layout>

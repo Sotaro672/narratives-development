@@ -1,8 +1,9 @@
-// frontend/amol/src/features/token-commnet/components/TokenCommentForm.tsx
+// frontend/mall/src/features/token-commnet/components/TokenCommentForm.tsx
 
-import type {
-  ChangeEvent,
-} from "react";
+import type { ChangeEvent } from "react";
+
+import Button from "../../../components/ui/Button";
+import Textbox from "../../../components/ui/Textbox";
 
 type TokenCommentFormProps = {
   value: string;
@@ -12,11 +13,8 @@ type TokenCommentFormProps = {
   placeholder?: string;
   buttonLabel?: string;
   postingLabel?: string;
-  onChange: (
-    value: string,
-  ) => void;
-  onSubmit: () =>
-    void | Promise<void>;
+  onChange: (value: string) => void;
+  onSubmit: () => void | Promise<void>;
 };
 
 export default function TokenCommentForm({
@@ -30,22 +28,12 @@ export default function TokenCommentForm({
   onChange,
   onSubmit,
 }: TokenCommentFormProps) {
-  const trimmedValue =
-    value.trim();
+  const trimmedValue = value.trim();
+  const disabled = posting || loading;
+  const canSubmit = !disabled && trimmedValue.length > 0;
 
-  const disabled =
-    posting || loading;
-
-  const canSubmit =
-    !disabled &&
-    trimmedValue.length > 0;
-
-  const handleChange = (
-    event: ChangeEvent<HTMLTextAreaElement>,
-  ) => {
-    onChange(
-      event.target.value,
-    );
+  const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(event.target.value);
   };
 
   const handleSubmit = () => {
@@ -58,7 +46,7 @@ export default function TokenCommentForm({
 
   return (
     <div className="token-comment-form">
-      <textarea
+      <Textbox
         className="token-comment-form__textarea"
         value={value}
         rows={rows}
@@ -67,16 +55,9 @@ export default function TokenCommentForm({
         onChange={handleChange}
       />
 
-      <button
-        type="button"
-        className="token-comment-form__button"
-        disabled={!canSubmit}
-        onClick={handleSubmit}
-      >
-        {posting
-          ? postingLabel
-          : buttonLabel}
-      </button>
+      <Button type="button" size="sm" disabled={!canSubmit} onClick={handleSubmit}>
+        {posting ? postingLabel : buttonLabel}
+      </Button>
     </div>
   );
 }

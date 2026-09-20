@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/inquiry-page.css */
+/* frontend/mall/src/styles/inquiry-page.css */
 
 .inquiry-page {
   min-height: 100%;
@@ -86,9 +86,7 @@
 .inquiry-page__meta code {
   overflow: hidden;
   color: #334155;
-  font-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   font-size: 0.78rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -96,9 +94,6 @@
 
 .inquiry-page__alert {
   margin-bottom: 16px;
-  border-radius: 18px;
-  font-size: 0.9rem;
-  line-height: 1.7;
 }
 
 .inquiry-page__alert p {
@@ -115,8 +110,8 @@
 
 .inquiry-page__submit.ui-button {
   min-height: 52px;
-  background: #0f172a;
   border-color: #0f172a;
+  background: #0f172a;
   color: #ffffff;
   box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
 }
@@ -166,26 +161,14 @@
   white-space: nowrap;
 }
 
-.inq__chip {
-  display: inline-flex;
+.inq__chip.ui-badge {
   flex: 0 0 auto;
-  align-items: center;
   min-height: 26px;
   padding: 0 10px;
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 999px;
-  background: #f8fafc;
-  color: #475569;
   font-size: 0.75rem;
-  font-weight: 700;
 }
 
-.inq__empty {
-  padding: 12px 14px;
-  border: 1px solid rgba(239, 68, 68, 0.18);
-  border-radius: 12px;
-  background: #fef2f2;
-  color: #991b1b;
+.inq__empty.ui-alert {
   font-size: 0.82rem;
   line-height: 1.6;
 }
@@ -194,30 +177,12 @@
  * Return refund
  * ============================================================ */
 
-.inq-detail__body input[type="number"] {
-  min-height: 42px;
-  box-sizing: border-box;
+.inq-detail__body .input-field__control[type="number"] {
   appearance: textfield;
-  outline: none;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    background-color 160ms ease;
 }
 
-.inq-detail__body input[type="number"]:focus {
-  border-color: rgba(15, 23, 42, 0.72);
-  box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.08);
-}
-
-.inq-detail__body input[type="number"]:disabled {
-  cursor: not-allowed;
-  background: #f1f5f9;
-  color: #94a3b8;
-}
-
-.inq-detail__body input[type="number"]::-webkit-inner-spin-button,
-.inq-detail__body input[type="number"]::-webkit-outer-spin-button {
+.inq-detail__body .input-field__control[type="number"]::-webkit-inner-spin-button,
+.inq-detail__body .input-field__control[type="number"]::-webkit-outer-spin-button {
   margin: 0;
   appearance: none;
 }
@@ -228,10 +193,7 @@
   border-radius: 14px;
   background: #ffffff;
   cursor: pointer;
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
 }
 
 .inq-detail__body label:has(input[type="checkbox"]):hover {
@@ -270,36 +232,10 @@
  * Status
  * ============================================================ */
 
-.inq-status-tab {
-  display: inline-flex;
-  align-items: center;
+.inq-status-tab.ui-badge {
   min-height: 28px;
   padding: 0 10px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  color: #475569;
   font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.inq-status-tab--open {
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-.inq-status-tab--in_progress {
-  background: #fffbeb;
-  color: #a16207;
-}
-
-.inq-status-tab--resolved {
-  background: #f0fdf4;
-  color: #15803d;
-}
-
-.inq-status-tab--closed {
-  background: #f1f5f9;
-  color: #64748b;
 }
 
 @media (min-width: 768px) {

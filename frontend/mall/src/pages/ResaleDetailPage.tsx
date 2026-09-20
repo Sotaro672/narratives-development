@@ -7,7 +7,10 @@ import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import SectionHeader from "../components/ui/SectionHeader";
 import TextState from "../components/ui/TextState";
-
+import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
+import ResaleDetailEditForm from "../features/resale/presentation/components/ResaleDetailEditForm";
+import ResaleDetailReadonlyInfo from "../features/resale/presentation/components/ResaleDetailReadonlyInfo";
+import { useResaleDetailPage } from "../features/resale/presentation/hooks/useResaleDetailPage";
 import AvatarSummaryCard from "../features/shared/presentation/components/AvatarSummaryCard";
 import ProductDescription from "../features/shared/presentation/components/ProductDescription";
 import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
@@ -17,11 +20,6 @@ import ProductModelMeta from "../features/shared/presentation/components/Product
 import ProductPrice from "../features/shared/presentation/components/ProductPrice";
 import ResaleCommentButton from "../features/shared/presentation/components/ResaleCommentButton";
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
-
-import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
-import ResaleDetailEditForm from "../features/resale/presentation/components/ResaleDetailEditForm";
-import ResaleDetailReadonlyInfo from "../features/resale/presentation/components/ResaleDetailReadonlyInfo";
-import { useResaleDetailPage } from "../features/resale/presentation/hooks/useResaleDetailPage";
 
 import "../styles/page-layout.css";
 import "../styles/resale-page.css";

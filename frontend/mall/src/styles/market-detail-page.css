@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/market-detail-page.css */
+/* frontend/mall/src/styles/market-detail-page.css */
 
 .market-detail-page {
   max-width: 960px;
@@ -6,36 +6,12 @@
   padding: 24px 20px 96px;
 }
 
-.market-detail-page__back-button {
-  appearance: none;
-  margin-bottom: 20px;
-  padding: 8px 16px;
-  border: 1px solid #d9d9d9;
-  border-radius: 999px;
-  background: #fff;
-  color: #222;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
+.market-detail-page__state-card {
+  width: 100%;
 }
 
-.market-detail-page__back-button:hover {
-  background: #f7f7f7;
-}
-
-.market-detail-page__state {
-  padding: 24px;
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
-  background: #fff;
-  color: #555;
-  font-size: 14px;
-}
-
-.market-detail-page__state--error {
-  border-color: #f1c8c8;
-  background: #fff7f7;
-  color: #b42318;
+.market-detail-page__state-text {
+  margin: 0;
 }
 
 .market-detail-page__media-actions-area {
@@ -55,23 +31,12 @@
 
 .market-detail-page__like-error {
   margin: 0;
-  color: #b42318;
-  font-size: 14px;
   font-weight: 700;
 }
 
-.market-detail-page__cart-message {
-  margin: 20px 0 0;
-  color: #157347;
-  font-size: 14px;
-  font-weight: 700;
-}
-
+.market-detail-page__cart-message,
 .market-detail-page__cart-error {
-  margin: 20px 0 0;
-  color: #b42318;
-  font-size: 14px;
-  font-weight: 700;
+  margin-top: 20px;
 }
 
 @media (max-width: 760px) {

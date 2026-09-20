@@ -2,6 +2,7 @@
 
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
+import SectionHeader from "../../../components/ui/SectionHeader";
 import TextButton from "../../../components/ui/TextButton";
 import TextState from "../../../components/ui/TextState";
 import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
@@ -27,12 +28,16 @@ export function PaymentMethodsCard({
 }: PaymentMethodsCardProps) {
   return (
     <Card as="section" variant="panel" className="payment-page__card">
-      <div className="payment-page__section-header">
-        <h2 className="payment-page__section-title">支払い方法</h2>
-        <TextButton type="button" onClick={onGoToPaymentMethod}>
-          カードを管理
-        </TextButton>
-      </div>
+      <SectionHeader
+        title="支払い方法"
+        titleAs="h2"
+        className="payment-page__section-header"
+        right={
+          <TextButton type="button" onClick={onGoToPaymentMethod}>
+            カードを管理
+          </TextButton>
+        }
+      />
 
       {paymentMethods.length > 0 ? (
         <div className="payment-page__payment-methods">

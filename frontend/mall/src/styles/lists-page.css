@@ -1,87 +1,15 @@
-/* frontend/amol/src/styles/lists-page.css */
+/* frontend/mall/src/styles/lists-page.css */
 
 .lists-page-section-root {
   width: 100%;
   min-height: calc(100vh - 120px);
-  padding: 20px 16px 96px;
   box-sizing: border-box;
-}
-
-.lists-page-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.lists-page-eyebrow {
-  margin: 0 0 4px;
-  color: var(--color-text-subtle, #8a8a8a);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.4;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.lists-page-title {
-  margin: 0;
-  color: var(--color-text, #1f1f1f);
-  font-size: 24px;
-  font-weight: 800;
-  line-height: 1.25;
-}
-
-.lists-page-description {
-  margin: 8px 0 0;
-  color: var(--color-text-muted, #666);
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.lists-page-count {
-  flex-shrink: 0;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: var(--color-surface-secondary, #f5f5f5);
-  color: var(--color-text-muted, #666);
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.lists-page-error {
-  margin-bottom: 16px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: #fff2f2;
-  color: #b42318;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.lists-page-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 180px;
-  padding: 24px;
-  border-radius: 16px;
-  background: var(--color-surface-secondary, #f7f7f7);
-  color: var(--color-text-muted, #666);
-  font-size: 14px;
-  line-height: 1.7;
-  text-align: center;
+  padding: 20px 16px 96px;
 }
 
 @media (min-width: 640px) {
   .lists-page-section-root {
     padding: 28px 24px 104px;
-  }
-
-  .lists-page-title {
-    font-size: 28px;
   }
 }
 
@@ -97,15 +25,5 @@
   .lists-page-section-root {
     padding-right: 12px;
     padding-left: 12px;
-  }
-
-  .lists-page-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 10px;
-  }
-
-  .lists-page-count {
-    align-self: flex-start;
   }
 }

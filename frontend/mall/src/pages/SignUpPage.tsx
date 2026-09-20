@@ -1,15 +1,18 @@
-// frontend/amol/src/pages/SignUpPage.tsx
+// frontend/mall/src/pages/SignUpPage.tsx
 
 import { useEffect, useState } from "react";
+
+import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import Input from "../components/ui/Input";
+import TextState from "../components/ui/TextState";
+import { useSignUpPage } from "../features/auth/hooks/useSignUpPage";
 
 import "../styles/page-layout.css";
 import "../styles/form.css";
 import "../styles/signUp-page.css";
-
-import Layout from "../components/layout/Layout";
-import Button from "../components/ui/Button";
-import Input from "../components/ui/Input";
-import { useSignUpPage } from "../features/auth/hooks/useSignUpPage";
 
 export default function SignUpPage() {
   const vm = useSignUpPage();
@@ -26,20 +29,14 @@ export default function SignUpPage() {
         setTermsLoading(true);
         setTermsError(null);
 
-        const response = await fetch(
-          "/assets/terms-for-user.txt",
-        );
-
-        const contentType =
-          response.headers.get("content-type") ?? "";
+        const response = await fetch("/assets/terms-for-user.txt");
+        const contentType = response.headers.get("content-type") ?? "";
 
         if (
           !response.ok ||
           !contentType.toLowerCase().startsWith("text/plain")
         ) {
-          throw new Error(
-            "利用規約を読み込めませんでした。",
-          );
+          throw new Error("利用規約を読み込めませんでした。");
         }
 
         const text = await response.text();
@@ -50,9 +47,7 @@ export default function SignUpPage() {
       } catch {
         if (!cancelled) {
           setTermsText("");
-          setTermsError(
-            "利用規約を読み込めませんでした。",
-          );
+          setTermsError("利用規約を読み込めませんでした。");
         }
       } finally {
         if (!cancelled) {
@@ -81,8 +76,8 @@ export default function SignUpPage() {
             type="email"
             placeholder="example@email.com"
             value={vm.email}
-            onChange={(e) => {
-              vm.setEmail(e.target.value);
+            onChange={(event) => {
+              vm.setEmail(event.target.value);
               vm.clearError();
             }}
             disabled={vm.loading}
@@ -95,8 +90,8 @@ export default function SignUpPage() {
             type="password"
             placeholder="パスワードを入力"
             value={vm.password}
-            onChange={(e) => {
-              vm.setPassword(e.target.value);
+            onChange={(event) => {
+              vm.setPassword(event.target.value);
               vm.clearError();
             }}
             disabled={vm.loading}
@@ -109,8 +104,8 @@ export default function SignUpPage() {
             type="password"
             placeholder="もう一度パスワードを入力"
             value={vm.passwordConfirmation}
-            onChange={(e) => {
-              vm.setPasswordConfirmation(e.target.value);
+            onChange={(event) => {
+              vm.setPasswordConfirmation(event.target.value);
               vm.clearError();
             }}
             disabled={vm.loading}
@@ -123,21 +118,24 @@ export default function SignUpPage() {
               利用規約
             </p>
 
-            <div className="terms-scroll-box">
+            <Card
+              padding="sm"
+              className="terms-scroll-box"
+            >
               {termsLoading ? (
-                <p className="terms-status-text">
+                <TextState variant="loading">
                   利用規約を読み込み中...
-                </p>
+                </TextState>
               ) : termsError ? (
-                <p className="terms-error-text">
+                <TextState variant="error">
                   {termsError}
-                </p>
+                </TextState>
               ) : (
                 <pre className="terms-text">
                   {termsText}
                 </pre>
               )}
-            </div>
+            </Card>
           </div>
 
           <label className="form-checkbox-row">
@@ -149,8 +147,8 @@ export default function SignUpPage() {
                 termsLoading ||
                 Boolean(termsError)
               }
-              onChange={(e) => {
-                vm.setAgree(e.target.checked);
+              onChange={(event) => {
+                vm.setAgree(event.target.checked);
                 vm.clearError();
               }}
             />
@@ -161,15 +159,19 @@ export default function SignUpPage() {
           </label>
 
           {vm.error ? (
-            <p className="form-error-text">
+            <Alert
+              variant="error"
+              className="signup-page__error"
+            >
               {vm.error}
-            </p>
+            </Alert>
           ) : null}
         </div>
 
         <div className="page-actions signup-page-actions">
           <Button
             variant="primary"
+            fullWidth
             onClick={vm.handleSignUp}
             disabled={
               !vm.canSubmit ||
@@ -177,9 +179,7 @@ export default function SignUpPage() {
               Boolean(termsError)
             }
           >
-            {vm.loading
-              ? "送信中..."
-              : "認証メールを送信"}
+            {vm.loading ? "送信中..." : "認証メールを送信"}
           </Button>
         </div>
       </section>

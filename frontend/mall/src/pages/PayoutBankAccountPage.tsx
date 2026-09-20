@@ -3,17 +3,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import "../styles/page-layout.css";
-import "../styles/settings-page.css";
-import "../styles/payout.css";
-import "../styles/payout-bank-account-page.css";
-
-import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
+import Layout from "../components/layout/Layout";
+import Card from "../components/ui/Card";
+import Input from "../components/ui/Input";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
 import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 import type { PayoutBankAccountType } from "../features/shared/types/payoutAccount";
+
+import "../styles/page-layout.css";
+import "../styles/settings-page.css";
+import "../styles/payout.css";
+import "../styles/payout-bank-account-page.css";
 
 function hasNonWhitespace(value: string): boolean {
   return /\S/.test(value);
@@ -137,9 +139,7 @@ export default function PayoutBankAccountPage() {
 
         <div className="payout-bank-account-page__destination">
           <div className="payout-bank-account-page__destination-row">
-            <span className="payout-summary__label">
-              金融機関
-            </span>
+            <span className="payout-summary__label">金融機関</span>
 
             <div className="payout-summary__value">
               <strong className="payout-summary__name">
@@ -152,9 +152,7 @@ export default function PayoutBankAccountPage() {
           </div>
 
           <div className="payout-bank-account-page__destination-row">
-            <span className="payout-summary__label">
-              支店
-            </span>
+            <span className="payout-summary__label">支店</span>
 
             <div className="payout-summary__value">
               <strong className="payout-summary__name">
@@ -216,89 +214,42 @@ export default function PayoutBankAccountPage() {
             </div>
           </fieldset>
 
-          <div className="payout-bank-account-page__field">
-            <label
-              htmlFor="payout-account-number"
-              className="payout-bank-account-page__label"
-            >
-              口座番号
-            </label>
+          <Input
+            id="payout-account-number"
+            label="口座番号"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            maxLength={7}
+            value={accountNumber}
+            placeholder="1234567"
+            error={accountNumberError || undefined}
+            helperText="7桁の口座番号を入力してください。"
+            onChange={(event) => setAccountNumber(event.target.value)}
+          />
 
-            <input
-              id="payout-account-number"
-              type="text"
-              inputMode="numeric"
-              autoComplete="off"
-              maxLength={7}
-              value={accountNumber}
-              onChange={(event) => setAccountNumber(event.target.value)}
-              placeholder="1234567"
-              className={[
-                "payout-bank-account-page__input",
-                accountNumberError
-                  ? "payout-bank-account-page__input--error"
-                  : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              aria-invalid={Boolean(accountNumberError)}
-              aria-describedby={
-                accountNumberError
-                  ? "payout-account-number-error"
-                  : "payout-account-number-help"
-              }
-            />
-
-            {accountNumberError ? (
-              <p
-                id="payout-account-number-error"
-                className="payout-bank-account-page__error"
-              >
-                {accountNumberError}
-              </p>
-            ) : (
-              <p
-                id="payout-account-number-help"
-                className="payout-bank-account-page__help"
-              >
-                7桁の口座番号を入力してください。
-              </p>
-            )}
-          </div>
-
-          <div className="payout-bank-account-page__field">
-            <label
-              htmlFor="payout-account-holder-name"
-              className="payout-bank-account-page__label"
-            >
-              口座名義
-            </label>
-
-            <input
-              id="payout-account-holder-name"
-              type="text"
-              autoComplete="off"
-              maxLength={64}
-              value={accountHolderName}
-              onChange={(event) => setAccountHolderName(event.target.value)}
-              placeholder="例：ヤマダ タロウ"
-              className="payout-bank-account-page__input"
-            />
-
-            <p className="payout-bank-account-page__help">
-              通帳や銀行アプリに登録されている口座名義を入力してください。
-            </p>
-          </div>
+          <Input
+            id="payout-account-holder-name"
+            label="口座名義"
+            type="text"
+            autoComplete="off"
+            maxLength={64}
+            value={accountHolderName}
+            placeholder="例：ヤマダ タロウ"
+            helperText="通帳や銀行アプリに登録されている口座名義を入力してください。"
+            onChange={(event) => setAccountHolderName(event.target.value)}
+          />
         </div>
 
-        <div className="payout-notice payout-bank-account-page__notice">
-          <p className="payout-notice__title">
-            口座情報の取り扱い
-          </p>
+        <Card
+          padding="md"
+          className="payout-notice payout-bank-account-page__notice"
+        >
+          <p className="payout-notice__title">口座情報の取り扱い</p>
           <p className="payout-notice__text">
             入力した口座番号は登録処理のために使用します。登録後、AMOLの画面では口座番号の末尾4桁のみを表示します。
           </p>
-        </div>
+        </Card>
       </section>
 
       {!isDesktop ? (

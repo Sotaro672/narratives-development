@@ -1,15 +1,17 @@
-// frontend/amol/src/pages/AvatarReviewPage.tsx
+// frontend/mall/src/pages/AvatarReviewPage.tsx
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Card from "../components/ui/Card";
 import Pagination from "../components/ui/Pagination";
-import { getPublicAvatar } from "../features/avatar/api/avatarApi";
+import TextState from "../components/ui/TextState";
 import {
   fetchAvatarReviews,
   type AvatarReviewPageResponse,
 } from "../features/avatar-review/api/avatarReviewApi";
+import { getPublicAvatar } from "../features/avatar/api/avatarApi";
 
 import "../styles/page-layout.css";
 import "../styles/avatar-review-page.css";
@@ -100,13 +102,15 @@ export default function AvatarReviewPage() {
     >
       <section className="content-page-section avatar-review-page">
         {loading ? (
-          <p className="avatar-review-page__message">読み込み中です...</p>
+          <TextState variant="loading" className="avatar-review-page__message">
+            読み込み中です...
+          </TextState>
         ) : null}
 
         {!loading && error ? (
-          <div role="alert" className="avatar-review-page__message">
+          <TextState variant="error" className="avatar-review-page__message">
             {error}
-          </div>
+          </TextState>
         ) : null}
 
         {!loading && !error && result ? (
@@ -117,26 +121,31 @@ export default function AvatarReviewPage() {
               </h1>
 
               <div className="avatar-review-page__summary">
-                <div className="avatar-review-page__summary-item">
+                <Card variant="panel" className="avatar-review-page__summary-item">
                   <span>良かった</span>
                   <strong>{result.goodCount}</strong>
-                </div>
+                </Card>
 
-                <div className="avatar-review-page__summary-item">
+                <Card variant="panel" className="avatar-review-page__summary-item">
                   <span>残念だった</span>
                   <strong>{result.disappointedCount}</strong>
-                </div>
+                </Card>
               </div>
             </header>
 
             {result.items.length === 0 ? (
-              <p className="avatar-review-page__empty">
+              <TextState variant="empty" className="avatar-review-page__empty">
                 まだ評価はありません。
-              </p>
+              </TextState>
             ) : (
               <div className="avatar-review-page__list">
                 {result.items.map((review) => (
-                  <article key={review.id} className="avatar-review-card">
+                  <Card
+                    key={review.id}
+                    as="article"
+                    variant="panel"
+                    className="avatar-review-card"
+                  >
                     <div className="avatar-review-card__header">
                       <strong
                         className={
@@ -158,7 +167,7 @@ export default function AvatarReviewPage() {
                     <p className="avatar-review-card__comment">
                       {review.comment}
                     </p>
-                  </article>
+                  </Card>
                 ))}
               </div>
             )}

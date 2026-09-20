@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/payment-page.css */
+/* frontend/mall/src/styles/payment-page.css */
 
 .payment-page {
   min-height: 100vh;
@@ -27,37 +27,20 @@
   min-width: 0;
 }
 
-.payment-page__header {
-  display: grid;
-  grid-template-columns: 72px 1fr 72px;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-.payment-page__title {
-  color: #111827;
-  font-size: 22px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.payment-page__card,
-.payment-page__success {
-  width: 100%;
-}
-
 .payment-page__section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   margin-bottom: 14px;
 }
 
-.payment-page__section-title {
+.payment-page__section-header .ui-section-header__title,
+.payment-page__card > .ui-section-header .ui-section-header__title {
   color: #111827;
   font-size: 17px;
   font-weight: 700;
+  line-height: 1.4;
+}
+
+.payment-page__card > .ui-section-header {
+  margin-bottom: 14px;
 }
 
 .payment-page__items {
@@ -81,6 +64,7 @@
 }
 
 .payment-page__item-title {
+  margin: 0;
   color: #111827;
   font-size: 15px;
   font-weight: 700;
@@ -88,13 +72,14 @@
 }
 
 .payment-page__item-meta {
-  margin-top: 4px;
+  margin: 4px 0 0;
   color: #6b7280;
   font-size: 13px;
 }
 
 .payment-page__item-price {
   flex: 0 0 auto;
+  margin: 0;
   color: #111827;
   font-size: 15px;
   font-weight: 700;
@@ -144,73 +129,8 @@
 .payment-page__payment-method input {
   width: 18px;
   height: 18px;
+  flex: 0 0 auto;
   accent-color: #111827;
-}
-
-.payment-page__payment-method span {
-  color: #111827;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.payment-page__shipping-address {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.payment-page__shipping-address-name {
-  color: #111827;
-  font-size: 15px;
-  font-weight: 700;
-}
-
-.payment-page__shipping-address-line {
-  color: #374151;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.payment-page__submit-button {
-  margin-top: 20px;
-}
-
-.payment-page__empty,
-.payment-page__empty-block {
-  color: #6b7280;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.payment-page__empty-block {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  align-items: stretch;
-}
-
-.payment-page__success {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  text-align: center;
-}
-
-.payment-page__success h2 {
-  margin: 0;
-  color: #111827;
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.payment-page__success p {
-  margin: 0;
-  color: #374151;
-  font-size: 14px;
-}
-
-.payment-page__success .ui-button {
-  margin-top: 8px;
 }
 
 .payment-page__payment-method-body {
@@ -248,13 +168,40 @@
   word-break: break-word;
 }
 
+.payment-page__shipping-address {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.payment-page__shipping-address-name {
+  margin: 0;
+  color: #111827;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.payment-page__shipping-address-line {
+  margin: 0;
+  color: #374151;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.payment-page__empty-block {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.payment-page__empty-block .ui-text-state {
+  margin: 0;
+}
+
 @media (min-width: 768px) {
   .payment-page__section {
     padding-top: 40px;
-  }
-
-  .payment-page__title {
-    font-size: 26px;
   }
 }
 
@@ -271,13 +218,8 @@
     gap: 24px;
   }
 
-  .payment-page__left-column {
-    gap: 16px;
-  }
-
   .payment-page__right-column {
     position: sticky;
     top: 88px;
-    gap: 16px;
   }
 }

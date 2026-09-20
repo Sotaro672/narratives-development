@@ -1,6 +1,9 @@
-// frontend/amol/src/features/token-commnet/components/TokenCommentReplyForm.tsx
+// frontend/mall/src/features/token-commnet/components/TokenCommentReplyForm.tsx
 
 import type { ChangeEvent } from "react";
+
+import Button from "../../../components/ui/Button";
+import Textbox from "../../../components/ui/Textbox";
 
 type TokenCommentReplyFormProps = {
   value: string;
@@ -42,33 +45,16 @@ export default function TokenCommentReplyForm({
 
   return (
     <div className="token-comment-reply-form">
-      <textarea
-        className="token-comment-reply-form__textarea"
-        value={value}
-        rows={3}
-        disabled={replyPosting}
-        placeholder={placeholder}
-        onChange={handleChange}
-      />
+      <Textbox value={value} rows={3} disabled={replyPosting} placeholder={placeholder} onChange={handleChange} />
 
       <div className="token-comment-reply-form__actions">
-        <button
-          type="button"
-          className="token-comment-reply-form__button token-comment-reply-form__button--secondary"
-          disabled={replyPosting}
-          onClick={onCancel}
-        >
+        <Button type="button" variant="secondary" size="sm" disabled={replyPosting} onClick={onCancel}>
           {cancelLabel}
-        </button>
+        </Button>
 
-        <button
-          type="button"
-          className="token-comment-reply-form__button"
-          disabled={!canSubmit}
-          onClick={handleSubmit}
-        >
+        <Button type="button" size="sm" disabled={!canSubmit} onClick={handleSubmit}>
           {replyPosting ? postingLabel : submitLabel}
-        </button>
+        </Button>
       </div>
     </div>
   );

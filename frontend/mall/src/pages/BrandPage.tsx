@@ -1,13 +1,9 @@
-// frontend/amol/src/pages/BrandPage.tsx
+// frontend/mall/src/pages/BrandPage.tsx
 
 import { useEffect, useState } from "react";
-import {
-  useNavigate,
-  useParams,
-} from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-
 import { getMyAvatar } from "../features/avatar/api/avatarApi";
 import BrandContent from "../features/brand/presentation/components/BrandContent";
 import BrandPageError from "../features/brand/presentation/components/BrandPageError";
@@ -24,26 +20,14 @@ type BrandPageRouteParams = {
 };
 
 export default function BrandPage() {
-  const {
-    brandId: routeBrandId,
-  } = useParams<BrandPageRouteParams>();
-
+  const { brandId: routeBrandId } = useParams<BrandPageRouteParams>();
   const navigate = useNavigate();
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
 
   const report = useReport();
-
-  const brandId =
-    routeBrandId?.trim() ?? "";
-
-  const {
-    brand,
-    listItems,
-    loading,
-    error,
-    reload,
-  } = useBrandPage(brandId);
+  const brandId = routeBrandId?.trim() ?? "";
+  const { brand, listItems, loading, error, reload } = useBrandPage(brandId);
 
   useEffect(() => {
     let cancelled = false;
@@ -58,9 +42,7 @@ export default function BrandPage() {
         const avatar = await getMyAvatar();
 
         if (!cancelled) {
-          setCurrentAvatarId(
-            avatar?.avatarId?.trim() ?? "",
-          );
+          setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
         }
       } catch {
         if (!cancelled) {
@@ -76,10 +58,7 @@ export default function BrandPage() {
     };
   }, [authResolved, isLoggedIn]);
 
-  const title =
-    brand?.brandName?.trim() ||
-    "ブランド";
-
+  const title = brand?.brandName?.trim() || "ブランド";
   const canReportBrand =
     authResolved &&
     isLoggedIn &&
@@ -96,9 +75,7 @@ export default function BrandPage() {
       return;
     }
 
-    report.openBrandReport({
-      brandId,
-    });
+    report.openBrandReport({ brandId });
   };
 
   return (
@@ -116,16 +93,11 @@ export default function BrandPage() {
         hideSettingsButton
         mainClassName="brand-page-main"
       >
-        {loading ? (
-          <BrandPageLoading />
-        ) : null}
+        {loading ? <BrandPageLoading /> : null}
 
         {!loading && (error || !brand) ? (
           <BrandPageError
-            error={
-              error ||
-              "brand data is empty"
-            }
+            error={error || "ブランド情報を取得できませんでした。"}
             onBack={handleBack}
             onRetry={() => {
               void reload();

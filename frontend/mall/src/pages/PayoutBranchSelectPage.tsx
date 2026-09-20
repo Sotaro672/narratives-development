@@ -4,16 +4,19 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, Search } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import FooterNav from "../components/layout/FooterNav";
+import Layout from "../components/layout/Layout";
+import Card from "../components/ui/Card";
+import Input from "../components/ui/Input";
+import TextState from "../components/ui/TextState";
+import { useContactViewport } from "../features/contact/hooks/useContactViewport";
+import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
+import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
+
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/payout.css";
 import "../styles/payout-branch-select-page.css";
-
-import Layout from "../components/layout/Layout";
-import FooterNav from "../components/layout/FooterNav";
-import { useContactViewport } from "../features/contact/hooks/useContactViewport";
-import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
-import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 
 type BranchCandidate = {
   branchCode: string;
@@ -154,7 +157,10 @@ export default function PayoutBranchSelectPage() {
           売上の受取口座として使用する支店を選択してください。
         </p>
 
-        <div className="payout-branch-select-page__bank-summary">
+        <Card
+          padding="md"
+          className="payout-branch-select-page__bank-summary"
+        >
           <span className="payout-branch-select-page__bank-summary-label">
             金融機関
           </span>
@@ -168,7 +174,7 @@ export default function PayoutBranchSelectPage() {
               金融機関コード {draft.bankCode}
             </span>
           </div>
-        </div>
+        </Card>
 
         <div className="payout-select__search">
           <Search
@@ -177,12 +183,11 @@ export default function PayoutBranchSelectPage() {
             aria-hidden="true"
           />
 
-          <input
+          <Input
             type="search"
             value={searchText}
             onChange={(event) => setSearchText(event.target.value)}
             placeholder="支店名・支店コードで検索"
-            className="payout-select__search-input"
             aria-label="支店を検索"
             autoComplete="off"
           />
@@ -233,20 +238,20 @@ export default function PayoutBranchSelectPage() {
 
           {filteredBranches.length === 0 ? (
             <div className="payout-select__empty">
-              <p className="payout-select__empty-title">
+              <TextState variant="empty">
                 該当する支店が見つかりません
-              </p>
+              </TextState>
 
-              <p className="payout-select__empty-description">
+              <TextState variant="muted">
                 支店名または支店コードを確認して、もう一度検索してください。
-              </p>
+              </TextState>
             </div>
           ) : null}
         </div>
 
-        <p className="payout-select__note">
+        <TextState variant="muted" className="payout-select__note">
           支店一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
-        </p>
+        </TextState>
       </section>
 
       {!isDesktop ? (

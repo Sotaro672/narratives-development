@@ -1,6 +1,7 @@
-// frontend\mall\src\features\payment\components\PaymentItemsCard.tsx
+// frontend/mall/src/features/payment/components/PaymentItemsCard.tsx
 
 import Card from "../../../components/ui/Card";
+import SectionHeader from "../../../components/ui/SectionHeader";
 import TextState from "../../../components/ui/TextState";
 import { formatPrice } from "../../../components/utils/price";
 import type { CartDisplayItem } from "../../shared/types/cart";
@@ -62,7 +63,7 @@ export function PaymentItemsCard({
 
   return (
     <Card as="section" variant="panel" className="payment-page__card">
-      <h2 className="payment-page__section-title">注文内容</h2>
+      <SectionHeader title="注文内容" titleAs="h2" />
 
       {cartItems.length > 0 ? (
         <ul className="payment-page__items">

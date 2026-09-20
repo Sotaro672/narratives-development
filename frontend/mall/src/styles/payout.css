@@ -21,14 +21,14 @@
 
 .payout-summary__label {
   flex-shrink: 0;
+  color: #6b7280;
   font-size: 13px;
   line-height: 1.5;
-  color: #6b7280;
 }
 
 .payout-summary__value {
-  min-width: 0;
   display: flex;
+  min-width: 0;
   flex-direction: column;
   align-items: flex-end;
   gap: 3px;
@@ -37,44 +37,43 @@
 
 .payout-summary__name {
   max-width: 100%;
+  color: var(--color-text);
   font-size: 15px;
   font-weight: 600;
   line-height: 1.4;
-  color: var(--color-text);
   overflow-wrap: anywhere;
 }
 
 .payout-summary__code {
+  color: #6b7280;
   font-size: 12px;
   line-height: 1.4;
-  color: #6b7280;
 }
 
 /* =========================================================
  * Notice
  * ======================================================= */
 
-.payout-notice {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 16px;
+.payout-notice.ui-card {
+  border: none;
   border-radius: 12px;
   background: #f9fafb;
+  box-shadow: none;
 }
 
 .payout-notice__title {
   margin: 0;
+  color: var(--color-text);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.5;
-  color: var(--color-text);
 }
 
 .payout-notice__text {
   margin: 6px 0 0;
+  color: #6b7280;
   font-size: 12px;
   line-height: 1.7;
-  color: #6b7280;
 }
 
 /* =========================================================
@@ -87,38 +86,25 @@
   margin-bottom: 20px;
 }
 
+.payout-select__search .input-field {
+  width: 100%;
+}
+
+.payout-select__search .input-field__control {
+  min-height: 48px;
+  height: 48px;
+  padding-left: 46px;
+  font-size: 16px;
+}
+
 .payout-select__search-icon {
   position: absolute;
-  top: 50%;
+  z-index: 1;
+  top: 24px;
   left: 16px;
   transform: translateY(-50%);
   color: #6b7280;
   pointer-events: none;
-}
-
-.payout-select__search-input {
-  width: 100%;
-  min-height: 48px;
-  box-sizing: border-box;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  padding: 11px 16px 11px 46px;
-  background: #fff;
-  color: var(--color-text);
-  font: inherit;
-  font-size: 16px;
-  line-height: 1.5;
-  outline: none;
-  appearance: none;
-}
-
-.payout-select__search-input::placeholder {
-  color: #9ca3af;
-}
-
-.payout-select__search-input:focus {
-  border-color: #111827;
-  box-shadow: 0 0 0 1px #111827;
 }
 
 /* =========================================================
@@ -134,18 +120,18 @@
 }
 
 .payout-select__option {
+  display: flex;
   width: 100%;
   min-height: 68px;
   box-sizing: border-box;
-  border: none;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 14px 16px;
-  background: #fff;
-  color: var(--color-text);
-  display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: 14px 16px;
+  border: none;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+  color: var(--color-text);
   text-align: left;
   cursor: pointer;
   transition: background-color 0.15s ease;
@@ -159,13 +145,20 @@
   background: #f9fafb;
 }
 
+.payout-select__option:focus-visible {
+  position: relative;
+  z-index: 1;
+  outline: 2px solid #111827;
+  outline-offset: -2px;
+}
+
 .payout-select__option--selected {
   background: #f3f4f6;
 }
 
 .payout-select__option-content {
-  min-width: 0;
   display: flex;
+  min-width: 0;
   flex: 1;
   flex-direction: column;
   gap: 4px;
@@ -180,9 +173,9 @@
 }
 
 .payout-select__option-code {
+  color: #6b7280;
   font-size: 12px;
   line-height: 1.4;
-  color: #6b7280;
 }
 
 /* =========================================================
@@ -190,16 +183,16 @@
  * ======================================================= */
 
 .payout-select__check {
+  display: inline-flex;
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-  border: 1px solid #d1d5db;
-  border-radius: 50%;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 50%;
   background: #fff;
+  color: #fff;
 }
 
 .payout-select__check--selected {
@@ -216,30 +209,29 @@
   text-align: center;
 }
 
-.payout-select__empty-title {
+.payout-select__empty .ui-text-state {
   margin: 0;
+}
+
+.payout-select__empty .ui-text-state:first-child {
+  color: var(--color-text);
   font-size: 15px;
   font-weight: 600;
   line-height: 1.5;
-  color: var(--color-text);
 }
 
-.payout-select__empty-description {
-  margin: 8px 0 0;
+.payout-select__empty .ui-text-state + .ui-text-state {
+  margin-top: 8px;
   font-size: 13px;
-  line-height: 1.6;
-  color: #6b7280;
 }
 
 /* =========================================================
  * Note
  * ======================================================= */
 
-.payout-select__note {
+.payout-select__note.ui-text-state {
   margin: 16px 0 0;
   font-size: 12px;
-  line-height: 1.6;
-  color: #6b7280;
 }
 
 /* =========================================================
@@ -254,7 +246,7 @@
 }
 
 @media (max-width: 480px) {
-  .payout-select__search-input {
+  .payout-select__search .input-field__control {
     font-size: 16px;
   }
 

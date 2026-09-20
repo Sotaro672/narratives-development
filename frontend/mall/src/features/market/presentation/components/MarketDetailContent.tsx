@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-import type { UseMarketDetailPageResult } from "../hooks/useMarketDetailPage";
-
+import Alert from "../../../../components/ui/Alert";
+import Card from "../../../../components/ui/Card";
+import TextState from "../../../../components/ui/TextState";
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
 import { useAuthState } from "../../../shared/hooks/useAuthState";
 import AvatarSummaryCard from "../../../shared/presentation/components/AvatarSummaryCard";
@@ -18,6 +19,7 @@ import ProductReviewSection from "../../../shared/presentation/components/Produc
 import ReportFlagButton from "../../../shared/presentation/components/ReportFlagButton";
 import ResaleCommentButton from "../../../shared/presentation/components/ResaleCommentButton";
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
+import type { UseMarketDetailPageResult } from "../hooks/useMarketDetailPage";
 
 import "../../../shared/styles/product-detail.css";
 
@@ -111,10 +113,14 @@ export default function MarketDetailContent({
 
       try {
         const avatar = await getMyAvatar();
-        if (cancelled) return;
-        setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
+
+        if (!cancelled) {
+          setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
+        }
       } catch {
-        if (!cancelled) setCurrentAvatarId("");
+        if (!cancelled) {
+          setCurrentAvatarId("");
+        }
       }
     }
 
@@ -139,15 +145,15 @@ export default function MarketDetailContent({
   return (
     <div className="page-layout market-detail-page">
       {loading ? (
-        <div className="market-detail-page__state">
-          <p>読み込み中です...</p>
-        </div>
+        <Card padding="lg" className="market-detail-page__state-card">
+          <TextState variant="loading" className="market-detail-page__state-text">
+            読み込み中です...
+          </TextState>
+        </Card>
       ) : null}
 
       {!loading && error ? (
-        <div className="market-detail-page__state market-detail-page__state--error">
-          <p>{error}</p>
-        </div>
+        <Alert variant="error">{error}</Alert>
       ) : null}
 
       {!loading && !error && item ? (
@@ -172,10 +178,12 @@ export default function MarketDetailContent({
                   disabled={loadingLike || updatingLike}
                   onClick={handleToggleLike}
                 />
+
                 <ResaleCommentButton
                   commentCount={commentCount}
                   onClick={onOpenResaleChat}
                 />
+
                 <ReportFlagButton
                   disabled={!canReportResale}
                   onClick={onOpenResaleReport}
@@ -183,9 +191,9 @@ export default function MarketDetailContent({
               </div>
 
               {likeErrorMessage ? (
-                <p className="market-detail-page__like-error" role="alert">
+                <TextState variant="error" className="market-detail-page__like-error">
                   {likeErrorMessage}
-                </p>
+                </TextState>
               ) : null}
             </div>
           }
@@ -235,13 +243,15 @@ export default function MarketDetailContent({
           />
 
           {cartMessage ? (
-            <p className="market-detail-page__cart-message">{cartMessage}</p>
+            <Alert variant="success" className="market-detail-page__cart-message">
+              {cartMessage}
+            </Alert>
           ) : null}
 
           {cartErrorMessage ? (
-            <p className="market-detail-page__cart-error" role="alert">
+            <Alert variant="error" className="market-detail-page__cart-error">
               {cartErrorMessage}
-            </p>
+            </Alert>
           ) : null}
         </ProductDetailLayout>
       ) : null}

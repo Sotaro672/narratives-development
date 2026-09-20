@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/InquiryCreatePage.tsx
+// frontend/mall/src/pages/InquiryCreatePage.tsx
 
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
@@ -7,6 +7,7 @@ import Input from "../components/ui/Input";
 import MediaUploader from "../components/ui/MediaUploader";
 import Textbox from "../components/ui/Textbox";
 import { useInquiryCreatePage } from "../features/inquiry/presentation/hooks/useInquiryCreatePage";
+
 import "../styles/inquiry-page.css";
 
 export default function InquiryCreatePage() {

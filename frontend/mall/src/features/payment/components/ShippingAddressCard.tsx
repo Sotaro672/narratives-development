@@ -2,6 +2,7 @@
 
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
+import SectionHeader from "../../../components/ui/SectionHeader";
 import TextButton from "../../../components/ui/TextButton";
 import TextState from "../../../components/ui/TextState";
 import type { CanonicalShippingAddress } from "../../shared/types/payment";
@@ -21,12 +22,16 @@ export function ShippingAddressCard({
 }: ShippingAddressCardProps) {
   return (
     <Card as="section" variant="panel" className="payment-page__card">
-      <div className="payment-page__section-header">
-        <h2 className="payment-page__section-title">配送先情報</h2>
-        <TextButton type="button" onClick={onGoToShippingAddress}>
-          配送先を管理
-        </TextButton>
-      </div>
+      <SectionHeader
+        title="配送先情報"
+        titleAs="h2"
+        className="payment-page__section-header"
+        right={
+          <TextButton type="button" onClick={onGoToShippingAddress}>
+            配送先を管理
+          </TextButton>
+        }
+      />
 
       {primaryShippingAddress ? (
         <div className="payment-page__shipping-address">
@@ -35,7 +40,10 @@ export function ShippingAddressCard({
           ) : null}
 
           {shippingAddressLabel.split("\n").map((line, index) => (
-            <p className="payment-page__shipping-address-line" key={`${line}-${index}`}>
+            <p
+              className="payment-page__shipping-address-line"
+              key={`${line}-${index}`}
+            >
               {line}
             </p>
           ))}

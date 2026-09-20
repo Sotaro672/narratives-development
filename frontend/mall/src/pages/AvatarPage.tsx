@@ -5,6 +5,7 @@ import "../styles/form.css";
 import "../styles/avatar-create-page.css";
 
 import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Textbox from "../components/ui/Textbox";
@@ -157,15 +158,12 @@ export default function AvatarPage() {
             />
 
             {vm.msg ? (
-              <div
-                className={
-                  vm.isSuccessMessage
-                    ? "avatar-create-message avatar-create-message--ok"
-                    : "avatar-create-message avatar-create-message--info"
-                }
+              <Alert
+                variant={vm.isSuccessMessage ? "success" : "info"}
+                className="avatar-create-message"
               >
                 {vm.msg}
-              </div>
+              </Alert>
             ) : null}
           </div>
         </section>

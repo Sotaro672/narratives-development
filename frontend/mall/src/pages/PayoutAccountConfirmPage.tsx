@@ -3,17 +3,18 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import "../styles/page-layout.css";
-import "../styles/settings-page.css";
-import "../styles/payout.css";
-import "../styles/payout-account-confirm-page.css";
-
-import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
+import Layout from "../components/layout/Layout";
+import Card from "../components/ui/Card";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
 import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 import { usePayoutAccountRegistrationSubmit } from "../features/payout/hooks/usePayoutAccountRegistrationSubmit";
+
+import "../styles/page-layout.css";
+import "../styles/settings-page.css";
+import "../styles/payout.css";
+import "../styles/payout-account-confirm-page.css";
 
 function getAccountTypeLabel(accountType: "ordinary" | "current"): string {
   switch (accountType) {
@@ -186,9 +187,7 @@ export default function PayoutAccountConfirmPage() {
         <div className="payout-account-confirm-page__card">
           <div className="payout-account-confirm-page__row">
             <div className="payout-account-confirm-page__row-main">
-              <span className="payout-summary__label">
-                金融機関
-              </span>
+              <span className="payout-summary__label">金融機関</span>
 
               <div className="payout-summary__value">
                 <strong className="payout-summary__name">
@@ -212,9 +211,7 @@ export default function PayoutAccountConfirmPage() {
 
           <div className="payout-account-confirm-page__row">
             <div className="payout-account-confirm-page__row-main">
-              <span className="payout-summary__label">
-                支店
-              </span>
+              <span className="payout-summary__label">支店</span>
 
               <div className="payout-summary__value">
                 <strong className="payout-summary__name">
@@ -238,9 +235,7 @@ export default function PayoutAccountConfirmPage() {
 
           <div className="payout-account-confirm-page__row">
             <div className="payout-account-confirm-page__row-main">
-              <span className="payout-summary__label">
-                口座種別
-              </span>
+              <span className="payout-summary__label">口座種別</span>
               <strong className="payout-account-confirm-page__single-value">
                 {getAccountTypeLabel(draft.accountType)}
               </strong>
@@ -258,9 +253,7 @@ export default function PayoutAccountConfirmPage() {
 
           <div className="payout-account-confirm-page__row">
             <div className="payout-account-confirm-page__row-main">
-              <span className="payout-summary__label">
-                口座番号
-              </span>
+              <span className="payout-summary__label">口座番号</span>
               <strong className="payout-account-confirm-page__single-value payout-account-confirm-page__account-number">
                 {draft.accountNumber}
               </strong>
@@ -278,9 +271,7 @@ export default function PayoutAccountConfirmPage() {
 
           <div className="payout-account-confirm-page__row">
             <div className="payout-account-confirm-page__row-main">
-              <span className="payout-summary__label">
-                口座名義
-              </span>
+              <span className="payout-summary__label">口座名義</span>
               <strong className="payout-account-confirm-page__single-value payout-account-confirm-page__holder-name">
                 {draft.accountHolderName}
               </strong>
@@ -297,14 +288,15 @@ export default function PayoutAccountConfirmPage() {
           </div>
         </div>
 
-        <div className="payout-notice payout-account-confirm-page__notice">
-          <p className="payout-notice__title">
-            登録前にご確認ください
-          </p>
+        <Card
+          padding="md"
+          className="payout-notice payout-account-confirm-page__notice"
+        >
+          <p className="payout-notice__title">登録前にご確認ください</p>
           <p className="payout-notice__text">
             金融機関名、支店名、口座番号、口座名義に誤りがあると売上を受け取れない場合があります。登録内容をもう一度ご確認ください。
           </p>
-        </div>
+        </Card>
 
         {errorMessage ? (
           <p className="payout-account-confirm-page__error" role="alert">

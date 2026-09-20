@@ -2,6 +2,7 @@
 
 import { useNavigate } from "react-router-dom";
 
+import Chip from "../../../components/ui/Chip";
 import { formatDateTime } from "../../../components/utils/date";
 import type {
   TokenComment,
@@ -36,11 +37,7 @@ function getAuthorAvatarId(comment: TokenComment): string {
   return comment.authorId?.trim() || "";
 }
 
-function TokenCommentAuthor({
-  comment,
-}: {
-  comment: TokenComment;
-}) {
+function TokenCommentAuthor({ comment }: { comment: TokenComment }) {
   const navigate = useNavigate();
   const displayName = getTokenCommentDisplayName(comment);
   const iconUrl = getTokenCommentDisplayIconUrl(comment);
@@ -64,24 +61,16 @@ function TokenCommentAuthor({
             className="token-comment-author__icon"
           />
         ) : (
-          <span className="token-comment-author__icon-fallback">
-            👤
-          </span>
+          <span className="token-comment-author__icon-fallback">👤</span>
         )}
       </span>
 
-      <span className="token-comment-author__name">
-        {displayName}
-      </span>
+      <span className="token-comment-author__name">{displayName}</span>
     </>
   );
 
   if (!avatarId) {
-    return (
-      <div className="token-comment-author">
-        {content}
-      </div>
-    );
+    return <div className="token-comment-author">{content}</div>;
   }
 
   return (
@@ -127,14 +116,14 @@ export default function TokenCommentItem({
   const hasChildren = hasTokenCommentChildren(node);
   const isOwnComment = Boolean(
     normalizedCurrentAvatarId &&
-    authorAvatarId &&
-    normalizedCurrentAvatarId === authorAvatarId,
+      authorAvatarId &&
+      normalizedCurrentAvatarId === authorAvatarId,
   );
   const canReport = Boolean(
     normalizedTokenBlueprintId &&
-    normalizedCurrentAvatarId &&
-    commentId &&
-    !isOwnComment,
+      normalizedCurrentAvatarId &&
+      commentId &&
+      !isOwnComment,
   );
   const indent = Math.min(Math.max(comment.depth * 16, 0), 48);
 
@@ -205,55 +194,38 @@ export default function TokenCommentItem({
           ) : null}
         </div>
 
-        <p className="token-comment-item__text">
-          {comment.body}
-        </p>
+        <p className="token-comment-item__text">{comment.body}</p>
 
         <div className="token-comment-item__actions">
-          <button
-            type="button"
-            className="token-comment-item__action"
-            onClick={handleLike}
-          >
+          <Chip size="sm" variant="neutral" onClick={handleLike}>
             👍 {comment.likeCount}
-          </button>
+          </Chip>
 
-          <button
-            type="button"
-            className="token-comment-item__action"
-            onClick={handleDislike}
-          >
+          <Chip size="sm" variant="neutral" onClick={handleDislike}>
             👎 {comment.dislikeCount}
-          </button>
+          </Chip>
 
-          <button
-            type="button"
-            className="token-comment-item__action"
-            onClick={handleStartReply}
-          >
+          <Chip size="sm" variant="neutral" onClick={handleStartReply}>
             返信
-          </button>
+          </Chip>
 
           {canReport ? (
-            <button
-              type="button"
-              className="token-comment-item__action token-comment-item__action--report"
-              onClick={handleReport}
-            >
+            <Chip size="sm" variant="danger" onClick={handleReport}>
               通報
-            </button>
+            </Chip>
           ) : null}
 
           {hasChildren ? (
-            <button
-              type="button"
-              className="token-comment-item__action"
+            <Chip
+              size="sm"
+              variant="neutral"
+              selected={isExpanded}
               onClick={handleToggleExpanded}
             >
               {isExpanded
                 ? "返信を閉じる"
                 : `返信を表示 (${comment.childCount})`}
-            </button>
+            </Chip>
           ) : (
             <span className="token-comment-item__reply-count">
               💬 {comment.childCount}

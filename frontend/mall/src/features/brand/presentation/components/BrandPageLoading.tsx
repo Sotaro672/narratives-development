@@ -1,4 +1,6 @@
-// frontend/amol/src/features/brand/presentation/components/BrandPageLoading.tsx
+// frontend/mall/src/features/brand/presentation/components/BrandPageLoading.tsx
+
+import TextState from "../../../../components/ui/TextState";
 
 export default function BrandPageLoading() {
   return (
@@ -7,12 +9,9 @@ export default function BrandPageLoading() {
       aria-live="polite"
       aria-busy="true"
     >
-      <div
-        className="brand-page-loading"
-        role="status"
-      >
+      <TextState variant="loading" className="brand-page-loading">
         ブランド情報を読み込み中...
-      </div>
+      </TextState>
     </div>
   );
 }

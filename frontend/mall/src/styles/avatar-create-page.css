@@ -186,18 +186,7 @@
 
 .avatar-create-message {
   width: 100%;
-  padding: 12px;
-  border-radius: 12px;
-  font-size: 0.95rem;
-  line-height: 1.6;
-}
-
-.avatar-create-message--info {
-  background: rgba(148, 163, 184, 0.16);
-}
-
-.avatar-create-message--ok {
-  background: rgba(34, 197, 94, 0.14);
+  box-sizing: border-box;
 }
 
 .avatar-create-page-actions {

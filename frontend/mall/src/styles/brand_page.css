@@ -12,8 +12,8 @@
 }
 
 .brand-page-centered {
-  min-height: 48vh;
   display: flex;
+  min-height: 48vh;
   align-items: center;
   justify-content: center;
 }
@@ -23,9 +23,6 @@
  * -------------------------------- */
 
 .brand-page-loading {
-  color: #666;
-  font-size: 14px;
-  line-height: 1.6;
   text-align: center;
 }
 
@@ -35,11 +32,6 @@
 
 .brand-page-error-card {
   width: min(100%, 520px);
-  padding: 24px;
-  border: 1px solid #eef0f3;
-  border-radius: 20px;
-  background: #fff;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
 }
 
 .brand-page-error-card h1 {
@@ -52,9 +44,6 @@
 
 .brand-page-error-card p {
   margin: 0;
-  color: #6b7280;
-  font-size: 14px;
-  line-height: 1.7;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -62,51 +51,9 @@
 .brand-page-error-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 12px;
-  align-items: center;
   margin-top: 20px;
-}
-
-.brand-page-error-actions button,
-.brand-page-error-actions a {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 999px;
-  background: #fff;
-  color: #111827;
-  font-family: inherit;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1;
-  text-decoration: none;
-  cursor: pointer;
-  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
-}
-
-.brand-page-error-actions button:hover:not(:disabled),
-.brand-page-error-actions a:hover {
-  border-color: #d1d5db;
-  background: #f3f4f6;
-}
-
-.brand-page-error-actions button:active:not(:disabled),
-.brand-page-error-actions a:active {
-  transform: translateY(1px);
-}
-
-.brand-page-error-actions button:focus-visible,
-.brand-page-error-actions a:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.25);
-  outline-offset: 2px;
-}
-
-.brand-page-error-actions button:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 /* --------------------------------
@@ -130,16 +77,16 @@
 .brand-page-profile {
   position: relative;
   display: flex;
-  gap: 18px;
   align-items: flex-end;
+  gap: 18px;
   margin-top: -44px;
   padding: 0 20px 20px;
 }
 
 .brand-page-icon {
+  flex: 0 0 auto;
   width: 96px;
   height: 96px;
-  flex: 0 0 auto;
   border: 4px solid #fff;
   background: #fff;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16);
@@ -153,25 +100,25 @@
 
 .brand-page-profile-body h1 {
   margin: 0;
+  overflow-wrap: anywhere;
   color: #111827;
   font-size: clamp(22px, 4vw, 28px);
   font-weight: 800;
   line-height: 1.25;
-  overflow-wrap: anywhere;
 }
 
 .brand-page-company {
   margin: 8px 0 0;
+  overflow-wrap: anywhere;
   color: #4b5563;
   font-size: 14px;
   line-height: 1.6;
-  overflow-wrap: anywhere;
 }
 
 .brand-page-link {
+  display: inline-flex;
   width: fit-content;
   min-height: 36px;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   margin-top: 12px;
@@ -206,15 +153,14 @@
 
 .brand-page-section {
   margin-top: 16px;
-  padding: 20px;
-  border: 1px solid #eef0f3;
-  border-radius: 24px;
-  background: #fff;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
 }
 
-.brand-page-section > h2,
-.brand-page-section-header h2 {
+.brand-page-section > .ui-section-header {
+  margin-bottom: 16px;
+}
+
+.brand-page-section > .ui-section-header .ui-section-header__title,
+.brand-page-section > h2 {
   margin: 0;
   color: #111827;
   font-size: 18px;
@@ -226,28 +172,13 @@
   margin-bottom: 12px;
 }
 
-.brand-page-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.brand-page-section-header span {
-  flex: 0 0 auto;
-  color: #6b7280;
-  font-size: 13px;
-  font-weight: 700;
-}
-
 .brand-page-description {
   margin: 0;
+  overflow-wrap: anywhere;
   color: #374151;
   font-size: 14px;
   line-height: 1.8;
   white-space: pre-wrap;
-  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -301,22 +232,11 @@
     font-size: 22px;
   }
 
-  .brand-page-section {
-    padding: 16px;
-    border-radius: 20px;
-  }
-
-  .brand-page-error-card {
-    padding: 20px;
-    border-radius: 16px;
-  }
-
   .brand-page-error-actions {
     align-items: stretch;
   }
 
-  .brand-page-error-actions button,
-  .brand-page-error-actions a {
+  .brand-page-error-actions .ui-button {
     flex: 1 1 calc(50% - 6px);
   }
 }
@@ -335,26 +255,17 @@
     width: 100%;
   }
 
-  .brand-page-section-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 4px;
-  }
-
   .brand-page-error-actions {
     flex-direction: column;
   }
 
-  .brand-page-error-actions button,
-  .brand-page-error-actions a {
+  .brand-page-error-actions .ui-button {
     width: 100%;
     flex-basis: auto;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brand-page-error-actions button,
-  .brand-page-error-actions a,
   .brand-page-link {
     transition: none;
   }

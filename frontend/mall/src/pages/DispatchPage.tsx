@@ -1,11 +1,15 @@
-// frontend/amol/src/pages/DispatchPage.tsx
+// frontend/mall/src/pages/DispatchPage.tsx
 
 import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
+import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Card from "../components/ui/Card";
+import InfoList from "../components/ui/InfoList";
+import SectionHeader from "../components/ui/SectionHeader";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import {
   dispatchTrade,
@@ -21,14 +25,7 @@ type DispatchRouteParams = {
   tradeId: string;
 };
 
-const BOX_SIZES: TradeDispatchBoxSize[] = [
-  60,
-  80,
-  100,
-  120,
-  140,
-  160,
-];
+const BOX_SIZES: TradeDispatchBoxSize[] = [60, 80, 100, 120, 140, 160];
 
 type CarrierOption = {
   value: TradeDispatchCarrier;
@@ -68,10 +65,7 @@ function formatJPY(amount: number): string {
   }).format(amount);
 }
 
-function getErrorMessage(
-  caught: unknown,
-  fallbackMessage: string,
-): string {
+function getErrorMessage(caught: unknown, fallbackMessage: string): string {
   if (caught instanceof Error && caught.message) {
     return caught.message;
   }
@@ -100,10 +94,7 @@ export default function DispatchPage() {
   }, [boxSize]);
 
   const selectedCarrier = useMemo(
-    () =>
-      CARRIER_OPTIONS.find(
-        (option) => option.value === carrier,
-      ) ?? null,
+    () => CARRIER_OPTIONS.find((option) => option.value === carrier) ?? null,
     [carrier],
   );
 
@@ -146,15 +137,10 @@ export default function DispatchPage() {
         boxSize,
       });
 
-      navigate(chatPath, {
-        replace: true,
-      });
+      navigate(chatPath, { replace: true });
     } catch (caught) {
       setSubmissionError(
-        getErrorMessage(
-          caught,
-          "商品の発送処理に失敗しました。",
-        ),
+        getErrorMessage(caught, "商品の発送処理に失敗しました。"),
       );
     } finally {
       setSubmitting(false);
@@ -187,9 +173,9 @@ export default function DispatchPage() {
     >
       <section className="page-section content-page-section settings-page dispatch-page">
         {!normalizedTradeId ? (
-          <div role="alert">
+          <Alert variant="error" className="dispatch-page__alert">
             取引IDが見つかりません。
-          </div>
+          </Alert>
         ) : null}
 
         <p className="content-page-description">
@@ -197,7 +183,7 @@ export default function DispatchPage() {
         </p>
 
         <section>
-          <h2>配送会社</h2>
+          <SectionHeader title="配送会社" titleAs="h2" />
 
           <div className="settings-list" role="list">
             {CARRIER_OPTIONS.map((option) => {
@@ -227,9 +213,7 @@ export default function DispatchPage() {
                   </span>
 
                   <span aria-hidden="true">
-                    {selected ? (
-                      <Check size={20} strokeWidth={2.5} />
-                    ) : null}
+                    {selected ? <Check size={20} strokeWidth={2.5} /> : null}
                   </span>
                 </button>
               );
@@ -238,7 +222,7 @@ export default function DispatchPage() {
         </section>
 
         <section>
-          <h2>箱のサイズ</h2>
+          <SectionHeader title="箱のサイズ" titleAs="h2" />
 
           <p className="content-page-description">
             梱包後の箱の3辺合計に収まるサイズを選択してください。重量や配送地域による料金差はありません。
@@ -274,16 +258,8 @@ export default function DispatchPage() {
 
                   <span>
                     <strong>{formatJPY(fee)}</strong>
-
                     {selected ? (
-                      <>
-                        {" "}
-                        <Check
-                          size={20}
-                          strokeWidth={2.5}
-                          aria-hidden="true"
-                        />
-                      </>
+                      <Check size={20} strokeWidth={2.5} aria-hidden="true" />
                     ) : null}
                   </span>
                 </button>
@@ -292,56 +268,50 @@ export default function DispatchPage() {
           </div>
         </section>
 
-        <section>
-          <h2>発送内容</h2>
+        <Card
+          as="section"
+          variant="panel"
+          className="dispatch-page__summary-card"
+        >
+          <SectionHeader title="発送内容" titleAs="h2" />
 
-          <dl>
-            <div>
-              <dt>配送会社</dt>
-              <dd>{selectedCarrier?.label ?? "未選択"}</dd>
-            </div>
+          <InfoList
+            className="dispatch-page__summary-list"
+            rows={[
+              {
+                key: "carrier",
+                label: "配送会社",
+                value: selectedCarrier?.label ?? "未選択",
+              },
+              {
+                key: "box-size",
+                label: "箱サイズ",
+                value: boxSize !== null ? `${boxSize}サイズ` : "未選択",
+              },
+              {
+                key: "shipping-fee",
+                label: "配送料",
+                value: shippingFee !== null ? formatJPY(shippingFee) : "—",
+              },
+            ]}
+          />
 
-            <div>
-              <dt>箱サイズ</dt>
-              <dd>
-                {boxSize !== null
-                  ? `${boxSize}サイズ`
-                  : "未選択"}
-              </dd>
-            </div>
-
-            <div>
-              <dt>配送料</dt>
-              <dd>
-                <strong>
-                  {shippingFee !== null
-                    ? formatJPY(shippingFee)
-                    : "—"}
-                </strong>
-              </dd>
-            </div>
-          </dl>
-
-          <p className="content-page-description">
+          <p className="content-page-description dispatch-page__summary-description">
             日本郵便・ヤマト運輸のどちらを選択しても、同じ箱サイズであれば配送料は同額です。
           </p>
-        </section>
+        </Card>
 
         {submissionError ? (
-          <div role="alert">
+          <Alert variant="error" className="dispatch-page__alert">
             {submissionError}
-          </div>
+          </Alert>
         ) : null}
       </section>
 
       {!isDesktop ? (
         <FooterNav
           variant="action"
-          buttonLabel={
-            submitting
-              ? "発送処理中..."
-              : "発送を確定"
-          }
+          buttonLabel={submitting ? "発送処理中..." : "発送を確定"}
           disabled={actionButtonDisabled}
           onButtonClick={() => {
             void handleConfirm();
