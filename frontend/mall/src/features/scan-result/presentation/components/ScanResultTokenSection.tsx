@@ -1,6 +1,8 @@
-// frontend/amol/src/features/scan-result/components/ScanResultTokenSection.tsx
+// frontend/mall/src/features/scan-result/presentation/components/ScanResultTokenSection.tsx
+
 import MediaIcon from "../../../../components/ui/MediaIcon";
 import SectionCard from "../../../../components/ui/SectionCard";
+import SectionHeader from "../../../../components/ui/SectionHeader";
 import Tab from "../../../../components/ui/Tab";
 import TextState from "../../../../components/ui/TextState";
 
@@ -15,9 +17,7 @@ type ScanResultTokenSectionProps = {
   onOpenTokenContents: (mintAddress: string) => void | Promise<void>;
 };
 
-export default function ScanResultTokenSection(
-  props: ScanResultTokenSectionProps
-) {
+export default function ScanResultTokenSection(props: ScanResultTokenSectionProps) {
   const {
     tokenName,
     tokenIconUrl,
@@ -39,9 +39,7 @@ export default function ScanResultTokenSection(
 
   return (
     <SectionCard>
-      <div className="scan-result-token-header">
-        <h2>トークン情報</h2>
-      </div>
+      <SectionHeader title="トークン情報" titleAs="h2" />
 
       <div className="scan-result-token-body">
         <MediaIcon
@@ -58,19 +56,14 @@ export default function ScanResultTokenSection(
               className="scan-result-token-name"
               onClick={handleOpenTokenContents}
             >
-              {tokenName}
+              {tokenName || "-"}
             </Tab>
           ) : (
             <h3>{tokenName || "-"}</h3>
           )}
 
-          {tokenBrandName ? (
-            <TextState> {tokenBrandName}</TextState>
-          ) : null}
-
-          {tokenCompanyName ? (
-            <TextState> {tokenCompanyName}</TextState>
-          ) : null}
+          {tokenBrandName ? <TextState>{tokenBrandName}</TextState> : null}
+          {tokenCompanyName ? <TextState>{tokenCompanyName}</TextState> : null}
 
           {tokenDescription ? (
             <p className="scan-result-description">{tokenDescription}</p>

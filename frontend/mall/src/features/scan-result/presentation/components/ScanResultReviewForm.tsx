@@ -1,8 +1,9 @@
-// frontend/amol/src/features/scan-result/components/ScanResultReviewForm.tsx
+// frontend/mall/src/features/scan-result/presentation/components/ScanResultReviewForm.tsx
+
 import Button from "../../../../components/ui/Button";
 import RatingSelect from "../../../../components/ui/RatingSelect";
 import SectionCard from "../../../../components/ui/SectionCard";
-import TextState from "../../../../components/ui/TextState";
+import Textbox from "../../../../components/ui/Textbox";
 
 type ScanResultReviewFormProps = {
   reviewBody: string;
@@ -31,21 +32,20 @@ export default function ScanResultReviewForm(props: ScanResultReviewFormProps) {
 
       <label className="scan-result-label">
         評価
-        <RatingSelect value={reviewRating} onChange={onReviewRatingChange} />
-      </label>
-
-      <label className="scan-result-label">
-        本文
-        <textarea
-          value={reviewBody}
-          onChange={(event) => onReviewBodyChange(event.target.value)}
-          placeholder="口コミを入力してください"
+        <RatingSelect
+          value={reviewRating}
+          onChange={onReviewRatingChange}
         />
       </label>
 
-      {postReviewError ? (
-        <TextState variant="error">{postReviewError}</TextState>
-      ) : null}
+      <Textbox
+        label="本文"
+        value={reviewBody}
+        disabled={postingReview}
+        error={postReviewError ?? undefined}
+        placeholder="口コミを入力してください"
+        onChange={(event) => onReviewBodyChange(event.target.value)}
+      />
 
       <Button
         type="button"
