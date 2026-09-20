@@ -22,6 +22,7 @@ export default function OrderDetailSummary({
   return (
     <Card as="section">
       <SectionHeader
+        className="ui-section-header--title-sm"
         title={`注文ID: ${order.id}`}
         titleAs="h1"
         eyebrow={`注文日時: ${order.createdAt ? formatDateTime(order.createdAt) : "-"}`}

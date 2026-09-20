@@ -7,7 +7,6 @@ import { useNavigate } from "react-router-dom";
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/payout.css";
-import "../styles/payout-bank-select-page.css";
 
 import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";

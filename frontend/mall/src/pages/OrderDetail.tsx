@@ -104,7 +104,7 @@ export default function OrderDetail() {
         ) : null}
 
         {showDetail && order ? (
-          <div className="page-stack">
+          <div className="page-stack order-detail-page__stack">
             <OrderDetailSummary
               order={order}
               error={error}
