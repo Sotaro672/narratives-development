@@ -70,19 +70,6 @@
   opacity: 0.5;
 }
 
-.resale-detail-page .page-form__field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.resale-detail-page .page-form__label {
-  color: #374151;
-  font-size: 13px;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
 @media (max-width: 760px) {
   .resale-detail-page {
     padding: 16px 16px calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 20px);
