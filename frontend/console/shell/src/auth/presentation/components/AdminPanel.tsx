@@ -1,17 +1,15 @@
 // frontend/console/shell/src/auth/presentation/components/AdminPanel.tsx
 
-import {
-  LogOut,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 
 import "../../../styles/auth.css";
 
-import {
-  Input,
-} from "../../../shared/ui/input";
-import {
-  useAdminPanel,
-} from "../hook/useAdminPanel";
+import { Button } from "../../../shared/ui/button";
+import { Input } from "../../../shared/ui/input";
+import { Label } from "../../../shared/ui/label";
+import { Modal } from "../../../shared/ui/modal";
+import { Separator } from "../../../shared/ui/separator";
+import { useAdminPanel } from "../hook/useAdminPanel";
 
 interface AdminPanelProps {
   fullName?: string;
@@ -20,12 +18,8 @@ interface AdminPanelProps {
   className?: string;
 }
 
-function getErrorCode(
-  error: unknown,
-): string {
-  return error instanceof Error
-    ? error.message
-    : "";
+function getErrorCode(error: unknown): string {
+  return error instanceof Error ? error.message : "";
 }
 
 export default function AdminPanel({
@@ -35,15 +29,12 @@ export default function AdminPanel({
   className,
 }: AdminPanelProps) {
   const {
-    // ダイアログ
     showProfileDialog,
     setShowProfileDialog,
     showEmailDialog,
     setShowEmailDialog,
     showPasswordDialog,
     setShowPasswordDialog,
-
-    // プロフィール
     lastName,
     setLastName,
     lastNameKana,
@@ -52,459 +43,289 @@ export default function AdminPanel({
     setFirstName,
     firstNameKana,
     setFirstNameKana,
-
-    // メールアドレス
     newEmail,
     setNewEmail,
     currentPasswordForEmail,
     setCurrentPasswordForEmail,
-
-    // 保存処理
     saveProfile,
     saveEmail,
     savePassword,
   } = useAdminPanel();
 
-  // -------------------------
-  // プロフィール保存
-  // -------------------------
+  const handleProfileSave = async () => {
+    try {
+      await saveProfile();
+    } catch (error: unknown) {
+      const code = getErrorCode(error);
 
-  const handleProfileSave =
-    async () => {
-      try {
-        await saveProfile();
-      } catch (error: unknown) {
-        console.error(
-          "[AdminPanel] handleProfileSave error:",
-          error,
-        );
-
-        const code =
-          getErrorCode(error);
-
-        switch (code) {
-          case "MEMBER_NOT_FOUND":
-            window.alert(
-              "ログインユーザーのメンバー情報を確認できませんでした。",
-            );
-            break;
-
-          case "KANA_INVALID":
-            window.alert(
-              "姓・名のかなはひらがなのみで入力してください。",
-            );
-            break;
-
-          default:
-            window.alert(
-              "プロフィールの更新に失敗しました。",
-            );
-        }
+      switch (code) {
+        case "MEMBER_NOT_FOUND":
+          window.alert("ログインユーザーのメンバー情報を確認できませんでした。");
+          break;
+        case "KANA_INVALID":
+          window.alert("姓・名のかなはひらがなのみで入力してください。");
+          break;
+        default:
+          window.alert("プロフィールの更新に失敗しました。");
       }
-    };
+    }
+  };
 
-  // -------------------------
-  // メールアドレス変更
-  // -------------------------
+  const handleEmailSave = async () => {
+    try {
+      await saveEmail();
+      window.alert(
+        "メールアドレス変更用の認証メールを送信しました。メールに記載されたリンクから新しいメールアドレスを確認してください。",
+      );
+    } catch (error: unknown) {
+      const code = getErrorCode(error);
 
-  const handleEmailSave =
-    async () => {
-      try {
-        await saveEmail();
-
-        window.alert(
-          "メールアドレス変更用の認証メールを送信しました。メールに記載されたリンクから新しいメールアドレスを確認してください。",
-        );
-      } catch (error: unknown) {
-        console.error(
-          "[AdminPanel] handleEmailSave error:",
-          error,
-        );
-
-        const code =
-          getErrorCode(error);
-
-        switch (code) {
-          case "EMAIL_REQUIRED":
-            window.alert(
-              "新しいメールアドレスを入力してください。",
-            );
-            break;
-
-          case "PASSWORD_REQUIRED":
-            window.alert(
-              "現在のパスワードを入力してください。",
-            );
-            break;
-
-          case "AUTH_REAUTH_FAILED":
-            window.alert(
-              "再認証に失敗しました。パスワードを確認してください。",
-            );
-            break;
-
-          case "AUTH_EMAIL_IN_USE":
-            window.alert(
-              "このメールアドレスは既に使用されています。",
-            );
-            break;
-
-          case "AUTH_NO_USER":
-            window.alert(
-              "ログイン情報が見つかりません。再ログインしてください。",
-            );
-            break;
-
-          default:
-            window.alert(
-              "認証メールの送信に失敗しました。",
-            );
-        }
+      switch (code) {
+        case "EMAIL_REQUIRED":
+          window.alert("新しいメールアドレスを入力してください。");
+          break;
+        case "PASSWORD_REQUIRED":
+          window.alert("現在のパスワードを入力してください。");
+          break;
+        case "AUTH_REAUTH_FAILED":
+          window.alert("再認証に失敗しました。パスワードを確認してください。");
+          break;
+        case "AUTH_EMAIL_IN_USE":
+          window.alert("このメールアドレスは既に使用されています。");
+          break;
+        case "AUTH_NO_USER":
+          window.alert("ログイン情報が見つかりません。再ログインしてください。");
+          break;
+        default:
+          window.alert("認証メールの送信に失敗しました。");
       }
-    };
+    }
+  };
 
-  // -------------------------
-  // パスワード再設定メール送信
-  // -------------------------
+  const handlePasswordSave = async () => {
+    try {
+      await savePassword();
+      window.alert(
+        "パスワード再設定用のメールを送信しました。メールに記載のリンクから新しいパスワードを設定してください。",
+      );
+    } catch (error: unknown) {
+      const code = getErrorCode(error);
 
-  const handlePasswordSave =
-    async () => {
-      try {
-        await savePassword();
-
-        window.alert(
-          "パスワード再設定用のメールを送信しました。メールに記載のリンクから新しいパスワードを設定してください。",
-        );
-      } catch (error: unknown) {
-        console.error(
-          "[AdminPanel] handlePasswordSave error:",
-          error,
-        );
-
-        const code =
-          getErrorCode(error);
-
-        switch (code) {
-          case "AUTH_NO_USER":
-            window.alert(
-              "ログイン情報が見つかりません。再ログインしてください。",
-            );
-            break;
-
-          default:
-            window.alert(
-              "パスワード再設定メールの送信に失敗しました。",
-            );
-        }
+      switch (code) {
+        case "AUTH_NO_USER":
+          window.alert("ログイン情報が見つかりません。再ログインしてください。");
+          break;
+        default:
+          window.alert("パスワード再設定メールの送信に失敗しました。");
       }
-    };
+    }
+  };
 
   return (
     <>
       <div
         id="admin-dropdown"
-        className={`admin-dropdown ${
-          className ?? ""
-        }`}
+        className={`admin-dropdown ${className ?? ""}`.trim()}
         role="menu"
         aria-label="アカウントメニュー"
       >
         <div className="admin-dropdown-header">
-          <div className="admin-dropdown-title">
-            {fullName}
-          </div>
-
-          {email && (
-            <div className="admin-dropdown-email">
-              {email}
-            </div>
-          )}
+          <div className="admin-dropdown-title">{fullName}</div>
+          {email && <div className="admin-dropdown-email">{email}</div>}
         </div>
 
-        <div className="admin-dropdown-sep" />
+        <Separator className="admin-dropdown-sep" />
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className="admin-dropdown-item"
-          onClick={() =>
-            setShowProfileDialog(true)
-          }
+          role="menuitem"
+          onClick={() => setShowProfileDialog(true)}
         >
           プロフィール変更
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className="admin-dropdown-item"
-          onClick={() =>
-            setShowEmailDialog(true)
-          }
+          role="menuitem"
+          onClick={() => setShowEmailDialog(true)}
         >
           メールアドレス変更
-        </button>
+        </Button>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className="admin-dropdown-item"
-          onClick={() =>
-            setShowPasswordDialog(true)
-          }
+          role="menuitem"
+          onClick={() => setShowPasswordDialog(true)}
         >
           パスワード変更
-        </button>
+        </Button>
 
-        <div className="admin-dropdown-sep" />
+        <Separator className="admin-dropdown-sep" />
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
           className="admin-dropdown-item logout"
+          role="menuitem"
           onClick={onLogout}
         >
-          <LogOut
-            className="logout-icon"
-            aria-hidden
-          />
+          <LogOut className="logout-icon" aria-hidden />
           ログアウト
-        </button>
+        </Button>
       </div>
 
-      {showProfileDialog && (
-        <div className="admin-modal-backdrop">
-          <div
-            className="admin-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="profile-dialog-title"
-          >
-            <div
-              id="profile-dialog-title"
-              className="admin-modal-title"
+      <Modal
+        open={showProfileDialog}
+        title="プロフィール変更"
+        onClose={() => setShowProfileDialog(false)}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowProfileDialog(false)}
             >
-              プロフィール変更
+              キャンセル
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => void handleProfileSave()}
+            >
+              保存
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="admin-profile-last-name">姓</Label>
+              <Input
+                id="admin-profile-last-name"
+                value={lastName}
+                onChange={(event) => setLastName(event.target.value)}
+                placeholder="山田"
+              />
             </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="admin-modal-label">
-                    姓
-                  </label>
+            <div className="space-y-2">
+              <Label htmlFor="admin-profile-last-name-kana">姓（かな）</Label>
+              <Input
+                id="admin-profile-last-name-kana"
+                value={lastNameKana}
+                onChange={(event) => setLastNameKana(event.target.value)}
+                placeholder="やまだ"
+                inputMode="text"
+              />
+            </div>
+          </div>
 
-                  <Input
-                    className="admin-modal-input"
-                    value={lastName}
-                    onChange={(event) =>
-                      setLastName(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="山田"
-                  />
-                </div>
-
-                <div>
-                  <label className="admin-modal-label">
-                    姓（かな）
-                  </label>
-
-                  <Input
-                    className="admin-modal-input"
-                    value={lastNameKana}
-                    onChange={(event) =>
-                      setLastNameKana(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="やまだ"
-                    inputMode="text"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="admin-modal-label">
-                    名
-                  </label>
-
-                  <Input
-                    className="admin-modal-input"
-                    value={firstName}
-                    onChange={(event) =>
-                      setFirstName(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="太郎"
-                  />
-                </div>
-
-                <div>
-                  <label className="admin-modal-label">
-                    名（かな）
-                  </label>
-
-                  <Input
-                    className="admin-modal-input"
-                    value={firstNameKana}
-                    onChange={(event) =>
-                      setFirstNameKana(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="たろう"
-                    inputMode="text"
-                  />
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label htmlFor="admin-profile-first-name">名</Label>
+              <Input
+                id="admin-profile-first-name"
+                value={firstName}
+                onChange={(event) => setFirstName(event.target.value)}
+                placeholder="太郎"
+              />
             </div>
 
-            <div className="admin-modal-footer">
-              <button
-                type="button"
-                className="admin-modal-button cancel"
-                onClick={() =>
-                  setShowProfileDialog(false)
-                }
-              >
-                キャンセル
-              </button>
-
-              <button
-                type="button"
-                className="admin-modal-button primary"
-                onClick={handleProfileSave}
-              >
-                保存
-              </button>
+            <div className="space-y-2">
+              <Label htmlFor="admin-profile-first-name-kana">名（かな）</Label>
+              <Input
+                id="admin-profile-first-name-kana"
+                value={firstNameKana}
+                onChange={(event) => setFirstNameKana(event.target.value)}
+                placeholder="たろう"
+                inputMode="text"
+              />
             </div>
           </div>
         </div>
-      )}
+      </Modal>
 
-      {showEmailDialog && (
-        <div className="admin-modal-backdrop">
-          <div
-            className="admin-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="email-dialog-title"
-          >
-            <div
-              id="email-dialog-title"
-              className="admin-modal-title"
+      <Modal
+        open={showEmailDialog}
+        title="メールアドレス変更"
+        onClose={() => setShowEmailDialog(false)}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowEmailDialog(false)}
             >
-              メールアドレス変更
-            </div>
+              キャンセル
+            </Button>
 
-            <div className="space-y-4">
-              <div>
-                <label className="admin-modal-label">
-                  新しいメールアドレス
-                </label>
+            <Button
+              type="button"
+              onClick={() => void handleEmailSave()}
+            >
+              認証メールを送信
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="admin-email-new">新しいメールアドレス</Label>
+            <Input
+              id="admin-email-new"
+              type="email"
+              value={newEmail}
+              onChange={(event) => setNewEmail(event.target.value)}
+              placeholder="new@example.com"
+            />
+          </div>
 
-                <Input
-                  className="admin-modal-input"
-                  type="email"
-                  value={newEmail}
-                  onChange={(event) =>
-                    setNewEmail(
-                      event.target.value,
-                    )
-                  }
-                  placeholder="new@example.com"
-                />
-              </div>
-
-              <div>
-                <label className="admin-modal-label">
-                  パスワード
-                </label>
-
-                <Input
-                  className="admin-modal-input"
-                  type="password"
-                  value={
-                    currentPasswordForEmail
-                  }
-                  onChange={(event) =>
-                    setCurrentPasswordForEmail(
-                      event.target.value,
-                    )
-                  }
-                  placeholder="現在のパスワード"
-                />
-              </div>
-            </div>
-
-            <div className="admin-modal-footer">
-              <button
-                type="button"
-                className="admin-modal-button cancel"
-                onClick={() =>
-                  setShowEmailDialog(false)
-                }
-              >
-                キャンセル
-              </button>
-
-              <button
-                type="button"
-                className="admin-modal-button primary"
-                onClick={handleEmailSave}
-              >
-                認証メールを送信
-              </button>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="admin-email-current-password">パスワード</Label>
+            <Input
+              id="admin-email-current-password"
+              type="password"
+              value={currentPasswordForEmail}
+              onChange={(event) =>
+                setCurrentPasswordForEmail(event.target.value)
+              }
+              placeholder="現在のパスワード"
+            />
           </div>
         </div>
-      )}
+      </Modal>
 
-      {showPasswordDialog && (
-        <div className="admin-modal-backdrop">
-          <div
-            className="admin-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="password-dialog-title"
-          >
-            <div
-              id="password-dialog-title"
-              className="admin-modal-title"
+      <Modal
+        open={showPasswordDialog}
+        title="パスワード変更"
+        description="現在ログイン中のメールアドレス宛に、パスワード再設定用のメールを送信します。メールに記載されたリンクから新しいパスワードを設定してください。"
+        onClose={() => setShowPasswordDialog(false)}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowPasswordDialog(false)}
             >
-              パスワード変更
-            </div>
+              キャンセル
+            </Button>
 
-            <div className="space-y-4">
-              <p className="admin-modal-text">
-                現在ログイン中のメールアドレス宛に、
-                パスワード再設定用のメールを送信します。
-                メールに記載されたリンクから新しいパスワードを設定してください。
-              </p>
-            </div>
-
-            <div className="admin-modal-footer">
-              <button
-                type="button"
-                className="admin-modal-button cancel"
-                onClick={() =>
-                  setShowPasswordDialog(false)
-                }
-              >
-                キャンセル
-              </button>
-
-              <button
-                type="button"
-                className="admin-modal-button primary"
-                onClick={handlePasswordSave}
-              >
-                再設定メールを送信
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            <Button
+              type="button"
+              onClick={() => void handlePasswordSave()}
+            >
+              再設定メールを送信
+            </Button>
+          </>
+        }
+      />
     </>
   );
 }

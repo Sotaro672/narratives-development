@@ -1,11 +1,8 @@
 /* frontend/console/shell/src/styles/auth.css */
 
-:root {
-  --hd-bg: #fff;
-  --hd-fg: #111;
-  --hd-fg-muted: #8a8a8a;
-  --hd-border: #eaeaea;
-}
+/* =========================================================
+ * Header
+ * ======================================================= */
 
 .app-header {
   position: sticky;
@@ -15,10 +12,10 @@
   height: 56px;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--hd-border);
-  background: var(--hd-bg);
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
   padding: 0 16px;
-  color: var(--hd-fg);
+  color: hsl(var(--foreground));
 }
 
 .brand {
@@ -35,7 +32,7 @@
 }
 
 .brand-sub {
-  color: var(--hd-fg-muted);
+  color: hsl(var(--muted-foreground));
   font-size: 16px;
   line-height: 1;
 }
@@ -46,43 +43,22 @@
   gap: 20px;
 }
 
-.icon-btn {
+.header-icon-button {
   position: relative;
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-}
-
-.icon-btn:hover {
-  background: #f6f6f6;
 }
 
 .user-trigger {
   width: auto;
   gap: 2px;
-  padding: 0 4px;
-}
-
-.icon-wrap {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  padding-right: 4px;
+  padding-left: 4px;
 }
 
 .icon {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
-  color: var(--hd-fg);
+  color: hsl(var(--foreground));
   stroke-width: 1.8;
 }
 
@@ -90,11 +66,13 @@
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: var(--hd-fg-muted);
+  color: hsl(var(--muted-foreground));
   stroke-width: 1.8;
 }
 
-/* ヘッダー通知件数 */
+/* =========================================================
+ * Header Notification
+ * ======================================================= */
 
 .header-notification-badge {
   position: absolute;
@@ -108,39 +86,36 @@
   pointer-events: none;
 }
 
-/* ============ 全体レイアウト（白基調） ============ */
+/* =========================================================
+ * Auth Page
+ * ======================================================= */
 
 .auth-page {
   display: flex;
   min-height: 100vh;
   align-items: center;
   justify-content: center;
-  background: #f5f5f7;
-  color: #111;
+  background: hsl(var(--muted));
+  padding: 24px;
+  color: hsl(var(--foreground));
 }
-
-/* ============ カード ============ */
 
 .auth-card {
-  width: 100%;
   max-width: 480px;
-  border: 1px solid #e5e5e5;
-  border-radius: 16px;
-  background: #ffffff;
   padding: 32px 40px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
 }
-
-/* タイトル */
 
 .auth-title {
-  margin-bottom: 20px;
-  color: #111;
+  margin: 0 0 20px;
+  color: hsl(var(--foreground));
   font-size: 1.6rem;
   font-weight: 600;
+  line-height: 1.3;
 }
 
-/* フォーム */
+/* =========================================================
+ * Auth Form
+ * ======================================================= */
 
 .auth-form {
   display: flex;
@@ -148,45 +123,21 @@
   gap: 14px;
 }
 
-/* 2カラム行 */
-
 .auth-row {
   display: flex;
   gap: 12px;
 }
 
-/* ラベル */
-
-.auth-label {
+.auth-field {
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 4px;
-  color: #444;
-  font-size: 0.82rem;
+  gap: 6px;
 }
 
-.auth-label-inline {
+.auth-field--inline {
   flex: 1;
 }
-
-/* 入力欄 */
-
-.auth-input {
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
-  background: #fff;
-  padding: 10px 12px;
-  color: #111;
-  font-size: 0.9rem;
-}
-
-.auth-input:focus {
-  border-color: #4f46e5;
-  outline: none;
-  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.3);
-}
-
-/* ボタン配置 */
 
 .auth-actions {
   display: flex;
@@ -194,16 +145,25 @@
   margin-top: 16px;
 }
 
-/* モード切り替え */
+.auth-forgot {
+  display: flex;
+  justify-content: flex-end;
+}
 
 .auth-switch {
   margin-top: 16px;
-  color: #333;
+  color: hsl(var(--muted-foreground));
   font-size: 0.85rem;
   text-align: center;
 }
 
-/* ドロップダウン */
+.auth-switch p {
+  margin: 0;
+}
+
+/* =========================================================
+ * Account Dropdown
+ * ======================================================= */
 
 .admin-dropdown {
   position: absolute;
@@ -211,11 +171,13 @@
   right: 0;
   z-index: 1000;
   width: 280px;
-  border: 1px solid #e8e8ee;
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
   border-radius: 14px;
-  background: #fff;
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
   padding: 10px 0;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.08);
 }
 
 .admin-dropdown-header {
@@ -224,19 +186,19 @@
 
 .admin-dropdown-title {
   margin-bottom: 2px;
-  color: #111319;
+  color: hsl(var(--foreground));
   font-weight: 700;
 }
 
 .admin-dropdown-email {
-  color: #6b6b77;
+  color: hsl(var(--muted-foreground));
   font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .admin-dropdown-sep {
-  height: 1px;
   margin: 8px 0;
-  background: #f1f1f5;
 }
 
 .admin-dropdown-item {
@@ -249,67 +211,10 @@
 }
 
 .admin-dropdown-item.logout {
-  color: #dc2626;
+  color: hsl(var(--destructive));
 }
 
 .logout-icon {
   width: 16px;
   height: 16px;
-}
-
-/* =========================
- * ダイアログ共通スタイル
- * ========================= */
-
-.admin-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 1100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(15, 23, 42, 0.45);
-}
-
-.admin-modal {
-  width: 420px;
-  max-width: 90vw;
-  border-radius: 16px;
-  background: #ffffff;
-  padding: 20px 24px 18px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
-}
-
-.admin-modal-title {
-  margin-bottom: 16px;
-  color: #111319;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.admin-modal-field {
-  margin-bottom: 12px;
-}
-
-.admin-modal-label {
-  display: block;
-  margin-bottom: 4px;
-  color: #4b5563;
-  font-size: 13px;
-}
-
-.admin-modal-input {
-  box-sizing: border-box;
-  width: 100%;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 8px 10px;
-  font-size: 14px;
-}
-
-.admin-modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
 }

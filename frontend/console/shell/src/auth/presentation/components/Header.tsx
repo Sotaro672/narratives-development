@@ -12,6 +12,7 @@ import "../../../styles/auth.css";
 
 import { useNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useNotificationUnreadCount";
 import { Badge } from "../../../shared/ui/badge";
+import { Button } from "../../../shared/ui/button";
 import AdminPanel from "./AdminPanel";
 import { useHeader } from "../hook/useHeader";
 
@@ -38,9 +39,7 @@ export default function Header(props: HeaderProps) {
     email: props.email ?? "ログインできていません",
   });
 
-  const {
-    unreadCount,
-  } = useNotificationUnreadCount();
+  const { unreadCount } = useNotificationUnreadCount();
 
   const handleOpenNotifications = () => {
     if (openAdmin) {
@@ -69,53 +68,42 @@ export default function Header(props: HeaderProps) {
           cursor: "pointer",
         }}
       >
-        <span className="brand-main">
-          {brandMain}
-        </span>
-
-        <span className="brand-sub">
-          Console
-        </span>
+        <span className="brand-main">{brandMain}</span>
+        <span className="brand-sub">Console</span>
       </button>
 
       <div className="actions">
-        <button
+        <Button
           type="button"
-          className="icon-btn"
+          variant="ghost"
+          size="icon"
+          className="header-icon-button"
           aria-label={notificationAriaLabel}
           title="通知"
           onClick={handleOpenNotifications}
         >
-          <Bell
-            className="icon"
-            aria-hidden
-          />
+          <Bell className="icon" aria-hidden />
 
-          {unreadCount > 0 ? (
+          {unreadCount > 0 && (
             <Badge
               variant="danger"
               className="header-notification-badge"
             >
               {unreadCount > 99 ? "99+" : unreadCount}
             </Badge>
-          ) : null}
-        </button>
+          )}
+        </Button>
 
-        <div
-          className="relative"
-          ref={panelContainerRef}
-        >
-          <button
+        <div className="relative" ref={panelContainerRef}>
+          <Button
             ref={triggerRef}
             type="button"
-            className="icon-btn user-trigger"
+            variant="ghost"
+            size="icon"
+            className="user-trigger"
             aria-haspopup="menu"
             aria-expanded={openAdmin}
-            aria-controls={
-              openAdmin
-                ? "admin-dropdown"
-                : undefined
-            }
+            aria-controls={openAdmin ? "admin-dropdown" : undefined}
             aria-label={
               openAdmin
                 ? "アカウントメニューを閉じる"
@@ -123,23 +111,14 @@ export default function Header(props: HeaderProps) {
             }
             onClick={handleToggleAdmin}
           >
-            <UserRound
-              className="icon"
-              aria-hidden
-            />
+            <UserRound className="icon" aria-hidden />
 
             {openAdmin ? (
-              <ChevronUp
-                className="caret"
-                aria-hidden
-              />
+              <ChevronUp className="caret" aria-hidden />
             ) : (
-              <ChevronDown
-                className="caret"
-                aria-hidden
-              />
+              <ChevronDown className="caret" aria-hidden />
             )}
-          </button>
+          </Button>
 
           {openAdmin && (
             <AdminPanel

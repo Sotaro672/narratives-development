@@ -4,7 +4,10 @@ import { useEffect } from "react";
 
 import { useAuthPage } from "../auth/presentation/hook/useAuthPage";
 import { Button } from "../shared/ui/button";
+import { Card } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
+import { Input } from "../shared/ui/input";
+import { Label } from "../shared/ui/label";
 
 import "../styles/auth.css";
 
@@ -12,17 +15,14 @@ export default function AuthPage() {
   const {
     mode,
     switchMode,
-
     forgotPasswordMode,
     setForgotPasswordMode,
-
     email,
     setEmail,
     password,
     setPassword,
     confirmPassword,
     setConfirmPassword,
-
     lastName,
     setLastName,
     firstName,
@@ -31,17 +31,13 @@ export default function AuthPage() {
     setLastNameKana,
     firstNameKana,
     setFirstNameKana,
-
     companyName,
     setCompanyName,
-
     submitting,
     error,
     setError,
-
     signupCompleted,
     resetSignupFlow,
-
     handleFormSubmit,
   } = useAuthPage();
 
@@ -56,7 +52,7 @@ export default function AuthPage() {
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <Card className="auth-card" elevated largeRadius>
         <h1 className="auth-title">
           {mode === "signup"
             ? "管理アカウントの新規登録"
@@ -69,149 +65,155 @@ export default function AuthPage() {
           {mode === "signup" && (
             <>
               <div className="auth-row">
-                <label className="auth-label auth-label-inline">
-                  姓（漢字）
-                  <input
+                <div className="auth-field auth-field--inline">
+                  <Label htmlFor="lastName">姓（漢字）</Label>
+                  <Input
+                    id="lastName"
                     type="text"
-                    className="auth-input"
                     value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
+                    onChange={(event) => setLastName(event.target.value)}
                     required
                   />
-                </label>
+                </div>
 
-                <label className="auth-label auth-label-inline">
-                  姓（かな）
-                  <input
+                <div className="auth-field auth-field--inline">
+                  <Label htmlFor="lastNameKana">姓（かな）</Label>
+                  <Input
+                    id="lastNameKana"
                     type="text"
-                    className="auth-input"
                     value={lastNameKana}
-                    onChange={(e) => setLastNameKana(e.target.value)}
+                    onChange={(event) => setLastNameKana(event.target.value)}
                     placeholder="姓（せい）"
                     required
                   />
-                </label>
+                </div>
               </div>
 
               <div className="auth-row">
-                <label className="auth-label auth-label-inline">
-                  名（漢字）
-                  <input
+                <div className="auth-field auth-field--inline">
+                  <Label htmlFor="firstName">名（漢字）</Label>
+                  <Input
+                    id="firstName"
                     type="text"
-                    className="auth-input"
                     value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
+                    onChange={(event) => setFirstName(event.target.value)}
                     required
                   />
-                </label>
+                </div>
 
-                <label className="auth-label auth-label-inline">
-                  名（かな）
-                  <input
+                <div className="auth-field auth-field--inline">
+                  <Label htmlFor="firstNameKana">名（かな）</Label>
+                  <Input
+                    id="firstNameKana"
                     type="text"
-                    className="auth-input"
                     value={firstNameKana}
-                    onChange={(e) => setFirstNameKana(e.target.value)}
+                    onChange={(event) => setFirstNameKana(event.target.value)}
                     placeholder="名（めい）"
                     required
                   />
-                </label>
+                </div>
               </div>
             </>
           )}
 
-          <label className="auth-label">
-            メールアドレス
-            <input
+          <div className="auth-field">
+            <Label htmlFor="email">メールアドレス</Label>
+            <Input
+              id="email"
               type="email"
-              className="auth-input"
               value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                if (error) setError(null);
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (error) {
+                  setError(null);
+                }
               }}
               required
             />
-          </label>
+          </div>
 
           {mode === "signup" && (
-            <label className="auth-label">
-              会社名・団体名
-              <input
+            <div className="auth-field">
+              <Label htmlFor="companyName">会社名・団体名</Label>
+              <Input
+                id="companyName"
                 type="text"
-                className="auth-input"
                 value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
+                onChange={(event) => setCompanyName(event.target.value)}
                 placeholder="会社名・団体名を入力してください"
               />
-            </label>
+            </div>
           )}
 
           {!(mode === "signin" && forgotPasswordMode) && (
-            <label className="auth-label">
-              パスワード
-              <input
+            <div className="auth-field">
+              <Label htmlFor="password">パスワード</Label>
+              <Input
+                id="password"
                 type="password"
-                className="auth-input"
                 value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (error) setError(null);
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  if (error) {
+                    setError(null);
+                  }
                 }}
                 required
               />
-            </label>
+            </div>
           )}
 
           {mode === "signup" && (
-            <label className="auth-label">
-              パスワード（確認用）
-              <input
+            <div className="auth-field">
+              <Label htmlFor="confirmPassword">パスワード（確認用）</Label>
+              <Input
+                id="confirmPassword"
                 type="password"
-                className="auth-input"
                 value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  if (error) setError(null);
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  if (error) {
+                    setError(null);
+                  }
                 }}
                 required
               />
-            </label>
+            </div>
           )}
 
           {mode === "signin" && !forgotPasswordMode && (
             <div className="auth-forgot">
-              <button
+              <Button
                 type="button"
-                className="auth-forgot-link"
+                variant="link"
                 onClick={() => {
                   setError(null);
                   setForgotPasswordMode(true);
                 }}
               >
                 パスワードをお忘れの方はこちら
-              </button>
+              </Button>
             </div>
           )}
 
           {mode === "signin" && forgotPasswordMode && (
             <div className="auth-forgot">
-              <button
+              <Button
                 type="button"
-                className="auth-forgot-link"
+                variant="link"
                 onClick={() => {
                   setError(null);
                   setForgotPasswordMode(false);
                 }}
               >
                 ログイン画面に戻る
-              </button>
+              </Button>
             </div>
           )}
 
           {error && <ErrorMessage size="xs">{error}</ErrorMessage>}
 
-          <div className="auth-actions" style={{ justifyContent: "center" }}>
+          <div className="auth-actions">
             <Button
               type="submit"
               variant="solid"
@@ -237,30 +239,34 @@ export default function AuthPage() {
           {mode === "signup" ? (
             <p>
               すでにアカウントをお持ちの方{" "}
-              <button
+              <Button
+                type="button"
+                variant="link"
                 onClick={() => {
                   resetSignupFlow();
                   switchMode("signin");
                 }}
               >
                 ログインする
-              </button>
+              </Button>
             </p>
           ) : (
             <p>
               アカウントをお持ちでない方{" "}
-              <button
+              <Button
+                type="button"
+                variant="link"
                 onClick={() => {
                   resetSignupFlow();
                   switchMode("signup");
                 }}
               >
                 新規登録する
-              </button>
+              </Button>
             </p>
           )}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }
