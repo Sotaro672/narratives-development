@@ -1,5 +1,8 @@
-//frontend\amol\src\features\shared\presentation\components\FavoriteHeartButton.tsx
+// frontend/mall/src/features/shared/presentation/components/FavoriteHeartButton.tsx
+
 import { Heart } from "lucide-react";
+
+import IconButton from "../../../../components/ui/IconButton";
 
 import "../../styles/favorite-heart-button.css";
 
@@ -19,11 +22,10 @@ export default function FavoriteHeartButton({
     : "お気に入りに追加";
 
   return (
-    <button
-      type="button"
-      className={`favorite-heart-button${
-        isLiked ? " favorite-heart-button--liked" : ""
-      }`}
+    <IconButton
+      variant="ghost"
+      size="md"
+      className={isLiked ? "favorite-heart-button--liked" : ""}
       disabled={disabled}
       aria-label={label}
       aria-pressed={isLiked}
@@ -36,6 +38,6 @@ export default function FavoriteHeartButton({
         fill={isLiked ? "currentColor" : "none"}
         aria-hidden="true"
       />
-    </button>
+    </IconButton>
   );
 }

@@ -1,9 +1,8 @@
-// frontend/amol/src/features/shared/presentation/components/ChatThreadCard.tsx
+// frontend/mall/src/features/shared/presentation/components/ChatThreadCard.tsx
 
-import type {
-  HTMLAttributes,
-  ReactNode,
-} from "react";
+import type { HTMLAttributes, ReactNode } from "react";
+
+import Card from "../../../../components/ui/Card";
 
 import "../../styles/chat-thread-card.css";
 
@@ -34,15 +33,16 @@ export default function ChatThreadCard({
   ...articleProps
 }: ChatThreadCardProps) {
   return (
-    <article
-      {...articleProps}
+    <Card
+      as="article"
       className={joinClassNames(
         "chat-thread-card",
         variant && `chat-thread-card--${variant}`,
         className,
       )}
+      {...articleProps}
     >
       {children}
-    </article>
+    </Card>
   );
 }

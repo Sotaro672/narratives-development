@@ -1,4 +1,4 @@
-/* frontend/amol/src/features/shared/styles/chat-detail-page.css */
+/* frontend/mall/src/features/shared/styles/chat-detail-page.css */
 
 .chat-detail-page-layout {
   background: #f8fafc;
@@ -13,6 +13,9 @@
 
 .chat-detail-page__error {
   margin: 16px 0;
+}
+
+.chat-detail-page__error:not(.ui-alert) {
   padding: 12px 14px;
   border: 1px solid rgba(239, 68, 68, 0.24);
   border-radius: 12px;
@@ -28,11 +31,15 @@
   padding: 28px 18px;
   border-radius: 16px;
   background: #ffffff;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.chat-detail-page__state:not(.ui-text-state),
+.chat-detail-page__empty:not(.ui-text-state) {
   color: rgba(15, 23, 42, 0.62);
   font-size: 0.95rem;
   line-height: 1.7;
-  text-align: center;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
 .chat-detail-page__thread {
@@ -226,10 +233,13 @@
   border: 1px dashed rgba(15, 23, 42, 0.16);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.72);
+  text-align: center;
+}
+
+.chat-detail-page__no-replies:not(.ui-text-state) {
   color: rgba(15, 23, 42, 0.52);
   font-size: 0.9rem;
   line-height: 1.7;
-  text-align: center;
 }
 
 .chat-detail-page__replies {

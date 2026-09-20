@@ -2,6 +2,8 @@
 
 import { Flag } from "lucide-react";
 
+import IconButton from "../../../../components/ui/IconButton";
+
 import "../../styles/report-flag-button.css";
 
 type ReportFlagButtonProps = {
@@ -16,8 +18,9 @@ export default function ReportFlagButton({
   onClick,
 }: ReportFlagButtonProps) {
   return (
-    <button
-      type="button"
+    <IconButton
+      variant="ghost"
+      size="md"
       className="report-flag-button"
       disabled={disabled}
       aria-label={label}
@@ -29,6 +32,6 @@ export default function ReportFlagButton({
         strokeWidth={2}
         aria-hidden="true"
       />
-    </button>
+    </IconButton>
   );
 }

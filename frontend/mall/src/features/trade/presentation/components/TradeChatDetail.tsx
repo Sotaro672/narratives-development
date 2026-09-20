@@ -3,6 +3,8 @@
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
+import Alert from "../../../../components/ui/Alert";
+import TextState from "../../../../components/ui/TextState";
 import ReturnRequestModal from "../../../order/components/ReturnRequestModal";
 import ReportModal from "../../../report/components/ReportModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
@@ -14,10 +16,7 @@ import useTradeReply from "../hooks/useTradeReply";
 import useTradeReturn from "../hooks/useTradeReturn";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
 import useTradeThread from "../hooks/useTradeThread";
-import {
-  getTradeOrderAction,
-  getTradeTitle,
-} from "../util/tradeChatDetail";
+import { getTradeOrderAction, getTradeTitle } from "../util/tradeChatDetail";
 
 import TradeMessageCard from "./TradeMessageCard";
 import TradeOrderActionPrompt from "./TradeOrderActionPrompt";
@@ -158,19 +157,27 @@ export default function TradeChatDetail({
       >
         <section className="page-section content-page-section chat-detail-page">
           {thread.error ? (
-            <div className="chat-detail-page__error" role="alert">
+            <Alert variant="error" className="chat-detail-page__error">
               {thread.error}
-            </div>
+            </Alert>
           ) : null}
 
           {thread.loading ? (
-            <div className="chat-detail-page__state">読み込み中...</div>
+            <TextState
+              variant="loading"
+              className="chat-detail-page__state"
+            >
+              読み込み中...
+            </TextState>
           ) : null}
 
           {!thread.loading && !thread.trade ? (
-            <div className="chat-detail-page__empty">
+            <TextState
+              variant="empty"
+              className="chat-detail-page__empty"
+            >
               取引が見つかりません。
-            </div>
+            </TextState>
           ) : null}
 
           {!thread.loading && thread.trade ? (
@@ -183,9 +190,12 @@ export default function TradeChatDetail({
                 </h3>
 
                 {thread.messages.length === 0 && !shouldShowOrderAction ? (
-                  <div className="chat-detail-page__no-replies">
+                  <TextState
+                    variant="empty"
+                    className="chat-detail-page__no-replies"
+                  >
                     まだメッセージはありません。
-                  </div>
+                  </TextState>
                 ) : (
                   <div className="chat-detail-page__replies">
                     {thread.messages.map((message) => (

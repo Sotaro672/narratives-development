@@ -1,4 +1,6 @@
-// frontend/amol/src/features/shared/presentation/components/ResaleCommentButton.tsx
+// frontend/mall/src/features/shared/presentation/components/ResaleCommentButton.tsx
+
+import IconButton from "../../../../components/ui/IconButton";
 
 import "../../styles/resale-comment-button.css";
 
@@ -17,8 +19,9 @@ export default function ResaleCommentButton({
   const countLabel = safeCount > 99 ? "99+" : String(safeCount);
 
   return (
-    <button
-      type="button"
+    <IconButton
+      variant="ghost"
+      size="md"
       className="resale-comment-button"
       onClick={onClick}
       disabled={disabled}
@@ -39,9 +42,9 @@ export default function ResaleCommentButton({
         />
       </svg>
 
-      <span className="resale-comment-button__count">
+      <span className="resale-comment-button__count" aria-hidden="true">
         {countLabel}
       </span>
-    </button>
+    </IconButton>
   );
 }

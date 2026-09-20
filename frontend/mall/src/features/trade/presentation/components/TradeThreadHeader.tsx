@@ -1,8 +1,9 @@
 // frontend/mall/src/features/trade/presentation/components/TradeThreadHeader.tsx
 
 import { useEffect, useState } from "react";
-import { Copy } from "lucide-react";
 
+import Badge from "../../../../components/ui/Badge";
+import Copy from "../../../../components/ui/Copy";
 import { formatDateTime } from "../../../../components/utils/date";
 import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
@@ -10,10 +11,7 @@ import ChatMetaSection, { type ChatMetaItem } from "../../../shared/presentation
 import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import type { TradeDetail } from "../../../shared/types/trade";
-
-import {
-  getTradeTitle,
-} from "../util/tradeChatDetail";
+import { getTradeTitle } from "../util/tradeChatDetail";
 import { getTradeStatusLabel } from "../util/tradeStatus";
 
 type TradeThreadHeaderProps = {
@@ -23,24 +21,17 @@ type TradeThreadHeaderProps = {
 export default function TradeThreadHeader({
   trade,
 }: TradeThreadHeaderProps) {
-  const counterpartLabel =
-    trade.viewerSide === "buyer"
-      ? "出品者"
-      : "購入者";
-
+  const counterpartLabel = trade.viewerSide === "buyer" ? "出品者" : "購入者";
   const counterpartAvatarName =
     trade.viewerSide === "buyer"
       ? trade.sellerAvatarName
       : trade.buyerAvatarName;
-
   const counterpartAvatarIcon =
     trade.viewerSide === "buyer"
       ? trade.sellerAvatarIcon
       : trade.buyerAvatarIcon;
 
-  const displayName =
-    counterpartAvatarName || counterpartLabel;
-
+  const displayName = counterpartAvatarName || counterpartLabel;
   const title = getTradeTitle(trade.productName);
   const model = createProductModelDisplay(trade.resale);
   const [orderIdCopied, setOrderIdCopied] = useState(false);
@@ -74,34 +65,11 @@ export default function TradeThreadHeader({
       value: (
         <span className="trade-chat-detail__order-id">
           <span>{trade.orderId}</span>
-
-          <button
-            type="button"
-            className="trade-chat-detail__copy-button"
-            onClick={() => {
-              void handleCopyOrderId();
-            }}
-            aria-label={
-              orderIdCopied
-                ? "コピーしました"
-                : "注文IDをコピー"
-            }
-            title={
-              orderIdCopied
-                ? "コピーしました"
-                : "注文IDをコピー"
-            }
-          >
-            {orderIdCopied ? (
-              <span>コピーしました</span>
-            ) : (
-              <Copy
-                size={15}
-                strokeWidth={2}
-                aria-hidden="true"
-              />
-            )}
-          </button>
+          <Copy
+            onClick={handleCopyOrderId}
+            ariaLabel={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
+            title={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
+          />
         </span>
       ),
     },
@@ -142,10 +110,7 @@ export default function TradeThreadHeader({
     });
   }
 
-  if (
-    model.kindLabel &&
-    model.kindLabel !== "アパレル"
-  ) {
+  if (model.kindLabel && model.kindLabel !== "アパレル") {
     productMetaItems.push({
       label: "種別",
       value: model.kindLabel,
@@ -162,9 +127,7 @@ export default function TradeThreadHeader({
   if (model.colorLabel || model.colorCssValue) {
     productMetaItems.push({
       label: "カラー",
-      value:
-        model.colorLabel ||
-        model.colorCssValue,
+      value: model.colorLabel || model.colorCssValue,
     });
   }
 
@@ -189,15 +152,13 @@ export default function TradeThreadHeader({
         icon={counterpartAvatarIcon}
         createdAt={trade.createdAt}
         action={
-          <span className="chat-detail-page__status">
+          <Badge variant="info">
             {getTradeStatusLabel(trade)}
-          </span>
+          </Badge>
         }
       />
 
-      <h2 className="chat-detail-page__subject">
-        {title}
-      </h2>
+      <h2 className="chat-detail-page__subject">{title}</h2>
 
       <ChatMetaSection
         title="取引情報"

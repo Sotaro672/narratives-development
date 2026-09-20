@@ -1,15 +1,16 @@
-// frontend/amol/src/pages/ChatDetailPage.tsx
+// frontend/mall/src/pages/ChatDetailPage.tsx
 
 import { useNavigate, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import TextState from "../components/ui/TextState";
 
 import InquiryClosePrompt from "../features/inquiry/presentation/components/InquiryClosePrompt";
 import InquiryMessageCard from "../features/inquiry/presentation/components/InquiryMessageCard";
 import InquiryReplyList from "../features/inquiry/presentation/components/InquiryReplyList";
 import InquiryReplyModal from "../features/inquiry/presentation/components/InquiryReplyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
-
 import ResaleChatDetail from "../features/resale/presentation/components/ResaleChatDetail";
 import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
 
@@ -104,21 +105,27 @@ function InquiryChatDetail({
       >
         <section className="page-section content-page-section chat-detail-page">
           {error ? (
-            <div className="chat-detail-page__error" role="alert">
+            <Alert variant="error" className="chat-detail-page__error">
               {error}
-            </div>
+            </Alert>
           ) : null}
 
           {loading ? (
-            <div className="chat-detail-page__state">
+            <TextState
+              variant="loading"
+              className="chat-detail-page__state"
+            >
               読み込み中...
-            </div>
+            </TextState>
           ) : null}
 
           {!loading && !inquiry ? (
-            <div className="chat-detail-page__empty">
+            <TextState
+              variant="empty"
+              className="chat-detail-page__empty"
+            >
               問い合わせが見つかりません。
-            </div>
+            </TextState>
           ) : null}
 
           {!loading && inquiry ? (
@@ -131,9 +138,12 @@ function InquiryChatDetail({
                 </h3>
 
                 {sortedReplies.length === 0 && !shouldShowClosePrompt ? (
-                  <div className="chat-detail-page__no-replies">
+                  <TextState
+                    variant="empty"
+                    className="chat-detail-page__no-replies"
+                  >
                     まだ返信はありません。
-                  </div>
+                  </TextState>
                 ) : (
                   <div className="chat-detail-page__replies">
                     <InquiryReplyList
