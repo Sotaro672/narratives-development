@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 
+import Alert from "../../../components/ui/Alert";
+import Card from "../../../components/ui/Card";
+import TextState from "../../../components/ui/TextState";
 import { getMyAvatar } from "../../avatar/api/avatarApi";
 import ReportModal from "../../report/components/ReportModal";
 import { useReport } from "../../report/hooks/useReport";
@@ -130,25 +133,24 @@ export default function TokenCommentCard({
 
   return (
     <>
-      <section
-        className={[
-          "token-comment-card",
-          hideCommentForm ? "token-comment-card--hide-form" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+      <Card
+        as="section"
+        variant="panel"
+        className={hideCommentForm ? "token-comment-card--hide-form" : ""}
       >
         <div className="token-comment-card__header">
           <div className="token-comment-card__title-wrap">
-            <span className="token-comment-card__icon">💬</span>
+            <span className="token-comment-card__icon" aria-hidden="true">
+              💬
+            </span>
             <h2 className="token-comment-card__title">コメント</h2>
           </div>
         </div>
 
         {!normalizedTokenBlueprintId ? (
-          <p className="token-comment-card__message">
+          <TextState variant="muted">
             tokenBlueprintId 未取得のためコメントを表示できません。
-          </p>
+          </TextState>
         ) : (
           <>
             {!hideCommentForm ? (
@@ -163,9 +165,9 @@ export default function TokenCommentCard({
             ) : null}
 
             {commentsError ? (
-              <p className="token-comment-card__error" role="alert">
+              <Alert variant="error">
                 {commentsError}
-              </p>
+              </Alert>
             ) : null}
 
             <TokenCommentList
@@ -188,7 +190,7 @@ export default function TokenCommentCard({
             />
           </>
         )}
-      </section>
+      </Card>
 
       <ReportModal
         open={isOpen}

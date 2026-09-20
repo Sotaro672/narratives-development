@@ -1,6 +1,11 @@
 // frontend/amol/src/pages/InquiryCreatePage.tsx
+
 import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
 import MediaUploader from "../components/ui/MediaUploader";
+import Textbox from "../components/ui/Textbox";
 import { useInquiryCreatePage } from "../features/inquiry/presentation/hooks/useInquiryCreatePage";
 import "../styles/inquiry-page.css";
 
@@ -29,9 +34,7 @@ export default function InquiryCreatePage() {
     handleBackToScanResult,
   } = useInquiryCreatePage();
 
-  const formDisabled =
-    !productId ||
-    submitting;
+  const formDisabled = !productId || submitting;
 
   return (
     <Layout
@@ -54,42 +57,42 @@ export default function InquiryCreatePage() {
       <section className="inquiry-page__container">
         <div className="inquiry-page__header">
           <p className="inquiry-page__eyebrow">CONTACT</p>
-          <h1 className="inquiry-page__title">
-            商品について問い合わせる
-          </h1>
+          <h1 className="inquiry-page__title">商品について問い合わせる</h1>
         </div>
 
         {!productId ? (
-          <div className="inquiry-page__notice inquiry-page__notice--error">
+          <Alert variant="error" className="inquiry-page__alert">
             <p>商品IDが見つかりませんでした。</p>
-            <button
-              type="button"
-              className="inquiry-page__secondary-button"
+            <Button
+              variant="secondary"
+              size="md"
+              className="inquiry-page__alert-action"
               onClick={() => navigate("/scan/result")}
             >
               スキャン結果へ戻る
-            </button>
-          </div>
+            </Button>
+          </Alert>
         ) : null}
 
         {submitted ? (
-          <div className="inquiry-page__notice inquiry-page__notice--success">
+          <Alert variant="success" className="inquiry-page__alert">
             <p>問い合わせを送信しました。</p>
             <p>返信があるまでしばらくお待ちください。</p>
-            <button
-              type="button"
-              className="inquiry-page__secondary-button"
+            <Button
+              variant="secondary"
+              size="md"
+              className="inquiry-page__alert-action"
               onClick={handleBackToScanResult}
             >
               スキャン結果へ戻る
-            </button>
-          </div>
+            </Button>
+          </Alert>
         ) : null}
 
         {error ? (
-          <div className="inquiry-page__notice inquiry-page__notice--error">
+          <Alert variant="error" className="inquiry-page__alert">
             {error}
-          </div>
+          </Alert>
         ) : null}
 
         {!submitted ? (
@@ -103,40 +106,30 @@ export default function InquiryCreatePage() {
             <input type="hidden" name="productId" value={productId} />
             <input type="hidden" name="inquiryType" value="product" />
 
-            <div className="inquiry-page__field">
-              <label className="inquiry-page__label" htmlFor="inquiry-subject">
-                件名
-              </label>
-              <input
-                id="inquiry-subject"
-                className="inquiry-page__input"
-                type="text"
-                value={subject}
-                placeholder="例: 商品の状態について"
-                maxLength={120}
-                disabled={formDisabled}
-                onChange={(event) => setSubject(event.target.value)}
-              />
-            </div>
+            <Input
+              id="inquiry-subject"
+              name="subject"
+              label="件名"
+              type="text"
+              value={subject}
+              placeholder="例: 商品の状態について"
+              maxLength={120}
+              disabled={formDisabled}
+              onChange={(event) => setSubject(event.target.value)}
+            />
 
-            <div className="inquiry-page__field">
-              <label className="inquiry-page__label" htmlFor="inquiry-content">
-                問い合わせ内容
-              </label>
-              <textarea
-                id="inquiry-content"
-                className="inquiry-page__textarea"
-                value={content}
-                placeholder="問い合わせ内容を入力してください"
-                rows={8}
-                maxLength={2000}
-                disabled={formDisabled}
-                onChange={(event) => setContent(event.target.value)}
-              />
-              <div className="inquiry-page__counter">
-                {content.length.toLocaleString()} / 2,000
-              </div>
-            </div>
+            <Textbox
+              id="inquiry-content"
+              name="content"
+              label="問い合わせ内容"
+              value={content}
+              placeholder="問い合わせ内容を入力してください"
+              rows={8}
+              maxLength={2000}
+              disabled={formDisabled}
+              counterText={`${content.length.toLocaleString()} / 2,000`}
+              onChange={(event) => setContent(event.target.value)}
+            />
 
             <MediaUploader
               label="添付画像"
@@ -163,13 +156,14 @@ export default function InquiryCreatePage() {
               <code>{productId || "-"}</code>
             </div>
 
-            <button
+            <Button
               type="submit"
-              className="inquiry-page__submit-button"
+              size="lg"
+              className="inquiry-page__submit"
               disabled={!canSubmit}
             >
               {submitting ? "送信中" : "送信する"}
-            </button>
+            </Button>
           </form>
         ) : null}
       </section>

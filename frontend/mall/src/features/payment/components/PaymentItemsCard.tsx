@@ -1,5 +1,7 @@
-// frontend/amol/src/features/payment/components/PaymentItemsCard.tsx
+// frontend\mall\src\features\payment\components\PaymentItemsCard.tsx
 
+import Card from "../../../components/ui/Card";
+import TextState from "../../../components/ui/TextState";
 import { formatPrice } from "../../../components/utils/price";
 import type { CartDisplayItem } from "../../shared/types/cart";
 
@@ -59,7 +61,7 @@ export function PaymentItemsCard({
     cartItems.every((item) => item.type === "resale");
 
   return (
-    <section className="payment-page__card">
+    <Card as="section" variant="panel" className="payment-page__card">
       <h2 className="payment-page__section-title">注文内容</h2>
 
       {cartItems.length > 0 ? (
@@ -90,7 +92,9 @@ export function PaymentItemsCard({
           })}
         </ul>
       ) : (
-        <p className="payment-page__empty">カート情報がありません。</p>
+        <TextState variant="empty">
+          カート情報がありません。
+        </TextState>
       )}
 
       <div className="payment-page__total">
@@ -116,6 +120,6 @@ export function PaymentItemsCard({
         <span>{isResaleOnly ? "支払額" : "支払額（税込）"}</span>
         <strong>{formatPrice(amount)}</strong>
       </div>
-    </section>
+    </Card>
   );
 }

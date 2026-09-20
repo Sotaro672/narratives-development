@@ -1,9 +1,13 @@
-//frontend\amol\src\features\payment-method\components\PaymentMethodForm.tsx
+// frontend/mall/src/features/payment-method/components/PaymentMethodForm.tsx
+
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 
+import Alert from "../../../components/ui/Alert";
 import Button from "../../../components/ui/Button";
+import Card from "../../../components/ui/Card";
+import TextState from "../../../components/ui/TextState";
 import type { ConfirmedCardPayload } from "../../shared/types/paymentMethods";
 
 type PaymentMethodFormProps = {
@@ -13,8 +17,12 @@ type PaymentMethodFormProps = {
   onCompleted: (payload: ConfirmedCardPayload) => Promise<void> | void;
 };
 
-export default function PaymentMethodForm(props: PaymentMethodFormProps) {
-  const { cardholderName, clientSecret, stripeCustomerId, onCompleted } = props;
+export default function PaymentMethodForm({
+  cardholderName,
+  clientSecret,
+  stripeCustomerId,
+  onCompleted,
+}: PaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
 
@@ -103,11 +111,11 @@ export default function PaymentMethodForm(props: PaymentMethodFormProps) {
         cardholderName: normalizedCardholderName,
       });
     } catch (error) {
-      if (error instanceof Error) {
-        setErrorMessage(error.message);
-      } else {
-        setErrorMessage("カード登録に失敗しました。");
-      }
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "カード登録に失敗しました。",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -115,10 +123,8 @@ export default function PaymentMethodForm(props: PaymentMethodFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="payment-method-page-form">
-      <div className="payment-method-page-form__element">
-        <label className="payment-method-page-card__text">
-          <strong>カード情報</strong>
-        </label>
+      <Card variant="panel">
+        <TextState variant="muted">カード情報</TextState>
 
         <div className="payment-method-page-card-element">
           <CardElement
@@ -148,24 +154,29 @@ export default function PaymentMethodForm(props: PaymentMethodFormProps) {
             }}
           />
         </div>
-      </div>
+      </Card>
 
       {errorMessage ? (
-        <p className="payment-method-page-form__error">{errorMessage}</p>
+        <Alert variant="error">
+          {errorMessage}
+        </Alert>
       ) : null}
 
       <div className="payment-method-page-form__actions">
         <Button
           type="submit"
+          variant="primary"
+          fullWidth
           disabled={!stripe || !elements || submitting || !isCardComplete}
+          aria-busy={submitting}
         >
           {submitting ? "登録中..." : "このカードを登録する"}
         </Button>
       </div>
 
-      <p className="payment-method-page-form__note">
+      <TextState variant="muted">
         カード番号・有効期限・CVCなどのカード情報はStripeにより安全に処理されます。
-      </p>
+      </TextState>
     </form>
   );
 }

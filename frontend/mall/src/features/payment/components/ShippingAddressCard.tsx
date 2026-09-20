@@ -1,4 +1,9 @@
-//frontend\amol\src\features\payment\components\ShippingAddressCard.tsx
+// frontend/mall/src/features/payment/components/ShippingAddressCard.tsx
+
+import Button from "../../../components/ui/Button";
+import Card from "../../../components/ui/Card";
+import TextButton from "../../../components/ui/TextButton";
+import TextState from "../../../components/ui/TextState";
 import type { CanonicalShippingAddress } from "../../shared/types/payment";
 
 type ShippingAddressCardProps = {
@@ -15,44 +20,42 @@ export function ShippingAddressCard({
   onGoToShippingAddress,
 }: ShippingAddressCardProps) {
   return (
-    <section className="payment-page__card">
+    <Card as="section" variant="panel" className="payment-page__card">
       <div className="payment-page__section-header">
         <h2 className="payment-page__section-title">配送先情報</h2>
-        <button
-          type="button"
-          className="payment-page__text-button"
-          onClick={onGoToShippingAddress}
-        >
+        <TextButton type="button" onClick={onGoToShippingAddress}>
           配送先を管理
-        </button>
+        </TextButton>
       </div>
 
       {primaryShippingAddress ? (
         <div className="payment-page__shipping-address">
           {userFullName ? (
-            <p className="payment-page__shipping-address-name">
-              {userFullName}
-            </p>
+            <p className="payment-page__shipping-address-name">{userFullName}</p>
           ) : null}
 
-          {shippingAddressLabel.split("\n").map((line) => (
-            <p className="payment-page__shipping-address-line" key={line}>
+          {shippingAddressLabel.split("\n").map((line, index) => (
+            <p className="payment-page__shipping-address-line" key={`${line}-${index}`}>
               {line}
             </p>
           ))}
         </div>
       ) : (
         <div className="payment-page__empty-block">
-          <p>配送先情報が登録されていません。</p>
-          <button
+          <TextState variant="empty">
+            配送先情報が登録されていません。
+          </TextState>
+
+          <Button
             type="button"
-            className="payment-page__primary-button"
+            variant="primary"
+            fullWidth
             onClick={onGoToShippingAddress}
           >
             配送先情報を登録する
-          </button>
+          </Button>
         </div>
       )}
-    </section>
+    </Card>
   );
 }

@@ -1,8 +1,7 @@
 /* frontend/amol/src/styles/contents-page/responsive.css */
 
 @media (min-width: 768px) {
-  .contents-page-card,
-  .token-comment-card {
+  .contents-page-card {
     padding: 20px;
     border-radius: 24px;
   }
@@ -19,8 +18,7 @@
 }
 
 @media (max-width: 640px) {
-  .contents-page-card,
-  .token-comment-card {
+  .contents-page-card {
     padding: 14px;
     border-radius: 18px;
   }

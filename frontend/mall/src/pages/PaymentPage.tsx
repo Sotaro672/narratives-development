@@ -2,22 +2,20 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import TextState from "../components/ui/TextState";
 import { PaymentErrorModal } from "../features/payment/components/PaymentErrorModal";
 import { PaymentItemsCard } from "../features/payment/components/PaymentItemsCard";
 import { PaymentMethodsCard } from "../features/payment/components/PaymentMethodsCard";
 import { ShippingAddressCard } from "../features/payment/components/ShippingAddressCard";
 import { usePaymentPage } from "../features/payment/hooks/usePaymentPage";
-import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 
 import "../styles/payment-page.css";
 
 export default function PaymentPage() {
   const navigate = useNavigate();
-  const { listId } = useParams<{
-    listId: string;
-  }>();
-
+  const { listId } = useParams<{ listId: string }>();
   const isMobilePortrait = useMobilePortrait();
 
   const {
@@ -61,7 +59,9 @@ export default function PaymentPage() {
           mainClassName="payment-page"
         >
           <section className="payment-page__section">
-            <p>決済情報を読み込んでいます。</p>
+            <TextState variant="loading">
+              決済情報を読み込んでいます。
+            </TextState>
           </section>
         </Layout>
 
@@ -85,16 +85,8 @@ export default function PaymentPage() {
         hideHamburgerMenu
         hideSettingsButton
         mainClassName="payment-page"
-        actionButtonLabel={
-          isMobilePortrait
-            ? undefined
-            : paymentButtonLabel
-        }
-        onActionButtonClick={
-          isMobilePortrait
-            ? undefined
-            : handleSubmitPayment
-        }
+        actionButtonLabel={isMobilePortrait ? undefined : paymentButtonLabel}
+        onActionButtonClick={isMobilePortrait ? undefined : handleSubmitPayment}
         actionButtonDisabled={isPaymentDisabled}
         footerProps={
           isMobilePortrait

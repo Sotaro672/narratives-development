@@ -1,41 +1,53 @@
-//frontend\amol\src\features\payment\components\PaymentErrorModal.tsx
+// frontend/mall/src/features/payment/components/PaymentErrorModal.tsx
+
+import Button from "../../../components/ui/Button";
+import Modal, {
+  ModalBody,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "../../../components/ui/Modal";
+
 type PaymentErrorModalProps = {
   message: string;
   onClose: () => void;
 };
 
-export function PaymentErrorModal({ message, onClose }: PaymentErrorModalProps) {
-  if (!message) {
-    return null;
-  }
-
+export function PaymentErrorModal({
+  message,
+  onClose,
+}: PaymentErrorModalProps) {
   return (
-    <div
-      className="payment-page__modal-backdrop"
-      role="presentation"
-      onClick={onClose}
+    <Modal
+      open={Boolean(message)}
+      onClose={onClose}
+      size="sm"
+      ariaLabelledBy="payment-error-modal-title"
+      ariaDescribedBy="payment-error-modal-description"
     >
-      <div
-        className="payment-page__modal"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="payment-error-modal-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <h2 id="payment-error-modal-title" className="payment-page__modal-title">
+      <ModalHeader>
+        <ModalTitle id="payment-error-modal-title">
           注文または決済処理に失敗しました
-        </h2>
+        </ModalTitle>
+      </ModalHeader>
 
-        <p className="payment-page__modal-message">{message}</p>
+      <ModalBody>
+        <ModalDescription id="payment-error-modal-description">
+          {message}
+        </ModalDescription>
+      </ModalBody>
 
-        <button
+      <ModalFooter>
+        <Button
           type="button"
-          className="payment-page__primary-button"
+          variant="primary"
+          fullWidth
           onClick={onClose}
         >
           閉じる
-        </button>
-      </div>
-    </div>
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }

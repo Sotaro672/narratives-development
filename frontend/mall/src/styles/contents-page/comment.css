@@ -1,13 +1,5 @@
 /* frontend/mall/src/styles/contents-page/comment.css */
 
-.token-comment-card {
-  box-sizing: border-box;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 20px;
-  background: #fff;
-}
-
 .token-comment-card__header {
   display: flex;
   align-items: center;
@@ -35,24 +27,6 @@
   font-size: 16px;
   font-weight: 800;
   line-height: 1.4;
-}
-
-.token-comment-card__message {
-  margin: 0;
-  color: #6b7280;
-  font-size: 14px;
-  line-height: 1.6;
-}
-
-.token-comment-card__error {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border: 1px solid #fecaca;
-  border-radius: 12px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 13px;
-  line-height: 1.6;
 }
 
 .token-comment-form {
@@ -224,11 +198,11 @@
 
 .token-comment-author__name {
   min-width: 0;
+  overflow: hidden;
   color: #374151;
   font-size: 13px;
   font-weight: 800;
   line-height: 1.4;
-  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

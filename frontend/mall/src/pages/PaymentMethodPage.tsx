@@ -3,15 +3,17 @@
 import { Elements } from "@stripe/react-stripe-js";
 import { useLocation } from "react-router-dom";
 
-import "../styles/page-layout.css";
-import "../styles/settings-page.css";
-import "../styles/payment-method-page.css";
-
 import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
 import PaymentMethodCardholderCard from "../features/payment-method/components/PaymentMethodCardholderCard";
 import PaymentMethodForm from "../features/payment-method/components/PaymentMethodForm";
 import PaymentMethodStatusCard from "../features/payment-method/components/PaymentMethodStatusCard";
 import usePaymentMethodPage from "../features/payment-method/hooks/usePaymentMethodPage";
+
+import "../styles/page-layout.css";
+import "../styles/settings-page.css";
+import "../styles/payment-method-page.css";
 
 export default function PaymentMethodPage() {
   const location = useLocation();
@@ -42,6 +44,12 @@ export default function PaymentMethodPage() {
     ? requestedBackTo
     : "/lists";
 
+  const registrationDisabled =
+    isCreatingIntent ||
+    isLoading ||
+    !stripePromise ||
+    !normalizedCardholderName;
+
   return (
     <Layout
       title="支払方法"
@@ -67,33 +75,38 @@ export default function PaymentMethodPage() {
           ) : null}
 
           {errorMessage ? (
-            <p className="payment-method-page-error">{errorMessage}</p>
+            <Alert variant="error">
+              {errorMessage}
+            </Alert>
           ) : null}
 
           {!clientSecret ? (
             <>
-              <button
+              <Button
                 type="button"
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={registrationDisabled}
+                aria-busy={isCreatingIntent}
                 onClick={handleCreateSetupIntent}
-                disabled={
-                  isCreatingIntent ||
-                  isLoading ||
-                  !stripePromise ||
-                  !normalizedCardholderName
-                }
-                className="payment-method-page-start-button"
               >
                 {isCreatingIntent ? "作成中..." : "支払方法を登録"}
-              </button>
+              </Button>
 
-              <div className="payment-method-page-test-warning-card">
+              <Alert
+                variant="warning"
+                className="payment-method-page-test-warning-card"
+              >
                 <p className="payment-method-page-test-warning-card__title">
                   テスト環境でのご利用について
                 </p>
+
                 <p className="payment-method-page-test-warning-card__text">
                   ここはテスト環境です。実際のクレジットカードは登録せず、
                   テスト用クレジットカードのみを登録してください。
                 </p>
+
                 <div className="payment-method-page-test-warning-card__example">
                   <p>
                     <strong>カード番号:</strong> 4242 4242 4242 4242
@@ -105,7 +118,7 @@ export default function PaymentMethodPage() {
                     <strong>CVC:</strong> 123
                   </p>
                 </div>
-              </div>
+              </Alert>
             </>
           ) : null}
 

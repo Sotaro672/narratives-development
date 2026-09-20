@@ -10,6 +10,7 @@
 }
 
 /* 問い合わせフォーム内の添付画像だけコンパクトに表示 */
+
 .contact-form .media-uploader__carousel {
   width: min(100%, 360px);
 }
@@ -31,63 +32,19 @@
 }
 
 /* 添付画像アップロード進捗モーダル */
-.contact-upload-progress-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 10000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.48);
-  box-sizing: border-box;
-}
 
 .contact-upload-progress-modal__panel {
-  width: min(100%, 440px);
-  max-height: calc(100vh - 48px);
-  overflow-y: auto;
-  padding: 24px;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2);
-  box-sizing: border-box;
+  max-width: 440px;
 }
 
-.contact-upload-progress-modal__header {
+.contact-upload-progress-modal__header .ui-modal__header-content {
   display: grid;
   gap: 8px;
-}
-
-.contact-upload-progress-modal__status {
-  width: fit-content;
-  padding: 4px 10px;
-  border-radius: 9999px;
-  background: #f3f4f6;
-  color: #374151;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.contact-upload-progress-modal__title {
-  margin: 0;
-  color: #111827;
-  font-size: 20px;
-  line-height: 1.4;
 }
 
 .contact-upload-progress-modal__body {
   display: grid;
   gap: 20px;
-  margin-top: 16px;
-}
-
-.contact-upload-progress-modal__description {
-  margin: 0;
-  color: #4b5563;
-  font-size: 14px;
-  line-height: 1.7;
 }
 
 .contact-upload-progress-modal__progress-section,
@@ -113,25 +70,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.contact-upload-progress-modal__progress,
-.contact-upload-progress-modal__file-progress {
-  position: relative;
-  width: 100%;
-  height: 10px;
-  overflow: hidden;
-  border-radius: 9999px;
-  background: #e5e7eb;
-}
-
-.contact-upload-progress-modal__progress-bar,
-.contact-upload-progress-modal__file-progress-bar {
-  height: 100%;
-  border-radius: inherit;
-  background: #111827;
-  transition: width 160ms ease;
-}
-
-.contact-upload-progress-modal__file-progress {
+.contact-upload-progress-modal__file-section .ui-progress {
   height: 6px;
 }
 
@@ -143,20 +82,5 @@
 
   .contact-form .media-uploader__image-frame {
     height: 150px;
-  }
-
-  .contact-upload-progress-modal {
-    padding: 16px;
-  }
-
-  .contact-upload-progress-modal__panel {
-    width: 100%;
-    max-height: calc(100vh - 32px);
-    padding: 20px;
-    border-radius: 14px;
-  }
-
-  .contact-upload-progress-modal__title {
-    font-size: 18px;
   }
 }

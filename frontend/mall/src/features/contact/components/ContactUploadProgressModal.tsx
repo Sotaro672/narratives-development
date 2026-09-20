@@ -1,5 +1,8 @@
 // frontend/mall/src/features/contact/components/ContactUploadProgressModal.tsx
-import { createPortal } from "react-dom";
+
+import Badge from "../../../components/ui/Badge";
+import Modal, { ModalBody, ModalDescription, ModalHeader, ModalTitle } from "../../../components/ui/Modal";
+import Progress from "../../../components/ui/Progress";
 
 type ContactUploadProgressModalProps = {
   open: boolean;
@@ -24,98 +27,58 @@ export default function ContactUploadProgressModal({
   fileIndex,
   fileCount,
 }: ContactUploadProgressModalProps) {
-  if (!open) {
-    return null;
-  }
-
   const totalProgress = clampProgress(progress);
   const currentFileProgress = clampProgress(fileProgress);
-  const currentFileIndex = Math.min(
-    Math.max(fileIndex, 1),
-    Math.max(fileCount, 1),
-  );
+  const safeFileCount = Math.max(fileCount, 1);
+  const currentFileIndex = Math.min(Math.max(fileIndex, 1), safeFileCount);
 
-  const modal = (
-    <div
-      className="contact-upload-progress-modal"
-      role="presentation"
+  return (
+    <Modal
+      open={open}
+      size="sm"
+      closeOnBackdrop={false}
+      closeOnEscape={false}
+      ariaLabelledBy="contact-upload-progress-modal-title"
+      ariaDescribedBy="contact-upload-progress-modal-description"
+      ariaBusy
+      panelClassName="contact-upload-progress-modal__panel"
     >
-      <div
-        className="contact-upload-progress-modal__panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="contact-upload-progress-modal-title"
-        aria-describedby="contact-upload-progress-modal-description"
-        aria-busy="true"
-      >
-        <div className="contact-upload-progress-modal__header">
-          <span className="contact-upload-progress-modal__status">
-            転送中
-          </span>
+      <ModalHeader className="contact-upload-progress-modal__header">
+        <Badge variant="info" size="md">転送中</Badge>
+        <ModalTitle id="contact-upload-progress-modal-title">添付画像を送信しています</ModalTitle>
+      </ModalHeader>
 
-          <h2
-            id="contact-upload-progress-modal-title"
-            className="contact-upload-progress-modal__title"
-          >
-            添付画像を送信しています
-          </h2>
+      <ModalBody className="contact-upload-progress-modal__body">
+        <ModalDescription id="contact-upload-progress-modal-description">
+          画像転送が完了するまで、この画面を閉じたり別のページへ移動したりしないでください。
+        </ModalDescription>
+
+        <div className="contact-upload-progress-modal__progress-section">
+          <div className="contact-upload-progress-modal__progress-header">
+            <span>全体の進捗</span>
+            <strong>{totalProgress}%</strong>
+          </div>
+          <Progress
+            aria-label="添付画像全体の転送進捗"
+            value={totalProgress}
+            max={100}
+            variant="info"
+          />
         </div>
 
-        <div className="contact-upload-progress-modal__body">
-          <p
-            id="contact-upload-progress-modal-description"
-            className="contact-upload-progress-modal__description"
-          >
-            画像転送が完了するまで、この画面を閉じたり別のページへ移動したりしないでください。
-          </p>
-
-          <div className="contact-upload-progress-modal__progress-section">
-            <div className="contact-upload-progress-modal__progress-header">
-              <span>全体の進捗</span>
-              <strong>{totalProgress}%</strong>
-            </div>
-
-            <div
-              className="contact-upload-progress-modal__progress"
-              role="progressbar"
-              aria-label="添付画像全体の転送進捗"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={totalProgress}
-            >
-              <div
-                className="contact-upload-progress-modal__progress-bar"
-                style={{ width: `${totalProgress}%` }}
-              />
-            </div>
+        <div className="contact-upload-progress-modal__file-section">
+          <div className="contact-upload-progress-modal__file-header">
+            <span>画像 {currentFileIndex} / {fileCount}</span>
+            <strong>{currentFileProgress}%</strong>
           </div>
-
-          <div className="contact-upload-progress-modal__file-section">
-            <div className="contact-upload-progress-modal__file-header">
-              <span>
-                画像 {currentFileIndex} / {fileCount}
-              </span>
-              <strong>{currentFileProgress}%</strong>
-            </div>
-
-            <div
-              className="contact-upload-progress-modal__file-progress"
-              role="progressbar"
-              aria-label={`${currentFileIndex}枚目の画像の転送進捗`}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={currentFileProgress}
-            >
-              <div
-                className="contact-upload-progress-modal__file-progress-bar"
-                style={{ width: `${currentFileProgress}%` }}
-              />
-            </div>
-          </div>
+          <Progress
+            aria-label={`${currentFileIndex}枚目の画像の転送進捗`}
+            value={currentFileProgress}
+            max={100}
+            variant="info"
+          />
         </div>
-      </div>
-    </div>
+      </ModalBody>
+    </Modal>
   );
-
-  return createPortal(modal, document.body);
 }

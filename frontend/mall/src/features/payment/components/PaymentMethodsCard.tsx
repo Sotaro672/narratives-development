@@ -1,5 +1,9 @@
-// frontend/amol/src/features/payment/components/PaymentMethodsCard.tsx
+// frontend/mall/src/features/payment/components/PaymentMethodsCard.tsx
 
+import Button from "../../../components/ui/Button";
+import Card from "../../../components/ui/Card";
+import TextButton from "../../../components/ui/TextButton";
+import TextState from "../../../components/ui/TextState";
 import type { CardPaymentMethod } from "../../shared/types/paymentMethods";
 import {
   formatCardBrand,
@@ -22,25 +26,18 @@ export function PaymentMethodsCard({
   onGoToPaymentMethod,
 }: PaymentMethodsCardProps) {
   return (
-    <section className="payment-page__card">
+    <Card as="section" variant="panel" className="payment-page__card">
       <div className="payment-page__section-header">
         <h2 className="payment-page__section-title">支払い方法</h2>
-        <button
-          type="button"
-          className="payment-page__text-button"
-          onClick={onGoToPaymentMethod}
-        >
+        <TextButton type="button" onClick={onGoToPaymentMethod}>
           カードを管理
-        </button>
+        </TextButton>
       </div>
 
       {paymentMethods.length > 0 ? (
         <div className="payment-page__payment-methods">
           {paymentMethods.map((method) => (
-            <label
-              className="payment-page__payment-method"
-              key={method.id}
-            >
+            <label className="payment-page__payment-method" key={method.id}>
               <input
                 type="radio"
                 name="paymentMethod"
@@ -91,16 +88,20 @@ export function PaymentMethodsCard({
         </div>
       ) : (
         <div className="payment-page__empty-block">
-          <p>登録済みの支払い方法がありません。</p>
-          <button
+          <TextState variant="empty">
+            登録済みの支払い方法がありません。
+          </TextState>
+
+          <Button
             type="button"
-            className="payment-page__primary-button"
+            variant="primary"
+            fullWidth
             onClick={onGoToPaymentMethod}
           >
             支払い方法を登録する
-          </button>
+          </Button>
         </div>
       )}
-    </section>
+    </Card>
   );
 }
