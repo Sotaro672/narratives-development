@@ -1,0 +1,53 @@
+/*frontend\mall\src\components\ui\Badge.css*/
+.ui-badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.ui-badge--sm {
+  min-height: 20px;
+  padding: 2px 7px;
+  font-size: 11px;
+}
+
+.ui-badge--md {
+  min-height: 24px;
+  padding: 3px 9px;
+  font-size: 12px;
+}
+
+.ui-badge--neutral {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.ui-badge--info {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.ui-badge--success {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.ui-badge--warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.ui-badge--danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.ui-badge--purple {
+  background: #ede9fe;
+  color: #7c3aed;
+}

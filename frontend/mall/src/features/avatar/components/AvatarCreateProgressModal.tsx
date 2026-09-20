@@ -1,8 +1,14 @@
 // frontend/mall/src/features/avatar/components/AvatarCreateProgressModal.tsx
 
-import { useEffect } from "react";
-import { createPortal } from "react-dom";
-
+import Alert from "../../../components/ui/Alert";
+import Badge from "../../../components/ui/Badge";
+import Button from "../../../components/ui/Button";
+import Modal, {
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "../../../components/ui/Modal";
+import Progress from "../../../components/ui/Progress";
 import type { AvatarCreateProgress } from "../models/avatarCreateProgress";
 
 import "../../../styles/avatar-create-progress.css";
@@ -47,6 +53,22 @@ function getStatusLabel(progress: AvatarCreateProgress): string {
   }
 }
 
+function getStatusVariant(
+  progress: AvatarCreateProgress,
+): "neutral" | "info" | "purple" | "danger" {
+  switch (progress.phase) {
+    case "idle":
+    case "preparing":
+      return "neutral";
+    case "uploading":
+      return "info";
+    case "saving":
+      return "purple";
+    case "failed":
+      return "danger";
+  }
+}
+
 function shouldShowIndeterminate(progress: AvatarCreateProgress): boolean {
   return progress.phase === "preparing" || progress.phase === "saving";
 }
@@ -63,210 +85,139 @@ export default function AvatarCreateProgressModal({
   progress,
   onClose,
 }: AvatarCreateProgressModalProps) {
-  const canClose =
-    !progress.isBlockingNavigation &&
-    Boolean(onClose);
-
-  useEffect(() => {
-    if (!open || !canClose) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") {
-        return;
-      }
-
-      event.preventDefault();
-      onClose?.();
-    };
-
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open, canClose, onClose]);
-
-  if (!open) {
-    return null;
-  }
-
+  const canClose = !progress.isBlockingNavigation && Boolean(onClose);
+  const closeHandler = canClose ? onClose : undefined;
   const statusLabel = getStatusLabel(progress);
   const progressPercentage = Math.min(
     100,
     Math.max(0, progress.percentage),
   );
 
-  const modal = (
-    <div
-      className="avatar-create-progress-modal"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (
-          event.target === event.currentTarget &&
-          canClose
-        ) {
-          onClose?.();
-        }
-      }}
+  return (
+    <Modal
+      open={open}
+      onClose={closeHandler}
+      size="md"
+      mobilePosition="bottom"
+      closeOnBackdrop={canClose}
+      closeOnEscape={canClose}
+      ariaLabelledBy="avatar-create-progress-modal-title"
+      ariaDescribedBy="avatar-create-progress-modal-description"
+      ariaBusy={
+        progress.phase === "preparing" ||
+        progress.phase === "uploading" ||
+        progress.phase === "saving"
+      }
     >
-      <div
-        className="avatar-create-progress-modal__panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="avatar-create-progress-modal-title"
-        aria-describedby="avatar-create-progress-modal-description"
-        aria-busy={
-          progress.phase === "preparing" ||
-          progress.phase === "uploading" ||
-          progress.phase === "saving"
-        }
+      <ModalHeader
+        onClose={closeHandler}
+        closeLabel="進捗画面を閉じる"
       >
-        <div className="avatar-create-progress-modal__header">
-          <div className="avatar-create-progress-modal__heading">
-            {statusLabel ? (
-              <span
-                className={[
-                  "avatar-create-progress-modal__status",
-                  `avatar-create-progress-modal__status--${progress.phase}`,
-                ].join(" ")}
-              >
-                {statusLabel}
-              </span>
-            ) : null}
-
-            <h2
-              id="avatar-create-progress-modal-title"
-              className="avatar-create-progress-modal__title"
-            >
-              {progress.title}
-            </h2>
-          </div>
-
-          {canClose ? (
-            <button
-              type="button"
-              className="avatar-create-progress-modal__close"
-              onClick={onClose}
-              aria-label="進捗画面を閉じる"
-            >
-              ×
-            </button>
+        <div className="avatar-create-progress-modal__heading">
+          {statusLabel ? (
+            <Badge variant={getStatusVariant(progress)}>
+              {statusLabel}
+            </Badge>
           ) : null}
-        </div>
 
-        <div className="avatar-create-progress-modal__body">
-          <p
-            id="avatar-create-progress-modal-description"
-            className="avatar-create-progress-modal__description"
+          <h2
+            id="avatar-create-progress-modal-title"
+            className="avatar-create-progress-modal__title"
           >
-            {progress.message}
-          </p>
-
-          {shouldShowIndeterminate(progress) ? (
-            <div
-              className="avatar-create-progress-modal__indeterminate"
-              aria-label={
-                progress.phase === "saving"
-                  ? "保存中"
-                  : "準備中"
-              }
-            >
-              <div className="avatar-create-progress-modal__indeterminate-bar" />
-            </div>
-          ) : null}
-
-          {shouldShowProgressBar(progress) ? (
-            <div className="avatar-create-progress-modal__progress-section">
-              <div className="avatar-create-progress-modal__progress-header">
-                <span className="avatar-create-progress-modal__progress-label">
-                  画像転送
-                </span>
-
-                <span className="avatar-create-progress-modal__progress-percentage">
-                  {progressPercentage}%
-                </span>
-              </div>
-
-              <div
-                className="avatar-create-progress-modal__progress"
-                role="progressbar"
-                aria-label="アバターアイコンの転送進捗"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressPercentage}
-              >
-                <div
-                  className="avatar-create-progress-modal__progress-bar"
-                  style={{
-                    width: `${progressPercentage}%`,
-                  }}
-                />
-              </div>
-
-              <div className="avatar-create-progress-modal__bytes">
-                {formatBytes(progress.transferredBytes)}
-                {" / "}
-                {formatBytes(progress.totalBytes)}
-              </div>
-            </div>
-          ) : null}
-
-          {progress.phase === "uploading" && progress.currentFileName ? (
-            <div className="avatar-create-progress-modal__current">
-              <span className="avatar-create-progress-modal__current-label">
-                画像
-              </span>
-
-              <span
-                className="avatar-create-progress-modal__current-file"
-                title={progress.currentFileName}
-              >
-                {progress.currentFileName}
-              </span>
-            </div>
-          ) : null}
-
-          {progress.phase === "uploading" && progress.isBrowserDependent ? (
-            <div
-              className="avatar-create-progress-modal__warning"
-              role="alert"
-            >
-              画像転送が完了するまで、この画面を閉じたり別のページへ移動したりしないでください。
-            </div>
-          ) : null}
-
-          {progress.phase === "saving" ? (
-            <div className="avatar-create-progress-modal__notice">
-              画像転送は完了しています。アバター情報の保存処理を続けています。
-            </div>
-          ) : null}
-
-          {progress.errorMessage ? (
-            <div
-              className="avatar-create-progress-modal__error"
-              role="alert"
-            >
-              {progress.errorMessage}
-            </div>
-          ) : null}
+            {progress.title}
+          </h2>
         </div>
+      </ModalHeader>
 
-        {progress.phase === "failed" && canClose ? (
-          <div className="avatar-create-progress-modal__actions">
-            <button
-              type="button"
-              className="avatar-create-progress-modal__button"
-              onClick={onClose}
-            >
-              閉じる
-            </button>
+      <ModalBody className="avatar-create-progress-modal__body">
+        <p
+          id="avatar-create-progress-modal-description"
+          className="avatar-create-progress-modal__description"
+        >
+          {progress.message}
+        </p>
+
+        {shouldShowIndeterminate(progress) ? (
+          <Progress
+            indeterminate
+            variant="info"
+            size="sm"
+            aria-label={progress.phase === "saving" ? "保存中" : "準備中"}
+          />
+        ) : null}
+
+        {shouldShowProgressBar(progress) ? (
+          <div className="avatar-create-progress-modal__progress-section">
+            <div className="avatar-create-progress-modal__progress-header">
+              <span className="avatar-create-progress-modal__progress-label">
+                画像転送
+              </span>
+
+              <span className="avatar-create-progress-modal__progress-percentage">
+                {progressPercentage}%
+              </span>
+            </div>
+
+            <Progress
+              value={progressPercentage}
+              variant="info"
+              size="md"
+              aria-label="アバターアイコンの転送進捗"
+            />
+
+            <div className="avatar-create-progress-modal__bytes">
+              {formatBytes(progress.transferredBytes)}
+              {" / "}
+              {formatBytes(progress.totalBytes)}
+            </div>
           </div>
         ) : null}
-      </div>
-    </div>
-  );
 
-  return createPortal(modal, document.body);
+        {progress.phase === "uploading" && progress.currentFileName ? (
+          <div className="avatar-create-progress-modal__current">
+            <span className="avatar-create-progress-modal__current-label">
+              画像
+            </span>
+
+            <span
+              className="avatar-create-progress-modal__current-file"
+              title={progress.currentFileName}
+            >
+              {progress.currentFileName}
+            </span>
+          </div>
+        ) : null}
+
+        {progress.phase === "uploading" && progress.isBrowserDependent ? (
+          <Alert variant="warning">
+            画像転送が完了するまで、この画面を閉じたり別のページへ移動したりしないでください。
+          </Alert>
+        ) : null}
+
+        {progress.phase === "saving" ? (
+          <Alert variant="info">
+            画像転送は完了しています。アバター情報の保存処理を続けています。
+          </Alert>
+        ) : null}
+
+        {progress.errorMessage ? (
+          <Alert variant="error">
+            {progress.errorMessage}
+          </Alert>
+        ) : null}
+      </ModalBody>
+
+      {progress.phase === "failed" && canClose ? (
+        <ModalFooter className="avatar-create-progress-modal__actions">
+          <Button
+            size="md"
+            className="avatar-create-progress-modal__button"
+            onClick={onClose}
+          >
+            閉じる
+          </Button>
+        </ModalFooter>
+      ) : null}
+    </Modal>
+  );
 }
