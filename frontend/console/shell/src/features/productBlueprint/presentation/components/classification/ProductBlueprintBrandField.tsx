@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
+import { Text } from "../../../../../shared/ui/text";
 
 import "../../../../../styles/productBlueprint.css";
 
@@ -54,13 +55,13 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
       <Label>ブランド</Label>
 
       {isEdit && brandOptions && onChangeBrandId ? (
-        <div className="pbc-brand-field">
+        <div className="product-blueprint-field">
           <Popover>
             <PopoverTrigger>
               <Button
                 type="button"
                 variant="outline"
-                className="pbc-brand-field__trigger"
+                className="product-blueprint-field__trigger"
                 aria-label="ブランドを選択"
               >
                 {selectedBrandName || "ブランドを選択してください。"}
@@ -72,9 +73,7 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
               className="popover__content--compact"
             >
               {brandOptions.length === 0 ? (
-                <div className="popover__empty">
-                  ブランド候補がありません。
-                </div>
+                <div className="popover__empty">ブランド候補がありません。</div>
               ) : (
                 <div className="popover__list">
                   {brandOptions.map((brand) => {
@@ -97,17 +96,13 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
           </Popover>
 
           {brandLoading && (
-            <p className="pbc-brand-field__status">
+            <Text as="p" size="xs" tone="muted">
               ブランドを取得中…
-            </p>
+            </Text>
           )}
 
           {brandError && (
-            <ErrorMessage
-              as="p"
-              size="xs"
-              className="pbc-brand-field__error"
-            >
+            <ErrorMessage as="p" size="xs">
               ブランド一覧の取得に失敗しました。
             </ErrorMessage>
           )}
