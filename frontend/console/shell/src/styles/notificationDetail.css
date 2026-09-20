@@ -32,13 +32,3 @@
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
-
-@media (max-width: 768px) {
-  .notification-detail {
-    padding: 16px;
-  }
-
-  .notification-detail__image {
-    max-height: 420px;
-  }
-}

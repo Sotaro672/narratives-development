@@ -219,13 +219,3 @@
   padding-right: 2.5rem;
   padding-left: 2.5rem;
 }
-
-/* =========================================================
- * Responsive
- * ======================================================= */
-
-@media (max-width: 640px) {
-  .invitation-page__grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
