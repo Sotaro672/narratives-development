@@ -1,4 +1,4 @@
-/* frontend/amol/src/styles/wallet-page/responsive.css */
+/* frontend/mall/src/styles/wallet-page/responsive.css */
 
 @media (min-width: 768px) {
   .wallet-page {
@@ -6,9 +6,9 @@
   }
 
   .wallet-page-layout {
+    display: grid;
     width: min(1120px, 100%);
     margin: 0 auto;
-    display: grid;
     grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
     gap: 32px;
     align-items: start;
@@ -17,27 +17,27 @@
   .wallet-page-layout__profile {
     position: sticky;
     top: 88px;
+    overflow: hidden;
     border: 1px solid #e5e7eb;
     border-radius: 24px;
-    overflow: hidden;
     background: #fff;
   }
 
   .wallet-page-layout__main {
     min-height: 420px;
+    overflow: hidden;
     border: 1px solid #e5e7eb;
     border-radius: 24px;
-    overflow: hidden;
     background: #fff;
   }
 
   .wallet-page-profile {
     max-width: none;
-    margin: 0;
-    padding: 32px 24px 18px;
     grid-template-columns: 1fr;
     gap: 18px;
     justify-items: center;
+    margin: 0;
+    padding: 32px 24px 18px;
     text-align: center;
   }
 
@@ -97,13 +97,30 @@
     max-width: none;
     margin: 0;
   }
+
+  .wallet-page-token-list {
+    grid-template-columns: repeat(auto-fill, minmax(148px, 180px));
+    justify-content: start;
+  }
+
+  .wallet-page-token-list__item {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .wallet-token-card {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+  }
 }
 
 @media (max-width: 640px) {
   .wallet-page-profile {
-    padding: 20px 16px 14px;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 16px;
+    padding: 20px 16px 14px;
   }
 
   .wallet-page-profile__avatar-area,
@@ -151,14 +168,12 @@
 
   .wallet-page-token-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    padding: 14px;
     gap: 12px;
+    padding: 14px;
   }
 
   .wallet-token-card {
     min-height: 184px;
-    padding: 12px;
-    border-radius: 16px;
   }
 
   .wallet-token-card__icon-wrap {
@@ -166,8 +181,8 @@
   }
 
   .wallet-page-share-qr {
-    padding: 32px 16px;
     gap: 20px;
+    padding: 32px 16px;
   }
 
   .wallet-page-share-qr__title {
