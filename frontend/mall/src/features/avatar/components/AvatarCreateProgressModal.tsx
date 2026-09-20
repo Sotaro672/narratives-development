@@ -5,8 +5,10 @@ import Badge from "../../../components/ui/Badge";
 import Button from "../../../components/ui/Button";
 import Modal, {
   ModalBody,
+  ModalDescription,
   ModalFooter,
   ModalHeader,
+  ModalTitle,
 } from "../../../components/ui/Modal";
 import Progress from "../../../components/ui/Progress";
 import type { AvatarCreateProgress } from "../models/avatarCreateProgress";
@@ -88,10 +90,7 @@ export default function AvatarCreateProgressModal({
   const canClose = !progress.isBlockingNavigation && Boolean(onClose);
   const closeHandler = canClose ? onClose : undefined;
   const statusLabel = getStatusLabel(progress);
-  const progressPercentage = Math.min(
-    100,
-    Math.max(0, progress.percentage),
-  );
+  const progressPercentage = Math.min(100, Math.max(0, progress.percentage));
 
   return (
     <Modal
@@ -109,10 +108,7 @@ export default function AvatarCreateProgressModal({
         progress.phase === "saving"
       }
     >
-      <ModalHeader
-        onClose={closeHandler}
-        closeLabel="進捗画面を閉じる"
-      >
+      <ModalHeader onClose={closeHandler} closeLabel="進捗画面を閉じる">
         <div className="avatar-create-progress-modal__heading">
           {statusLabel ? (
             <Badge variant={getStatusVariant(progress)}>
@@ -120,22 +116,16 @@ export default function AvatarCreateProgressModal({
             </Badge>
           ) : null}
 
-          <h2
-            id="avatar-create-progress-modal-title"
-            className="avatar-create-progress-modal__title"
-          >
+          <ModalTitle id="avatar-create-progress-modal-title">
             {progress.title}
-          </h2>
+          </ModalTitle>
         </div>
       </ModalHeader>
 
       <ModalBody className="avatar-create-progress-modal__body">
-        <p
-          id="avatar-create-progress-modal-description"
-          className="avatar-create-progress-modal__description"
-        >
+        <ModalDescription id="avatar-create-progress-modal-description">
           {progress.message}
-        </p>
+        </ModalDescription>
 
         {shouldShowIndeterminate(progress) ? (
           <Progress
@@ -152,7 +142,6 @@ export default function AvatarCreateProgressModal({
               <span className="avatar-create-progress-modal__progress-label">
                 画像転送
               </span>
-
               <span className="avatar-create-progress-modal__progress-percentage">
                 {progressPercentage}%
               </span>
@@ -178,7 +167,6 @@ export default function AvatarCreateProgressModal({
             <span className="avatar-create-progress-modal__current-label">
               画像
             </span>
-
             <span
               className="avatar-create-progress-modal__current-file"
               title={progress.currentFileName}
@@ -201,9 +189,7 @@ export default function AvatarCreateProgressModal({
         ) : null}
 
         {progress.errorMessage ? (
-          <Alert variant="error">
-            {progress.errorMessage}
-          </Alert>
+          <Alert variant="error">{progress.errorMessage}</Alert>
         ) : null}
       </ModalBody>
 

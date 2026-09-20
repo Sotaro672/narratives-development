@@ -7,25 +7,10 @@
   gap: 8px;
 }
 
-.avatar-create-progress-modal__title {
-  margin: 0;
-  color: var(--color-text, #111827);
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
 .avatar-create-progress-modal__body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.avatar-create-progress-modal__description {
-  margin: 0;
-  color: #475569;
-  font-size: 14px;
-  line-height: 1.7;
 }
 
 .avatar-create-progress-modal__progress-section {

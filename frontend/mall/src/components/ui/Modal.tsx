@@ -1,4 +1,3 @@
-//frontend\mall\src\components\ui\Modal.tsx
 import {
   useEffect,
   type HTMLAttributes,
@@ -36,6 +35,14 @@ type ModalSectionProps = HTMLAttributes<HTMLDivElement> & {
 type ModalHeaderProps = ModalSectionProps & {
   onClose?: () => void;
   closeLabel?: string;
+};
+
+type ModalTitleProps = HTMLAttributes<HTMLHeadingElement> & {
+  children: ReactNode;
+};
+
+type ModalDescriptionProps = HTMLAttributes<HTMLParagraphElement> & {
+  children: ReactNode;
 };
 
 export default function Modal({
@@ -165,6 +172,38 @@ export function ModalHeader({
         </IconButton>
       ) : null}
     </div>
+  );
+}
+
+export function ModalTitle({
+  children,
+  className = "",
+  ...props
+}: ModalTitleProps) {
+  const classes = ["ui-modal__title", className]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <h2 className={classes} {...props}>
+      {children}
+    </h2>
+  );
+}
+
+export function ModalDescription({
+  children,
+  className = "",
+  ...props
+}: ModalDescriptionProps) {
+  const classes = ["ui-modal__description", className]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <p className={classes} {...props}>
+      {children}
+    </p>
   );
 }
 
