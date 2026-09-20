@@ -1,12 +1,19 @@
-//frontend\mall\src\components\ui\Card.tsx
-import type { HTMLAttributes, ReactNode } from "react";
+// frontend/mall/src/components/ui/Card.tsx
+
+import {
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 
 import "./Card.css";
 
 type CardPadding = "sm" | "md" | "lg";
+type CardElement = "div" | "article" | "section";
 
-type CardProps = HTMLAttributes<HTMLDivElement> & {
+type CardProps = HTMLAttributes<HTMLElement> & {
   children: ReactNode;
+  as?: CardElement;
   interactive?: boolean;
   highlighted?: boolean;
   busy?: boolean;
@@ -15,6 +22,7 @@ type CardProps = HTMLAttributes<HTMLDivElement> & {
 
 export default function Card({
   children,
+  as: Component = "div",
   interactive = false,
   highlighted = false,
   busy = false,
@@ -22,6 +30,8 @@ export default function Card({
   className = "",
   tabIndex,
   role,
+  onClick,
+  onKeyDown,
   ...props
 }: CardProps) {
   const classes = [
@@ -35,15 +45,34 @@ export default function Card({
     .filter(Boolean)
     .join(" ");
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    onKeyDown?.(event);
+
+    if (
+      event.defaultPrevented ||
+      !interactive ||
+      busy ||
+      !onClick ||
+      (event.key !== "Enter" && event.key !== " ")
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.click();
+  };
+
   return (
-    <div
+    <Component
       className={classes}
       role={role ?? (interactive ? "button" : undefined)}
       tabIndex={tabIndex ?? (interactive && !busy ? 0 : undefined)}
       aria-busy={busy || undefined}
+      onClick={onClick}
+      onKeyDown={handleKeyDown}
       {...props}
     >
       {children}
-    </div>
+    </Component>
   );
 }

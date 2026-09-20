@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Card from "../components/ui/Card";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementDetail } from "../features/announcement/hooks/useAnnouncementDetail";
@@ -215,13 +217,18 @@ export default function AnnouncementDetailPage() {
       >
         <section className="page-section content-page-section announcement-page">
           {error ? (
-            <div className="announcement-page__error" role="alert">
+            <Alert
+              variant="error"
+              className="announcement-page__error"
+            >
               {error}
-            </div>
+            </Alert>
           ) : null}
 
           {loading ? (
-            <div className="announcement-page__state">読み込み中...</div>
+            <div className="announcement-page__state">
+              読み込み中...
+            </div>
           ) : null}
 
           {!loading &&
@@ -264,7 +271,7 @@ export default function AnnouncementDetailPage() {
           !isNewsDetail &&
           !isReportDecisionDetail &&
           announcement ? (
-            <article className="announcement-page__detail">
+            <Card as="article" padding="lg">
               <h1 className="announcement-page__detail-title">
                 {announcement.title}
               </h1>
@@ -371,7 +378,7 @@ export default function AnnouncementDetailPage() {
                   </div>
                 </div>
               ) : null}
-            </article>
+            </Card>
           ) : null}
         </section>
       </Layout>

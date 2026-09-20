@@ -4,6 +4,9 @@ import { useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import Badge from "../components/ui/Badge";
+import Card from "../components/ui/Card";
 import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
@@ -266,12 +269,12 @@ export default function AnnouncementPage() {
     >
       <section className="page-section content-page-section announcement-page">
         {error ? (
-          <div
+          <Alert
+            variant="error"
             className="announcement-page__error"
-            role="alert"
           >
             {error}
-          </div>
+          </Alert>
         ) : null}
 
         {loading ? (
@@ -301,28 +304,15 @@ export default function AnnouncementPage() {
                   formatDateTime(item.occurredAt);
 
                 return (
-                  <article
+                  <Card
                     key={item.key}
-                    className={
-                      isUnread
-                        ? "announcement-page__card announcement-page__card--unread"
-                        : "announcement-page__card"
-                    }
-                    role="button"
-                    tabIndex={0}
+                    as="article"
+                    interactive
+                    highlighted={isUnread}
                     aria-label={`${announcement.title} の詳細を開く`}
                     onClick={() =>
                       handleOpenAnnouncement(announcement)
                     }
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" ||
-                        event.key === " "
-                      ) {
-                        event.preventDefault();
-                        handleOpenAnnouncement(announcement);
-                      }
-                    }}
                   >
                     <div className="announcement-page__card-head">
                       <div className="announcement-page__card-meta">
@@ -332,50 +322,33 @@ export default function AnnouncementPage() {
 
                         <time
                           className="announcement-page__date"
-                          dateTime={
-                            item.occurredAt ||
-                            undefined
-                          }
+                          dateTime={item.occurredAt || undefined}
                         >
                           {occurredAtLabel}
                         </time>
                       </div>
 
-                      {isUnread ? (
-                        <span className="announcement-page__unread-badge">
-                          未読
-                        </span>
-                      ) : (
-                        <span className="announcement-page__read-badge">
-                          既読
-                        </span>
-                      )}
+                      <Badge variant={isUnread ? "info" : "neutral"}>
+                        {isUnread ? "未読" : "既読"}
+                      </Badge>
                     </div>
 
                     <h2 className="announcement-page__card-title">
                       {announcement.title}
                     </h2>
 
-                    {Array.isArray(
-                      announcement.attachmentFiles,
-                    ) &&
+                    {Array.isArray(announcement.attachmentFiles) &&
                     announcement.attachmentFiles.length > 0 ? (
                       <div className="announcement-page__attachments">
-                        添付{" "}
-                        {announcement.attachmentFiles.length}{" "}
-                        件
+                        添付 {announcement.attachmentFiles.length} 件
                       </div>
-                    ) : Array.isArray(
-                        announcement.attachments,
-                      ) &&
+                    ) : Array.isArray(announcement.attachments) &&
                       announcement.attachments.length > 0 ? (
                       <div className="announcement-page__attachments">
-                        添付{" "}
-                        {announcement.attachments.length}{" "}
-                        件
+                        添付 {announcement.attachments.length} 件
                       </div>
                     ) : null}
-                  </article>
+                  </Card>
                 );
               }
 
@@ -387,28 +360,13 @@ export default function AnnouncementPage() {
                   formatDateTime(item.occurredAt);
 
                 return (
-                  <article
+                  <Card
                     key={item.key}
-                    className={
-                      isUnread
-                        ? "announcement-page__card announcement-page__card--unread"
-                        : "announcement-page__card"
-                    }
-                    role="button"
-                    tabIndex={0}
+                    as="article"
+                    interactive
+                    highlighted={isUnread}
                     aria-label={`${newsItem.title} の詳細を開く`}
-                    onClick={() =>
-                      handleOpenNews(newsItem)
-                    }
-                    onKeyDown={(event) => {
-                      if (
-                        event.key === "Enter" ||
-                        event.key === " "
-                      ) {
-                        event.preventDefault();
-                        handleOpenNews(newsItem);
-                      }
-                    }}
+                    onClick={() => handleOpenNews(newsItem)}
                   >
                     <div className="announcement-page__card-head">
                       <div className="announcement-page__card-meta">
@@ -418,30 +376,21 @@ export default function AnnouncementPage() {
 
                         <time
                           className="announcement-page__date"
-                          dateTime={
-                            item.occurredAt ||
-                            undefined
-                          }
+                          dateTime={item.occurredAt || undefined}
                         >
                           {occurredAtLabel}
                         </time>
                       </div>
 
-                      {isUnread ? (
-                        <span className="announcement-page__unread-badge">
-                          未読
-                        </span>
-                      ) : (
-                        <span className="announcement-page__read-badge">
-                          既読
-                        </span>
-                      )}
+                      <Badge variant={isUnread ? "info" : "neutral"}>
+                        {isUnread ? "未読" : "既読"}
+                      </Badge>
                     </div>
 
                     <h2 className="announcement-page__card-title">
                       {newsItem.title}
                     </h2>
-                  </article>
+                  </Card>
                 );
               }
 
@@ -449,9 +398,7 @@ export default function AnnouncementPage() {
               const isUnread =
                 notification.isRead === false;
               const targetLabel =
-                getReportTargetLabel(
-                  notification.targetType,
-                );
+                getReportTargetLabel(notification.targetType);
               const occurredAtLabel =
                 formatDateTime(item.occurredAt);
               const cardLabel =
@@ -463,32 +410,15 @@ export default function AnnouncementPage() {
                 getDecisionCardTitle(notification);
 
               return (
-                <article
+                <Card
                   key={item.key}
-                  className={
-                    isUnread
-                      ? "announcement-page__card announcement-page__card--unread"
-                      : "announcement-page__card"
-                  }
-                  role="button"
-                  tabIndex={0}
+                  as="article"
+                  interactive
+                  highlighted={isUnread}
                   aria-label={`${cardTitle} の詳細を開く`}
                   onClick={() =>
-                    handleOpenDecisionNotification(
-                      notification,
-                    )
+                    handleOpenDecisionNotification(notification)
                   }
-                  onKeyDown={(event) => {
-                    if (
-                      event.key === "Enter" ||
-                      event.key === " "
-                    ) {
-                      event.preventDefault();
-                      handleOpenDecisionNotification(
-                        notification,
-                      );
-                    }
-                  }}
                 >
                   <div className="announcement-page__card-head">
                     <div className="announcement-page__card-meta">
@@ -498,30 +428,21 @@ export default function AnnouncementPage() {
 
                       <time
                         className="announcement-page__date"
-                        dateTime={
-                          item.occurredAt ||
-                          undefined
-                        }
+                        dateTime={item.occurredAt || undefined}
                       >
                         {occurredAtLabel}
                       </time>
                     </div>
 
-                    {isUnread ? (
-                      <span className="announcement-page__unread-badge">
-                        未読
-                      </span>
-                    ) : (
-                      <span className="announcement-page__read-badge">
-                        既読
-                      </span>
-                    )}
+                    <Badge variant={isUnread ? "info" : "neutral"}>
+                      {isUnread ? "未読" : "既読"}
+                    </Badge>
                   </div>
 
                   <h2 className="announcement-page__card-title">
                     {cardTitle}
                   </h2>
-                </article>
+                </Card>
               );
             })}
           </div>
