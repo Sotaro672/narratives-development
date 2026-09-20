@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
+
 export type ProductMetaListItem = {
   label: string;
   value: ReactNode;
@@ -25,16 +27,16 @@ export default function ProductMetaList({
   }
 
   return (
-    <dl className={joinClassNames("product-detail__meta", className)}>
+    <InfoList className={joinClassNames("product-detail__meta", className)}>
       {items.map((item, index) => (
-        <div
+        <InfoRow
           key={`${item.label}-${index}`}
+          label={item.label}
           className="product-detail__meta-row"
         >
-          <dt>{item.label}</dt>
-          <dd>{item.value}</dd>
-        </div>
+          {item.value}
+        </InfoRow>
       ))}
-    </dl>
+    </InfoList>
   );
 }

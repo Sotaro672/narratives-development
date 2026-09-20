@@ -1,4 +1,4 @@
-/* frontend/amol/src/features/shared/styles/product-detail.css */
+/* frontend\mall\src\features\shared\styles\product-detail.css */
 
 .product-detail__layout {
   display: grid;
@@ -98,32 +98,34 @@
   line-height: 1.2;
 }
 
-.product-detail__meta {
+.ui-info-list.product-detail__meta {
+  gap: 0;
   margin: 24px 0 0;
   border-top: 1px solid #eee;
 }
 
-.product-detail__meta-row {
-  display: grid;
+.ui-info-row.product-detail__meta-row {
   grid-template-columns: 96px minmax(0, 1fr);
   gap: 12px;
+  align-items: flex-start;
   padding: 16px 0;
   border-bottom: 1px solid #eee;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
-.product-detail__meta-row dt {
-  margin: 0;
+.product-detail__meta-row .ui-info-row__label {
   color: #777;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.7;
 }
 
-.product-detail__meta-row dd {
+.product-detail__meta-row .ui-info-row__value {
   min-width: 0;
-  margin: 0;
   color: #222;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
@@ -185,31 +187,20 @@
 }
 
 .product-detail__description-toggle {
-  appearance: none;
   display: inline-flex;
   align-items: center;
   margin: 8px 0 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
   color: #555;
-  font: inherit;
   font-size: 13px;
   font-weight: 800;
   line-height: 1.5;
-  cursor: pointer;
+  text-decoration: none;
 }
 
 .product-detail__description-toggle:hover {
   color: #111;
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-.product-detail__description-toggle:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 3px;
-  border-radius: 4px;
 }
 
 @media (max-width: 760px) {
@@ -292,7 +283,7 @@
     font-size: 24px;
   }
 
-  .product-detail__meta-row {
+  .ui-info-row.product-detail__meta-row {
     grid-template-columns: 80px minmax(0, 1fr);
   }
 

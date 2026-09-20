@@ -7,15 +7,6 @@
   width: 100%;
 }
 
-.product-listing-grid__empty {
-  margin: 0;
-  padding: 32px 16px;
-  color: #777;
-  font-size: 14px;
-  line-height: 1.6;
-  text-align: center;
-}
-
 .product-listing-card {
   display: flex;
   flex-direction: column;

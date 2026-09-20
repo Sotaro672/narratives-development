@@ -1,5 +1,7 @@
 // frontend/amol/src/features/shared/presentation/components/ProductListingGrid.tsx
 
+import TextState from "../../../../components/ui/TextState";
+
 import ProductListingCard, {
   type ProductListingCardViewModel,
 } from "./ProductListingCard";
@@ -26,7 +28,7 @@ export default function ProductListingGrid({
   className,
 }: ProductListingGridProps) {
   if (items.length === 0) {
-    return <p className="product-listing-grid__empty">{emptyText}</p>;
+    return <TextState variant="empty">{emptyText}</TextState>;
   }
 
   return (

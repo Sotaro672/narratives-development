@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 
+import Alert from "../../../../components/ui/Alert";
+import TextButton from "../../../../components/ui/TextButton";
+import TextState from "../../../../components/ui/TextState";
 import { formatDateTime } from "../../../../components/utils/date";
+
 import ReportModal from "../../../report/components/ReportModal";
 import { useReport } from "../../../report/hooks/useReport";
 
@@ -105,7 +109,15 @@ export default function ProductReviewSection({
       <section className={joinClassNames("product-review", className)}>
         <div className="product-review__header">
           <h2 className="product-review__heading">レビュー</h2>
-          {loading ? <span className="product-review__status">読み込み中...</span> : null}
+
+          {loading ? (
+            <TextState
+              variant="loading"
+              className="product-review__status"
+            >
+              読み込み中...
+            </TextState>
+          ) : null}
         </div>
 
         {hasSummary ? (
@@ -115,20 +127,31 @@ export default function ProductReviewSection({
                 {Number(averageRating).toFixed(1)}
               </strong>
             ) : null}
+
             {Number.isFinite(totalCount) ? (
-              <span className="product-review__count">{Number(totalCount)}件</span>
+              <span className="product-review__count">
+                {Number(totalCount)}件
+              </span>
             ) : null}
           </div>
         ) : null}
 
         {safeErrorMessage ? (
-          <p className="product-review__error" role="alert">
+          <Alert
+            variant="error"
+            className="product-review__error"
+          >
             {safeErrorMessage}
-          </p>
+          </Alert>
         ) : null}
 
         {!loading && !safeErrorMessage && safeItems.length === 0 ? (
-          <p className="product-review__empty">{emptyText}</p>
+          <TextState
+            variant="empty"
+            className="product-review__empty"
+          >
+            {emptyText}
+          </TextState>
         ) : null}
 
         {!safeErrorMessage && safeItems.length > 0 ? (
@@ -148,14 +171,13 @@ export default function ProductReviewSection({
             </div>
 
             {hasMoreReviews ? (
-              <button
-                type="button"
+              <TextButton
                 className="product-review__toggle"
                 aria-expanded={reviewsExpanded}
                 onClick={() => setReviewsExpanded((current) => !current)}
               >
                 {reviewsExpanded ? "閉じる" : "詳しく見る"}
-              </button>
+              </TextButton>
             ) : null}
           </>
         ) : null}
@@ -202,11 +224,13 @@ function ProductReviewItemView({
   const reviewedAt = review.reviewedAt?.trim() || "";
   const reviewedAtLabel = reviewedAt ? formatDateTime(reviewedAt) : "-";
   const canOpenAvatar = Boolean(avatarId && onAvatarClick);
+
   const isOwnReview = Boolean(
     currentAvatarId &&
     avatarId &&
     currentAvatarId === avatarId,
   );
+
   const canReport = Boolean(
     productBlueprintId &&
     currentAvatarId &&
@@ -225,13 +249,19 @@ function ProductReviewItemView({
           loading="lazy"
         />
       ) : (
-        <span className="product-review__avatar-placeholder" aria-hidden="true">
+        <span
+          className="product-review__avatar-placeholder"
+          aria-hidden="true"
+        >
           {avatarName.slice(0, 1)}
         </span>
       )}
 
       <div className="product-review__author-body">
-        <span className="product-review__author-name">{avatarName}</span>
+        <span className="product-review__author-name">
+          {avatarName}
+        </span>
+
         <span className="product-review__meta">
           {renderRatingStars(review.rating)}
           {reviewedAtLabel !== "-" ? `・${reviewedAtLabel}` : ""}
@@ -252,23 +282,26 @@ function ProductReviewItemView({
             {avatarContent}
           </button>
         ) : (
-          <div className="product-review__author">{avatarContent}</div>
+          <div className="product-review__author">
+            {avatarContent}
+          </div>
         )}
 
         {canReport ? (
-          <button
-            type="button"
+          <TextButton
             className="product-review__report"
             aria-label={`${avatarName}のレビューを通報`}
             onClick={() => onReport?.(review)}
           >
             通報
-          </button>
+          </TextButton>
         ) : null}
       </div>
 
       {reviewBody ? (
-        <p className="product-review__body">{reviewBody}</p>
+        <p className="product-review__body">
+          {reviewBody}
+        </p>
       ) : null}
 
       {showHelpfulVotes &&

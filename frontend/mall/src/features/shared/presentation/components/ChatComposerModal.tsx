@@ -1,11 +1,17 @@
 // frontend/amol/src/features/shared/presentation/components/ChatComposerModal.tsx
 
-import {
-  useEffect,
-  useId,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
+import { useId, type ReactNode } from "react";
+
+import Alert from "../../../../components/ui/Alert";
+import Button from "../../../../components/ui/Button";
+import Modal, {
+  ModalBody,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "../../../../components/ui/Modal";
+import Textbox from "../../../../components/ui/Textbox";
 
 export type ChatComposerModalProps = {
   open: boolean;
@@ -50,129 +56,70 @@ export default function ChatComposerModal({
 }: ChatComposerModalProps) {
   const titleId = useId();
   const descriptionId = useId();
+  const closeHandler = submitting ? undefined : onCancel;
 
-  useEffect(() => {
-    if (
-      !open ||
-      typeof document === "undefined"
-    ) {
-      return;
-    }
+  return (
+    <Modal
+      open={open}
+      onClose={closeHandler}
+      size="md"
+      mobilePosition="bottom"
+      closeOnBackdrop={!submitting}
+      closeOnEscape={!submitting}
+      ariaLabelledBy={titleId}
+      ariaDescribedBy={description ? descriptionId : undefined}
+      ariaBusy={submitting}
+    >
+      <ModalHeader onClose={closeHandler} closeLabel="閉じる">
+        <ModalTitle id={titleId}>{title}</ModalTitle>
+      </ModalHeader>
 
-    const previousOverflow =
-      document.body.style.overflow;
-    const previousTouchAction =
-      document.body.style.touchAction;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
-
-    return () => {
-      document.body.style.overflow =
-        previousOverflow;
-      document.body.style.touchAction =
-        previousTouchAction;
-    };
-  }, [open]);
-
-  if (
-    !open ||
-    typeof document === "undefined"
-  ) {
-    return null;
-  }
-
-  return createPortal(
-    <div className="chat-detail-page__modal-backdrop">
-      <div
-        className="chat-detail-page__modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={
-          description
-            ? descriptionId
-            : undefined
-        }
-      >
-        <div className="chat-detail-page__modal-header">
-          <h2 id={titleId}>
-            {title}
-          </h2>
-
-          <button
-            type="button"
-            className="chat-detail-page__modal-close"
-            onClick={onCancel}
-            disabled={submitting}
-            aria-label="閉じる"
-          >
-            ×
-          </button>
-        </div>
-
+      <ModalBody>
         {description ? (
-          <div
-            id={descriptionId}
-            className="chat-detail-page__content"
-          >
+          <ModalDescription id={descriptionId}>
             {description}
-          </div>
+          </ModalDescription>
         ) : null}
 
-        <textarea
-          className="chat-detail-page__reply-input"
+        <Textbox
           value={content}
-          onChange={(event) => {
-            onContentChange(
-              event.target.value,
-            );
-          }}
           placeholder={placeholder}
-          aria-label={
-            inputAriaLabel ??
-            placeholder
-          }
+          aria-label={inputAriaLabel ?? placeholder}
           rows={rows}
           maxLength={maxLength ?? undefined}
           disabled={submitting}
+          onChange={(event) => onContentChange(event.currentTarget.value)}
         />
 
         {afterInput}
 
         {error ? (
-          <div
-            className="chat-detail-page__modal-error"
-            role="alert"
-          >
+          <Alert variant="error">
             {error}
-          </div>
+          </Alert>
         ) : null}
+      </ModalBody>
 
-        <div className="chat-detail-page__modal-actions">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={submitting}
-          >
-            {cancelLabel}
-          </button>
+      <ModalFooter>
+        <Button
+          variant="secondary"
+          size="md"
+          disabled={submitting}
+          onClick={onCancel}
+        >
+          {cancelLabel}
+        </Button>
 
-          <button
-            type="button"
-            onClick={onSubmit}
-            disabled={
-              !canSubmit ||
-              submitting
-            }
-          >
-            {submitting
-              ? submittingLabel
-              : submitLabel}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+        <Button
+          variant="primary"
+          size="md"
+          disabled={!canSubmit || submitting}
+          aria-busy={submitting || undefined}
+          onClick={onSubmit}
+        >
+          {submitting ? submittingLabel : submitLabel}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }

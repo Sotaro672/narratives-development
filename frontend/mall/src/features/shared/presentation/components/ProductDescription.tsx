@@ -1,9 +1,11 @@
-// frontend/amol/src/features/shared/presentation/components/ProductDescription.tsx
+// frontend\mall\src\features\shared\presentation\components\ProductDescription.tsx
 
 import {
   useId,
   useState,
 } from "react";
+
+import TextButton from "../../../../components/ui/TextButton";
 
 const DESCRIPTION_COLLAPSE_THRESHOLD = 80;
 
@@ -49,15 +51,14 @@ export default function ProductDescription({
       </p>
 
       {isDescriptionExpandable ? (
-        <button
-          type="button"
+        <TextButton
           className="product-detail__description-toggle"
           aria-expanded={descriptionExpanded}
           aria-controls={descriptionId}
           onClick={() => setDescriptionExpanded((current) => !current)}
         >
           {descriptionExpanded ? "閉じる" : "詳しく見る"}
-        </button>
+        </TextButton>
       ) : null}
     </div>
   );
