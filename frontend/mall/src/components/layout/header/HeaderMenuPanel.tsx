@@ -1,6 +1,8 @@
-// frontend/amol/src/components/layout/header/HeaderMenuPanel.tsx
-import { Link } from "react-router-dom";
+// frontend/mall/src/components/layout/header/HeaderMenuPanel.tsx
 
+import { useNavigate } from "react-router-dom";
+
+import List, { ListItem } from "../../ui/List";
 import FooterNav from "../FooterNav";
 import { publicHeaderNavigationItems } from "./headerNavigationItems";
 
@@ -15,6 +17,13 @@ export default function HeaderMenuPanel({
   closeMenu,
   shouldShowLandscapeSidebarMenuButton,
 }: HeaderMenuPanelProps) {
+  const navigate = useNavigate();
+
+  const handleNavigate = (to: string) => {
+    closeMenu();
+    navigate(to);
+  };
+
   return (
     <>
       <button
@@ -41,18 +50,17 @@ export default function HeaderMenuPanel({
         {shouldShowLandscapeSidebarMenuButton ? (
           <FooterNav renderMode="sidebar" onNavigate={closeMenu} />
         ) : (
-          <div className="header__menu-list">
-            {publicHeaderNavigationItems.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className="header__menu-link"
-                onClick={closeMenu}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
+          <nav aria-label="ページナビゲーション">
+            <List>
+              {publicHeaderNavigationItems.map((item) => (
+                <ListItem
+                  key={item.to}
+                  label={item.label}
+                  onClick={() => handleNavigate(item.to)}
+                />
+              ))}
+            </List>
+          </nav>
         )}
       </div>
     </>

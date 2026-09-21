@@ -6,6 +6,9 @@ import { useInquiryBadgeCounter } from "../../../features/inquiry/presentation/h
 import { useNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useNotificationUnreadCount";
 import { useResaleChatBadgeCounter } from "../../../features/resale/presentation/hooks/useResaleChatBadgeCounter";
 
+import Badge from "../../ui/Badge";
+import Button from "../../ui/Button";
+import IconButton from "../../ui/IconButton";
 import type { HeaderActionState } from "./types";
 
 type HeaderActionsProps = {
@@ -76,55 +79,64 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
   const safeChatBadgeCount = safeInquiryBadgeCount + safeResaleChatBadgeCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
-  const notificationUnreadBadgeLabel = formatBadgeLabel(safeNotificationUnreadCount);
+  const notificationUnreadBadgeLabel = formatBadgeLabel(
+    safeNotificationUnreadCount
+  );
   const chatBadgeLabel = formatBadgeLabel(safeChatBadgeCount);
 
   const shouldShowResaleButton = isResalePagePath(location.pathname);
-  const shouldShowResaleDetailActions = isResaleDetailPagePath(location.pathname);
+  const shouldShowResaleDetailActions = isResaleDetailPagePath(
+    location.pathname
+  );
 
   const resaleButtonLabel = actionButtonLabel || "出品";
   const resaleButtonDisabled = !onActionButtonClick || actionButtonDisabled;
 
   const primaryActionClassName = [
-    "header__settings-link",
     "header__action-button",
     "header__add-to-cart-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const secondaryActionClassName = [
-    "header__settings-link",
     "header__action-button",
     "header__secondary-action-button",
     "header__buy-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const tertiaryActionClassName = [
-    "header__settings-link",
     "header__action-button",
     "header__tertiary-action-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="header__right">
       {shouldShowResaleButton ? (
-        <button
-          type="button"
-          className="header__settings-link header__resale-button"
+        <Button
+          variant="primary"
+          size="sm"
+          className="header__resale-button"
           aria-label={resaleButtonLabel}
           title={resaleButtonLabel}
           onClick={onActionButtonClick}
           disabled={resaleButtonDisabled}
         >
           {resaleButtonLabel}
-        </button>
+        </Button>
       ) : null}
 
       {hasActionButton && !shouldShowResaleButton ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           className={primaryActionClassName}
           aria-label={actionButtonLabel}
           title={actionButtonLabel}
@@ -132,12 +144,13 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           disabled={actionButtonDisabled}
         >
           {actionButtonLabel}
-        </button>
+        </Button>
       ) : null}
 
       {hasSecondaryActionButton ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           className={secondaryActionClassName}
           aria-label={secondaryActionButtonLabel}
           title={secondaryActionButtonLabel}
@@ -145,12 +158,13 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           disabled={secondaryActionButtonDisabled}
         >
           {secondaryActionButtonLabel}
-        </button>
+        </Button>
       ) : null}
 
       {hasTertiaryActionButton ? (
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           className={tertiaryActionClassName}
           aria-label={tertiaryActionButtonLabel}
           title={tertiaryActionButtonLabel}
@@ -158,7 +172,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           disabled={tertiaryActionButtonDisabled}
         >
           {tertiaryActionButtonLabel}
-        </button>
+        </Button>
       ) : null}
 
       {shouldShowLoginButton ? (
@@ -179,9 +193,14 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           </span>
 
           {safeNotificationUnreadCount > 0 ? (
-            <span className="header__cart-badge" aria-hidden="true">
+            <Badge
+              variant="danger"
+              size="sm"
+              className="header__cart-badge"
+              aria-hidden="true"
+            >
               {notificationUnreadBadgeLabel}
-            </span>
+            </Badge>
           ) : null}
         </Link>
       ) : null}
@@ -198,17 +217,23 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           </span>
 
           {safeChatBadgeCount > 0 ? (
-            <span className="header__cart-badge" aria-hidden="true">
+            <Badge
+              variant="danger"
+              size="sm"
+              className="header__cart-badge"
+              aria-hidden="true"
+            >
               {chatBadgeLabel}
-            </span>
+            </Badge>
           ) : null}
         </Link>
       ) : null}
 
       {shouldShowCartButton ? (
-        <button
-          type="button"
-          className="header__settings-link header__cart-link"
+        <IconButton
+          variant="ghost"
+          size="md"
+          className="header__cart-link"
           aria-label={`${cartButtonLabel || "カート"} ${safeCartItemCount}件`}
           title={cartButtonLabel || "カート"}
           onClick={onCartButtonClick}
@@ -219,23 +244,28 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           </span>
 
           {safeCartItemCount > 0 ? (
-            <span className="header__cart-badge" aria-hidden="true">
+            <Badge
+              variant="danger"
+              size="sm"
+              className="header__cart-badge"
+              aria-hidden="true"
+            >
               {cartBadgeLabel}
-            </span>
+            </Badge>
           ) : null}
-        </button>
+        </IconButton>
       ) : null}
 
       {shouldShowSettingsButton ? (
-        <button
-          type="button"
-          className="header__settings-link"
+        <IconButton
+          variant="ghost"
+          size="md"
           aria-label="設定"
           title="設定"
           onClick={toggleSettings}
         >
-          ⚙
-        </button>
+          <span aria-hidden="true">⚙</span>
+        </IconButton>
       ) : null}
     </div>
   );
