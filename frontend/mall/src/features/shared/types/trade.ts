@@ -125,6 +125,16 @@ export type CreateTradeReturnProposalResponse = {
   data: TradeReturnProposal;
 };
 
+export type AcceptTradeReturnProposalParams = {
+  tradeId: string;
+  proposalId: string;
+};
+
+export type RejectTradeReturnProposalParams = {
+  tradeId: string;
+  proposalId: string;
+};
+
 // ============================================================
 // Return Refund
 // TODO: 返金条件を TradeReturnProposal で確定し、返品受領APIが

@@ -3,6 +3,7 @@
 import { requestJson, type ApiQueryParams } from "../../../lib/http";
 
 import type {
+  AcceptTradeReturnProposalParams,
   CreateTradeMessageParams,
   CreateTradeMessageRequest,
   CreateTradeMessageResponse,
@@ -17,6 +18,7 @@ import type {
   ReceiveTradeReturnParams,
   ReceiveTradeReturnResponse,
   ReceiveTradeReturnResult,
+  RejectTradeReturnProposalParams,
   TradeDetail,
   TradeDetailResponse,
   TradeMessage,
@@ -94,6 +96,16 @@ function requireTradeId(tradeId: string): string {
   }
 
   return normalizedTradeId;
+}
+
+function requireProposalId(proposalId: string): string {
+  const normalizedProposalId = proposalId.trim();
+
+  if (!normalizedProposalId) {
+    throw new Error("proposalId is required");
+  }
+
+  return normalizedProposalId;
 }
 
 function requireOrderId(orderId: string): string {
@@ -398,6 +410,42 @@ export async function createTradeReturnProposal(
         returnRequirement,
         refundAmount,
       },
+    },
+  );
+}
+
+export async function acceptTradeReturnProposal(
+  params: AcceptTradeReturnProposalParams,
+): Promise<void> {
+  const tradeId = requireTradeId(params.tradeId);
+  const proposalId = requireProposalId(params.proposalId);
+
+  await fetchTradeWithAuth<unknown>(
+    `${buildTradePath(
+      tradeId,
+    )}/return-proposals/${encodeURIComponent(
+      proposalId,
+    )}/accept`,
+    {
+      method: "POST",
+    },
+  );
+}
+
+export async function rejectTradeReturnProposal(
+  params: RejectTradeReturnProposalParams,
+): Promise<void> {
+  const tradeId = requireTradeId(params.tradeId);
+  const proposalId = requireProposalId(params.proposalId);
+
+  await fetchTradeWithAuth<unknown>(
+    `${buildTradePath(
+      tradeId,
+    )}/return-proposals/${encodeURIComponent(
+      proposalId,
+    )}/reject`,
+    {
+      method: "POST",
     },
   );
 }
