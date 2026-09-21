@@ -66,6 +66,9 @@ func buildMallQueries(
 	if r.tradeMessageRepo == nil {
 		return nil, errors.New("di.mall: trade message repository is nil")
 	}
+	if r.tradeReturnAgreementRepo == nil {
+		return nil, errors.New("di.mall: trade return agreement repository is nil")
+	}
 	if r.orderRepo == nil {
 		return nil, errors.New("di.mall: order repository is nil")
 	}
@@ -221,6 +224,7 @@ func buildMallQueries(
 	tradeQ := mallquery.NewTradeQuery(
 		r.tradeRepo,
 		r.tradeMessageRepo,
+		r.tradeReturnAgreementRepo,
 		r.orderRepo,
 		r.resaleRepo,
 		r.resaleImageRepo,

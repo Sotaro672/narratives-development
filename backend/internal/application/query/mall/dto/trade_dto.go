@@ -2,7 +2,6 @@
 package dto
 
 import (
-	orderdom "narratives/internal/domain/order"
 	resaledom "narratives/internal/domain/resale"
 	tradedom "narratives/internal/domain/trade"
 )
@@ -36,6 +35,36 @@ type TradeResaleDetail struct {
 	Images []TradeResaleImage `json:"images"`
 }
 
+// TradeReturnConsultation represents the buyer's return consultation displayed
+// in Trade detail.
+//
+// The authoritative consultation is owned by trade.ReturnAgreement.
+type TradeReturnConsultation struct {
+	ID     string                            `json:"id"`
+	Reason tradedom.ReturnConsultationReason `json:"reason"`
+	Detail string                            `json:"detail"`
+
+	CreatedAt string `json:"createdAt"`
+}
+
+// TradeReturnProposal represents the seller's latest answer to a return
+// consultation.
+//
+// When Agreement is "agree", ReturnRequirement and RefundAmount contain the
+// conditions presented to the buyer.
+//
+// When Agreement is "disagree", those condition fields are omitted.
+type TradeReturnProposal struct {
+	ID string `json:"id"`
+
+	Agreement         tradedom.ReturnProposalAgreement `json:"agreement"`
+	ReturnRequirement tradedom.ReturnRequirement       `json:"returnRequirement,omitempty"`
+	RefundAmount      int                              `json:"refundAmount,omitempty"`
+
+	CreatedAt  string `json:"createdAt"`
+	RejectedAt string `json:"rejectedAt,omitempty"`
+}
+
 // TradeDetail is the buyer/seller private Trade view returned to Mall clients.
 //
 // Trade is currently limited to Resale transactions:
@@ -45,9 +74,11 @@ type TradeResaleDetail struct {
 // ViewerSide is resolved by the backend from the authenticated Avatar and must
 // not be supplied by the client.
 //
-// Cancellation, dispatch, return, transfer, and refund-limit state are read from
-// the authoritative Order item associated with this Trade and are not owned by
-// the Trade aggregate.
+// Cancellation, dispatch, transfer and refund-limit state are read from the
+// authoritative Order item associated with this Trade.
+//
+// Return negotiation state is read from the authoritative ReturnAgreement.
+// When no ReturnAgreement exists, ReturnStatus is returned as "none".
 type TradeDetail struct {
 	ID             string `json:"id"`
 	OrderID        string `json:"orderId"`
@@ -71,17 +102,14 @@ type TradeDetail struct {
 	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
-	IsReturnRequested bool                       `json:"isReturnRequested"`
-	ReturnRequestKind orderdom.ReturnRequestKind `json:"returnRequestKind,omitempty"`
-	IsReturnCompleted bool                       `json:"isReturnCompleted"`
+	ReturnStatus       tradedom.ReturnStatus    `json:"returnStatus"`
+	ReturnConsultation *TradeReturnConsultation `json:"returnConsultation,omitempty"`
+	ReturnProposal     *TradeReturnProposal     `json:"returnProposal,omitempty"`
 
 	MerchandiseRefundMaxAmount int `json:"merchandiseRefundMaxAmount"`
 
-	Transferred bool `json:"transferred"`
-
-	ReturnRequestedAt string `json:"returnRequestedAt,omitempty"`
-	ReturnCompletedAt string `json:"returnCompletedAt,omitempty"`
-	TransferredAt     string `json:"transferredAt,omitempty"`
+	Transferred   bool   `json:"transferred"`
+	TransferredAt string `json:"transferredAt,omitempty"`
 
 	Messages []TradeMessage `json:"messages"`
 

@@ -34,21 +34,24 @@ var (
 // AvatarContext. A caller that is not a participant receives ErrNotFound so the
 // existence of another user's private Trade is not exposed.
 //
-// Cancellation, dispatch, return, and transfer state are read from the authoritative
-// Order item. Trade does not own or duplicate those states.
+// Cancellation, dispatch, transfer, and refund-limit state are read from the
+// authoritative Order item. Return negotiation state is read from the
+// authoritative ReturnAgreement aggregate.
 type TradeQuery struct {
-	tradeRepo       tradedom.Repository
-	messageRepo     tradedom.MessageRepository
-	orderRepo       orderdom.Repository
-	resaleRepo      resaledom.Repository
-	resaleImageRepo applicationport.ResaleImageLister
-	displayResolver mallshared.MallDisplayResolver
-	avatarRepo      avatardom.Repository
+	tradeRepo           tradedom.Repository
+	messageRepo         tradedom.MessageRepository
+	returnAgreementRepo tradedom.ReturnAgreementRepository
+	orderRepo           orderdom.Repository
+	resaleRepo          resaledom.Repository
+	resaleImageRepo     applicationport.ResaleImageLister
+	displayResolver     mallshared.MallDisplayResolver
+	avatarRepo          avatardom.Repository
 }
 
 func NewTradeQuery(
 	tradeRepo tradedom.Repository,
 	messageRepo tradedom.MessageRepository,
+	returnAgreementRepo tradedom.ReturnAgreementRepository,
 	orderRepo orderdom.Repository,
 	resaleRepo resaledom.Repository,
 	resaleImageRepo applicationport.ResaleImageLister,
@@ -56,13 +59,14 @@ func NewTradeQuery(
 	avatarRepo avatardom.Repository,
 ) *TradeQuery {
 	return &TradeQuery{
-		tradeRepo:       tradeRepo,
-		messageRepo:     messageRepo,
-		orderRepo:       orderRepo,
-		resaleRepo:      resaleRepo,
-		resaleImageRepo: resaleImageRepo,
-		displayResolver: displayResolver,
-		avatarRepo:      avatarRepo,
+		tradeRepo:           tradeRepo,
+		messageRepo:         messageRepo,
+		returnAgreementRepo: returnAgreementRepo,
+		orderRepo:           orderRepo,
+		resaleRepo:          resaleRepo,
+		resaleImageRepo:     resaleImageRepo,
+		displayResolver:     displayResolver,
+		avatarRepo:          avatarRepo,
 	}
 }
 
@@ -70,7 +74,8 @@ func NewTradeQuery(
 //
 // ViewerSide and CounterpartAvatarID are derived from the authenticated Avatar.
 // LatestMessage and UnreadMessageCount are aggregated from Trade messages.
-// Dispatch, return, and transfer state are read from the authoritative Order item.
+// Dispatch and transfer state are read from the authoritative Order item.
+// ReturnStatus is read from ReturnAgreement.
 type TradeListItem struct {
 	ID             string `json:"id"`
 	OrderID        string `json:"orderId"`
@@ -86,10 +91,9 @@ type TradeListItem struct {
 
 	Status tradedom.Status `json:"status"`
 
-	IsDispatched      bool `json:"isDispatched"`
-	IsReturnRequested bool `json:"isReturnRequested"`
-	IsReturnCompleted bool `json:"isReturnCompleted"`
-	Transferred       bool `json:"transferred"`
+	IsDispatched bool                  `json:"isDispatched"`
+	ReturnStatus tradedom.ReturnStatus `json:"returnStatus"`
+	Transferred  bool                  `json:"transferred"`
 
 	LatestMessage      *tradedto.TradeMessage `json:"latestMessage,omitempty"`
 	UnreadMessageCount int                    `json:"unreadMessageCount"`
@@ -121,6 +125,7 @@ func (q *TradeQuery) ListForAvatar(
 	if q == nil ||
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
+		q.returnAgreementRepo == nil ||
 		q.orderRepo == nil ||
 		q.displayResolver == nil ||
 		q.avatarRepo == nil {
@@ -153,6 +158,14 @@ func (q *TradeQuery) ListForAvatar(
 			continue
 		}
 
+		returnState, err := q.getTradeReturnState(
+			ctx,
+			trade.ID,
+		)
+		if err != nil {
+			return TradeListResult{}, err
+		}
+
 		latestMessage, err := q.getLatestMessage(ctx, trade.ID)
 		if err != nil {
 			return TradeListResult{}, err
@@ -174,6 +187,7 @@ func (q *TradeQuery) ListForAvatar(
 			viewerSide,
 			display,
 			orderItemState,
+			returnState,
 			latestMessage,
 			unreadMessageCount,
 		))
@@ -215,6 +229,7 @@ func (q *TradeQuery) GetByOrderItem(
 	if q == nil ||
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
+		q.returnAgreementRepo == nil ||
 		q.orderRepo == nil ||
 		q.resaleRepo == nil ||
 		q.resaleImageRepo == nil ||
@@ -262,6 +277,14 @@ func (q *TradeQuery) GetByOrderItem(
 		return tradedto.TradeDetail{}, err
 	}
 
+	returnState, err := q.getTradeReturnState(
+		ctx,
+		trade.ID,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	resaleDetail, err := q.getTradeResaleDetail(
 		ctx,
 		orderItemState.ResaleID,
@@ -293,6 +316,7 @@ func (q *TradeQuery) GetByOrderItem(
 		trade,
 		viewerSide,
 		orderItemState,
+		returnState,
 		display,
 		resaleDetail,
 		messages,
@@ -317,6 +341,7 @@ func (q *TradeQuery) GetByID(
 	if q == nil ||
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
+		q.returnAgreementRepo == nil ||
 		q.orderRepo == nil ||
 		q.resaleRepo == nil ||
 		q.resaleImageRepo == nil ||
@@ -358,6 +383,14 @@ func (q *TradeQuery) GetByID(
 		return tradedto.TradeDetail{}, err
 	}
 
+	returnState, err := q.getTradeReturnState(
+		ctx,
+		trade.ID,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	resaleDetail, err := q.getTradeResaleDetail(
 		ctx,
 		orderItemState.ResaleID,
@@ -389,6 +422,7 @@ func (q *TradeQuery) GetByID(
 		trade,
 		viewerSide,
 		orderItemState,
+		returnState,
 		display,
 		resaleDetail,
 		messages,
@@ -398,13 +432,6 @@ func (q *TradeQuery) GetByID(
 type tradeOrderItemState struct {
 	IsCancelled  bool
 	IsDispatched bool
-
-	IsReturnRequested bool
-	ReturnRequestKind orderdom.ReturnRequestKind
-	ReturnRequestedAt *time.Time
-
-	IsReturnCompleted bool
-	ReturnCompletedAt *time.Time
 
 	MerchandiseRefundMaxAmount int
 
@@ -467,17 +494,92 @@ func (q *TradeQuery) getTradeOrderItemState(
 	return tradeOrderItemState{
 		IsCancelled:                item.IsCancelled,
 		IsDispatched:               item.IsDispatched,
-		IsReturnRequested:          item.IsReturnRequested,
-		ReturnRequestKind:          item.ReturnRequestKind,
-		ReturnRequestedAt:          item.ReturnRequestedAt,
-		IsReturnCompleted:          item.IsReturnCompleted,
-		ReturnCompletedAt:          item.ReturnCompletedAt,
 		MerchandiseRefundMaxAmount: merchandiseRefundMaxAmount,
 		Transferred:                item.Transferred,
 		TransferredAt:              item.TransferredAt,
 		ResaleID:                   item.ResaleID,
 		ProductBlueprintID:         item.ProductBlueprintID,
 	}, nil
+}
+
+type tradeReturnState struct {
+	Status       tradedom.ReturnStatus
+	Consultation *tradedto.TradeReturnConsultation
+	Proposal     *tradedto.TradeReturnProposal
+	UpdatedAt    time.Time
+}
+
+func (q *TradeQuery) getTradeReturnState(
+	ctx context.Context,
+	tradeID string,
+) (tradeReturnState, error) {
+	if q == nil || q.returnAgreementRepo == nil {
+		return tradeReturnState{}, ErrTradeQueryNotConfigured
+	}
+	if tradeID == "" {
+		return tradeReturnState{}, tradedom.ErrInvalidID
+	}
+
+	agreement, err := q.returnAgreementRepo.GetByTradeID(
+		ctx,
+		tradeID,
+	)
+	if err != nil {
+		if errors.Is(err, tradedom.ErrReturnAgreementNotFound) {
+			return tradeReturnState{
+				Status: tradedom.ReturnStatusNone,
+			}, nil
+		}
+
+		return tradeReturnState{}, err
+	}
+
+	if agreement.ID != tradeID ||
+		agreement.TradeID != tradeID {
+		return tradeReturnState{}, ErrTradeQueryUnsupportedTrade
+	}
+
+	state := tradeReturnState{
+		Status:    agreement.Status,
+		UpdatedAt: agreement.UpdatedAt.UTC(),
+	}
+
+	consultation := tradedto.TradeReturnConsultation{
+		ID:     agreement.Consultation.ID,
+		Reason: agreement.Consultation.Reason,
+		Detail: agreement.Consultation.Detail,
+	}
+	if !agreement.Consultation.CreatedAt.IsZero() {
+		consultation.CreatedAt = agreement.Consultation.CreatedAt.
+			UTC().
+			Format(time.RFC3339Nano)
+	}
+	state.Consultation = &consultation
+
+	if agreement.Proposal != nil {
+		proposal := tradedto.TradeReturnProposal{
+			ID:                agreement.Proposal.ID,
+			Agreement:         agreement.Proposal.Agreement,
+			ReturnRequirement: agreement.Proposal.ReturnRequirement,
+			RefundAmount:      agreement.Proposal.RefundAmount,
+		}
+
+		if !agreement.Proposal.CreatedAt.IsZero() {
+			proposal.CreatedAt = agreement.Proposal.CreatedAt.
+				UTC().
+				Format(time.RFC3339Nano)
+		}
+		if agreement.Proposal.RejectedAt != nil &&
+			!agreement.Proposal.RejectedAt.IsZero() {
+			proposal.RejectedAt = agreement.Proposal.RejectedAt.
+				UTC().
+				Format(time.RFC3339Nano)
+		}
+
+		state.Proposal = &proposal
+	}
+
+	return state, nil
 }
 
 func (q *TradeQuery) getTradeResaleDetail(
@@ -685,6 +787,7 @@ func buildTradeListItem(
 	viewerSide tradedom.MessageSenderSide,
 	display tradeDisplay,
 	orderItemState tradeOrderItemState,
+	returnState tradeReturnState,
 	latestMessage *tradedto.TradeMessage,
 	unreadMessageCount int,
 ) TradeListItem {
@@ -698,7 +801,10 @@ func buildTradeListItem(
 		counterpartAvatarIcon = display.BuyerAvatarIcon
 	}
 
-	latestActivityAt := tradeLatestActivityAt(trade)
+	latestActivityAt := tradeLatestActivityAt(
+		trade,
+		returnState.UpdatedAt,
+	)
 
 	out := TradeListItem{
 		ID:                    trade.ID,
@@ -711,8 +817,7 @@ func buildTradeListItem(
 		CounterpartAvatarIcon: counterpartAvatarIcon,
 		Status:                trade.Status,
 		IsDispatched:          orderItemState.IsDispatched,
-		IsReturnRequested:     orderItemState.IsReturnRequested,
-		IsReturnCompleted:     orderItemState.IsReturnCompleted,
+		ReturnStatus:          returnState.Status,
 		Transferred:           orderItemState.Transferred,
 		LatestMessage:         latestMessage,
 		UnreadMessageCount:    unreadMessageCount,
@@ -739,6 +844,7 @@ func buildTradeListItem(
 
 func tradeLatestActivityAt(
 	trade tradedom.Trade,
+	returnUpdatedAt time.Time,
 ) time.Time {
 	latest := trade.CreatedAt
 
@@ -748,6 +854,9 @@ func tradeLatestActivityAt(
 	if trade.LastMessageAt != nil &&
 		trade.LastMessageAt.After(latest) {
 		latest = *trade.LastMessageAt
+	}
+	if returnUpdatedAt.After(latest) {
+		latest = returnUpdatedAt
 	}
 
 	return latest.UTC()
@@ -775,6 +884,7 @@ func buildTradeDetailDTO(
 	trade tradedom.Trade,
 	viewerSide tradedom.MessageSenderSide,
 	orderItemState tradeOrderItemState,
+	returnState tradeReturnState,
 	display tradeDisplay,
 	resale tradedto.TradeResaleDetail,
 	messages []tradedom.Message,
@@ -808,26 +918,14 @@ func buildTradeDetailDTO(
 		Status:                     trade.Status,
 		IsCancelled:                orderItemState.IsCancelled,
 		IsDispatched:               orderItemState.IsDispatched,
-		IsReturnRequested:          orderItemState.IsReturnRequested,
-		ReturnRequestKind:          orderItemState.ReturnRequestKind,
-		IsReturnCompleted:          orderItemState.IsReturnCompleted,
+		ReturnStatus:               returnState.Status,
+		ReturnConsultation:         returnState.Consultation,
+		ReturnProposal:             returnState.Proposal,
 		MerchandiseRefundMaxAmount: orderItemState.MerchandiseRefundMaxAmount,
 		Transferred:                orderItemState.Transferred,
 		Messages:                   messageDTOs,
 	}
 
-	if orderItemState.ReturnRequestedAt != nil &&
-		!orderItemState.ReturnRequestedAt.IsZero() {
-		out.ReturnRequestedAt = orderItemState.ReturnRequestedAt.
-			UTC().
-			Format(time.RFC3339Nano)
-	}
-	if orderItemState.ReturnCompletedAt != nil &&
-		!orderItemState.ReturnCompletedAt.IsZero() {
-		out.ReturnCompletedAt = orderItemState.ReturnCompletedAt.
-			UTC().
-			Format(time.RFC3339Nano)
-	}
 	if orderItemState.TransferredAt != nil &&
 		!orderItemState.TransferredAt.IsZero() {
 		out.TransferredAt = orderItemState.TransferredAt.
