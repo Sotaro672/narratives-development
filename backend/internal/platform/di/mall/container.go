@@ -23,41 +23,42 @@ type Container struct {
 	Infra  *shared.Infra
 	config mallConfig
 
-	AvatarUC                        *usecase.AvatarUsecase
-	AvatarRegistrationUC            *usecase.AvatarRegistrationUsecase
-	SetupUC                         *usecase.SetupUsecase
-	ShippingAddressUC               *usecase.ShippingAddressUsecase
-	ShippingQuoteUC                 *usecase.ShippingQuoteUsecase
-	PaymentMethodUC                 *usecase.PaymentMethodUsecase
-	PayoutAccountUC                 *usecase.PayoutAccountUsecase
-	UserUC                          *usecase.UserUsecase
-	WalletUC                        *usecase.WalletUsecase
-	CartUC                          *usecase.CartUsecase
-	PaymentUC                       *usecase.PaymentUsecase
-	SettlementUC                    *usecase.SettlementUsecase
-	BrandFeeSettlementUC            *usecase.BrandFeeSettlementUsecase
-	BrandFeeSettlementTransferUC    *usecase.BrandFeeSettlementTransferUsecase
-	BrandFeeSettlementQueue         usecase.BrandFeeSettlementTransferQueue
-	RefundUC                        *usecase.RefundUsecase
-	ItemRefundUC                    *usecase.ItemRefundUsecase
-	RefundRepo                      refunddom.RepositoryPort
-	RefundCompletionNotificationUC  usecase.RefundCompletionNotificationUsecasePort
-	ResalePayoutNotificationUC      usecase.ResalePayoutNotificationUsecasePort
-	OrderUC                         *usecase.OrderUsecase
-	TradeUC                         *usecase.TradeUsecase
-	AvatarReviewUC                  *usecase.AvatarReviewUsecase
-	TradeMessageUC                  *usecase.TradeMessageUsecase
-	ResaleTradeDispatchUC           *usecase.ResaleTradeDispatchUsecase
-	ResaleTradeReturnConsultationUC *usecase.ResaleTradeReturnConsultationUsecase
-	ResaleTradeReturnProposalUC     *usecase.ResaleTradeReturnProposalUsecase
-	ResaleTradeReturnReceiptUC      *usecase.ResaleTradeReturnReceiptUsecase
-	InquiryUC                       *usecase.InquiryUsecase
-	ReturnRequestUC                 *usecase.ReturnRequestUsecase
-	AnnouncementUC                  *usecase.AnnouncementUsecase
-	NewsUC                          *usecase.NewsUsecase
-	ResaleUC                        *usecase.ResaleUsecase
-	ResaleReviewUC                  *usecase.ResaleReviewUsecase
-	LikeUC                          *usecase.LikeUsecase
+	AvatarUC                            *usecase.AvatarUsecase
+	AvatarRegistrationUC                *usecase.AvatarRegistrationUsecase
+	SetupUC                             *usecase.SetupUsecase
+	ShippingAddressUC                   *usecase.ShippingAddressUsecase
+	ShippingQuoteUC                     *usecase.ShippingQuoteUsecase
+	PaymentMethodUC                     *usecase.PaymentMethodUsecase
+	PayoutAccountUC                     *usecase.PayoutAccountUsecase
+	UserUC                              *usecase.UserUsecase
+	WalletUC                            *usecase.WalletUsecase
+	CartUC                              *usecase.CartUsecase
+	PaymentUC                           *usecase.PaymentUsecase
+	SettlementUC                        *usecase.SettlementUsecase
+	BrandFeeSettlementUC                *usecase.BrandFeeSettlementUsecase
+	BrandFeeSettlementTransferUC        *usecase.BrandFeeSettlementTransferUsecase
+	BrandFeeSettlementQueue             usecase.BrandFeeSettlementTransferQueue
+	RefundUC                            *usecase.RefundUsecase
+	ItemRefundUC                        *usecase.ItemRefundUsecase
+	RefundRepo                          refunddom.RepositoryPort
+	RefundCompletionNotificationUC      usecase.RefundCompletionNotificationUsecasePort
+	ResalePayoutNotificationUC          usecase.ResalePayoutNotificationUsecasePort
+	OrderUC                             *usecase.OrderUsecase
+	TradeUC                             *usecase.TradeUsecase
+	AvatarReviewUC                      *usecase.AvatarReviewUsecase
+	TradeMessageUC                      *usecase.TradeMessageUsecase
+	ResaleTradeDispatchUC               *usecase.ResaleTradeDispatchUsecase
+	ResaleTradeReturnConsultationUC     *usecase.ResaleTradeReturnConsultationUsecase
+	ResaleTradeReturnProposalUC         *usecase.ResaleTradeReturnProposalUsecase
+	ResaleTradeReturnProposalResponseUC *usecase.ResaleTradeReturnProposalResponseUsecase
+	ResaleTradeReturnReceiptUC          *usecase.ResaleTradeReturnReceiptUsecase
+	InquiryUC                           *usecase.InquiryUsecase
+	ReturnRequestUC                     *usecase.ReturnRequestUsecase
+	AnnouncementUC                      *usecase.AnnouncementUsecase
+	NewsUC                              *usecase.NewsUsecase
+	ResaleUC                            *usecase.ResaleUsecase
+	ResaleReviewUC                      *usecase.ResaleReviewUsecase
+	LikeUC                              *usecase.LikeUsecase
 
 	MeAvatarResolver mallhandler.MeAvatarResolver
 
