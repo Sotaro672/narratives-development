@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
 import TextState from "../../../../components/ui/TextState";
-import ReturnRequestModal from "../../../order/components/ReturnRequestModal";
 import ReportModal from "../../../report/components/ReportModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import "../../../shared/styles/trade-chat-detail.css";
@@ -13,13 +12,14 @@ import "../../../shared/styles/trade-chat-detail.css";
 import useTradeCancel from "../hooks/useTradeCancel";
 import useTradeMessageReport from "../hooks/useTradeMessageReport";
 import useTradeReply from "../hooks/useTradeReply";
-import useTradeReturn from "../hooks/useTradeReturn";
+import useTradeReturnConsultation from "../hooks/useTradeReturnConsultation";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
 import useTradeThread from "../hooks/useTradeThread";
 import { getTradeOrderAction, getTradeTitle } from "../util/tradeChatDetail";
 
 import TradeMessageCard from "./TradeMessageCard";
 import TradeOrderActionPrompt from "./TradeOrderActionPrompt";
+import TradeReturnConsultationModal from "./TradeReturnConsultationModal";
 import TradeReturnReceiptModal from "./TradeReturnReceiptModal";
 import TradeThreadHeader from "./TradeThreadHeader";
 
@@ -41,7 +41,7 @@ export default function TradeChatDetail({
     reload: thread.reload,
   });
 
-  const returnFlow = useTradeReturn({
+  const returnConsultationFlow = useTradeReturnConsultation({
     tradeId: thread.tradeId,
     trade: thread.trade,
     reload: thread.reload,
@@ -52,7 +52,9 @@ export default function TradeChatDetail({
     tradeId: thread.tradeId,
     trade: thread.trade,
     reload: thread.reload,
-    blocked: cancelFlow.cancelling || returnFlow.returning,
+    blocked:
+      cancelFlow.cancelling ||
+      returnConsultationFlow.submitting,
   });
 
   const reply = useTradeReply({
@@ -62,7 +64,7 @@ export default function TradeChatDetail({
     loading: thread.loading,
     blocked:
       cancelFlow.cancelling ||
-      returnFlow.returning ||
+      returnConsultationFlow.submitting ||
       returnReceiptFlow.submitting,
   });
 
@@ -80,7 +82,7 @@ export default function TradeChatDetail({
 
     if (
       cancelFlow.cancelling ||
-      returnFlow.returning ||
+      returnConsultationFlow.submitting ||
       returnReceiptFlow.submitting ||
       !trade ||
       !orderAction ||
@@ -93,15 +95,20 @@ export default function TradeChatDetail({
 
     switch (orderAction) {
       case "dispatch":
-        if (trade.viewerSide !== "seller" || trade.isDispatched) {
+        if (
+          trade.viewerSide !== "seller" ||
+          trade.isDispatched
+        ) {
           return;
         }
 
-        navigate(`/dispatch/trades/${encodeURIComponent(thread.tradeId)}`);
+        navigate(
+          `/dispatch/trades/${encodeURIComponent(thread.tradeId)}`,
+        );
         return;
 
       case "return":
-        returnFlow.openModal();
+        returnConsultationFlow.openModal();
         return;
 
       case "receive-return":
@@ -125,7 +132,7 @@ export default function TradeChatDetail({
 
   const orderActionProcessing =
     cancelFlow.cancelling ||
-    returnFlow.returning ||
+    returnConsultationFlow.submitting ||
     returnReceiptFlow.submitting;
 
   return (
@@ -135,7 +142,7 @@ export default function TradeChatDetail({
         showFooter={
           !reply.open &&
           !cancelFlow.open &&
-          !returnFlow.open &&
+          !returnConsultationFlow.open &&
           !returnReceiptFlow.open &&
           !report.isOpen
         }
@@ -153,7 +160,10 @@ export default function TradeChatDetail({
       >
         <section className="page-section content-page-section chat-detail-page">
           {thread.error ? (
-            <Alert variant="error" className="chat-detail-page__error">
+            <Alert
+              variant="error"
+              className="chat-detail-page__error"
+            >
               {thread.error}
             </Alert>
           ) : null}
@@ -185,7 +195,8 @@ export default function TradeChatDetail({
                   メッセージ一覧
                 </h3>
 
-                {thread.messages.length === 0 && !shouldShowOrderAction ? (
+                {thread.messages.length === 0 &&
+                !shouldShowOrderAction ? (
                   <TextState
                     variant="empty"
                     className="chat-detail-page__no-replies"
@@ -259,26 +270,34 @@ export default function TradeChatDetail({
         }}
       />
 
-      <ReturnRequestModal
-        open={returnFlow.open}
-        packageState={returnFlow.packageState}
-        reason={returnFlow.reason}
-        error={returnFlow.error}
-        submitting={returnFlow.returning}
-        onPackageStateChange={returnFlow.setPackageState}
-        onReasonChange={returnFlow.setReason}
-        onCancel={returnFlow.closeModal}
+      <TradeReturnConsultationModal
+        open={returnConsultationFlow.open}
+        reason={returnConsultationFlow.reason}
+        detail={returnConsultationFlow.detail}
+        error={returnConsultationFlow.error}
+        submitting={returnConsultationFlow.submitting}
+        onReasonChange={returnConsultationFlow.setReason}
+        onDetailChange={returnConsultationFlow.setDetail}
+        onCancel={returnConsultationFlow.closeModal}
         onSubmit={() => {
-          void returnFlow.submit();
+          void returnConsultationFlow.submit();
         }}
       />
 
       <TradeReturnReceiptModal
         open={returnReceiptFlow.open}
-        merchandiseRefundAmount={returnReceiptFlow.merchandiseRefundAmount}
-        merchandiseRefundMaxAmount={returnReceiptFlow.merchandiseRefundMaxAmount}
-        refundOutboundShipping={returnReceiptFlow.refundOutboundShipping}
-        coverReturnShipping={returnReceiptFlow.coverReturnShipping}
+        merchandiseRefundAmount={
+          returnReceiptFlow.merchandiseRefundAmount
+        }
+        merchandiseRefundMaxAmount={
+          returnReceiptFlow.merchandiseRefundMaxAmount
+        }
+        refundOutboundShipping={
+          returnReceiptFlow.refundOutboundShipping
+        }
+        coverReturnShipping={
+          returnReceiptFlow.coverReturnShipping
+        }
         error={returnReceiptFlow.error}
         submitting={returnReceiptFlow.submitting}
         selectionLocked={returnReceiptFlow.selectionLocked}
