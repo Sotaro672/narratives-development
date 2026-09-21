@@ -1,16 +1,13 @@
 // frontend/amol/src/pages/PublicWalletPage.tsx
 
-import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/wallet-page.css";
 import "../styles/wallet-page/resale-panel.css";
-import "../styles/avatar-review-page.css";
 
 import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
-import { fetchAvatarReviews, type AvatarReviewPageResponse } from "../features/avatar-review/api/avatarReviewApi";
 import ReportModal from "../features/report/components/ReportModal";
 import { useReport } from "../features/report/hooks/useReport";
 import WalletProfile from "../features/wallet/components/WalletProfile";
@@ -50,52 +47,8 @@ export default function PublicWalletPage() {
 
   const targetAvatarId = viewedAvatarId || avatarId;
   const normalizedTargetAvatarId = targetAvatarId.trim();
-  const canReportAvatar = Boolean(normalizedTargetAvatarId) && !isOwnAvatar;
-
-  const [reviewSummary, setReviewSummary] =
-    useState<AvatarReviewPageResponse | null>(null);
-  const [reviewLoading, setReviewLoading] = useState(false);
-
-  useEffect(() => {
-    const id = targetAvatarId.trim();
-
-    if (!id || loading || error) {
-      setReviewSummary(null);
-      return;
-    }
-
-    let active = true;
-
-    const loadReviewSummary = async () => {
-      setReviewLoading(true);
-
-      try {
-        const result = await fetchAvatarReviews({
-          avatarId: id,
-          page: 1,
-          perPage: 1,
-        });
-
-        if (active) {
-          setReviewSummary(result);
-        }
-      } catch {
-        if (active) {
-          setReviewSummary(null);
-        }
-      } finally {
-        if (active) {
-          setReviewLoading(false);
-        }
-      }
-    };
-
-    void loadReviewSummary();
-
-    return () => {
-      active = false;
-    };
-  }, [error, loading, targetAvatarId]);
+  const canReportAvatar =
+    Boolean(normalizedTargetAvatarId) && !isOwnAvatar;
 
   const handleOpenMarketDetail = (resaleId: string) => {
     const id = resaleId.trim();
@@ -153,47 +106,13 @@ export default function PublicWalletPage() {
               {!loading && !error ? (
                 <>
                   <WalletProfile
+                    avatarId={targetAvatarId}
                     avatarName={avatarName}
                     avatarIcon={avatarIcon}
                     profile={profile}
                     isOwnAvatar={isOwnAvatar}
-                  />
-
-                  <button
-                    type="button"
-                    className="avatar-review-summary"
                     onClick={handleOpenAvatarReviews}
-                    disabled={!targetAvatarId || reviewLoading}
-                  >
-                    <span className="avatar-review-summary__item">
-                      <span className="avatar-review-summary__label">
-                        良かった
-                      </span>
-                      <strong className="avatar-review-summary__count">
-                        {reviewLoading ? "-" : reviewSummary?.goodCount ?? 0}
-                      </strong>
-                    </span>
-
-                    <span className="avatar-review-summary__divider" />
-
-                    <span className="avatar-review-summary__item">
-                      <span className="avatar-review-summary__label">
-                        残念だった
-                      </span>
-                      <strong className="avatar-review-summary__count">
-                        {reviewLoading
-                          ? "-"
-                          : reviewSummary?.disappointedCount ?? 0}
-                      </strong>
-                    </span>
-
-                    <span
-                      className="avatar-review-summary__arrow"
-                      aria-hidden="true"
-                    >
-                      ›
-                    </span>
-                  </button>
+                  />
 
                   {canReportAvatar ? (
                     <div className="wallet-page-profile-actions-bar">

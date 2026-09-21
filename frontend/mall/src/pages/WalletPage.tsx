@@ -37,8 +37,17 @@ export default function WalletPage() {
     orderError,
     hasItems,
     hasTokens,
-    pageTitle,
   } = useWalletPage();
+
+  const handleOpenAvatarReviews = () => {
+    const id = avatarId.trim();
+
+    if (!id) {
+      return;
+    }
+
+    navigate(`/avatars/${encodeURIComponent(id)}/reviews`);
+  };
 
   const handleOpenContents = (token: WalletTokenItem) => {
     const params = new URLSearchParams();
@@ -120,16 +129,11 @@ export default function WalletPage() {
   const renderTokenList = () => (
     <div className="wallet-page-token-list">
       {tokenLoading ? (
-        <p className="wallet-page__message">
-          読み込み中です...
-        </p>
+        <p className="wallet-page__message">読み込み中です...</p>
       ) : null}
 
       {!tokenLoading && tokenError ? (
-        <div
-          role="alert"
-          className="wallet-page__message"
-        >
+        <div role="alert" className="wallet-page__message">
           <p>{tokenError}</p>
         </div>
       ) : null}
@@ -157,25 +161,24 @@ export default function WalletPage() {
   );
 
   return (
-    <Layout title={pageTitle || "AMOL"} mode="mypage">
+    <Layout title="AMOL" mode="mypage">
       <section className="content-page-section wallet-page">
         <div className="wallet-page-layout">
           <aside className="wallet-page-layout__profile">
             <WalletProfile
+              avatarId={avatarId}
               avatarName={avatarName}
               avatarIcon={avatarIcon}
               profile={profile}
               isOwnAvatar
+              onClick={handleOpenAvatarReviews}
             />
 
-            <WalletProfileActions avatarId={avatarId} />
+            <WalletProfileActions />
           </aside>
 
           <div className="wallet-page-layout__main">
-            <WalletTabs
-              activeTab={activeTab}
-              onChange={setActiveTab}
-            />
+            <WalletTabs activeTab={activeTab} onChange={setActiveTab} />
 
             {activeTab === "history" ? (
               <WalletHistoryPanel
