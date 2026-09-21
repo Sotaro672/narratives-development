@@ -1,4 +1,5 @@
-// frontend\amol\src\features\shared\types\announcements.ts
+// frontend/amol/src/features/shared/types/announcements.ts
+
 export type AnnouncementAttachmentFileItem = {
   announcementId: string;
   id: string;
@@ -15,6 +16,7 @@ export type AnnouncementListItem = {
   content: string;
   targetToken?: string | null;
   tokenName?: string | null;
+  tokenIcon?: string | null;
   published?: boolean;
   publishedAt?: string | null;
   attachments?: string[];

@@ -7,6 +7,7 @@ import type {
 } from "react";
 import { ChevronRight } from "lucide-react";
 
+import DateDisplay from "./Date";
 import "./List.css";
 
 type ListProps = HTMLAttributes<HTMLDivElement> & {
@@ -26,8 +27,7 @@ type ListRowProps = {
   leading?: ReactNode;
   title: ReactNode;
   subLabel?: ReactNode;
-  dateLabel?: ReactNode;
-  dateTime?: string;
+  dateValue?: string | null;
   preview?: ReactNode;
   meta?: ReactNode;
   attention?: boolean;
@@ -74,8 +74,7 @@ export function ListRow({
   leading,
   title,
   subLabel,
-  dateLabel,
-  dateTime,
+  dateValue,
   preview,
   meta,
   attention = false,
@@ -143,13 +142,12 @@ export function ListRow({
             ) : null}
           </div>
 
-          {dateLabel ? (
-            <time
+          {dateValue ? (
+            <DateDisplay
               className="ui-list__date"
-              dateTime={dateTime || undefined}
-            >
-              {dateLabel}
-            </time>
+              value={dateValue}
+              variant="compact"
+            />
           ) : null}
         </div>
 

@@ -114,7 +114,6 @@ function ResaleListItem({
   const hasAttention = item.unreadCommentCount > 0;
   const title = getResaleTitle(item);
   const preview = getResalePreview(item);
-  const dateLabel = formatChatDate(item.latestActivityAt);
   const statusLabel = getResaleStatusLabel(item.status);
   const countLabel =
     item.commentCount > 0
@@ -140,8 +139,7 @@ function ResaleListItem({
       }
       title={title}
       subLabel={item.brandName || undefined}
-      dateLabel={dateLabel || undefined}
-      dateTime={item.latestActivityAt}
+      dateValue={item.latestActivityAt}
       preview={preview}
       meta={
         <>
@@ -187,7 +185,6 @@ function TradeListItem({
   const hasAttention = item.unreadMessageCount > 0;
   const title = getTradeTitle(item);
   const preview = getTradePreview(item);
-  const dateLabel = formatChatDate(item.latestActivityAt);
   const statusLabel = getTradeStatusLabel(item);
   const initial = getInitial(
     item.counterpartAvatarName || item.productName || "取引",
@@ -211,8 +208,7 @@ function TradeListItem({
       }
       title={title}
       subLabel={item.counterpartAvatarName || undefined}
-      dateLabel={dateLabel || undefined}
-      dateTime={item.latestActivityAt}
+      dateValue={item.latestActivityAt}
       preview={preview}
       meta={
         <>
@@ -302,38 +298,4 @@ function getTradePreview(item: TradeChatListItem): string {
 
 function getInitial(value: string): string {
   return Array.from(value)[0] ?? "？";
-}
-
-function formatChatDate(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const now = new Date();
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (isToday) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  }
-
-  if (date.getFullYear() === now.getFullYear()) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-  }
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
 }

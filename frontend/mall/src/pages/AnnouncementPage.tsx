@@ -118,44 +118,6 @@ function getAnnouncementPreview(
   return "お知らせ";
 }
 
-function formatNotificationDate(value: string): string {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const now = new Date();
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (isToday) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  }
-
-  if (date.getFullYear() === now.getFullYear()) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-  }
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
-}
-
 export default function AnnouncementPage() {
   const navigate = useNavigate();
 
@@ -330,10 +292,7 @@ export default function AnnouncementPage() {
     >
       <section className="page-section content-page-section announcement-page announcement-page--list">
         {error ? (
-          <div
-            className="announcement-page__list-error"
-            role="alert"
-          >
+          <div className="announcement-page__list-error" role="alert">
             {error}
           </div>
         ) : null}
@@ -373,12 +332,15 @@ export default function AnnouncementPage() {
                       handleOpenAnnouncement(announcement)
                     }
                     leading={
-                      <Bell size={20} strokeWidth={1.8} />
+                      announcement.tokenIcon ? (
+                        <img src={announcement.tokenIcon} alt="" />
+                      ) : (
+                        <Bell size={20} strokeWidth={1.8} />
+                      )
                     }
                     title={announcement.title}
                     subLabel={tokenLabel}
-                    dateLabel={formatNotificationDate(item.occurredAt)}
-                    dateTime={item.occurredAt}
+                    dateValue={item.occurredAt}
                     preview={getAnnouncementPreview(announcement)}
                     meta={
                       <Badge
@@ -407,8 +369,7 @@ export default function AnnouncementPage() {
                     }
                     title={newsItem.title}
                     subLabel="システム通知"
-                    dateLabel={formatNotificationDate(item.occurredAt)}
-                    dateTime={item.occurredAt}
+                    dateValue={item.occurredAt}
                     preview={
                       newsItem.body?.trim() ||
                       "システム通知"
@@ -452,8 +413,7 @@ export default function AnnouncementPage() {
                   }
                   title={cardTitle}
                   subLabel={cardLabel}
-                  dateLabel={formatNotificationDate(item.occurredAt)}
-                  dateTime={item.occurredAt}
+                  dateValue={item.occurredAt}
                   preview={
                     notification.decisionReason?.trim() ||
                     targetLabel

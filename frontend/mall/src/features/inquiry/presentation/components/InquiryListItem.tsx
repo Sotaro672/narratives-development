@@ -20,7 +20,6 @@ export default function InquiryListItem({
   const hasAttention = badgeCount > 0;
   const title = getInquiryTitle(item);
   const preview = getInquiryPreview(item);
-  const dateLabel = formatInquiryDate(item.latestActivityAt);
   const statusLabel = getInquiryStatusLabel(item.status);
   const countLabel = getReplyCountLabel(item);
   const brandInitial = getInitial(item.brandName || item.productName);
@@ -40,8 +39,7 @@ export default function InquiryListItem({
       }
       title={title}
       subLabel={item.brandName || undefined}
-      dateLabel={dateLabel || undefined}
-      dateTime={item.latestActivityAt}
+      dateValue={item.latestActivityAt}
       preview={preview}
       meta={
         <>
@@ -122,38 +120,4 @@ function getReplyCountLabel(item: InquiryChatListItem): string {
 
 function getInitial(value: string): string {
   return Array.from(value)[0] ?? "？";
-}
-
-function formatInquiryDate(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const now = new Date();
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
-
-  if (isToday) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  }
-
-  if (date.getFullYear() === now.getFullYear()) {
-    return new Intl.DateTimeFormat("ja-JP", {
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-  }
-
-  return new Intl.DateTimeFormat("ja-JP", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(date);
 }

@@ -45,6 +45,7 @@ type AnnouncementListItem struct {
 
 	TargetToken string `json:"targetToken"`
 	TokenName   string `json:"tokenName"`
+	TokenIcon   string `json:"tokenIcon"`
 
 	Published   bool       `json:"published"`
 	PublishedAt *time.Time `json:"publishedAt,omitempty"`
@@ -121,7 +122,7 @@ func (s *AnnouncementQueryService) toListItem(
 		targetToken = *a.TargetToken
 	}
 
-	tokenName, err := s.resolveTokenName(ctx, targetToken)
+	tokenName, tokenIcon, err := s.resolveTokenDisplay(ctx, targetToken)
 	if err != nil {
 		return AnnouncementListItem{}, err
 	}
@@ -142,6 +143,7 @@ func (s *AnnouncementQueryService) toListItem(
 		Content:     a.Content,
 		TargetToken: targetToken,
 		TokenName:   tokenName,
+		TokenIcon:   tokenIcon,
 
 		Published:   a.Published,
 		PublishedAt: a.PublishedAt,
@@ -167,6 +169,7 @@ func (s *AnnouncementQueryService) resolveReadState(
 	if announcementID == "" {
 		return false, nil, ann.ErrInvalidAnnouncementID
 	}
+
 	if avatarID == "" {
 		return false, nil, ann.ErrInvalidAvatarID
 	}
@@ -227,29 +230,31 @@ func (s *AnnouncementQueryService) resolveAttachmentFiles(
 	return items, nil
 }
 
-func (s *AnnouncementQueryService) resolveTokenName(
+func (s *AnnouncementQueryService) resolveTokenDisplay(
 	ctx context.Context,
 	targetToken string,
-) (string, error) {
+) (string, string, error) {
 	if targetToken == "" {
-		return "", nil
+		return "", "", nil
 	}
 
 	if s == nil || s.tokenBlueprintRepo == nil {
-		return targetToken, nil
+		return targetToken, "", nil
 	}
 
 	tb, err := s.tokenBlueprintRepo.GetByID(ctx, targetToken)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
+
 	if tb == nil {
-		return targetToken, nil
+		return targetToken, "", nil
 	}
 
+	tokenName := targetToken
 	if tb.Name != "" {
-		return tb.Name, nil
+		tokenName = tb.Name
 	}
 
-	return targetToken, nil
+	return tokenName, tb.IconURL, nil
 }
