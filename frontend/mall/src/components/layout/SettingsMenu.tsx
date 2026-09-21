@@ -1,4 +1,4 @@
-// frontend/amol/src/components/layout/SettingsMenu.tsx
+// frontend\mall\src\components\layout\SettingsMenu.tsx
 
 import { useState } from "react";
 import {
