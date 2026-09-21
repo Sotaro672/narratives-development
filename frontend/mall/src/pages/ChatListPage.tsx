@@ -1,6 +1,7 @@
 // frontend/amol/src/pages/ChatListPage.tsx
 
 import Layout from "../components/layout/Layout";
+import List, { ListRow } from "../components/ui/List";
 
 import InquiryListItem from "../features/inquiry/presentation/components/InquiryListItem";
 import {
@@ -50,7 +51,7 @@ export default function ChatListPage() {
         ) : null}
 
         {!loading && sortedItems.length > 0 ? (
-          <div
+          <List
             className="chat-list-page__list"
             aria-label="チャット一覧"
           >
@@ -92,7 +93,7 @@ export default function ChatListPage() {
                 />
               );
             })}
-          </div>
+          </List>
         ) : null}
       </section>
     </Layout>
@@ -115,115 +116,60 @@ function ResaleListItem({
   const preview = getResalePreview(item);
   const dateLabel = formatChatDate(item.latestActivityAt);
   const statusLabel = getResaleStatusLabel(item.status);
-  const countLabel = item.commentCount > 0
-    ? `コメント ${item.commentCount} 件`
-    : "";
+  const countLabel =
+    item.commentCount > 0
+      ? `コメント ${item.commentCount} 件`
+      : "";
   const imageUrl = item.imageUrl || item.tokenIcon;
   const initial = getInitial(
     item.productName || item.tokenName || item.brandName,
   );
 
-  const handleOpen = () => {
-    if (navigating) {
-      return;
-    }
-
-    onOpen();
-  };
-
   return (
-    <article
-      className={
-        hasAttention
-          ? "chat-list-page__row chat-list-page__row--attention"
-          : "chat-list-page__row"
-      }
-      role="button"
-      tabIndex={0}
-      aria-label={`${title} のチャットを開く`}
-      aria-busy={navigating}
-      onClick={handleOpen}
-      onKeyDown={(event) => {
-        if (
-          navigating ||
-          (event.key !== "Enter" && event.key !== " ")
-        ) {
-          return;
-        }
-
-        event.preventDefault();
-        onOpen();
-      }}
-    >
-      <div
-        className="chat-list-page__avatar"
-        aria-hidden="true"
-      >
-        {imageUrl ? (
-          <img
-            src={imageUrl}
-            alt=""
-            className="chat-list-page__avatar-image"
-          />
+    <ListRow
+      attention={hasAttention}
+      busy={navigating}
+      ariaLabel={`${title} のチャットを開く`}
+      onClick={onOpen}
+      leading={
+        imageUrl ? (
+          <img src={imageUrl} alt="" />
         ) : (
           <span>{initial}</span>
-        )}
-      </div>
-
-      <div className="chat-list-page__body">
-        <div className="chat-list-page__head">
-          <div className="chat-list-page__title-wrap">
-            <h2 className="chat-list-page__title">
-              {title}
-            </h2>
-
-            {item.brandName ? (
-              <span className="chat-list-page__sub-label">
-                {item.brandName}
-              </span>
-            ) : null}
-          </div>
-
-          {dateLabel ? (
-            <time
-              className="chat-list-page__date"
-              dateTime={item.latestActivityAt}
-            >
-              {dateLabel}
-            </time>
+        )
+      }
+      title={title}
+      subLabel={item.brandName || undefined}
+      dateLabel={dateLabel || undefined}
+      dateTime={item.latestActivityAt}
+      preview={preview}
+      meta={
+        <>
+          {countLabel ? (
+            <span className="chat-list-page__reply-count">
+              {countLabel}
+            </span>
           ) : null}
-        </div>
 
-        <div className="chat-list-page__content">
-          <p className="chat-list-page__preview">
-            {preview}
-          </p>
-
-          <div className="chat-list-page__meta">
-            {countLabel ? (
-              <span className="chat-list-page__reply-count">
-                {countLabel}
-              </span>
-            ) : null}
-
+          {statusLabel ? (
             <span className="chat-list-page__status">
               {statusLabel}
             </span>
+          ) : null}
 
-            {hasAttention ? (
-              <span
-                className="chat-list-page__badge-count"
-                aria-label={`未読 ${item.unreadCommentCount} 件`}
-              >
-                {item.unreadCommentCount > 99
-                  ? "99+"
-                  : item.unreadCommentCount}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </article>
+          {hasAttention ? (
+            <span
+              className="chat-list-page__badge-count"
+              aria-label={`未読 ${item.unreadCommentCount} 件`}
+            >
+              {item.unreadCommentCount > 99
+                ? "99+"
+                : item.unreadCommentCount}
+            </span>
+          ) : null}
+        </>
+      }
+    />
   );
 }
 
@@ -247,101 +193,48 @@ function TradeListItem({
     item.counterpartAvatarName || item.productName || "取引",
   );
 
-  const handleOpen = () => {
-    if (navigating) {
-      return;
-    }
-
-    onOpen();
-  };
-
   return (
-    <article
-      className={
-        hasAttention
-          ? "chat-list-page__row chat-list-page__row--attention"
-          : "chat-list-page__row"
-      }
-      role="button"
-      tabIndex={0}
-      aria-label={`${title}を開く`}
-      aria-busy={navigating}
-      onClick={handleOpen}
-      onKeyDown={(event) => {
-        if (
-          navigating ||
-          (event.key !== "Enter" && event.key !== " ")
-        ) {
-          return;
-        }
-
-        event.preventDefault();
-        onOpen();
-      }}
-    >
-      <div
-        className="chat-list-page__avatar"
-        aria-hidden="true"
-      >
-        {item.counterpartAvatarIcon ? (
+    <ListRow
+      attention={hasAttention}
+      busy={navigating}
+      ariaLabel={`${title}を開く`}
+      onClick={onOpen}
+      leading={
+        item.counterpartAvatarIcon ? (
           <img
             src={item.counterpartAvatarIcon}
             alt=""
-            className="chat-list-page__avatar-image"
           />
         ) : (
           <span>{initial}</span>
-        )}
-      </div>
-
-      <div className="chat-list-page__body">
-        <div className="chat-list-page__head">
-          <div className="chat-list-page__title-wrap">
-            <h2 className="chat-list-page__title">
-              {title}
-            </h2>
-
-            {item.counterpartAvatarName ? (
-              <span className="chat-list-page__sub-label">
-                {item.counterpartAvatarName}
-              </span>
-            ) : null}
-          </div>
-
-          {dateLabel ? (
-            <time
-              className="chat-list-page__date"
-              dateTime={item.latestActivityAt}
-            >
-              {dateLabel}
-            </time>
-          ) : null}
-        </div>
-
-        <div className="chat-list-page__content">
-          <p className="chat-list-page__preview">
-            {preview}
-          </p>
-
-          <div className="chat-list-page__meta">
+        )
+      }
+      title={title}
+      subLabel={item.counterpartAvatarName || undefined}
+      dateLabel={dateLabel || undefined}
+      dateTime={item.latestActivityAt}
+      preview={preview}
+      meta={
+        <>
+          {statusLabel ? (
             <span className="chat-list-page__status">
               {statusLabel}
             </span>
+          ) : null}
 
-            {hasAttention ? (
-              <span
-                className="chat-list-page__badge-count"
-                aria-label={`未読 ${item.unreadMessageCount} 件`}
-              >
-                {item.unreadMessageCount > 99
-                  ? "99+"
-                  : item.unreadMessageCount}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </article>
+          {hasAttention ? (
+            <span
+              className="chat-list-page__badge-count"
+              aria-label={`未読 ${item.unreadMessageCount} 件`}
+            >
+              {item.unreadMessageCount > 99
+                ? "99+"
+                : item.unreadMessageCount}
+            </span>
+          ) : null}
+        </>
+      }
+    />
   );
 }
 

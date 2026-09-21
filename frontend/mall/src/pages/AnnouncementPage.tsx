@@ -1,15 +1,15 @@
 // frontend/mall/src/pages/AnnouncementPage.tsx
 
 import { useCallback, useMemo } from "react";
+import { Bell, Newspaper, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import Badge from "../components/ui/Badge";
 import Card from "../components/ui/Card";
-import SectionHeader from "../components/ui/SectionHeader";
+import List, { ListRow } from "../components/ui/List";
 import TextState from "../components/ui/TextState";
-import { formatDateTime } from "../components/utils/date";
 
 import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
 import { useNewsQuery } from "../features/news/hooks/useNewsQuery";
@@ -95,6 +95,68 @@ function getDecisionCardTitle(
   }
 
   return "通報内容の確認が完了しました";
+}
+
+function getAnnouncementPreview(
+  announcement: AnnouncementListItem,
+): string {
+  const content = announcement.content?.trim();
+
+  if (content) {
+    return content;
+  }
+
+  const attachmentCount =
+    Array.isArray(announcement.attachmentFiles) &&
+    announcement.attachmentFiles.length > 0
+      ? announcement.attachmentFiles.length
+      : Array.isArray(announcement.attachments)
+        ? announcement.attachments.length
+        : 0;
+
+  if (attachmentCount > 0) {
+    return `添付 ${attachmentCount} 件`;
+  }
+
+  return "お知らせ";
+}
+
+function formatNotificationDate(value: string): string {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const now = new Date();
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    return new Intl.DateTimeFormat("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  }
+
+  if (date.getFullYear() === now.getFullYear()) {
+    return new Intl.DateTimeFormat("ja-JP", {
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
 }
 
 export default function AnnouncementPage() {
@@ -302,7 +364,10 @@ export default function AnnouncementPage() {
         ) : null}
 
         {!loading && items.length > 0 ? (
-          <div className="announcement-page__list">
+          <List
+            className="announcement-page__list"
+            aria-label="通知一覧"
+          >
             {items.map((item) => {
               if (item.kind === "announcement") {
                 const announcement = item.announcement;
@@ -312,57 +377,41 @@ export default function AnnouncementPage() {
                   announcement.tokenName ||
                   announcement.targetToken ||
                   "お知らせ";
-                const occurredAtLabel =
-                  formatDateTime(item.occurredAt);
 
                 return (
-                  <Card
+                  <ListRow
                     key={item.key}
-                    as="article"
-                    interactive
-                    highlighted={isUnread}
-                    aria-label={`${announcement.title} の詳細を開く`}
+                    attention={isUnread}
+                    ariaLabel={`${announcement.title} の詳細を開く`}
                     onClick={() =>
                       handleOpenAnnouncement(announcement)
                     }
-                  >
-                    <SectionHeader
-                      right={
-                        <Badge variant={isUnread ? "info" : "neutral"}>
-                          {isUnread ? "未読" : "既読"}
-                        </Badge>
-                      }
-                    >
-                      <div className="announcement-page__card-meta">
-                        <span className="announcement-page__token">
-                          {tokenLabel}
-                        </span>
-
-                        <time
-                          className="announcement-page__date"
-                          dateTime={item.occurredAt || undefined}
-                        >
-                          {occurredAtLabel}
-                        </time>
-                      </div>
-                    </SectionHeader>
-
-                    <h2 className="announcement-page__card-title">
-                      {announcement.title}
-                    </h2>
-
-                    {Array.isArray(announcement.attachmentFiles) &&
-                    announcement.attachmentFiles.length > 0 ? (
-                      <div className="announcement-page__attachments">
-                        添付 {announcement.attachmentFiles.length} 件
-                      </div>
-                    ) : Array.isArray(announcement.attachments) &&
-                      announcement.attachments.length > 0 ? (
-                      <div className="announcement-page__attachments">
-                        添付 {announcement.attachments.length} 件
-                      </div>
-                    ) : null}
-                  </Card>
+                    leading={
+                      <Bell
+                        size={20}
+                        strokeWidth={1.8}
+                      />
+                    }
+                    title={announcement.title}
+                    subLabel={tokenLabel}
+                    dateLabel={
+                      formatNotificationDate(item.occurredAt)
+                    }
+                    dateTime={item.occurredAt}
+                    preview={
+                      getAnnouncementPreview(announcement)
+                    }
+                    meta={
+                      <Badge
+                        variant={
+                          isUnread ? "info" : "neutral"
+                        }
+                        size="sm"
+                      >
+                        {isUnread ? "未読" : "既読"}
+                      </Badge>
+                    }
+                  />
                 );
               }
 
@@ -370,43 +419,42 @@ export default function AnnouncementPage() {
                 const newsItem = item.news;
                 const isUnread =
                   newsItem.isRead === false;
-                const occurredAtLabel =
-                  formatDateTime(item.occurredAt);
 
                 return (
-                  <Card
+                  <ListRow
                     key={item.key}
-                    as="article"
-                    interactive
-                    highlighted={isUnread}
-                    aria-label={`${newsItem.title} の詳細を開く`}
-                    onClick={() => handleOpenNews(newsItem)}
-                  >
-                    <SectionHeader
-                      right={
-                        <Badge variant={isUnread ? "info" : "neutral"}>
-                          {isUnread ? "未読" : "既読"}
-                        </Badge>
-                      }
-                    >
-                      <div className="announcement-page__card-meta">
-                        <span className="announcement-page__token">
-                          システム通知
-                        </span>
-
-                        <time
-                          className="announcement-page__date"
-                          dateTime={item.occurredAt || undefined}
-                        >
-                          {occurredAtLabel}
-                        </time>
-                      </div>
-                    </SectionHeader>
-
-                    <h2 className="announcement-page__card-title">
-                      {newsItem.title}
-                    </h2>
-                  </Card>
+                    attention={isUnread}
+                    ariaLabel={`${newsItem.title} の詳細を開く`}
+                    onClick={() =>
+                      handleOpenNews(newsItem)
+                    }
+                    leading={
+                      <Newspaper
+                        size={20}
+                        strokeWidth={1.8}
+                      />
+                    }
+                    title={newsItem.title}
+                    subLabel="システム通知"
+                    dateLabel={
+                      formatNotificationDate(item.occurredAt)
+                    }
+                    dateTime={item.occurredAt}
+                    preview={
+                      newsItem.body?.trim() ||
+                      "システム通知"
+                    }
+                    meta={
+                      <Badge
+                        variant={
+                          isUnread ? "info" : "neutral"
+                        }
+                        size="sm"
+                      >
+                        {isUnread ? "未読" : "既読"}
+                      </Badge>
+                    }
+                  />
                 );
               }
 
@@ -414,9 +462,9 @@ export default function AnnouncementPage() {
               const isUnread =
                 notification.isRead === false;
               const targetLabel =
-                getReportTargetLabel(notification.targetType);
-              const occurredAtLabel =
-                formatDateTime(item.occurredAt);
+                getReportTargetLabel(
+                  notification.targetType,
+                );
               const cardLabel =
                 getDecisionCardLabel(
                   notification,
@@ -426,44 +474,45 @@ export default function AnnouncementPage() {
                 getDecisionCardTitle(notification);
 
               return (
-                <Card
+                <ListRow
                   key={item.key}
-                  as="article"
-                  interactive
-                  highlighted={isUnread}
-                  aria-label={`${cardTitle} の詳細を開く`}
+                  attention={isUnread}
+                  ariaLabel={`${cardTitle} の詳細を開く`}
                   onClick={() =>
-                    handleOpenDecisionNotification(notification)
+                    handleOpenDecisionNotification(
+                      notification,
+                    )
                   }
-                >
-                  <SectionHeader
-                    right={
-                      <Badge variant={isUnread ? "info" : "neutral"}>
-                        {isUnread ? "未読" : "既読"}
-                      </Badge>
-                    }
-                  >
-                    <div className="announcement-page__card-meta">
-                      <span className="announcement-page__token">
-                        {cardLabel}
-                      </span>
-
-                      <time
-                        className="announcement-page__date"
-                        dateTime={item.occurredAt || undefined}
-                      >
-                        {occurredAtLabel}
-                      </time>
-                    </div>
-                  </SectionHeader>
-
-                  <h2 className="announcement-page__card-title">
-                    {cardTitle}
-                  </h2>
-                </Card>
+                  leading={
+                    <ShieldCheck
+                      size={20}
+                      strokeWidth={1.8}
+                    />
+                  }
+                  title={cardTitle}
+                  subLabel={cardLabel}
+                  dateLabel={
+                    formatNotificationDate(item.occurredAt)
+                  }
+                  dateTime={item.occurredAt}
+                  preview={
+                    notification.decisionReason?.trim() ||
+                    targetLabel
+                  }
+                  meta={
+                    <Badge
+                      variant={
+                        isUnread ? "info" : "neutral"
+                      }
+                      size="sm"
+                    >
+                      {isUnread ? "未読" : "既読"}
+                    </Badge>
+                  }
+                />
               );
             })}
-          </div>
+          </List>
         ) : null}
       </section>
     </Layout>

@@ -1,5 +1,6 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryListItem.tsx
 
+import { ListRow } from "../../../../components/ui/List";
 import type { InquiryChatListItem } from "../hooks/useInquiryListPage";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
 
@@ -17,7 +18,6 @@ export default function InquiryListItem({
   const closePendingCount = item.status === "resolved" ? 1 : 0;
   const badgeCount = item.unreadReplyCount + closePendingCount;
   const hasAttention = badgeCount > 0;
-
   const title = getInquiryTitle(item);
   const preview = getInquiryPreview(item);
   const dateLabel = formatInquiryDate(item.latestActivityAt);
@@ -25,103 +25,47 @@ export default function InquiryListItem({
   const countLabel = getReplyCountLabel(item);
   const brandInitial = getInitial(item.brandName || item.productName);
 
-  const handleOpen = () => {
-    if (navigating) {
-      return;
-    }
-
-    onOpen();
-  };
-
   return (
-    <article
-      className={
-        hasAttention
-          ? "chat-list-page__row chat-list-page__row--attention"
-          : "chat-list-page__row"
-      }
-      role="button"
-      tabIndex={0}
-      aria-label={`${title} のチャットを開く`}
-      aria-busy={navigating}
-      onClick={handleOpen}
-      onKeyDown={(event) => {
-        if (
-          navigating ||
-          (event.key !== "Enter" && event.key !== " ")
-        ) {
-          return;
-        }
-
-        event.preventDefault();
-        onOpen();
-      }}
-    >
-      <div
-        className="chat-list-page__avatar"
-        aria-hidden="true"
-      >
-        {item.brandIcon ? (
-          <img
-            src={item.brandIcon}
-            alt=""
-            className="chat-list-page__avatar-image"
-          />
+    <ListRow
+      attention={hasAttention}
+      busy={navigating}
+      ariaLabel={`${title} のチャットを開く`}
+      onClick={onOpen}
+      leading={
+        item.brandIcon ? (
+          <img src={item.brandIcon} alt="" />
         ) : (
           <span>{brandInitial}</span>
-        )}
-      </div>
-
-      <div className="chat-list-page__body">
-        <div className="chat-list-page__head">
-          <div className="chat-list-page__title-wrap">
-            <h2 className="chat-list-page__title">
-              {title}
-            </h2>
-
-            <span className="chat-list-page__sub-label">
-              {item.brandName}
+        )
+      }
+      title={title}
+      subLabel={item.brandName || undefined}
+      dateLabel={dateLabel || undefined}
+      dateTime={item.latestActivityAt}
+      preview={preview}
+      meta={
+        <>
+          {countLabel ? (
+            <span className="chat-list-page__reply-count">
+              {countLabel}
             </span>
-          </div>
-
-          {dateLabel ? (
-            <time
-              className="chat-list-page__date"
-              dateTime={item.latestActivityAt}
-            >
-              {dateLabel}
-            </time>
           ) : null}
-        </div>
 
-        <div className="chat-list-page__content">
-          <p className="chat-list-page__preview">
-            {preview}
-          </p>
+          <span className="chat-list-page__status">
+            {statusLabel}
+          </span>
 
-          <div className="chat-list-page__meta">
-            {countLabel ? (
-              <span className="chat-list-page__reply-count">
-                {countLabel}
-              </span>
-            ) : null}
-
-            <span className="chat-list-page__status">
-              {statusLabel}
+          {hasAttention ? (
+            <span
+              className="chat-list-page__badge-count"
+              aria-label={`要確認 ${badgeCount} 件`}
+            >
+              {badgeCount > 99 ? "99+" : badgeCount}
             </span>
-
-            {hasAttention ? (
-              <span
-                className="chat-list-page__badge-count"
-                aria-label={`要確認 ${badgeCount} 件`}
-              >
-                {badgeCount > 99 ? "99+" : badgeCount}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </article>
+          ) : null}
+        </>
+      }
+    />
   );
 }
 
@@ -163,24 +107,17 @@ function getInquiryStatusLabel(
   switch (status) {
     case "open":
       return "未対応";
-
     case "in_progress":
       return "対応中";
-
     case "resolved":
       return "解決済み";
-
     case "closed":
       return "クローズ";
   }
 }
 
-function getReplyCountLabel(
-  item: InquiryChatListItem,
-): string {
-  return item.replyCount > 0
-    ? `返信 ${item.replyCount} 件`
-    : "";
+function getReplyCountLabel(item: InquiryChatListItem): string {
+  return item.replyCount > 0 ? `返信 ${item.replyCount} 件` : "";
 }
 
 function getInitial(value: string): string {

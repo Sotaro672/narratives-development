@@ -12,6 +12,10 @@
   border-bottom: 1px solid #e5e7eb;
 }
 
+.ui-list__row:last-child {
+  border-bottom: none;
+}
+
 .ui-list__action {
   display: flex;
   width: 100%;
@@ -82,4 +86,230 @@
 .ui-list__row--disabled .ui-list__action:hover,
 .ui-list__row--disabled .ui-list__action:active {
   background: transparent;
+}
+
+.ui-list__row--rich {
+  position: relative;
+  display: flex;
+  min-height: 76px;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  background: #ffffff;
+  color: var(--color-text);
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.ui-list__row--rich:hover {
+  background: #f8fafc;
+}
+
+.ui-list__row--rich:active {
+  transform: scale(0.995);
+}
+
+.ui-list__row--rich:focus-visible {
+  z-index: 1;
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 0.42);
+}
+
+.ui-list__row--rich.ui-list__row--disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.ui-list__row--rich.ui-list__row--disabled:hover {
+  background: #ffffff;
+}
+
+.ui-list__row--rich.ui-list__row--disabled:active {
+  transform: none;
+}
+
+.ui-list__row--attention {
+  background: #f8fbff;
+}
+
+.ui-list__row--attention:hover {
+  background: #f3f8ff;
+}
+
+.ui-list__row--attention .ui-list__title {
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.ui-list__row--attention .ui-list__preview {
+  color: rgba(15, 23, 42, 0.86);
+  font-weight: 650;
+}
+
+.ui-list__leading {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 9999px;
+  background:
+    radial-gradient(
+      circle at 30% 20%,
+      rgba(255, 255, 255, 0.9),
+      transparent 32%
+    ),
+    linear-gradient(
+      135deg,
+      #e0f2fe,
+      #dbeafe 48%,
+      #ede9fe
+    );
+  color: #1e3a8a;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+}
+
+.ui-list__leading > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  object-fit: cover;
+  object-position: center;
+}
+
+.ui-list__leading > svg {
+  display: block;
+}
+
+.ui-list__body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ui-list__head {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ui-list__title-wrap {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.ui-list__title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 0.98rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-list__sub-label {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  color: rgba(15, 23, 42, 0.5);
+  font-size: 0.74rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-list__date {
+  flex: 0 0 auto;
+  color: rgba(15, 23, 42, 0.48);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.ui-list__content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+.ui-list__preview {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(15, 23, 42, 0.58);
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-list__preview-spacer {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.ui-list__meta {
+  display: inline-flex;
+  min-height: 20px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 640px) {
+  .ui-list__row--rich {
+    min-height: 74px;
+    gap: 11px;
+    padding: 11px 14px;
+  }
+
+  .ui-list__leading {
+    width: 44px;
+    height: 44px;
+    font-size: 0.98rem;
+  }
+
+  .ui-list__title {
+    font-size: 0.94rem;
+  }
+
+  .ui-list__sub-label {
+    display: none;
+  }
+
+  .ui-list__preview {
+    font-size: 0.81rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .ui-list__row--rich {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .ui-list__leading {
+    width: 40px;
+    height: 40px;
+  }
 }
