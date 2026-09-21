@@ -54,6 +54,7 @@ type mallRepositories struct {
 	tokenReader                      *fs.TokenReaderFS
 	tradeRepo                        *fs.TradeRepositoryFS
 	tradeMessageRepo                 *fs.TradeMessageRepositoryFS
+	tradeReturnAgreementRepo         *fs.TradeReturnAgreementRepositoryFS
 	transferRepo                     *fs.TransferRepositoryFS
 	transportationRepo               *fs.TransportationRepositoryFS
 	userRepo                         *fs.UserRepositoryFS
@@ -109,6 +110,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 	tokenOwnerUpdater := fs.NewTokenOwnerUpdaterFS(fsClient)
 	tradeRepo := fs.NewTradeRepositoryFS(fsClient)
 	tradeMessageRepo := fs.NewTradeMessageRepositoryFS(fsClient)
+	tradeReturnAgreementRepo := fs.NewTradeReturnAgreementRepositoryFS(fsClient)
 	transferRepo := fs.NewTransferRepositoryFS(fsClient)
 	refundCompletionNotificationRepo := fs.NewRefundCompletionNotificationRepositoryFS(fsClient)
 	resalePayoutNotificationRepo := fs.NewResalePayoutNotificationRepositoryFS(fsClient)
@@ -165,6 +167,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 		tokenReader:                      tokenReader,
 		tradeRepo:                        tradeRepo,
 		tradeMessageRepo:                 tradeMessageRepo,
+		tradeReturnAgreementRepo:         tradeReturnAgreementRepo,
 		transferRepo:                     transferRepo,
 		transportationRepo:               transportationRepo,
 		userRepo:                         userRepo,

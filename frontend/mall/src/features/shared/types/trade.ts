@@ -6,13 +6,9 @@ import type {
   ResaleVolume,
 } from "./resale";
 
-export const TRADE_STATUSES = [
-  "active",
-  "closed",
-] as const;
+export const TRADE_STATUSES = ["active", "closed"] as const;
 
-export type TradeStatus =
-  (typeof TRADE_STATUSES)[number];
+export type TradeStatus = (typeof TRADE_STATUSES)[number];
 
 export const TRADE_MESSAGE_SENDER_SIDES = [
   "buyer",
@@ -36,6 +32,104 @@ export const TRADE_MESSAGE_SENDER_TYPES = [
 export type TradeMessageSenderType =
   (typeof TRADE_MESSAGE_SENDER_TYPES)[number];
 
+// ============================================================
+// Trade Return
+// ============================================================
+
+export const TRADE_RETURN_CONSULTATION_REASONS = [
+  "not_as_described",
+  "damaged",
+  "wrong_item",
+  "other",
+] as const;
+
+export type TradeReturnConsultationReason =
+  (typeof TRADE_RETURN_CONSULTATION_REASONS)[number];
+
+export const TRADE_RETURN_STATUSES = [
+  "none",
+  "discussing",
+  "proposed",
+  "agreed",
+  "return_shipped",
+  "return_received",
+  "refund_processing",
+  "completed",
+  "disputed",
+] as const;
+
+export type TradeReturnStatus =
+  (typeof TRADE_RETURN_STATUSES)[number];
+
+export const TRADE_RETURN_AGREEMENTS = [
+  "agree",
+  "disagree",
+] as const;
+
+export type TradeReturnAgreement =
+  (typeof TRADE_RETURN_AGREEMENTS)[number];
+
+export const TRADE_RETURN_REQUIREMENTS = [
+  "required",
+  "not_required",
+] as const;
+
+export type TradeReturnRequirement =
+  (typeof TRADE_RETURN_REQUIREMENTS)[number];
+
+export type TradeReturnConsultation = {
+  id: string;
+  reason: TradeReturnConsultationReason;
+  detail: string;
+  createdAt: string;
+};
+
+export type TradeReturnProposal = {
+  id: string;
+  agreement: TradeReturnAgreement;
+  returnRequirement?: TradeReturnRequirement;
+  refundAmount?: number;
+  createdAt: string;
+};
+
+export type CreateTradeReturnConsultationParams = {
+  tradeId: string;
+  reason: TradeReturnConsultationReason;
+  detail: string;
+};
+
+export type CreateTradeReturnConsultationRequest = {
+  reason: TradeReturnConsultationReason;
+  detail: string;
+};
+
+export type CreateTradeReturnConsultationResponse = {
+  data: TradeReturnConsultation;
+};
+
+export type CreateTradeReturnProposalParams = {
+  tradeId: string;
+  agreement: TradeReturnAgreement;
+  returnRequirement?: TradeReturnRequirement;
+  refundAmount?: number;
+};
+
+export type CreateTradeReturnProposalRequest = {
+  agreement: TradeReturnAgreement;
+  returnRequirement?: TradeReturnRequirement;
+  refundAmount?: number;
+};
+
+export type CreateTradeReturnProposalResponse = {
+  data: TradeReturnProposal;
+};
+
+// ============================================================
+// Legacy Trade Return
+// TODO: 新しい TradeReturnStatus / TradeReturnConsultation /
+// TradeReturnProposal への移行完了後に削除する。
+// ============================================================
+
 export const TRADE_RETURN_REQUEST_KINDS = [
   "unopened",
   "opened",
@@ -46,6 +140,8 @@ export type TradeReturnRequestKind =
 
 // ============================================================
 // Return Refund
+// TODO: 返金条件を TradeReturnProposal で確定し、返品受領APIが
+// 保存済み条件を参照する方式へ移行後に整理する。
 // ============================================================
 
 export type ReturnRefundSelection = {
@@ -139,12 +235,20 @@ export type TradeDetail = {
   status: TradeStatus;
   isCancelled: boolean;
   isDispatched: boolean;
+
+  returnStatus?: TradeReturnStatus;
+  returnConsultation?: TradeReturnConsultation;
+  returnProposal?: TradeReturnProposal;
+
+  // Legacy return state.
+  // Backend移行完了までは既存画面との互換性のため保持する。
   isReturnRequested: boolean;
   returnRequestKind?: TradeReturnRequestKind;
   returnRequestedAt?: string;
   isReturnCompleted: boolean;
   returnCompletedAt?: string;
   merchandiseRefundMaxAmount: number;
+
   transferred: boolean;
   transferredAt?: string;
   messages: TradeMessage[];

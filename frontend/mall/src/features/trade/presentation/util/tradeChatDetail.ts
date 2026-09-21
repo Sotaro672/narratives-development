@@ -7,7 +7,9 @@ import type {
 
 export type TradeOrderActionKind =
   | "dispatch"
-  | "return"
+  | "start-return-consultation"
+  | "respond-return-consultation"
+  | "review-return-proposal"
   | "receive-return"
   | "cancel";
 
@@ -52,27 +54,48 @@ export function getTradeOrderAction(
       return "dispatch";
     }
 
-    if (
-      trade.isReturnRequested &&
-      !trade.isReturnCompleted
-    ) {
-      return "receive-return";
-    }
+    switch (trade.returnStatus) {
+      case "discussing":
+        return "respond-return-consultation";
 
-    return null;
+      case "return_shipped":
+        return "receive-return";
+
+      case "none":
+      case "proposed":
+      case "agreed":
+      case "return_received":
+      case "refund_processing":
+      case "completed":
+      case "disputed":
+      case undefined:
+        return null;
+    }
   }
 
   if (!trade.isDispatched) {
     return "cancel";
   }
 
-  if (
-    !trade.transferred &&
-    !trade.isReturnRequested &&
-    !trade.isReturnCompleted
-  ) {
-    return "return";
+  if (trade.transferred) {
+    return null;
   }
 
-  return null;
+  switch (trade.returnStatus) {
+    case "none":
+      return "start-return-consultation";
+
+    case "proposed":
+      return "review-return-proposal";
+
+    case "discussing":
+    case "agreed":
+    case "return_shipped":
+    case "return_received":
+    case "refund_processing":
+    case "completed":
+    case "disputed":
+    case undefined:
+      return null;
+  }
 }

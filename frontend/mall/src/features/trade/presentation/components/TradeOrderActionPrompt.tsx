@@ -1,43 +1,59 @@
-// frontend/amol/src/features/trade/presentation/components/TradeOrderActionPrompt.tsx
+// frontend/mall/src/features/trade/presentation/components/TradeOrderActionPrompt.tsx
 
-export type TradeOrderAction =
-  | "cancel"
-  | "dispatch"
-  | "return"
-  | "receive-return";
+import type { TradeOrderActionKind } from "../util/tradeChatDetail";
 
 type TradeOrderActionPromptProps = {
-  action: TradeOrderAction;
+  action: TradeOrderActionKind;
   processing: boolean;
   error?: string | null;
   onAction: () => void;
 };
 
-function getPromptText(action: TradeOrderAction): string {
+function getPromptText(
+  action: TradeOrderActionKind,
+): string {
   switch (action) {
     case "cancel":
       return "注文をキャンセルしますか？";
+
     case "dispatch":
       return "商品を発送しますか？";
-    case "return":
-      return "商品の返品を申請しますか？";
+
+    case "start-return-consultation":
+      return "返品について相談しますか？";
+
+    case "respond-return-consultation":
+      return "購入者から返品についての相談が届いています。";
+
+    case "review-return-proposal":
+      return "出品者から返品条件が提示されています。";
+
     case "receive-return":
       return "返品商品を受領しましたか？";
   }
 }
 
 function getActionLabel(
-  action: TradeOrderAction,
+  action: TradeOrderActionKind,
   processing: boolean,
 ): string {
   if (processing) {
     switch (action) {
       case "cancel":
         return "キャンセル中...";
+
       case "dispatch":
         return "発送処理中...";
-      case "return":
-        return "返品申請中...";
+
+      case "start-return-consultation":
+        return "送信中...";
+
+      case "respond-return-consultation":
+        return "回答中...";
+
+      case "review-return-proposal":
+        return "処理中...";
+
       case "receive-return":
         return "返品処理中...";
     }
@@ -46,12 +62,21 @@ function getActionLabel(
   switch (action) {
     case "cancel":
       return "注文をキャンセル";
+
     case "dispatch":
       return "発送する";
-    case "return":
-      return "返品を申請";
+
+    case "start-return-consultation":
+      return "返品について相談する";
+
+    case "respond-return-consultation":
+      return "返品相談に回答する";
+
+    case "review-return-proposal":
+      return "返品条件を確認する";
+
     case "receive-return":
-      return "返品受領・返金";
+      return "返品商品を受領する";
   }
 }
 
@@ -65,7 +90,9 @@ export default function TradeOrderActionPrompt({
     <article className="chat-detail-page__reply chat-detail-page__reply--system">
       <div className="chat-detail-page__message-head">
         <div>
-          <span className="chat-detail-page__sender">システム</span>
+          <span className="chat-detail-page__sender">
+            システム
+          </span>
         </div>
       </div>
 
