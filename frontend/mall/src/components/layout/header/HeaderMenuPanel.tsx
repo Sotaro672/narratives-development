@@ -49,7 +49,7 @@ export default function HeaderMenuPanel({
         }`}
         aria-hidden={!menuOpen}
       >
-        <div className="header__panel-close-row">
+        <div className="header__panel-close-row header__panel-close-row--left">
           <IconButton
             variant="ghost"
             size="md"
