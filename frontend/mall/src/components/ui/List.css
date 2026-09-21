@@ -1,0 +1,85 @@
+/* frontend/mall/src/components/ui/List.css */
+
+.ui-list {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+}
+
+.ui-list__row {
+  width: 100%;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.ui-list__action {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 0;
+  background: transparent;
+  padding: 16px 20px;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+.ui-list__action:hover {
+  background: #f7f7f7;
+}
+
+.ui-list__action:active {
+  background: #f1f1f1;
+}
+
+.ui-list__action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -2px;
+}
+
+.ui-list__label {
+  min-width: 0;
+  flex: 1;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.ui-list__right {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-list__row--danger .ui-list__action {
+  color: #c62828;
+}
+
+.ui-list__row--danger .ui-list__action:hover {
+  background: #fff5f5;
+}
+
+.ui-list__row--danger .ui-list__action:active {
+  background: #ffebee;
+}
+
+.ui-list__row--disabled {
+  opacity: 0.5;
+}
+
+.ui-list__row--disabled .ui-list__action {
+  cursor: not-allowed;
+}
+
+.ui-list__row--disabled .ui-list__action:hover,
+.ui-list__row--disabled .ui-list__action:active {
+  background: transparent;
+}

@@ -1,4 +1,4 @@
-// frontend\mall\src\components\layout\SettingsMenu.tsx
+// frontend/mall/src/components/layout/SettingsMenu.tsx
 
 import { useState } from "react";
 import {
@@ -9,7 +9,7 @@ import {
 } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 
-import Item from "../ui/Item";
+import List, { ListItem } from "../ui/List";
 
 type SettingsMenuProps = {
   onItemClick?: () => void;
@@ -18,7 +18,6 @@ type SettingsMenuProps = {
 export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
   const navigate = useNavigate();
   const auth = getAuth();
-
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleNavigate = (to: string) => {
@@ -62,7 +61,6 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
         currentUser.email,
         password
       );
-
       await reauthenticateWithCredential(currentUser, credential);
 
       const idToken = await currentUser.getIdToken(true);
@@ -109,44 +107,38 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
   };
 
   return (
-    <ul className="settings-list">
-      <Item
+    <List className="settings-list">
+      <ListItem
         label="メールアドレス変更"
         onClick={() => handleNavigate("/settings/email")}
       />
-
-      <Item
+      <ListItem
         label="パスワード変更"
         onClick={() => handleNavigate("/settings/password")}
       />
-
-      <Item
+      <ListItem
         label="支払方法"
         onClick={() => handleNavigate("/settings/payment-method")}
       />
-
-      <Item
+      <ListItem
         label="口座変更"
         onClick={() => handleNavigate("/settings/payout-account")}
       />
-
-      <Item
+      <ListItem
         label="配送先情報"
         onClick={() => handleNavigate("/settings/shipping-address")}
       />
-
-      <Item
+      <ListItem
         label="問い合わせ"
         onClick={() => handleNavigate("/settings/inquiry")}
       />
-
-      <Item label="ログアウト" onClick={handleLogout} />
-
-      <Item
+      <ListItem label="ログアウト" onClick={handleLogout} />
+      <ListItem
         label={isDeleting ? "削除中..." : "アカウント削除"}
         danger
-        onClick={isDeleting ? undefined : handleDeleteAccount}
+        disabled={isDeleting}
+        onClick={handleDeleteAccount}
       />
-    </ul>
+    </List>
   );
 }
