@@ -1,7 +1,9 @@
 // frontend/mall/src/components/layout/header/HeaderMenuPanel.tsx
 
+import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import IconButton from "../../ui/IconButton";
 import List, { ListItem } from "../../ui/List";
 import FooterNav from "../FooterNav";
 import { publicHeaderNavigationItems } from "./headerNavigationItems";
@@ -47,6 +49,20 @@ export default function HeaderMenuPanel({
         }`}
         aria-hidden={!menuOpen}
       >
+        <div className="header__panel-close-row">
+          <IconButton
+            variant="ghost"
+            size="md"
+            className="header__panel-close-button"
+            aria-label="メニューを閉じる"
+            title="閉じる"
+            onClick={closeMenu}
+            tabIndex={menuOpen ? 0 : -1}
+          >
+            <X size={20} strokeWidth={1.8} aria-hidden="true" />
+          </IconButton>
+        </div>
+
         {shouldShowLandscapeSidebarMenuButton ? (
           <FooterNav renderMode="sidebar" onNavigate={closeMenu} />
         ) : (

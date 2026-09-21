@@ -1,5 +1,6 @@
 // frontend/mall/src/components/layout/header/HeaderActions.tsx
 
+import { Bell, MessageCircle, Settings, ShoppingCart } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useInquiryBadgeCounter } from "../../../features/inquiry/presentation/hooks/useInquiryBadgeCounter";
@@ -189,7 +190,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           title="通知"
         >
           <span className="header__cart-icon" aria-hidden="true">
-            🔔
+            <Bell size={20} strokeWidth={1.8} />
           </span>
 
           {safeNotificationUnreadCount > 0 ? (
@@ -213,7 +214,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           title="メッセージ"
         >
           <span className="header__cart-icon" aria-hidden="true">
-            💬
+            <MessageCircle size={20} strokeWidth={1.8} />
           </span>
 
           {safeChatBadgeCount > 0 ? (
@@ -239,9 +240,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           onClick={onCartButtonClick}
           disabled={cartButtonDisabled}
         >
-          <span className="header__cart-icon" aria-hidden="true">
-            🛒
-          </span>
+          <ShoppingCart size={20} strokeWidth={1.8} aria-hidden="true" />
 
           {safeCartItemCount > 0 ? (
             <Badge
@@ -264,7 +263,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           title="設定"
           onClick={toggleSettings}
         >
-          <span aria-hidden="true">⚙</span>
+          <Settings size={20} strokeWidth={1.8} aria-hidden="true" />
         </IconButton>
       ) : null}
     </div>
