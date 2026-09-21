@@ -25,7 +25,7 @@ export default function ChatListPage() {
 
   return (
     <Layout
-      title="チャット"
+      title="AMOL"
       showFooter
       mode="mypage"
       mainClassName="chat-list-page-layout"
