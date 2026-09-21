@@ -11,9 +11,10 @@ import Modal, {
   ModalHeader,
   ModalTitle,
 } from "../../../../components/ui/Modal";
-
-export type TradeReturnAgreement = "agree" | "disagree";
-export type TradeReturnRequirement = "required" | "not_required";
+import type {
+  TradeReturnAgreement,
+  TradeReturnRequirement,
+} from "../../../shared/types/trade";
 
 export type TradeReturnProposalModalProps = {
   open: boolean;
@@ -57,7 +58,7 @@ export default function TradeReturnProposalModal({
   const validRefundAmount =
     typeof refundAmount === "number" &&
     Number.isInteger(refundAmount) &&
-    refundAmount >= 0 &&
+    refundAmount > 0 &&
     refundAmount <= refundAmountMax;
 
   const canSubmit =
@@ -70,11 +71,6 @@ export default function TradeReturnProposalModal({
     value: TradeReturnAgreement,
   ): void => {
     onAgreementChange(value);
-
-    if (value === "disagree") {
-      onReturnRequirementChange("not_required");
-      onRefundAmountChange(0);
-    }
   };
 
   const handleRefundAmountChange = (
@@ -134,9 +130,7 @@ export default function TradeReturnProposalModal({
             購入者からの返品相談に対する回答内容を入力してください。提示した条件は購入者に表示され、購入者が同意した場合に返品手続きへ進みます。
           </ModalDescription>
 
-          <section
-            aria-labelledby="trade-return-agreement-label"
-          >
+          <section aria-labelledby="trade-return-agreement-label">
             <ModalDescription id="trade-return-agreement-label">
               返品に合意しますか？
             </ModalDescription>
@@ -171,9 +165,7 @@ export default function TradeReturnProposalModal({
 
           {agreed ? (
             <>
-              <section
-                aria-labelledby="trade-return-requirement-label"
-              >
+              <section aria-labelledby="trade-return-requirement-label">
                 <ModalDescription id="trade-return-requirement-label">
                   商品を返品してもらいますか？
                 </ModalDescription>
@@ -189,9 +181,7 @@ export default function TradeReturnProposalModal({
                   }}
                 >
                   <Chip
-                    selected={
-                      returnRequirement === "required"
-                    }
+                    selected={returnRequirement === "required"}
                     disabled={submitting}
                     onClick={() =>
                       onReturnRequirementChange("required")
@@ -201,9 +191,7 @@ export default function TradeReturnProposalModal({
                   </Chip>
 
                   <Chip
-                    selected={
-                      returnRequirement === "not_required"
-                    }
+                    selected={returnRequirement === "not_required"}
                     disabled={submitting}
                     onClick={() =>
                       onReturnRequirementChange("not_required")
@@ -218,7 +206,7 @@ export default function TradeReturnProposalModal({
                 id="trade-return-proposal-refund-amount"
                 type="number"
                 inputMode="numeric"
-                min={0}
+                min={1}
                 max={
                   refundAmountMax > 0
                     ? refundAmountMax
@@ -245,15 +233,13 @@ export default function TradeReturnProposalModal({
             </Alert>
           ) : null}
 
-          {agreed &&
-          returnRequirement === "required" ? (
+          {agreed && returnRequirement === "required" ? (
             <Alert variant="info">
               購入者が提示条件に同意した後、PUDO匿名返品の手続きへ進みます。
             </Alert>
           ) : null}
 
-          {agreed &&
-          returnRequirement === "not_required" ? (
+          {agreed && returnRequirement === "not_required" ? (
             <Alert variant="info">
               商品は購入者が保持したまま、指定した金額を返金する条件として提示します。
             </Alert>

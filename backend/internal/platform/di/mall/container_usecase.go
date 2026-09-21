@@ -54,6 +54,7 @@ type mallUsecases struct {
 	tradeMessageUC                  *usecase.TradeMessageUsecase
 	resaleTradeDispatchUC           *usecase.ResaleTradeDispatchUsecase
 	resaleTradeReturnConsultationUC *usecase.ResaleTradeReturnConsultationUsecase
+	resaleTradeReturnProposalUC     *usecase.ResaleTradeReturnProposalUsecase
 	resaleTradeReturnReceiptUC      *usecase.ResaleTradeReturnReceiptUsecase
 	inquiryUC                       *usecase.InquiryUsecase
 	returnRequestUC                 *usecase.ReturnRequestUsecase
@@ -338,6 +339,20 @@ func buildMallUsecases(
 	if resaleTradeReturnConsultationUC == nil {
 		return nil, errors.New(
 			"di.mall: resale trade return consultation usecase is nil",
+		)
+	}
+
+	resaleTradeReturnProposalUC := usecase.NewResaleTradeReturnProposalUsecase(
+		usecase.NewResaleTradeReturnProposalUsecaseInput{
+			TradeRepository:           r.tradeRepo,
+			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
+			OrderRepository:           r.orderRepo,
+			MessageRepository:         r.tradeMessageRepo,
+		},
+	)
+	if resaleTradeReturnProposalUC == nil {
+		return nil, errors.New(
+			"di.mall: resale trade return proposal usecase is nil",
 		)
 	}
 
@@ -756,6 +771,7 @@ func buildMallUsecases(
 		tradeMessageUC:                  tradeMessageUC,
 		resaleTradeDispatchUC:           resaleTradeDispatchUC,
 		resaleTradeReturnConsultationUC: resaleTradeReturnConsultationUC,
+		resaleTradeReturnProposalUC:     resaleTradeReturnProposalUC,
 		resaleTradeReturnReceiptUC:      resaleTradeReturnReceiptUC,
 		inquiryUC:                       inquiryUC,
 		returnRequestUC:                 returnRequestUC,
@@ -803,6 +819,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.TradeMessageUC = u.tradeMessageUC
 	c.ResaleTradeDispatchUC = u.resaleTradeDispatchUC
 	c.ResaleTradeReturnConsultationUC = u.resaleTradeReturnConsultationUC
+	c.ResaleTradeReturnProposalUC = u.resaleTradeReturnProposalUC
 	c.ResaleTradeReturnReceiptUC = u.resaleTradeReturnReceiptUC
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
