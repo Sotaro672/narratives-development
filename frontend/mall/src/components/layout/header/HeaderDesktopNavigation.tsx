@@ -9,7 +9,6 @@ import {
 import {
   Link,
   NavLink,
-  useLocation,
 } from "react-router-dom";
 import {
   Heart,
@@ -20,17 +19,18 @@ import {
 } from "lucide-react";
 
 import { getMyAvatar } from "../../../features/avatar/api/avatarApi";
-import { getVisiblePublicHeaderNavigationItems } from "./headerNavigationItems";
+import { publicHeaderNavigationItems } from "./headerNavigationItems";
 
-export default function HeaderDesktopNavigation() {
-  const location = useLocation();
+type HeaderDesktopNavigationProps = {
+  showPublicNavigation?: boolean;
+};
 
+export default function HeaderDesktopNavigation({
+  showPublicNavigation = false,
+}: HeaderDesktopNavigationProps) {
   const [authResolved, setAuthResolved] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [avatarIcon, setAvatarIcon] = useState("");
-
-  const publicNavigationItems =
-    getVisiblePublicHeaderNavigationItems(location.pathname);
 
   useEffect(() => {
     const auth = getAuth();
@@ -79,12 +79,16 @@ export default function HeaderDesktopNavigation() {
   }
 
   if (!currentUser) {
+    if (!showPublicNavigation) {
+      return null;
+    }
+
     return (
       <nav
         className="header__desktop-nav"
         aria-label="ページナビゲーション"
       >
-        {publicNavigationItems.map((item) => (
+        {publicHeaderNavigationItems.map((item) => (
           <Link
             key={item.to}
             to={item.to}

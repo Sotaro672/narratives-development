@@ -6,8 +6,6 @@ import "../../styles/settings-page.css";
 import { useHeaderController } from "./header/useHeaderController";
 import HeaderActions from "./header/HeaderActions";
 import HeaderDesktopNavigation from "./header/HeaderDesktopNavigation";
-import HeaderMenuButton from "./header/HeaderMenuButton";
-import HeaderMenuPanel from "./header/HeaderMenuPanel";
 import HeaderSettingsPanel from "./header/HeaderSettingsPanel";
 import type { HeaderProps } from "./header/types";
 
@@ -15,14 +13,9 @@ export default function Header(props: HeaderProps) {
   const {
     displayTitle,
     handleTitleClick,
-    menuOpen,
     settingsOpen,
-    shouldShowMenuButton,
-    shouldShowLandscapeSidebarMenuButton,
     shouldShowSettingsButton,
-    closeMenu,
     closeSettings,
-    toggleMenu,
     actions,
   } = useHeaderController(props);
 
@@ -48,10 +41,6 @@ export default function Header(props: HeaderProps) {
     <header className="header">
       <div className="header__inner">
         <div className="header__left">
-          {shouldShowMenuButton ? (
-            <HeaderMenuButton menuOpen={menuOpen} onClick={toggleMenu} />
-          ) : null}
-
           {props.titleClickable === false ? (
             <span className="header__title header__title-text">
               {displayTitle}
@@ -67,20 +56,12 @@ export default function Header(props: HeaderProps) {
           )}
         </div>
 
-        <HeaderDesktopNavigation />
+        <HeaderDesktopNavigation
+          showPublicNavigation={props.mode === "landing"}
+        />
 
         <HeaderActions actions={mergedActions} />
       </div>
-
-      {shouldShowMenuButton ? (
-        <HeaderMenuPanel
-          menuOpen={menuOpen}
-          closeMenu={closeMenu}
-          shouldShowLandscapeSidebarMenuButton={
-            shouldShowLandscapeSidebarMenuButton
-          }
-        />
-      ) : null}
 
       {shouldRenderSettingsPanel ? (
         <HeaderSettingsPanel

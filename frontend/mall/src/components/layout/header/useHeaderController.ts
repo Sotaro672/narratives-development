@@ -1,7 +1,7 @@
 // frontend/mall/src/components/layout/header/useHeaderController.ts
 
 import { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { onAuthStateChanged, type User } from "firebase/auth";
 
 import { fetchCart } from "../../../features/cart/api/cartApi";
@@ -33,42 +33,29 @@ export function useHeaderController({
   title,
   mode = "default",
   showEditButton = false,
-  hideHamburgerMenu = false,
   hideSettingsButton = false,
   hideAnnouncementButton = false,
-
   actionButtonLabel,
   onActionButtonClick,
   actionButtonDisabled = false,
-
   secondaryActionButtonLabel,
   onSecondaryActionButtonClick,
   secondaryActionButtonDisabled = false,
-
   tertiaryActionButtonLabel,
   onTertiaryActionButtonClick,
   tertiaryActionButtonDisabled = false,
-
   showCartButton = false,
   cartButtonLabel = "カート",
   onCartButtonClick,
   cartButtonDisabled = false,
   cartItemCount,
 }: HeaderProps) {
-  const location = useLocation();
   const navigate = useNavigate();
 
-  const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [authResolved, setAuthResolved] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
   const [fetchedCartItemCount, setFetchedCartItemCount] = useState(0);
-
-  useEffect(() => {
-    setMenuOpen(false);
-    setSettingsOpen(false);
-  }, [location.pathname]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -79,44 +66,7 @@ export function useHeaderController({
     return unsubscribe;
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    const desktopQuery = window.matchMedia("(min-width: 1024px)");
-
-    const updateViewportState = () => {
-      setIsDesktop(desktopQuery.matches);
-    };
-
-    updateViewportState();
-
-    if (typeof desktopQuery.addEventListener === "function") {
-      desktopQuery.addEventListener("change", updateViewportState);
-
-      return () => {
-        desktopQuery.removeEventListener("change", updateViewportState);
-      };
-    }
-
-    desktopQuery.addListener(updateViewportState);
-
-    return () => {
-      desktopQuery.removeListener(updateViewportState);
-    };
-  }, []);
-
   const isLoggedIn = !!currentUser;
-
-  const isSignInSelectPage = location.pathname === "/signin/select";
-
-  const isRoomDetailPage =
-    /^\/lists\/[^/]+$/.test(location.pathname);
-
-  const shouldHideHamburgerMenu =
-    hideHamburgerMenu ||
-    isRoomDetailPage;
 
   const hasActionButton =
     mode !== "signin" &&
@@ -179,7 +129,6 @@ export function useHeaderController({
     currentUser,
     shouldShowCartButton,
     cartItemCount,
-    location.pathname,
   ]);
 
   const displayCartItemCount =
@@ -221,40 +170,11 @@ export function useHeaderController({
     !hasTertiaryActionButton &&
     !shouldShowCartButton;
 
-  const shouldShowGuestMenuButton =
-    (mode !== "signin" || isSignInSelectPage) &&
-    authResolved &&
-    !isLoggedIn &&
-    !isDesktop &&
-    !shouldHideHamburgerMenu;
-
-  const shouldShowAuthenticatedMenuButton =
-    mode !== "signin" &&
-    authResolved &&
-    isLoggedIn &&
-    !shouldHideHamburgerMenu;
-
-  const shouldShowLandscapeSidebarMenuButton = false;
-
-  const shouldShowMenuButton =
-    shouldShowGuestMenuButton ||
-    shouldShowAuthenticatedMenuButton;
-
-  const closeMenu = () => {
-    setMenuOpen(false);
-  };
-
   const closeSettings = () => {
     setSettingsOpen(false);
   };
 
-  const toggleMenu = () => {
-    setSettingsOpen(false);
-    setMenuOpen((previous) => !previous);
-  };
-
   const toggleSettings = () => {
-    setMenuOpen(false);
     setSettingsOpen((previous) => !previous);
   };
 
@@ -267,44 +187,34 @@ export function useHeaderController({
     actionButtonLabel: actionButtonLabel ?? "",
     onActionButtonClick,
     actionButtonDisabled,
-
     hasSecondaryActionButton,
     secondaryActionButtonLabel: secondaryActionButtonLabel ?? "",
     onSecondaryActionButtonClick,
     secondaryActionButtonDisabled,
-
     hasTertiaryActionButton,
     tertiaryActionButtonLabel: tertiaryActionButtonLabel ?? "",
     onTertiaryActionButtonClick,
     tertiaryActionButtonDisabled,
-
     shouldShowCartButton,
     cartButtonLabel,
     onCartButtonClick,
     cartButtonDisabled,
     cartItemCount: displayCartItemCount,
-
     shouldShowLoginButton,
     shouldShowAnnouncementButton,
     shouldShowRoomCopyButton: false,
     shouldShowEditButton,
     shouldShowSettingsButton,
     copyButtonLabel: "",
-
     toggleSettings,
   };
 
   return {
     displayTitle,
     handleTitleClick,
-    menuOpen,
     settingsOpen,
-    shouldShowMenuButton,
-    shouldShowLandscapeSidebarMenuButton,
     shouldShowSettingsButton,
-    closeMenu,
     closeSettings,
-    toggleMenu,
     actions,
   };
 }
