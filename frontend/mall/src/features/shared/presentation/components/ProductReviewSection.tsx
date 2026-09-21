@@ -9,6 +9,7 @@ import { formatDateTime } from "../../../../components/utils/date";
 
 import ReportModal from "../../../report/components/ReportModal";
 import { useReport } from "../../../report/hooks/useReport";
+import ReportFlagButton from "./ReportFlagButton";
 
 import "../../styles/product-review.css";
 
@@ -111,10 +112,7 @@ export default function ProductReviewSection({
           <h2 className="product-review__heading">レビュー</h2>
 
           {loading ? (
-            <TextState
-              variant="loading"
-              className="product-review__status"
-            >
+            <TextState variant="loading" className="product-review__status">
               読み込み中...
             </TextState>
           ) : null}
@@ -137,19 +135,13 @@ export default function ProductReviewSection({
         ) : null}
 
         {safeErrorMessage ? (
-          <Alert
-            variant="error"
-            className="product-review__error"
-          >
+          <Alert variant="error" className="product-review__error">
             {safeErrorMessage}
           </Alert>
         ) : null}
 
         {!loading && !safeErrorMessage && safeItems.length === 0 ? (
-          <TextState
-            variant="empty"
-            className="product-review__empty"
-          >
+          <TextState variant="empty" className="product-review__empty">
             {emptyText}
           </TextState>
         ) : null}
@@ -288,13 +280,10 @@ function ProductReviewItemView({
         )}
 
         {canReport ? (
-          <TextButton
-            className="product-review__report"
-            aria-label={`${avatarName}のレビューを通報`}
+          <ReportFlagButton
+            label={`${avatarName}のレビューを通報`}
             onClick={() => onReport?.(review)}
-          >
-            通報
-          </TextButton>
+          />
         ) : null}
       </div>
 

@@ -152,9 +152,7 @@ export default function MarketDetailContent({
         </Card>
       ) : null}
 
-      {!loading && error ? (
-        <Alert variant="error">{error}</Alert>
-      ) : null}
+      {!loading && error ? <Alert variant="error">{error}</Alert> : null}
 
       {!loading && !error && item ? (
         <ProductDetailLayout
@@ -215,9 +213,12 @@ export default function MarketDetailContent({
             </>
           }
           contentFooter={
-            <ProductDescription
-              description={item.description}
-              className="product-detail__description--standalone"
+            <ProductReviewSection
+              items={reviews?.items ?? []}
+              productBlueprintId={item.productBlueprintId}
+              currentAvatarId={isLoggedIn ? currentAvatarId : ""}
+              loading={loadingReviews}
+              errorMessage={reviewsError}
             />
           }
         >
@@ -234,12 +235,9 @@ export default function MarketDetailContent({
             model={model}
           />
 
-          <ProductReviewSection
-            items={reviews?.items ?? []}
-            productBlueprintId={item.productBlueprintId}
-            currentAvatarId={isLoggedIn ? currentAvatarId : ""}
-            loading={loadingReviews}
-            errorMessage={reviewsError}
+          <ProductDescription
+            description={item.description}
+            className="product-detail__description--standalone"
           />
 
           {cartMessage ? (
