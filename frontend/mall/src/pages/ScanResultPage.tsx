@@ -79,9 +79,7 @@ export default function ScanResultPage() {
       title="AMOL"
       mode={isLoggedIn ? "mypage" : "landing"}
       showHeader
-      showBackButton={isLoggedIn && isMobilePortrait}
       showFooter={isLoggedIn && isMobilePortrait}
-      backTo="/wallet"
       hideHamburgerMenu={false}
       hideSettingsButton={!isLoggedIn}
       hideAnnouncementButton={!isLoggedIn}

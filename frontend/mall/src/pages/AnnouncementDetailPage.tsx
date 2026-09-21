@@ -5,7 +5,6 @@ import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
-import Card from "../components/ui/Card";
 import Media from "../components/ui/Media";
 import SectionHeader from "../components/ui/SectionHeader";
 import TextState from "../components/ui/TextState";
@@ -48,11 +47,9 @@ export default function AnnouncementDetailPage() {
 
   const location = useLocation();
   const locationState = location.state as AnnouncementDetailLocationState | null;
-
   const stateAnnouncement = locationState?.announcement;
   const stateDecisionNotification = locationState?.reportDecisionNotification;
   const stateNews = locationState?.news;
-
   const report = useReport();
 
   const effectiveNewsId = useMemo(
@@ -212,8 +209,6 @@ export default function AnnouncementDetailPage() {
     <>
       <Layout
         title={isNewsDetail ? "システム通知" : "お知らせ"}
-        showBackButton
-        backTo="/announcements"
         showFooter
         mode="mypage"
         mainClassName="announcement-page-layout"
@@ -229,55 +224,47 @@ export default function AnnouncementDetailPage() {
           ) : null}
 
           {loading ? (
-            <Card padding="lg">
-              <TextState
-                variant="loading"
-                className="announcement-page__state-text"
-              >
-                読み込み中...
-              </TextState>
-            </Card>
+            <TextState
+              variant="loading"
+              className="announcement-page__state-text"
+            >
+              読み込み中...
+            </TextState>
           ) : null}
 
           {!loading &&
           isNewsDetail &&
           newsNotFound &&
           !newsQueryError ? (
-            <Card padding="lg">
-              <TextState
-                variant="empty"
-                className="announcement-page__state-text"
-              >
-                システム通知が見つかりません。
-              </TextState>
-            </Card>
+            <TextState
+              variant="empty"
+              className="announcement-page__state-text"
+            >
+              システム通知が見つかりません。
+            </TextState>
           ) : null}
 
           {!loading &&
           isReportDecisionDetail &&
           decisionNotFound ? (
-            <Card padding="lg">
-              <TextState
-                variant="empty"
-                className="announcement-page__state-text"
-              >
-                通報結果通知が見つかりません。
-              </TextState>
-            </Card>
+            <TextState
+              variant="empty"
+              className="announcement-page__state-text"
+            >
+              通報結果通知が見つかりません。
+            </TextState>
           ) : null}
 
           {!loading &&
           !isNewsDetail &&
           !isReportDecisionDetail &&
           announcementNotFound ? (
-            <Card padding="lg">
-              <TextState
-                variant="empty"
-                className="announcement-page__state-text"
-              >
-                お知らせが見つかりません。
-              </TextState>
-            </Card>
+            <TextState
+              variant="empty"
+              className="announcement-page__state-text"
+            >
+              お知らせが見つかりません。
+            </TextState>
           ) : null}
 
           {!loading && isNewsDetail && news ? (
@@ -294,7 +281,7 @@ export default function AnnouncementDetailPage() {
           !isNewsDetail &&
           !isReportDecisionDetail &&
           announcement ? (
-            <Card as="article" padding="lg">
+            <article className="announcement-page__detail">
               <h1 className="announcement-page__detail-title">
                 {announcement.title}
               </h1>
@@ -404,7 +391,7 @@ export default function AnnouncementDetailPage() {
                   </div>
                 </div>
               ) : null}
-            </Card>
+            </article>
           ) : null}
         </section>
       </Layout>

@@ -1,7 +1,5 @@
 // frontend/amol/src/pages/ShippingAddressPage.tsx
 
-import { useLocation } from "react-router-dom";
-
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/shipping-address-page.css";
@@ -13,7 +11,6 @@ import ShippingAddressForm from "../features/shipping-address/components/Shippin
 import { useShippingAddressPage } from "../features/shipping-address/hooks/useShippingAddressPage";
 
 export default function ShippingAddressPage() {
-  const location = useLocation();
   const { isDesktop } = useContactViewport();
 
   const {
@@ -29,24 +26,11 @@ export default function ShippingAddressPage() {
     handleSubmit,
   } = useShippingAddressPage();
 
-  const requestedBackTo =
-    (
-      location.state as {
-        paymentBackTo?: string;
-      } | null
-    )?.paymentBackTo ?? "";
-
-  const backTo = requestedBackTo.startsWith("/payments/")
-    ? requestedBackTo
-    : "/lists";
-
   return (
     <Layout
       title={isEditMode ? "配送先情報編集" : "配送先情報登録"}
       titleClickable={false}
-      showBackButton
       mode="default"
-      backTo={backTo}
       hideHamburgerMenu
       hideSettingsButton
       actionButtonLabel={isDesktop ? actionButtonLabel : undefined}

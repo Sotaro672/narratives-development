@@ -108,14 +108,6 @@ export default function DispatchPage() {
     boxSize === null ||
     shippingFee === null;
 
-  const handleBack = () => {
-    if (submitting) {
-      return;
-    }
-
-    navigate(chatPath);
-  };
-
   const handleConfirm = async (): Promise<void> => {
     if (
       submitting ||
@@ -150,8 +142,6 @@ export default function DispatchPage() {
     <Layout
       title="発送"
       titleClickable={false}
-      showBackButton
-      onBackButtonClick={handleBack}
       showFooter={false}
       mode="mypage"
       actionButtonLabel={
@@ -184,7 +174,11 @@ export default function DispatchPage() {
         <section>
           <SectionHeader title="配送会社" titleAs="h2" />
 
-          <div className="dispatch-page__option-list" role="radiogroup" aria-label="配送会社">
+          <div
+            className="dispatch-page__option-list"
+            role="radiogroup"
+            aria-label="配送会社"
+          >
             {CARRIER_OPTIONS.map((option) => {
               const selected = carrier === option.value;
 
@@ -217,7 +211,10 @@ export default function DispatchPage() {
                     </span>
                   </span>
 
-                  <span className="dispatch-page__option-aside" aria-hidden="true">
+                  <span
+                    className="dispatch-page__option-aside"
+                    aria-hidden="true"
+                  >
                     {selected ? <Check size={20} strokeWidth={2.5} /> : null}
                   </span>
                 </Card>
@@ -233,7 +230,11 @@ export default function DispatchPage() {
             梱包後の箱の3辺合計に収まるサイズを選択してください。重量や配送地域による料金差はありません。
           </p>
 
-          <div className="dispatch-page__option-list" role="radiogroup" aria-label="箱のサイズ">
+          <div
+            className="dispatch-page__option-list"
+            role="radiogroup"
+            aria-label="箱のサイズ"
+          >
             {BOX_SIZES.map((size) => {
               const selected = boxSize === size;
               const fee = SHIPPING_FEE_BY_BOX_SIZE[size];

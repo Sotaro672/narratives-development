@@ -1,4 +1,5 @@
 // frontend/src/pages/EmailPage.tsx
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -44,7 +45,7 @@ export default function EmailPage() {
 
       if (trimmedCurrentEmail === trimmedNewEmail) {
         window.alert(
-          "新しいメールアドレスは現在のメールアドレスと別のものを入力してください。"
+          "新しいメールアドレスは現在のメールアドレスと別のものを入力してください。",
         );
         return;
       }
@@ -64,7 +65,7 @@ export default function EmailPage() {
 
       const credential = EmailAuthProvider.credential(
         emailForCredential,
-        password
+        password,
       );
 
       await reauthenticateWithCredential(user, credential);
@@ -75,7 +76,7 @@ export default function EmailPage() {
       });
 
       window.alert(
-        "新しいメールアドレス宛に確認メールを送信しました。メール内のリンクを開いて変更を完了してください。"
+        "新しいメールアドレス宛に確認メールを送信しました。メール内のリンクを開いて変更を完了してください。",
       );
       navigate("/settings");
     } catch (error) {
@@ -103,7 +104,7 @@ export default function EmailPage() {
           break;
         case "auth/operation-not-allowed":
           window.alert(
-            "メールアドレス変更が許可されていません。Firebase のメール確認設定を確認してください。"
+            "メールアドレス変更が許可されていません。Firebase のメール確認設定を確認してください。",
           );
           break;
         default:
@@ -119,9 +120,7 @@ export default function EmailPage() {
     <Layout
       title="メールアドレス変更"
       titleClickable={false}
-      showBackButton
       mode="signin"
-      backTo="/lists"
     >
       <section className="page-section">
         <p className="page-description">

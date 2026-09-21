@@ -25,7 +25,6 @@ export default function AvatarPage() {
   };
 
   const isCreateMode = vm.mode === "create";
-  const isEditMode = vm.mode === "edit";
   const isIconEditing = Boolean(vm.iconFile && vm.iconPreviewUrl);
 
   return (
@@ -33,13 +32,13 @@ export default function AvatarPage() {
       <Layout
         title={vm.pageTitle}
         titleClickable={false}
-        showBackButton={isEditMode}
-        backTo="/wallet"
         actionButtonLabel={vm.saveButtonLabel}
         onActionButtonClick={handleSaveClick}
         actionButtonDisabled={vm.saving || vm.loading}
         secondaryActionButtonLabel={isCreateMode ? "サインアウト" : undefined}
-        onSecondaryActionButtonClick={isCreateMode ? handleSignOutClick : undefined}
+        onSecondaryActionButtonClick={
+          isCreateMode ? handleSignOutClick : undefined
+        }
         secondaryActionButtonDisabled={vm.saving || vm.loading}
         showFooter
         footerProps={{

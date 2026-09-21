@@ -50,10 +50,6 @@ export default function OrderDetail() {
     openTrade,
   } = useOrderTradeNavigation();
 
-  const handleBack = () => {
-    navigate("/wallet");
-  };
-
   const handleOpenBrand = (brandId?: string) => {
     const id = brandId?.trim() || "";
 
@@ -71,8 +67,6 @@ export default function OrderDetail() {
     <Layout
       title="注文詳細"
       titleClickable={false}
-      showBackButton
-      onBackButtonClick={handleBack}
       mode="mypage"
       showFooter
     >

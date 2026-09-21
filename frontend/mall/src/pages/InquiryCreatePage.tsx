@@ -14,7 +14,6 @@ export default function InquiryCreatePage() {
   const {
     navigate,
     productId,
-    backTo,
     subject,
     setSubject,
     content,
@@ -42,9 +41,7 @@ export default function InquiryCreatePage() {
       title="AMOL"
       mode="mypage"
       showHeader
-      showBackButton
       showFooter
-      backTo={backTo}
       hideHamburgerMenu={false}
       hideSettingsButton={false}
       mainClassName="inquiry-page"

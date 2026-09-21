@@ -1,7 +1,7 @@
 // frontend/mall/src/pages/AvatarReviewPage.tsx
 
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Card from "../components/ui/Card";
@@ -37,7 +37,6 @@ function formatCreatedAt(value: string): string {
 }
 
 export default function AvatarReviewPage() {
-  const navigate = useNavigate();
   const { avatarId = "" } = useParams<{ avatarId: string }>();
 
   const [avatarName, setAvatarName] = useState("");
@@ -97,8 +96,6 @@ export default function AvatarReviewPage() {
     <Layout
       title={avatarName ? `${avatarName}の評価` : "評価"}
       mode="mypage"
-      showBackButton
-      onBackButtonClick={() => navigate(-1)}
     >
       <section className="content-page-section avatar-review-page">
         {loading ? (

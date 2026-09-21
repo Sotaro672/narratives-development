@@ -49,7 +49,6 @@ export default function ResaleCreatePage() {
     <>
       <Layout
         title="出品"
-        showBackButton
         mode="mypage"
         actionButtonLabel="出品"
         onActionButtonClick={handleSubmit}

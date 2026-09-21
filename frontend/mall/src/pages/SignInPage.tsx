@@ -105,9 +105,7 @@ export default function SignInPage() {
   return (
     <Layout
       title="AMOL"
-      showBackButton
       mode="signin"
-      backTo="/"
     >
       <section className="signin-page-section">
         <div className="signin-page-section__inner">

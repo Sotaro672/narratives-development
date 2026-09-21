@@ -85,9 +85,6 @@ export default function BrandPage() {
         titleClickable={false}
         mode="landing"
         showHeader
-        showBackButton
-        backTo="/lists"
-        onBackButtonClick={handleBack}
         showFooter={false}
         hideHamburgerMenu={false}
         hideSettingsButton

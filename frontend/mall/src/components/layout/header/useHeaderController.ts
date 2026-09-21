@@ -7,7 +7,6 @@ import { onAuthStateChanged, type User } from "firebase/auth";
 import { fetchCart } from "../../../features/cart/api/cartApi";
 import type { CartDTO, CartItemDTO } from "../../../features/shared/types/cart";
 import { auth } from "../../../lib/firebase";
-import { WALLET_PATH } from "../../../lib/navigation";
 import type { HeaderActionState, HeaderProps } from "./types";
 
 function getCartItemQty(item: CartItemDTO): number {
@@ -32,15 +31,11 @@ async function fetchCartItemCount(): Promise<number> {
 
 export function useHeaderController({
   title,
-  showBackButton = false,
-  backTo = WALLET_PATH,
   mode = "default",
   showEditButton = false,
   hideHamburgerMenu = false,
   hideSettingsButton = false,
   hideAnnouncementButton = false,
-
-  onBackButtonClick,
 
   actionButtonLabel,
   onActionButtonClick,
@@ -114,18 +109,7 @@ export function useHeaderController({
 
   const isLoggedIn = !!currentUser;
 
-  const isContactPage = location.pathname === "/contact";
-
-  const isInfoPage =
-    location.pathname === "/" ||
-    location.pathname === "/landing" ||
-    location.pathname === "/specified-commercial-transactions" ||
-    location.pathname === "/terms" ||
-    location.pathname === "/privacy-policy" ||
-    location.pathname === "/contact";
-
-  const isSignInSelectPage =
-    location.pathname === "/signin/select";
+  const isSignInSelectPage = location.pathname === "/signin/select";
 
   const isRoomDetailPage =
     /^\/lists\/[^/]+$/.test(location.pathname);
@@ -205,13 +189,6 @@ export function useHeaderController({
 
   const displayTitle = title ?? "AMOL";
 
-  const shouldShowBackButton =
-    isContactPage
-      ? isLoggedIn
-      : isInfoPage
-        ? false
-        : showBackButton;
-
   const shouldShowLoginButton =
     mode !== "signin" &&
     authResolved &&
@@ -281,20 +258,6 @@ export function useHeaderController({
     setSettingsOpen((previous) => !previous);
   };
 
-  const handleBack = () => {
-    if (onBackButtonClick) {
-      void onBackButtonClick();
-      return;
-    }
-
-    const normalizedBackTo = backTo.trim();
-
-    navigate(
-      normalizedBackTo ||
-        WALLET_PATH,
-    );
-  };
-
   const handleTitleClick = () => {
     navigate("/landing");
   };
@@ -337,12 +300,10 @@ export function useHeaderController({
     menuOpen,
     settingsOpen,
     shouldShowMenuButton,
-    shouldShowBackButton,
     shouldShowLandscapeSidebarMenuButton,
     shouldShowSettingsButton,
     closeMenu,
     closeSettings,
-    handleBack,
     toggleMenu,
     actions,
   };

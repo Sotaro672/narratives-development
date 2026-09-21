@@ -143,9 +143,7 @@ export default function PayoutBranchSelectPage() {
     <Layout
       title="支店を選択"
       titleClickable={false}
-      showBackButton
       mode="default"
-      backTo="/settings/payout-account/bank"
       hideHamburgerMenu
       hideSettingsButton
       actionButtonLabel={isDesktop ? "次へ" : undefined}

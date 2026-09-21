@@ -1,4 +1,5 @@
 // frontend/amol/src/components/layout/Header.tsx
+
 import "./header.css";
 import "../../styles/settings-page.css";
 
@@ -17,12 +18,10 @@ export default function Header(props: HeaderProps) {
     menuOpen,
     settingsOpen,
     shouldShowMenuButton,
-    shouldShowBackButton,
     shouldShowLandscapeSidebarMenuButton,
     shouldShowSettingsButton,
     closeMenu,
     closeSettings,
-    handleBack,
     toggleMenu,
     actions,
   } = useHeaderController(props);
@@ -34,8 +33,7 @@ export default function Header(props: HeaderProps) {
     ...actions,
     hasActionButton: actions.hasActionButton || hasDirectActionButton,
     actionButtonLabel: props.actionButtonLabel ?? actions.actionButtonLabel,
-    onActionButtonClick:
-      props.onActionButtonClick ?? actions.onActionButtonClick,
+    onActionButtonClick: props.onActionButtonClick ?? actions.onActionButtonClick,
     actionButtonDisabled:
       props.actionButtonDisabled ?? actions.actionButtonDisabled,
     shouldShowSettingsButton: hasDirectActionButton
@@ -52,17 +50,6 @@ export default function Header(props: HeaderProps) {
         <div className="header__left">
           {shouldShowMenuButton ? (
             <HeaderMenuButton menuOpen={menuOpen} onClick={toggleMenu} />
-          ) : null}
-
-          {shouldShowBackButton ? (
-            <button
-              type="button"
-              className="header__back-button"
-              aria-label="戻る"
-              onClick={handleBack}
-            >
-              ←
-            </button>
           ) : null}
 
           {props.titleClickable === false ? (

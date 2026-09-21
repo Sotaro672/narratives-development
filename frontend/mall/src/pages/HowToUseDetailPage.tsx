@@ -169,8 +169,6 @@ export default function HowToUseDetailPage() {
       title={item.title}
       titleClickable={false}
       mode="landing"
-      showBackButton
-      backTo="/how-to-use"
       hideAnnouncementButton
       hideSettingsButton
     >

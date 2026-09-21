@@ -164,9 +164,7 @@ export default function PayoutAccountConfirmPage() {
     <Layout
       title="口座情報を確認"
       titleClickable={false}
-      showBackButton
       mode="default"
-      backTo="/settings/payout-account/account"
       hideHamburgerMenu
       hideSettingsButton
       actionButtonLabel={

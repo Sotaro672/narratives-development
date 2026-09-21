@@ -134,9 +134,7 @@ export default function InquiryPage() {
       <Layout
         title="問い合わせ"
         titleClickable={false}
-        showBackButton
         mode="default"
-        backTo="/lists"
         hideHamburgerMenu
         hideSettingsButton
       >

@@ -1,4 +1,4 @@
-/* frontend/src/components/layout/header.css */
+/* frontend\mall\src\components\layout\header.css */
 
 :root {
   --amol-header-height: 72px;
@@ -172,7 +172,6 @@
 }
 
 .header__menu-button,
-.header__back-button,
 .header__settings-link {
   position: relative;
   display: inline-flex;
@@ -195,7 +194,6 @@
 }
 
 .header__menu-button:hover,
-.header__back-button:hover,
 .header__settings-link:hover {
   background: rgba(0, 0, 0, 0.04);
 }
@@ -302,7 +300,6 @@
 }
 
 .header__menu-button:focus-visible,
-.header__back-button:focus-visible,
 .header__title-link:focus-visible,
 .header__title-button:focus-visible,
 .header__desktop-nav-link:focus-visible,
@@ -586,7 +583,6 @@
   }
 
   .header__menu-button,
-  .header__back-button,
   .header__settings-link {
     width: 40px;
     height: 40px;

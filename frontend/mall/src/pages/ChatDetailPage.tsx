@@ -1,6 +1,6 @@
 // frontend/mall/src/pages/ChatDetailPage.tsx
 
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
@@ -23,42 +23,21 @@ type ChatDetailRouteParams = {
   tradeId?: string;
 };
 
-type InquiryChatDetailProps = {
-  onBack: () => void;
-};
-
 export default function ChatDetailPage() {
-  const navigate = useNavigate();
   const { resaleId, tradeId } = useParams<ChatDetailRouteParams>();
 
-  const handleBack = () => {
-    navigate(-1);
-  };
-
   if (tradeId) {
-    return (
-      <TradeChatDetail
-        tradeId={tradeId}
-        onBack={handleBack}
-      />
-    );
+    return <TradeChatDetail tradeId={tradeId} />;
   }
 
   if (resaleId) {
-    return (
-      <ResaleChatDetail
-        resaleId={resaleId}
-        onBack={handleBack}
-      />
-    );
+    return <ResaleChatDetail resaleId={resaleId} />;
   }
 
-  return <InquiryChatDetail onBack={handleBack} />;
+  return <InquiryChatDetail />;
 }
 
-function InquiryChatDetail({
-  onBack,
-}: InquiryChatDetailProps) {
+function InquiryChatDetail() {
   const {
     title,
     inquiry,
@@ -88,8 +67,6 @@ function InquiryChatDetail({
     <>
       <Layout
         title={title}
-        showBackButton
-        onBackButtonClick={onBack}
         showFooter={!isReplyModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"
@@ -111,19 +88,13 @@ function InquiryChatDetail({
           ) : null}
 
           {loading ? (
-            <TextState
-              variant="loading"
-              className="chat-detail-page__state"
-            >
+            <TextState variant="loading" className="chat-detail-page__state">
               読み込み中...
             </TextState>
           ) : null}
 
           {!loading && !inquiry ? (
-            <TextState
-              variant="empty"
-              className="chat-detail-page__empty"
-            >
+            <TextState variant="empty" className="chat-detail-page__empty">
               問い合わせが見つかりません。
             </TextState>
           ) : null}

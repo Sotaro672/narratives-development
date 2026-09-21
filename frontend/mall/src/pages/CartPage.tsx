@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/CartPage.tsx
+// frontend/mall/src/pages/CartPage.tsx
 
 import { useNavigate } from "react-router-dom";
 
@@ -52,8 +52,6 @@ export default function CartPage() {
       title="カート"
       titleClickable={false}
       mode="mypage"
-      showBackButton
-      backTo="/lists"
       showFooter={isMobilePortrait}
       hideHamburgerMenu
       hideSettingsButton

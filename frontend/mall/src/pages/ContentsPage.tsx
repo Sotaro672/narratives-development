@@ -16,8 +16,6 @@ export default function ContentsPage() {
       title={page.pageTitle}
       titleClickable={false}
       mode="mypage"
-      showBackButton
-      backTo="/wallet"
       hideHamburgerMenu
       showFooter
       disableFooterPaddingOnDesktop

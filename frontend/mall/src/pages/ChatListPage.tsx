@@ -26,7 +26,6 @@ export default function ChatListPage() {
   return (
     <Layout
       title="チャット"
-      showBackButton
       showFooter
       mode="mypage"
       mainClassName="chat-list-page-layout"

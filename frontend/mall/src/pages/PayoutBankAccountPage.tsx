@@ -123,9 +123,7 @@ export default function PayoutBankAccountPage() {
     <Layout
       title="口座情報を入力"
       titleClickable={false}
-      showBackButton
       mode="default"
-      backTo="/settings/payout-account/branch"
       hideHamburgerMenu
       hideSettingsButton
       actionButtonLabel={isDesktop ? "確認へ進む" : undefined}

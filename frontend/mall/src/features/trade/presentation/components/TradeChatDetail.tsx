@@ -27,12 +27,10 @@ import "../../../../styles/order-detail-page.css";
 
 type TradeChatDetailProps = {
   tradeId: string;
-  onBack: () => void;
 };
 
 export default function TradeChatDetail({
   tradeId,
-  onBack,
 }: TradeChatDetailProps) {
   const navigate = useNavigate();
   const thread = useTradeThread(tradeId);
@@ -134,8 +132,6 @@ export default function TradeChatDetail({
     <>
       <Layout
         title={title}
-        showBackButton
-        onBackButtonClick={onBack}
         showFooter={
           !reply.open &&
           !cancelFlow.open &&

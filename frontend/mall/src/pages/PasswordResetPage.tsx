@@ -1,4 +1,5 @@
-// frontend/src/pages/PasswordResetPage.tsx
+// frontend/mall/src/pages/PasswordResetPage.tsx
+
 import { useState } from "react";
 import { sendPasswordResetEmail } from "firebase/auth";
 
@@ -30,7 +31,7 @@ export default function PasswordResetPage() {
       setLoading(true);
       await sendPasswordResetEmail(auth, email);
       setNotice(
-        "パスワード再設定メールを送信しました。メールをご確認ください。"
+        "パスワード再設定メールを送信しました。メールをご確認ください。",
       );
     } catch (e) {
       if (e instanceof Error) {
@@ -44,7 +45,7 @@ export default function PasswordResetPage() {
   };
 
   return (
-    <Layout title="パスワード再設定" showBackButton mode="signin">
+    <Layout title="パスワード再設定" mode="signin">
       <section className="page-section signin-page-section">
         <p className="page-description">
           現在使用中のメールアドレスを入力してください。パスワード再設定用のメールを送信します。
@@ -64,13 +65,7 @@ export default function PasswordResetPage() {
           {error ? <p className="form-error-text">{error}</p> : null}
 
           {notice ? (
-            <p
-              style={{
-                color: "#166534",
-                fontSize: "14px",
-                margin: 0,
-              }}
-            >
+            <p className="signin-page-notice">
               {notice}
             </p>
           ) : null}

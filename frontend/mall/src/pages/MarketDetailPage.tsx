@@ -84,8 +84,6 @@ export default function MarketDetailPage() {
     <Layout
       title={title}
       titleClickable={false}
-      showBackButton
-      onBackButtonClick={() => navigate(-1)}
       hideAnnouncementButton
       hideSettingsButton
       hideHamburgerMenu

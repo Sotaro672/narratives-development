@@ -66,7 +66,6 @@ type ResaleChatData = {
 
 type ResaleChatDetailProps = {
   resaleId: string;
-  onBack: () => void;
 };
 
 function getErrorMessage(error: unknown, fallbackMessage: string): string {
@@ -238,7 +237,6 @@ async function loadResaleChat(
 
 export default function ResaleChatDetail({
   resaleId,
-  onBack,
 }: ResaleChatDetailProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -509,8 +507,6 @@ export default function ResaleChatDetail({
     <>
       <Layout
         title={title}
-        showBackButton
-        onBackButtonClick={onBack}
         showFooter={!isReplyModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"
@@ -592,9 +588,7 @@ export default function ResaleChatDetail({
                           comment={comment}
                           isMine={isMine}
                           canDelete={canDelete}
-                          deleting={
-                            deletingCommentId === comment.commentId
-                          }
+                          deleting={deletingCommentId === comment.commentId}
                           onDelete={() => {
                             void handleDeleteComment(comment);
                           }}

@@ -1,4 +1,5 @@
 // frontend/src/pages/PasswordPage.tsx
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -40,7 +41,7 @@ export default function PasswordPage() {
 
       const credential = EmailAuthProvider.credential(
         user.email,
-        currentPassword
+        currentPassword,
       );
 
       await reauthenticateWithCredential(user, credential);
@@ -51,7 +52,7 @@ export default function PasswordPage() {
       });
 
       window.alert(
-        "パスワード再設定メールを送信しました。メール内のリンクを開いて新しいパスワードを設定してください。"
+        "パスワード再設定メールを送信しました。メール内のリンクを開いて新しいパスワードを設定してください。",
       );
       navigate("/settings");
     } catch (error) {
@@ -86,9 +87,7 @@ export default function PasswordPage() {
     <Layout
       title="パスワード変更"
       titleClickable={false}
-      showBackButton
       mode="signin"
-      backTo="/lists"
     >
       <section className="page-section">
         <p className="page-description">

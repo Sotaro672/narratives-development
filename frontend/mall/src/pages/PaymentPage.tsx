@@ -20,7 +20,6 @@ export default function PaymentPage() {
 
   const {
     amount,
-    backTo,
     cartItems,
     closeErrorModal,
     handleGoToPaymentMethod,
@@ -51,8 +50,6 @@ export default function PaymentPage() {
           title="お支払い"
           titleClickable={false}
           mode="mypage"
-          showBackButton
-          backTo={backTo}
           showFooter={false}
           hideHamburgerMenu
           hideSettingsButton
@@ -79,14 +76,14 @@ export default function PaymentPage() {
         title="お支払い"
         titleClickable={false}
         mode="mypage"
-        showBackButton
-        backTo={backTo}
         showFooter={isMobilePortrait}
         hideHamburgerMenu
         hideSettingsButton
         mainClassName="payment-page"
         actionButtonLabel={isMobilePortrait ? undefined : paymentButtonLabel}
-        onActionButtonClick={isMobilePortrait ? undefined : handleSubmitPayment}
+        onActionButtonClick={
+          isMobilePortrait ? undefined : handleSubmitPayment
+        }
         actionButtonDisabled={isPaymentDisabled}
         footerProps={
           isMobilePortrait

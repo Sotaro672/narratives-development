@@ -42,7 +42,6 @@ export default function PayoutAccountCompletePage() {
     <Layout
       title="口座登録完了"
       titleClickable={false}
-      showBackButton={false}
       mode="default"
       hideHamburgerMenu
       hideSettingsButton

@@ -285,7 +285,6 @@ export default function AnnouncementPage() {
   return (
     <Layout
       title="通知"
-      showBackButton
       showFooter
       mode="mypage"
       mainClassName="announcement-list-page-layout"

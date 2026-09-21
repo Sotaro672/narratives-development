@@ -132,15 +132,6 @@ export default function CatalogPage() {
     Boolean(normalizedListId) &&
     !reportSubmitting;
 
-  const handleBackButtonClick = () => {
-    if (isLoggedIn) {
-      navigate("/lists");
-      return;
-    }
-
-    navigate(-1);
-  };
-
   const handleOpenListReport = () => {
     if (!canReportList) {
       return;
@@ -159,9 +150,6 @@ export default function CatalogPage() {
       }
       titleClickable={false}
       mode={isLoggedIn ? "mypage" : "landing"}
-      showBackButton
-      backTo="/lists"
-      onBackButtonClick={handleBackButtonClick}
       showFooter={false}
       showHeader
       hideSettingsButton

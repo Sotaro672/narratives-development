@@ -1,9 +1,9 @@
-// frontend/amol/src/components/layout/Layout.tsx
+// frontend/mall/src/components/layout/Layout.tsx
+
 import type { ReactNode } from "react";
 
 import Header from "./Header";
 import FooterNav from "./FooterNav";
-import { WALLET_PATH } from "../../lib/navigation";
 import "./layout.css";
 
 type LayoutMode =
@@ -71,10 +71,7 @@ type LayoutProps = {
   title: string;
   titleClickable?: boolean;
   children: ReactNode;
-  showBackButton?: boolean;
   mode?: LayoutMode;
-  backTo?: string;
-  onBackButtonClick?: () => void | Promise<void>;
   showFooter?: boolean;
   showHeader?: boolean;
   showEditButton?: boolean;
@@ -108,10 +105,7 @@ export default function Layout({
   title,
   titleClickable = true,
   children,
-  showBackButton = false,
   mode = "default",
-  backTo = WALLET_PATH,
-  onBackButtonClick,
   showFooter,
   showHeader = true,
   showEditButton = false,
@@ -162,10 +156,7 @@ export default function Layout({
         <Header
           title={title}
           titleClickable={titleClickable}
-          showBackButton={showBackButton}
           mode={headerMode}
-          backTo={backTo}
-          onBackButtonClick={onBackButtonClick}
           showEditButton={showEditButton}
           hideHamburgerMenu={hideHamburgerMenu}
           hideSettingsButton={hideSettingsButton}
@@ -173,24 +164,12 @@ export default function Layout({
           actionButtonLabel={actionButtonLabel}
           onActionButtonClick={onActionButtonClick}
           actionButtonDisabled={actionButtonDisabled}
-          secondaryActionButtonLabel={
-            secondaryActionButtonLabel
-          }
-          onSecondaryActionButtonClick={
-            onSecondaryActionButtonClick
-          }
-          secondaryActionButtonDisabled={
-            secondaryActionButtonDisabled
-          }
-          tertiaryActionButtonLabel={
-            tertiaryActionButtonLabel
-          }
-          onTertiaryActionButtonClick={
-            onTertiaryActionButtonClick
-          }
-          tertiaryActionButtonDisabled={
-            tertiaryActionButtonDisabled
-          }
+          secondaryActionButtonLabel={secondaryActionButtonLabel}
+          onSecondaryActionButtonClick={onSecondaryActionButtonClick}
+          secondaryActionButtonDisabled={secondaryActionButtonDisabled}
+          tertiaryActionButtonLabel={tertiaryActionButtonLabel}
+          onTertiaryActionButtonClick={onTertiaryActionButtonClick}
+          tertiaryActionButtonDisabled={tertiaryActionButtonDisabled}
           showCartButton={showCartButton}
           cartButtonLabel={cartButtonLabel}
           onCartButtonClick={onCartButtonClick}
@@ -202,16 +181,9 @@ export default function Layout({
         className={[
           "layout-main",
           mainClassName ?? "",
-          !showHeader
-            ? "layout-main--without-header"
-            : "",
-          shouldShowFooter &&
-          !isActionFooter
-            ? "layout-main--with-footer"
-            : "",
-          isActionFooter
-            ? "layout-main--with-action-footer"
-            : "",
+          !showHeader ? "layout-main--without-header" : "",
+          shouldShowFooter && !isActionFooter ? "layout-main--with-footer" : "",
+          isActionFooter ? "layout-main--with-action-footer" : "",
           disableFooterPaddingOnDesktop
             ? "layout-main--disable-footer-padding-desktop"
             : "",

@@ -42,7 +42,6 @@ export default function ResaleDetailPage() {
     model,
     readonlyInfoProps,
     editFormProps,
-    handleBack,
     handleReload,
     handleBackToWallet,
   } = useResaleDetailPage();
@@ -89,8 +88,6 @@ export default function ResaleDetailPage() {
     <Layout
       title={title}
       titleClickable={false}
-      showBackButton
-      onBackButtonClick={handleBack}
       mode="mypage"
       hideAnnouncementButton
       hideSettingsButton

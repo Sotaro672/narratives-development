@@ -56,7 +56,6 @@ export default function OrderConfirmedPage() {
       title="注文受付完了"
       titleClickable={false}
       mode="mypage"
-      showBackButton={false}
       showFooter
       hideHamburgerMenu
       hideSettingsButton

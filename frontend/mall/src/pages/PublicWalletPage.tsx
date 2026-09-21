@@ -85,8 +85,6 @@ export default function PublicWalletPage() {
       <Layout
         title={pageTitle || "AMOL"}
         mode="mypage"
-        showBackButton
-        onBackButtonClick={() => navigate(-1)}
       >
         <section className="content-page-section wallet-page">
           <div className="wallet-page-layout">
