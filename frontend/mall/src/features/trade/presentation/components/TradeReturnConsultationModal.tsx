@@ -11,16 +11,10 @@ import Modal, {
   ModalTitle,
 } from "../../../../components/ui/Modal";
 import Textbox from "../../../../components/ui/Textbox";
-
-export const TRADE_RETURN_CONSULTATION_REASONS = [
-  "not_as_described",
-  "damaged",
-  "wrong_item",
-  "other",
-] as const;
-
-export type TradeReturnConsultationReason =
-  (typeof TRADE_RETURN_CONSULTATION_REASONS)[number];
+import {
+  TRADE_RETURN_CONSULTATION_REASONS,
+  type TradeReturnConsultationReason,
+} from "../../../shared/types/trade";
 
 export type TradeReturnConsultationModalProps = {
   open: boolean;
@@ -103,9 +97,7 @@ export default function TradeReturnConsultationModal({
           返品を希望する理由を選択し、商品の状態や問題点を具体的に入力してください。この操作だけでは返品は確定しません。
         </ModalDescription>
 
-        <section
-          aria-labelledby="trade-return-consultation-reason-label"
-        >
+        <section aria-labelledby="trade-return-consultation-reason-label">
           <ModalDescription id="trade-return-consultation-reason-label">
             返品理由
           </ModalDescription>

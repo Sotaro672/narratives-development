@@ -7,8 +7,7 @@ export type TradeStatusSource = Pick<
   | "status"
   | "isCancelled"
   | "isDispatched"
-  | "isReturnRequested"
-  | "isReturnCompleted"
+  | "returnStatus"
   | "transferred"
 >;
 
@@ -23,12 +22,33 @@ export function getTradeStatusLabel(
     return "キャンセル";
   }
 
-  if (trade.isReturnCompleted) {
-    return "返品済み";
-  }
+  switch (trade.returnStatus) {
+    case "discussing":
+      return "返品相談中";
 
-  if (trade.isReturnRequested) {
-    return "返品申請済み";
+    case "proposed":
+      return "返品条件提示中";
+
+    case "agreed":
+      return "返品合意済み";
+
+    case "return_shipped":
+      return "返送中";
+
+    case "return_received":
+      return "返品受領済み";
+
+    case "refund_processing":
+      return "返金処理中";
+
+    case "completed":
+      return "返品完了";
+
+    case "disputed":
+      return "運営確認中";
+
+    case "none":
+      break;
   }
 
   if (trade.isDispatched) {

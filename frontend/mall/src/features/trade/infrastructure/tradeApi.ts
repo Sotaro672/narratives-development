@@ -1,4 +1,4 @@
-// frontend/amol/src/features/trade/infrastructure/tradeApi.ts
+// frontend/mall/src/features/trade/infrastructure/tradeApi.ts
 
 import { requestJson, type ApiQueryParams } from "../../../lib/http";
 
@@ -23,6 +23,7 @@ import type {
   TradeReturnAgreement,
   TradeReturnConsultationReason,
   TradeReturnRequirement,
+  TradeReturnStatus,
   TradeStatus,
   TradeViewerSide,
 } from "../../shared/types/trade";
@@ -46,8 +47,7 @@ export type TradeChatListItem = {
   status: TradeStatus;
   isCancelled: boolean;
   isDispatched: boolean;
-  isReturnRequested: boolean;
-  isReturnCompleted: boolean;
+  returnStatus: TradeReturnStatus;
   transferred: boolean;
   latestMessage?: TradeMessage;
   unreadMessageCount: number;

@@ -75,17 +75,17 @@ export default function TradeThreadHeader({
     },
   ];
 
-  if (trade.returnRequestedAt) {
+  if (trade.returnConsultation?.createdAt) {
     transactionMetaItems.push({
-      label: "返品申請日時",
-      value: formatDateTime(trade.returnRequestedAt),
+      label: "返品相談日時",
+      value: formatDateTime(trade.returnConsultation.createdAt),
     });
   }
 
-  if (trade.returnCompletedAt) {
+  if (trade.returnProposal?.createdAt) {
     transactionMetaItems.push({
-      label: "返品完了日時",
-      value: formatDateTime(trade.returnCompletedAt),
+      label: "返品条件提示日時",
+      value: formatDateTime(trade.returnProposal.createdAt),
     });
   }
 

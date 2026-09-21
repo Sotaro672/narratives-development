@@ -2,9 +2,11 @@
 
 import { useCallback, useState } from "react";
 
-import type { TradeDetail } from "../../../shared/types/trade";
+import type {
+  TradeDetail,
+  TradeReturnConsultationReason,
+} from "../../../shared/types/trade";
 import { createTradeReturnConsultation } from "../../infrastructure/tradeApi";
-import type { TradeReturnConsultationReason } from "../components/TradeReturnConsultationModal";
 import { getErrorMessage } from "../util/tradeChatDetail";
 
 type UseTradeReturnConsultationInput = {
@@ -57,8 +59,7 @@ export function useTradeReturnConsultation({
       trade.isCancelled ||
       !trade.isDispatched ||
       trade.transferred ||
-      trade.isReturnRequested ||
-      trade.isReturnCompleted ||
+      trade.returnStatus !== "none" ||
       !tradeId
     ) {
       return;
@@ -87,8 +88,7 @@ export function useTradeReturnConsultation({
       trade.isCancelled ||
       !trade.isDispatched ||
       trade.transferred ||
-      trade.isReturnRequested ||
-      trade.isReturnCompleted ||
+      trade.returnStatus !== "none" ||
       !tradeId
     ) {
       return;
@@ -125,7 +125,6 @@ export function useTradeReturnConsultation({
 
       setOpen(false);
       reset();
-
       await reload();
     } catch (caught) {
       setError(

@@ -90,6 +90,7 @@ export type TradeReturnProposal = {
   returnRequirement?: TradeReturnRequirement;
   refundAmount?: number;
   createdAt: string;
+  rejectedAt?: string;
 };
 
 export type CreateTradeReturnConsultationParams = {
@@ -123,20 +124,6 @@ export type CreateTradeReturnProposalRequest = {
 export type CreateTradeReturnProposalResponse = {
   data: TradeReturnProposal;
 };
-
-// ============================================================
-// Legacy Trade Return
-// TODO: 新しい TradeReturnStatus / TradeReturnConsultation /
-// TradeReturnProposal への移行完了後に削除する。
-// ============================================================
-
-export const TRADE_RETURN_REQUEST_KINDS = [
-  "unopened",
-  "opened",
-] as const;
-
-export type TradeReturnRequestKind =
-  (typeof TRADE_RETURN_REQUEST_KINDS)[number];
 
 // ============================================================
 // Return Refund
@@ -235,20 +222,10 @@ export type TradeDetail = {
   status: TradeStatus;
   isCancelled: boolean;
   isDispatched: boolean;
-
-  returnStatus?: TradeReturnStatus;
+  returnStatus: TradeReturnStatus;
   returnConsultation?: TradeReturnConsultation;
   returnProposal?: TradeReturnProposal;
-
-  // Legacy return state.
-  // Backend移行完了までは既存画面との互換性のため保持する。
-  isReturnRequested: boolean;
-  returnRequestKind?: TradeReturnRequestKind;
-  returnRequestedAt?: string;
-  isReturnCompleted: boolean;
-  returnCompletedAt?: string;
   merchandiseRefundMaxAmount: number;
-
   transferred: boolean;
   transferredAt?: string;
   messages: TradeMessage[];

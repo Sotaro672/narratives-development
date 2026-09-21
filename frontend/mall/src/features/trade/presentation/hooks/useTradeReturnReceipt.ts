@@ -84,8 +84,8 @@ function canReceiveReturn(
     trade.status === "active" &&
     !trade.isCancelled &&
     trade.isDispatched &&
-    trade.isReturnRequested &&
-    !trade.isReturnCompleted
+    !trade.transferred &&
+    trade.returnStatus === "return_shipped"
   );
 }
 
@@ -293,8 +293,8 @@ export function useTradeReturnReceipt({
               coverReturnShipping,
             });
 
-          // 202相当で金融処理が未完了の場合でも、RefundはこのSelectionで
-          // 作成済みとなるため、以後の再試行で条件を変更できないようにする。
+          // 現行の receive-return API は返金条件をリクエストで受け取る。
+          // 金融処理が未完了でもRefund作成後は条件変更を防ぐ。
           setResult(response);
 
           try {
