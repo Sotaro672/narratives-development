@@ -26,45 +26,46 @@ import (
 const payoutAccountKMSKeyNameEnv = "PAYOUT_ACCOUNT_KMS_KEY_NAME"
 
 type mallUsecases struct {
-	avatarUC                       *usecase.AvatarUsecase
-	avatarRegistrationUC           *usecase.AvatarRegistrationUsecase
-	setupUC                        *usecase.SetupUsecase
-	shippingAddressUC              *usecase.ShippingAddressUsecase
-	shippingQuoteUC                *usecase.ShippingQuoteUsecase
-	paymentMethodUC                *usecase.PaymentMethodUsecase
-	payoutAccountUC                *usecase.PayoutAccountUsecase
-	userUC                         *usecase.UserUsecase
-	walletUC                       *usecase.WalletUsecase
-	cartUC                         *usecase.CartUsecase
-	paymentUC                      *usecase.PaymentUsecase
-	salesReceivableUC              *usecase.SalesReceivableUsecase
-	bankPayoutUC                   *usecase.BankPayoutUsecase
-	resalePayoutNotificationUC     usecase.ResalePayoutNotificationUsecasePort
-	brandFeeSettlementUC           *usecase.BrandFeeSettlementUsecase
-	brandFeeSettlementTransferUC   *usecase.BrandFeeSettlementTransferUsecase
-	brandFeeSettlementQueue        usecase.BrandFeeSettlementTransferQueue
-	settlementUC                   *usecase.SettlementUsecase
-	settlementQueue                usecase.SettlementTransferQueue
-	refundUC                       *usecase.RefundUsecase
-	itemRefundUC                   *usecase.ItemRefundUsecase
-	refundCompletionNotificationUC usecase.RefundCompletionNotificationUsecasePort
-	orderUC                        *usecase.OrderUsecase
-	tradeUC                        *usecase.TradeUsecase
-	avatarReviewUC                 *usecase.AvatarReviewUsecase
-	tradeMessageUC                 *usecase.TradeMessageUsecase
-	resaleTradeDispatchUC          *usecase.ResaleTradeDispatchUsecase
-	resaleTradeReturnReceiptUC     *usecase.ResaleTradeReturnReceiptUsecase
-	inquiryUC                      *usecase.InquiryUsecase
-	returnRequestUC                *usecase.ReturnRequestUsecase
-	announcementUC                 *usecase.AnnouncementUsecase
-	newsUC                         *usecase.NewsUsecase
-	resaleUC                       *usecase.ResaleUsecase
-	resaleReviewUC                 *usecase.ResaleReviewUsecase
-	likeUC                         *usecase.LikeUsecase
-	productBlueprintReviewUC       *usecase.ProductBlueprintReviewUsecase
-	tokenBlueprintReviewUC         *usecase.TokenBlueprintReviewUsecase
-	reportUC                       *usecase.ReportUsecase
-	paymentFlowUC                  *usecase.PaymentFlowUsecase
+	avatarUC                        *usecase.AvatarUsecase
+	avatarRegistrationUC            *usecase.AvatarRegistrationUsecase
+	setupUC                         *usecase.SetupUsecase
+	shippingAddressUC               *usecase.ShippingAddressUsecase
+	shippingQuoteUC                 *usecase.ShippingQuoteUsecase
+	paymentMethodUC                 *usecase.PaymentMethodUsecase
+	payoutAccountUC                 *usecase.PayoutAccountUsecase
+	userUC                          *usecase.UserUsecase
+	walletUC                        *usecase.WalletUsecase
+	cartUC                          *usecase.CartUsecase
+	paymentUC                       *usecase.PaymentUsecase
+	salesReceivableUC               *usecase.SalesReceivableUsecase
+	bankPayoutUC                    *usecase.BankPayoutUsecase
+	resalePayoutNotificationUC      usecase.ResalePayoutNotificationUsecasePort
+	brandFeeSettlementUC            *usecase.BrandFeeSettlementUsecase
+	brandFeeSettlementTransferUC    *usecase.BrandFeeSettlementTransferUsecase
+	brandFeeSettlementQueue         usecase.BrandFeeSettlementTransferQueue
+	settlementUC                    *usecase.SettlementUsecase
+	settlementQueue                 usecase.SettlementTransferQueue
+	refundUC                        *usecase.RefundUsecase
+	itemRefundUC                    *usecase.ItemRefundUsecase
+	refundCompletionNotificationUC  usecase.RefundCompletionNotificationUsecasePort
+	orderUC                         *usecase.OrderUsecase
+	tradeUC                         *usecase.TradeUsecase
+	avatarReviewUC                  *usecase.AvatarReviewUsecase
+	tradeMessageUC                  *usecase.TradeMessageUsecase
+	resaleTradeDispatchUC           *usecase.ResaleTradeDispatchUsecase
+	resaleTradeReturnConsultationUC *usecase.ResaleTradeReturnConsultationUsecase
+	resaleTradeReturnReceiptUC      *usecase.ResaleTradeReturnReceiptUsecase
+	inquiryUC                       *usecase.InquiryUsecase
+	returnRequestUC                 *usecase.ReturnRequestUsecase
+	announcementUC                  *usecase.AnnouncementUsecase
+	newsUC                          *usecase.NewsUsecase
+	resaleUC                        *usecase.ResaleUsecase
+	resaleReviewUC                  *usecase.ResaleReviewUsecase
+	likeUC                          *usecase.LikeUsecase
+	productBlueprintReviewUC        *usecase.ProductBlueprintReviewUsecase
+	tokenBlueprintReviewUC          *usecase.TokenBlueprintReviewUsecase
+	reportUC                        *usecase.ReportUsecase
+	paymentFlowUC                   *usecase.PaymentFlowUsecase
 
 	// TransferUsecaseの構築時にも利用するためContainerには公開しない。
 	inventoryUC *usecase.InventoryUsecase
@@ -99,6 +100,9 @@ func buildMallUsecases(
 	}
 	if r.tradeMessageRepo == nil {
 		return nil, errors.New("di.mall: trade message repository is nil")
+	}
+	if r.tradeReturnAgreementRepo == nil {
+		return nil, errors.New("di.mall: trade return agreement repository is nil")
 	}
 	if r.reportRepo == nil {
 		return nil, errors.New("di.mall: report repository is nil")
@@ -321,6 +325,20 @@ func buildMallUsecases(
 	)
 	if tradeMessageUC == nil {
 		return nil, errors.New("di.mall: trade message usecase is nil")
+	}
+
+	resaleTradeReturnConsultationUC := usecase.NewResaleTradeReturnConsultationUsecase(
+		usecase.NewResaleTradeReturnConsultationUsecaseInput{
+			TradeRepository:           r.tradeRepo,
+			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
+			OrderRepository:           r.orderRepo,
+			MessageRepository:         r.tradeMessageRepo,
+		},
+	)
+	if resaleTradeReturnConsultationUC == nil {
+		return nil, errors.New(
+			"di.mall: resale trade return consultation usecase is nil",
+		)
 	}
 
 	paymentUC := usecase.NewPaymentUsecase(
@@ -710,46 +728,47 @@ func buildMallUsecases(
 	}
 
 	return &mallUsecases{
-		avatarUC:                       avatarUC,
-		avatarRegistrationUC:           avatarRegistrationUC,
-		setupUC:                        setupUC,
-		shippingAddressUC:              shippingAddressUC,
-		shippingQuoteUC:                shippingQuoteUC,
-		paymentMethodUC:                paymentMethodUC,
-		payoutAccountUC:                payoutAccountUC,
-		userUC:                         userUC,
-		walletUC:                       walletUC,
-		cartUC:                         cartUC,
-		paymentUC:                      paymentUC,
-		salesReceivableUC:              salesReceivableUC,
-		bankPayoutUC:                   bankPayoutUC,
-		resalePayoutNotificationUC:     resalePayoutNotificationUC,
-		brandFeeSettlementUC:           brandFeeSettlementUC,
-		brandFeeSettlementTransferUC:   brandFeeSettlementTransferUC,
-		brandFeeSettlementQueue:        brandFeeSettlementQueue,
-		settlementUC:                   settlementUC,
-		settlementQueue:                settlementQueue,
-		refundUC:                       refundUC,
-		itemRefundUC:                   itemRefundUC,
-		refundCompletionNotificationUC: refundCompletionNotificationUC,
-		orderUC:                        orderUC,
-		tradeUC:                        tradeUC,
-		avatarReviewUC:                 avatarReviewUC,
-		tradeMessageUC:                 tradeMessageUC,
-		resaleTradeDispatchUC:          resaleTradeDispatchUC,
-		resaleTradeReturnReceiptUC:     resaleTradeReturnReceiptUC,
-		inquiryUC:                      inquiryUC,
-		returnRequestUC:                returnRequestUC,
-		announcementUC:                 announcementUC,
-		newsUC:                         newsUC,
-		resaleUC:                       resaleUC,
-		resaleReviewUC:                 resaleReviewUC,
-		likeUC:                         likeUC,
-		productBlueprintReviewUC:       productBlueprintReviewUC,
-		tokenBlueprintReviewUC:         tokenBlueprintReviewUC,
-		reportUC:                       reportUC,
-		paymentFlowUC:                  paymentFlowUC,
-		inventoryUC:                    inventoryUC,
+		avatarUC:                        avatarUC,
+		avatarRegistrationUC:            avatarRegistrationUC,
+		setupUC:                         setupUC,
+		shippingAddressUC:               shippingAddressUC,
+		shippingQuoteUC:                 shippingQuoteUC,
+		paymentMethodUC:                 paymentMethodUC,
+		payoutAccountUC:                 payoutAccountUC,
+		userUC:                          userUC,
+		walletUC:                        walletUC,
+		cartUC:                          cartUC,
+		paymentUC:                       paymentUC,
+		salesReceivableUC:               salesReceivableUC,
+		bankPayoutUC:                    bankPayoutUC,
+		resalePayoutNotificationUC:      resalePayoutNotificationUC,
+		brandFeeSettlementUC:            brandFeeSettlementUC,
+		brandFeeSettlementTransferUC:    brandFeeSettlementTransferUC,
+		brandFeeSettlementQueue:         brandFeeSettlementQueue,
+		settlementUC:                    settlementUC,
+		settlementQueue:                 settlementQueue,
+		refundUC:                        refundUC,
+		itemRefundUC:                    itemRefundUC,
+		refundCompletionNotificationUC:  refundCompletionNotificationUC,
+		orderUC:                         orderUC,
+		tradeUC:                         tradeUC,
+		avatarReviewUC:                  avatarReviewUC,
+		tradeMessageUC:                  tradeMessageUC,
+		resaleTradeDispatchUC:           resaleTradeDispatchUC,
+		resaleTradeReturnConsultationUC: resaleTradeReturnConsultationUC,
+		resaleTradeReturnReceiptUC:      resaleTradeReturnReceiptUC,
+		inquiryUC:                       inquiryUC,
+		returnRequestUC:                 returnRequestUC,
+		announcementUC:                  announcementUC,
+		newsUC:                          newsUC,
+		resaleUC:                        resaleUC,
+		resaleReviewUC:                  resaleReviewUC,
+		likeUC:                          likeUC,
+		productBlueprintReviewUC:        productBlueprintReviewUC,
+		tokenBlueprintReviewUC:          tokenBlueprintReviewUC,
+		reportUC:                        reportUC,
+		paymentFlowUC:                   paymentFlowUC,
+		inventoryUC:                     inventoryUC,
 	}, nil
 }
 
@@ -783,6 +802,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.AvatarReviewUC = u.avatarReviewUC
 	c.TradeMessageUC = u.tradeMessageUC
 	c.ResaleTradeDispatchUC = u.resaleTradeDispatchUC
+	c.ResaleTradeReturnConsultationUC = u.resaleTradeReturnConsultationUC
 	c.ResaleTradeReturnReceiptUC = u.resaleTradeReturnReceiptUC
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
