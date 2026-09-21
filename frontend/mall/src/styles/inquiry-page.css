@@ -1,283 +1,101 @@
-/* frontend/mall/src/styles/inquiry-page.css */
+/* frontend/amol/src/features/inquiry/presentation/styles/inquiry-list-page.css */
 
-.inquiry-page {
-  min-height: 100%;
-  background:
-    radial-gradient(circle at top left, rgba(30, 64, 175, 0.08), transparent 32rem),
-    linear-gradient(180deg, #f8fafc 0%, #ffffff 48%, #f8fafc 100%);
-}
-
-.inquiry-page__container {
-  width: min(100%, 720px);
-  margin: 0 auto;
-  padding: 28px 18px 120px;
-}
-
-.inquiry-page__header {
-  margin-bottom: 22px;
-}
-
-.inquiry-page__eyebrow {
-  margin: 0 0 8px;
-  color: #64748b;
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.16em;
-}
-
-.inquiry-page__title {
-  margin: 0;
-  color: #0f172a;
-  font-size: clamp(1.45rem, 5vw, 2rem);
-  font-weight: 800;
-  line-height: 1.25;
-  letter-spacing: -0.04em;
-}
-
-.inquiry-page__description {
-  margin: 12px 0 0;
-  color: #475569;
-  font-size: 0.95rem;
-  line-height: 1.8;
-}
-
-.inquiry-page__form {
-  display: grid;
-  gap: 18px;
-  padding: 18px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(14px);
-}
-
-.inquiry-page__form .input-field,
-.inquiry-page__form .textbox-field {
-  width: 100%;
-}
-
-.inquiry-page__form .textbox-field__control {
-  min-height: 180px;
-}
-
-.inquiry-page__form .textbox-field__counter {
-  justify-self: end;
-}
-
-.inquiry-page__meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 16px;
+.chat-list-page-layout {
   background: #f8fafc;
-  color: #64748b;
-  font-size: 0.82rem;
 }
 
-.inquiry-page__meta span {
-  flex: 0 0 auto;
-  font-weight: 700;
+.chat-list-page {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0;
 }
 
-.inquiry-page__meta code {
-  overflow: hidden;
-  color: #334155;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.78rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inquiry-page__alert {
-  margin-bottom: 16px;
-}
-
-.inquiry-page__alert p {
-  margin: 0;
-}
-
-.inquiry-page__alert p + p {
-  margin-top: 4px;
-}
-
-.inquiry-page__alert-action {
-  margin-top: 12px;
-}
-
-.inquiry-page__submit.ui-button {
-  min-height: 52px;
-  border-color: #0f172a;
-  background: #0f172a;
-  color: #ffffff;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.22);
-}
-
-/* ============================================================
- * Inquiry detail
- * ============================================================ */
-
-.inq-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.inq-detail__body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.inq-detail__label {
-  color: #0f172a;
-  font-size: 0.88rem;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.inq-detail__text {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.82rem;
-  line-height: 1.65;
-}
-
-.inq-detail__page-title {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  gap: 10px;
-}
-
-.inq-detail__page-title-text {
-  overflow: hidden;
-  color: #0f172a;
-  font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inq__chip.ui-badge {
-  flex: 0 0 auto;
-  min-height: 26px;
-  padding: 0 10px;
-  font-size: 0.75rem;
-}
-
-.inq__empty.ui-alert {
-  font-size: 0.82rem;
+.chat-list-page__error {
+  margin: 16px;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.24);
+  border-radius: 12px;
+  background: rgba(254, 242, 242, 0.96);
+  color: #b91c1c;
+  font-size: 0.9rem;
   line-height: 1.6;
 }
 
-/* ============================================================
- * Return refund
- * ============================================================ */
-
-.inq-detail__body .input-field__control[type="number"] {
-  appearance: textfield;
-}
-
-.inq-detail__body .input-field__control[type="number"]::-webkit-inner-spin-button,
-.inq-detail__body .input-field__control[type="number"]::-webkit-outer-spin-button {
-  margin: 0;
-  appearance: none;
-}
-
-.inq-detail__body label:has(input[type="checkbox"]) {
-  padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.26);
-  border-radius: 14px;
+.chat-list-page__state,
+.chat-list-page__empty {
+  margin: 16px;
+  padding: 28px 18px;
+  border-radius: 16px;
   background: #ffffff;
-  cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  color: rgba(15, 23, 42, 0.62);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
-.inq-detail__body label:has(input[type="checkbox"]):hover {
-  border-color: rgba(100, 116, 139, 0.4);
-  background: #f8fafc;
+.chat-list-page__list {
+  width: 100%;
+  overflow: hidden;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+  background: #ffffff;
 }
 
-.inq-detail__body label:has(input[type="checkbox"]:checked) {
-  border-color: rgba(15, 23, 42, 0.42);
-  background: #f8fafc;
-  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.04);
+.chat-list-page__reply-count,
+.chat-list-page__status {
+  display: inline-flex;
+  min-height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.inq-detail__body label:has(input[type="checkbox"]:disabled) {
-  cursor: not-allowed;
-  opacity: 0.62;
+.chat-list-page__reply-count {
+  background: rgba(15, 23, 42, 0.06);
+  color: rgba(15, 23, 42, 0.58);
 }
 
-.inq-detail__body input[type="checkbox"] {
-  width: 17px;
-  height: 17px;
-  flex: 0 0 auto;
-  accent-color: #0f172a;
-  cursor: pointer;
+.chat-list-page__status {
+  background: rgba(37, 99, 235, 0.09);
+  color: #1d4ed8;
 }
 
-.inq-detail__body input[type="checkbox"]:disabled {
-  cursor: not-allowed;
+.chat-list-page__badge-count {
+  display: inline-flex;
+  min-width: 20px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
-.inq-detail__body button[aria-busy="true"] {
-  cursor: wait;
-}
-
-/* ============================================================
- * Status
- * ============================================================ */
-
-.inq-status-tab.ui-badge {
-  min-height: 28px;
-  padding: 0 10px;
-  font-size: 0.75rem;
-}
-
-@media (min-width: 768px) {
-  .inquiry-page__container {
-    padding: 44px 24px 96px;
+@media (max-width: 640px) {
+  .chat-list-page {
+    max-width: none;
   }
 
-  .inquiry-page__form {
-    padding: 24px;
-  }
-
-  .inquiry-page__submit.ui-button {
-    justify-self: end;
-    min-width: 180px;
-  }
-}
-
-@media (max-width: 767px) {
-  .inquiry-page__container {
-    padding-top: 20px;
-  }
-
-  .inquiry-page__form {
-    border-radius: 22px;
-  }
-
-  .inquiry-page__submit.ui-button {
+  .chat-list-page__reply-count {
     display: none;
   }
+}
 
-  .inq-detail__page-title {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .inq-detail__page-title-text {
-    max-width: 100%;
-    white-space: normal;
-  }
-
-  .inq-detail__body label:has(input[type="checkbox"]) {
-    padding: 12px;
+@media (max-width: 380px) {
+  .chat-list-page__status {
+    display: none;
   }
 }

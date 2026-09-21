@@ -5,11 +5,8 @@ import { Bell, Newspaper, ShieldCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-import Alert from "../components/ui/Alert";
 import Badge from "../components/ui/Badge";
-import Card from "../components/ui/Card";
 import List, { ListRow } from "../components/ui/List";
-import TextState from "../components/ui/TextState";
 
 import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
 import { useNewsQuery } from "../features/news/hooks/useNewsQuery";
@@ -329,38 +326,28 @@ export default function AnnouncementPage() {
       showBackButton
       showFooter
       mode="mypage"
-      mainClassName="announcement-page-layout"
+      mainClassName="announcement-list-page-layout"
     >
-      <section className="page-section content-page-section announcement-page">
+      <section className="page-section content-page-section announcement-page announcement-page--list">
         {error ? (
-          <Alert
-            variant="error"
-            className="announcement-page__error"
+          <div
+            className="announcement-page__list-error"
+            role="alert"
           >
             {error}
-          </Alert>
+          </div>
         ) : null}
 
         {loading ? (
-          <Card padding="lg">
-            <TextState
-              variant="loading"
-              className="announcement-page__state-text"
-            >
-              読み込み中...
-            </TextState>
-          </Card>
+          <div className="announcement-page__list-state">
+            読み込み中...
+          </div>
         ) : null}
 
         {!loading && items.length === 0 ? (
-          <Card padding="lg">
-            <TextState
-              variant="empty"
-              className="announcement-page__state-text"
-            >
-              現在、通知はありません。
-            </TextState>
-          </Card>
+          <div className="announcement-page__list-empty">
+            現在、通知はありません。
+          </div>
         ) : null}
 
         {!loading && items.length > 0 ? (
@@ -371,8 +358,7 @@ export default function AnnouncementPage() {
             {items.map((item) => {
               if (item.kind === "announcement") {
                 const announcement = item.announcement;
-                const isUnread =
-                  announcement.isRead === false;
+                const isUnread = announcement.isRead === false;
                 const tokenLabel =
                   announcement.tokenName ||
                   announcement.targetToken ||
@@ -387,25 +373,16 @@ export default function AnnouncementPage() {
                       handleOpenAnnouncement(announcement)
                     }
                     leading={
-                      <Bell
-                        size={20}
-                        strokeWidth={1.8}
-                      />
+                      <Bell size={20} strokeWidth={1.8} />
                     }
                     title={announcement.title}
                     subLabel={tokenLabel}
-                    dateLabel={
-                      formatNotificationDate(item.occurredAt)
-                    }
+                    dateLabel={formatNotificationDate(item.occurredAt)}
                     dateTime={item.occurredAt}
-                    preview={
-                      getAnnouncementPreview(announcement)
-                    }
+                    preview={getAnnouncementPreview(announcement)}
                     meta={
                       <Badge
-                        variant={
-                          isUnread ? "info" : "neutral"
-                        }
+                        variant={isUnread ? "info" : "neutral"}
                         size="sm"
                       >
                         {isUnread ? "未読" : "既読"}
@@ -417,28 +394,20 @@ export default function AnnouncementPage() {
 
               if (item.kind === "news") {
                 const newsItem = item.news;
-                const isUnread =
-                  newsItem.isRead === false;
+                const isUnread = newsItem.isRead === false;
 
                 return (
                   <ListRow
                     key={item.key}
                     attention={isUnread}
                     ariaLabel={`${newsItem.title} の詳細を開く`}
-                    onClick={() =>
-                      handleOpenNews(newsItem)
-                    }
+                    onClick={() => handleOpenNews(newsItem)}
                     leading={
-                      <Newspaper
-                        size={20}
-                        strokeWidth={1.8}
-                      />
+                      <Newspaper size={20} strokeWidth={1.8} />
                     }
                     title={newsItem.title}
                     subLabel="システム通知"
-                    dateLabel={
-                      formatNotificationDate(item.occurredAt)
-                    }
+                    dateLabel={formatNotificationDate(item.occurredAt)}
                     dateTime={item.occurredAt}
                     preview={
                       newsItem.body?.trim() ||
@@ -446,9 +415,7 @@ export default function AnnouncementPage() {
                     }
                     meta={
                       <Badge
-                        variant={
-                          isUnread ? "info" : "neutral"
-                        }
+                        variant={isUnread ? "info" : "neutral"}
                         size="sm"
                       >
                         {isUnread ? "未読" : "既読"}
@@ -459,12 +426,9 @@ export default function AnnouncementPage() {
               }
 
               const notification = item.notification;
-              const isUnread =
-                notification.isRead === false;
+              const isUnread = notification.isRead === false;
               const targetLabel =
-                getReportTargetLabel(
-                  notification.targetType,
-                );
+                getReportTargetLabel(notification.targetType);
               const cardLabel =
                 getDecisionCardLabel(
                   notification,
@@ -484,16 +448,11 @@ export default function AnnouncementPage() {
                     )
                   }
                   leading={
-                    <ShieldCheck
-                      size={20}
-                      strokeWidth={1.8}
-                    />
+                    <ShieldCheck size={20} strokeWidth={1.8} />
                   }
                   title={cardTitle}
                   subLabel={cardLabel}
-                  dateLabel={
-                    formatNotificationDate(item.occurredAt)
-                  }
+                  dateLabel={formatNotificationDate(item.occurredAt)}
                   dateTime={item.occurredAt}
                   preview={
                     notification.decisionReason?.trim() ||
@@ -501,9 +460,7 @@ export default function AnnouncementPage() {
                   }
                   meta={
                     <Badge
-                      variant={
-                        isUnread ? "info" : "neutral"
-                      }
+                      variant={isUnread ? "info" : "neutral"}
                       size="sm"
                     >
                       {isUnread ? "未読" : "既読"}
