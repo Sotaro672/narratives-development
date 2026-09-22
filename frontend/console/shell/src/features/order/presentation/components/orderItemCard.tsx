@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ColorValue } from "../../../../shared/ui/color";
 import {
   Table,
   TableBody,
@@ -40,20 +41,13 @@ export default function OrderItemCard({
   item,
   index,
 }: OrderItemCardProps) {
-  const transferredAt = safeDateTimeLabelJa(
-    item.transferredAt,
-    "-",
-  );
-
+  const transferredAt = safeDateTimeLabelJa(item.transferredAt, "-");
   const alcohol = isAlcoholItem(item);
 
   const vintage = getCategoryFieldValue(item, "vintage");
   const region = getCategoryFieldValue(item, "region");
   const material = getCategoryFieldValue(item, "material");
-  const alcoholContent = getCategoryFieldValue(
-    item,
-    "alcoholContent",
-  );
+  const alcoholContent = getCategoryFieldValue(item, "alcoholContent");
 
   const colorName = item.color?.trim() ?? "";
   const rgbInt = coerceRgbInt(item.rgb);
@@ -73,10 +67,7 @@ export default function OrderItemCard({
             {alcohol ? (
               <>
                 <TableRow>
-                  <TableHead
-                    scope="row"
-                    className="order-detail__label-cell"
-                  >
+                  <TableHead scope="row" className="order-detail__label-cell">
                     容量
                   </TableHead>
                   <TableCell className="order-detail__value-cell">
@@ -85,10 +76,7 @@ export default function OrderItemCard({
                 </TableRow>
 
                 <TableRow>
-                  <TableHead
-                    scope="row"
-                    className="order-detail__label-cell"
-                  >
+                  <TableHead scope="row" className="order-detail__label-cell">
                     ヴィンテージ
                   </TableHead>
                   <TableCell className="order-detail__value-cell">
@@ -97,10 +85,7 @@ export default function OrderItemCard({
                 </TableRow>
 
                 <TableRow>
-                  <TableHead
-                    scope="row"
-                    className="order-detail__label-cell"
-                  >
+                  <TableHead scope="row" className="order-detail__label-cell">
                     地域・産地
                   </TableHead>
                   <TableCell className="order-detail__value-cell">
@@ -109,10 +94,7 @@ export default function OrderItemCard({
                 </TableRow>
 
                 <TableRow>
-                  <TableHead
-                    scope="row"
-                    className="order-detail__label-cell"
-                  >
+                  <TableHead scope="row" className="order-detail__label-cell">
                     素材
                   </TableHead>
                   <TableCell className="order-detail__value-cell">
@@ -121,10 +103,7 @@ export default function OrderItemCard({
                 </TableRow>
 
                 <TableRow>
-                  <TableHead
-                    scope="row"
-                    className="order-detail__label-cell"
-                  >
+                  <TableHead scope="row" className="order-detail__label-cell">
                     アルコール度数
                   </TableHead>
                   <TableCell className="order-detail__value-cell">
@@ -135,10 +114,7 @@ export default function OrderItemCard({
             ) : (
               <>
                 <TableRow>
-                  <TableHead
-                    scope="row"
-                    className="order-detail__label-cell"
-                  >
+                  <TableHead scope="row" className="order-detail__label-cell">
                     サイズ
                   </TableHead>
                   <TableCell className="order-detail__value-cell">
@@ -147,27 +123,24 @@ export default function OrderItemCard({
                 </TableRow>
 
                 <TableRow>
-                  <TableHead
-                    scope="row"
-                    className="order-detail__label-cell"
-                  >
+                  <TableHead scope="row" className="order-detail__label-cell">
                     カラー
                   </TableHead>
                   <TableCell className="order-detail__value-cell">
                     {!colorName && !colorHex ? (
                       "-"
                     ) : (
-                      <div className="order-detail__color">
-                        {colorHex ? (
-                          <span
-                            className="order-detail__color-swatch"
-                            style={{ backgroundColor: colorHex }}
-                            aria-label={`color ${colorHex}`}
-                            title={colorHex}
-                          />
-                        ) : null}
-                        <span>{colorName || "-"}</span>
-                      </div>
+                      <ColorValue
+                        color={colorHex}
+                        size="md"
+                        shape="square"
+                        swatchTitle={colorHex}
+                        swatchAriaLabel={
+                          colorHex ? `color ${colorHex}` : undefined
+                        }
+                      >
+                        {colorName || "-"}
+                      </ColorValue>
                     )}
                   </TableCell>
                 </TableRow>
@@ -175,10 +148,7 @@ export default function OrderItemCard({
             )}
 
             <TableRow>
-              <TableHead
-                scope="row"
-                className="order-detail__label-cell"
-              >
+              <TableHead scope="row" className="order-detail__label-cell">
                 型番
               </TableHead>
               <TableCell className="order-detail__value-cell">
@@ -187,10 +157,7 @@ export default function OrderItemCard({
             </TableRow>
 
             <TableRow>
-              <TableHead
-                scope="row"
-                className="order-detail__label-cell"
-              >
+              <TableHead scope="row" className="order-detail__label-cell">
                 商品名
               </TableHead>
               <TableCell className="order-detail__value-cell">
@@ -199,10 +166,7 @@ export default function OrderItemCard({
             </TableRow>
 
             <TableRow>
-              <TableHead
-                scope="row"
-                className="order-detail__label-cell"
-              >
+              <TableHead scope="row" className="order-detail__label-cell">
                 トークン名
               </TableHead>
               <TableCell className="order-detail__value-cell">
@@ -211,10 +175,7 @@ export default function OrderItemCard({
             </TableRow>
 
             <TableRow>
-              <TableHead
-                scope="row"
-                className="order-detail__label-cell"
-              >
+              <TableHead scope="row" className="order-detail__label-cell">
                 数量
               </TableHead>
               <TableCell className="order-detail__value-cell">
@@ -223,10 +184,7 @@ export default function OrderItemCard({
             </TableRow>
 
             <TableRow>
-              <TableHead
-                scope="row"
-                className="order-detail__label-cell"
-              >
+              <TableHead scope="row" className="order-detail__label-cell">
                 金額
               </TableHead>
               <TableCell className="order-detail__value-cell">
@@ -235,10 +193,7 @@ export default function OrderItemCard({
             </TableRow>
 
             <TableRow>
-              <TableHead
-                scope="row"
-                className="order-detail__label-cell"
-              >
+              <TableHead scope="row" className="order-detail__label-cell">
                 移譲日
               </TableHead>
               <TableCell className="order-detail__value-cell">

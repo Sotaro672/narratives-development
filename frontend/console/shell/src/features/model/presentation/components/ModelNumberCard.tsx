@@ -72,30 +72,24 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
 
   return (
     <Card
-      className={`mnc ${mode === "view" ? "view-mode" : ""} ${
+      className={`${mode === "view" ? "view-mode" : ""} ${
         className ?? ""
       }`}
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardTitle strong>
-            モデルナンバー
-          </CardTitle>
+          <CardTitle strong>モデルナンバー</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
       <CardContent>
-        <Table className="mnc__table">
+        <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>
-                サイズ / カラー
-              </TableHead>
+              <TableHead>サイズ / カラー</TableHead>
 
               {colors.map((color) => (
-                <TableHead key={color}>
-                  {color}
-                </TableHead>
+                <TableHead key={color}>{color}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -103,9 +97,7 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
           <TableBody>
             {sizes.map((size) => (
               <TableRow key={size.id}>
-                <TableCell className="mnc__size">
-                  {size.sizeLabel}
-                </TableCell>
+                <TableCell>{size.sizeLabel}</TableCell>
 
                 {colors.map((color) => {
                   const code = getCode(size.sizeLabel, color);
@@ -140,7 +132,6 @@ const ModelNumberCard: React.FC<ModelNumberCardProps> = ({
                     1,
                     colors.length + 1,
                   )}
-                  className="mnc__empty"
                 >
                   登録されているサイズはありません。
                 </TableCell>

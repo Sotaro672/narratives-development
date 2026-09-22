@@ -1,0 +1,55 @@
+/* frontend/console/shell/src/shared/ui/color.css */
+
+/* =========================================================
+ * Color
+ * ======================================================= */
+
+.ui-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ui-color__label {
+  min-width: 0;
+}
+
+/* =========================================================
+ * Color Swatch
+ * ======================================================= */
+
+.ui-color__swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
+}
+
+/* =========================================================
+ * Sizes
+ * ======================================================= */
+
+.ui-color__swatch--sm {
+  width: 10px;
+  height: 10px;
+}
+
+.ui-color__swatch--md {
+  width: 16px;
+  height: 16px;
+}
+
+/* =========================================================
+ * Shapes
+ * ======================================================= */
+
+.ui-color__swatch--circle {
+  border-radius: 9999px;
+}
+
+.ui-color__swatch--square {
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  box-shadow: none;
+}

@@ -13,24 +13,6 @@
 }
 
 /* =========================================================
- * Production Quantity Color
- * ======================================================= */
-
-.mqc__color {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.mqc__color-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  border-radius: 9999px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
-}
-
-/* =========================================================
  * Print Card
  * ======================================================= */
 

@@ -12,6 +12,7 @@ import {
   CardInput,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ColorValue } from "../../../../shared/ui/color";
 import {
   Table,
   TableBody,
@@ -29,49 +30,29 @@ import type {
   PriceRowVM,
 } from "../../../inventory/application/listCreateService";
 
-type ProductBlueprintCategoryKind =
-  | "apparel"
-  | "alcohol"
-  | "unknown";
+type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 
 function resolveProductBlueprintCategoryKind(args: {
   productBlueprintCategory?: string;
   rows: PriceRowVM[];
 }): ProductBlueprintCategoryKind {
-  const category = String(args.productBlueprintCategory ?? "")
-    .trim()
-    .toLowerCase();
+  const category = String(args.productBlueprintCategory ?? "").trim().toLowerCase();
 
-  if (category.startsWith("alcohol")) {
-    return "alcohol";
-  }
-
-  if (category.startsWith("apparel")) {
-    return "apparel";
-  }
+  if (category.startsWith("alcohol")) return "alcohol";
+  if (category.startsWith("apparel")) return "apparel";
 
   const hasAlcoholRow = args.rows.some((row) => row.kind === "alcohol");
-
-  if (hasAlcoholRow) {
-    return "alcohol";
-  }
+  if (hasAlcoholRow) return "alcohol";
 
   const hasApparelRow = args.rows.some((row) => row.kind === "apparel");
-
-  if (hasApparelRow) {
-    return "apparel";
-  }
+  if (hasApparelRow) return "apparel";
 
   return "unknown";
 }
 
 function getVolumeValueLabel(row: PriceRowVM): string {
   const value = row.volumeValue;
-
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return "";
 }
 
@@ -133,42 +114,24 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
               <TableRow>
                 {isAlcoholCategory ? (
                   <>
-                    <TableHead className="prc__th">
-                      容量
-                    </TableHead>
-
-                    <TableHead className="prc__th">
-                      単位
-                    </TableHead>
+                    <TableHead className="prc__th">容量</TableHead>
+                    <TableHead className="prc__th">単位</TableHead>
                   </>
                 ) : (
                   <>
-                    <TableHead className="prc__th">
-                      サイズ
-                    </TableHead>
-
-                    <TableHead className="prc__th">
-                      カラー
-                    </TableHead>
+                    <TableHead className="prc__th">サイズ</TableHead>
+                    <TableHead className="prc__th">カラー</TableHead>
                   </>
                 )}
 
-                <TableHead className="prc__th prc__th--right">
-                  在庫数
-                </TableHead>
-
-                <TableHead className="prc__th prc__th--right">
-                  価格
-                </TableHead>
+                <TableHead className="prc__th prc__th--right">在庫数</TableHead>
+                <TableHead className="prc__th prc__th--right">価格</TableHead>
               </TableRow>
             </TableHeader>
 
             <TableBody>
               {rowsVM.map((row) => (
-                <TableRow
-                  key={row.modelId}
-                  className="prc__tr"
-                >
+                <TableRow key={row.modelId} className="prc__tr">
                   {isAlcoholCategory ? (
                     <>
                       <TableCell className="prc__size">
@@ -186,23 +149,18 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
                       </TableCell>
 
                       <TableCell className="text--wrap-nowrap">
-                        <span
-                          className="prc__color-dot"
-                          style={{ backgroundColor: row.bgColor }}
-                          title={row.rgbTitle}
-                        />
-
-                        <span className="prc__color-label">
+                        <ColorValue
+                          color={row.bgColor}
+                          swatchTitle={row.rgbTitle || undefined}
+                        >
                           {row.color || "-"}
-                        </span>
+                        </ColorValue>
                       </TableCell>
                     </>
                   )}
 
                   <TableCell className="prc__stock text-left">
-                    <span className="prc__stock-number">
-                      {row.stock}
-                    </span>
+                    <span className="prc__stock-number">{row.stock}</span>
                   </TableCell>
 
                   <TableCell className="prc__price text-left">
@@ -238,10 +196,7 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
 
               {isEmpty && (
                 <TableRow>
-                  <TableCell
-                    colSpan={4}
-                    className="prc__empty"
-                  >
+                  <TableCell colSpan={4} className="prc__empty">
                     表示できるデータがありません。
                   </TableCell>
                 </TableRow>

@@ -12,6 +12,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ColorValue } from "../../../../shared/ui/color";
 import { Input } from "../../../../shared/ui/input";
 import {
   Table,
@@ -216,14 +217,12 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
                       <TableCell>{row.size ?? "-"}</TableCell>
 
                       <TableCell>
-                        <span className="mqc__color">
-                          <span
-                            className="mqc__color-dot"
-                            style={{ backgroundColor }}
-                            title={rgbHex ?? ""}
-                          />
-                          <span>{row.color ?? "-"}</span>
-                        </span>
+                        <ColorValue
+                          color={backgroundColor}
+                          swatchTitle={rgbHex ?? undefined}
+                        >
+                          {row.color ?? "-"}
+                        </ColorValue>
                       </TableCell>
                     </>
                   )}

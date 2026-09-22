@@ -11,6 +11,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ColorValue } from "../../../../shared/ui/color";
 import {
   Table,
   TableBody,
@@ -22,15 +23,11 @@ import {
 import type { InventoryDetailRowDTO } from "../../../../shared/types/inventory";
 import { rgbIntToHex } from "../../../../shared/util/color";
 
-type ProductBlueprintCategoryKind =
-  | "apparel"
-  | "alcohol"
-  | "unknown";
+type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 
 type InventoryCardProps = {
   title?: string;
   rows: InventoryDetailRowDTO[];
-
   /**
    * ProductBlueprintCategory.code を渡す想定。
    *
@@ -47,49 +44,23 @@ function resolveProductBlueprintCategoryKind(args: {
   productBlueprintCategory?: string;
   rows: InventoryDetailRowDTO[];
 }): ProductBlueprintCategoryKind {
-  const category = String(
-    args.productBlueprintCategory ?? "",
-  )
-    .trim()
-    .toLowerCase();
+  const category = String(args.productBlueprintCategory ?? "").trim().toLowerCase();
 
-  if (category.startsWith("alcohol")) {
-    return "alcohol";
-  }
-
-  if (category.startsWith("apparel")) {
-    return "apparel";
-  }
-
-  if (args.rows.some((row) => row.kind === "alcohol")) {
-    return "alcohol";
-  }
-
-  if (args.rows.some((row) => row.kind === "apparel")) {
-    return "apparel";
-  }
+  if (category.startsWith("alcohol")) return "alcohol";
+  if (category.startsWith("apparel")) return "apparel";
+  if (args.rows.some((row) => row.kind === "alcohol")) return "alcohol";
+  if (args.rows.some((row) => row.kind === "apparel")) return "apparel";
 
   return "unknown";
 }
 
-function getVolumeValueLabel(
-  row: InventoryDetailRowDTO,
-): string {
+function getVolumeValueLabel(row: InventoryDetailRowDTO): string {
   const value = row.volumeValue;
-
-  if (
-    typeof value === "number" &&
-    Number.isFinite(value)
-  ) {
-    return String(value);
-  }
-
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return "";
 }
 
-function getVolumeUnitLabel(
-  row: InventoryDetailRowDTO,
-): string {
+function getVolumeUnitLabel(row: InventoryDetailRowDTO): string {
   return String(row.volumeUnit ?? "").trim();
 }
 
@@ -108,15 +79,10 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
     [productBlueprintCategory, rows],
   );
 
-  const isAlcoholCategory =
-    categoryKind === "alcohol";
+  const isAlcoholCategory = categoryKind === "alcohol";
 
   const totalStock = React.useMemo(
-    () =>
-      rows.reduce(
-        (sum, row) => sum + row.stock,
-        0,
-      ),
+    () => rows.reduce((sum, row) => sum + row.stock, 0),
     [rows],
   );
 
@@ -129,10 +95,7 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
           <CardHeaderIcon>
             <Palette className="card__header-icon-svg" />
           </CardHeaderIcon>
-
-          <CardTitle strong>
-            {title}
-          </CardTitle>
+          <CardTitle strong>{title}</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
@@ -140,100 +103,66 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>
-                型番
-              </TableHead>
+              <TableHead>型番</TableHead>
 
               {isAlcoholCategory ? (
                 <>
-                  <TableHead>
-                    容量
-                  </TableHead>
-                  <TableHead>
-                    単位
-                  </TableHead>
+                  <TableHead>容量</TableHead>
+                  <TableHead>単位</TableHead>
                 </>
               ) : (
                 <>
-                  <TableHead>
-                    サイズ
-                  </TableHead>
-                  <TableHead>
-                    カラー
-                  </TableHead>
+                  <TableHead>サイズ</TableHead>
+                  <TableHead>カラー</TableHead>
                 </>
               )}
 
-              <TableHead>
-                在庫数
-              </TableHead>
+              <TableHead>在庫数</TableHead>
             </TableRow>
           </TableHeader>
 
           <TableBody>
             {rows.map((row) => {
-              const rgbHex =
-                rgbIntToHex(row.rgb) ?? null;
-              const backgroundColor =
-                rgbHex ?? "#ffffff";
+              const rgbHex = rgbIntToHex(row.rgb) ?? null;
+              const backgroundColor = rgbHex ?? "#ffffff";
 
               return (
                 <TableRow key={row.modelId}>
-                  <TableCell>
-                    {row.modelNumber}
-                  </TableCell>
+                  <TableCell>{row.modelNumber}</TableCell>
 
                   {isAlcoholCategory ? (
                     <>
-                      <TableCell>
-                        {getVolumeValueLabel(row) || "-"}
-                      </TableCell>
-                      <TableCell>
-                        {getVolumeUnitLabel(row) || "-"}
-                      </TableCell>
+                      <TableCell>{getVolumeValueLabel(row) || "-"}</TableCell>
+                      <TableCell>{getVolumeUnitLabel(row) || "-"}</TableCell>
                     </>
                   ) : (
                     <>
+                      <TableCell>{row.size || "-"}</TableCell>
                       <TableCell>
-                        {row.size || "-"}
-                      </TableCell>
-                      <TableCell className="ivc__color-cell">
-                        <span
-                          className="ivc__color-dot"
-                          style={{
-                            backgroundColor,
-                            boxShadow:
-                              "0 0 0 1px rgba(0, 0, 0, 0.18)",
-                          }}
-                          title={rgbHex ?? ""}
-                        />
-                        <span>
+                        <ColorValue
+                          color={backgroundColor}
+                          swatchTitle={rgbHex ?? undefined}
+                        >
                           {row.color || "-"}
-                        </span>
+                        </ColorValue>
                       </TableCell>
                     </>
                   )}
 
-                  <TableCell>
-                    {row.stock}
-                  </TableCell>
+                  <TableCell>{row.stock}</TableCell>
                 </TableRow>
               );
             })}
 
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4}>
-                  表示できる在庫データがありません。
-                </TableCell>
+                <TableCell colSpan={4}>表示できる在庫データがありません。</TableCell>
               </TableRow>
             )}
 
             {rows.length > 0 && (
               <TableRow>
-                <TableCell colSpan={footerColSpan}>
-                  合計
-                </TableCell>
+                <TableCell colSpan={footerColSpan}>合計</TableCell>
                 <TableCell>
                   <strong>{totalStock}</strong>
                 </TableCell>

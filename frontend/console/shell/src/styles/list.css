@@ -1,24 +1,6 @@
 /* frontend/console/shell/src/styles/list.css */
 
 /* =========================================================
- * PriceCard
- * ======================================================= */
-
-.prc__color-dot {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  margin-right: 0.5rem;
-  border-radius: 9999px;
-  vertical-align: middle;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
-}
-
-.prc__color-label {
-  vertical-align: middle;
-}
-
-/* =========================================================
  * List Create
  * ======================================================= */
 

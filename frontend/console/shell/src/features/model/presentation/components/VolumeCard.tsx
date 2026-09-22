@@ -114,7 +114,7 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
       </CardHeader>
 
       <CardContent>
-        <Table className="svc__table">
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead>
@@ -172,7 +172,6 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
                       type="button"
                       variant="default"
                       size="icon"
-                      className="svc__remove"
                       onClick={() => onRemoveVolume?.(volume.id)}
                       aria-label="容量を削除"
                     >
@@ -185,10 +184,7 @@ const VolumeCard: React.FC<VolumeCardProps> = ({
 
             {volumes.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={isEdit ? 3 : 2}
-                  className="svc__empty"
-                >
+                <TableCell colSpan={isEdit ? 3 : 2}>
                   登録されている容量はありません。
                 </TableCell>
               </TableRow>

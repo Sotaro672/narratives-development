@@ -263,7 +263,7 @@ function ApparelShippingPackageRows({
   if (sizeRows.length === 0) {
     return (
       <TableRow>
-        <TableCell colSpan={5} className="mnc__empty">
+        <TableCell colSpan={5}>
           登録されているサイズはありません。
         </TableCell>
       </TableRow>
@@ -278,9 +278,7 @@ function ApparelShippingPackageRows({
 
         return (
           <TableRow key={size}>
-            <TableCell className="mnc__size">
-              {size}
-            </TableCell>
+            <TableCell>{size}</TableCell>
 
             {SHIPPING_PACKAGE_FIELDS.map((field) => (
               <TableCell key={field.key}>
@@ -321,7 +319,7 @@ function AlcoholShippingPackageRows({
   if (modelNumbers.length === 0) {
     return (
       <TableRow>
-        <TableCell colSpan={5} className="mnc__empty">
+        <TableCell colSpan={5}>
           登録されている容量はありません。
         </TableCell>
       </TableRow>
@@ -338,9 +336,7 @@ function AlcoholShippingPackageRows({
 
         return (
           <TableRow key={rowKey}>
-            <TableCell className="mnc__size">
-              {volumeLabel || "-"}
-            </TableCell>
+            <TableCell>{volumeLabel || "-"}</TableCell>
 
             {SHIPPING_PACKAGE_FIELDS.map((field) => (
               <TableCell key={field.key}>
@@ -384,14 +380,12 @@ const ShippingPackageCard: React.FC<ShippingPackageCardProps> = (props) => {
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardTitle strong>
-            配送用梱包情報
-          </CardTitle>
+          <CardTitle strong>配送用梱包情報</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
       <CardContent>
-        <Table className="mnc__table">
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead>

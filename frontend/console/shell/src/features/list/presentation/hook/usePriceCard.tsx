@@ -46,34 +46,13 @@ function parsePriceInput(
 function getBgColor(
   rgb: PriceRow["rgb"],
 ): string {
-  const rgbHex =
-    rgbIntToHex(rgb) ?? null;
-
-  if (
-    typeof rgb === "string" &&
-    rgb.startsWith("#")
-  ) {
-    return rgb;
-  }
-
-  return rgbHex ?? "#ffffff";
+  return rgbIntToHex(rgb) ?? "#ffffff";
 }
 
 function getRgbTitle(
   rgb: PriceRow["rgb"],
 ): string {
-  const rgbHex =
-    rgbIntToHex(rgb) ?? null;
-
-  if (rgbHex) {
-    return rgbHex;
-  }
-
-  if (typeof rgb === "string") {
-    return rgb;
-  }
-
-  return "";
+  return rgbIntToHex(rgb) ?? "";
 }
 
 function getPriceInputValue(
@@ -114,116 +93,90 @@ export function usePriceCard(
     currencySymbol = "¥",
   } = props;
 
-  const isEdit =
-    mode === "edit";
+  const isEdit = mode === "edit";
+  const showModeBadge = mode !== "view";
 
-  const showModeBadge =
-    mode !== "view";
-
-  const rowsVM =
-    React.useMemo<
-      PriceRowVM[]
-    >(() => {
-      const sortedRows:
-        IndexedPriceRow[] =
-        rows
-          .map(
-            (
-              row,
-              originalIdx,
-            ) => ({
-              row,
-              originalIdx,
-            }),
-          )
-          .sort(
-            (
-              first,
-              second,
-            ) => {
-              const firstOrder =
-                first.row
-                  .displayOrder ??
-                Number.POSITIVE_INFINITY;
-
-              const secondOrder =
-                second.row
-                  .displayOrder ??
-                Number.POSITIVE_INFINITY;
-
-              if (
-                firstOrder !==
-                secondOrder
-              ) {
-                return (
-                  firstOrder -
-                  secondOrder
-                );
-              }
-
-              return (
-                first.originalIdx -
-                second.originalIdx
-              );
-            },
-          );
-
-      return sortedRows.map(
-        ({
+  const rowsVM = React.useMemo<PriceRowVM[]>(() => {
+    const sortedRows: IndexedPriceRow[] = rows
+      .map(
+        (
           row,
           originalIdx,
-        }) => {
-          const priceInputValue =
-            getPriceInputValue(
-              row.price,
-            );
+        ) => ({
+          row,
+          originalIdx,
+        }),
+      )
+      .sort(
+        (
+          first,
+          second,
+        ) => {
+          const firstOrder =
+            first.row.displayOrder ??
+            Number.POSITIVE_INFINITY;
 
-          const priceDisplayText =
-            getPriceDisplayText({
-              price:
-                row.price,
+          const secondOrder =
+            second.row.displayOrder ??
+            Number.POSITIVE_INFINITY;
 
-              currencySymbol,
-            });
+          if (firstOrder !== secondOrder) {
+            return firstOrder - secondOrder;
+          }
 
-          const onChangePriceInput = (
-            event:
-              React.ChangeEvent<HTMLInputElement>,
-          ) => {
-            const nextPrice =
-              parsePriceInput(
-                event.target.value,
-              );
-
-            onChangePrice?.(
-              originalIdx,
-              nextPrice,
-              row,
-            );
-          };
-
-          return {
-            modelId:row.modelId,
-            kind:row.kind ?? null,
-            displayOrder:row.displayOrder ?? null,
-            size:row.size ?? null,
-            color:row.color ?? null,
-            volumeValue:row.volumeValue ?? null,
-            volumeUnit:row.volumeUnit ?? null,
-            stock:row.stock,
-            bgColor:getBgColor(row.rgb,),
-            rgbTitle:getRgbTitle(row.rgb,),
-            priceInputValue,
-            priceDisplayText,
-            onChangePriceInput,
-          };
+          return first.originalIdx - second.originalIdx;
         },
       );
-    }, [
-      rows,
-      onChangePrice,
-      currencySymbol,
-    ]);
+
+    return sortedRows.map(
+      ({
+        row,
+        originalIdx,
+      }) => {
+        const priceInputValue =
+          getPriceInputValue(row.price);
+
+        const priceDisplayText =
+          getPriceDisplayText({
+            price: row.price,
+            currencySymbol,
+          });
+
+        const onChangePriceInput = (
+          event: React.ChangeEvent<HTMLInputElement>,
+        ) => {
+          const nextPrice =
+            parsePriceInput(event.target.value);
+
+          onChangePrice?.(
+            originalIdx,
+            nextPrice,
+            row,
+          );
+        };
+
+        return {
+          modelId: row.modelId,
+          kind: row.kind ?? null,
+          displayOrder: row.displayOrder ?? null,
+          size: row.size ?? null,
+          color: row.color ?? null,
+          volumeValue: row.volumeValue ?? null,
+          volumeUnit: row.volumeUnit ?? null,
+          stock: row.stock,
+          bgColor: getBgColor(row.rgb),
+          rgbTitle: getRgbTitle(row.rgb),
+          priceInputValue,
+          priceDisplayText,
+          onChangePriceInput,
+        };
+      },
+    );
+  }, [
+    rows,
+    onChangePrice,
+    currencySymbol,
+  ]);
 
   return {
     title,
@@ -232,7 +185,6 @@ export function usePriceCard(
     showModeBadge,
     currencySymbol,
     rowsVM,
-    isEmpty:
-      rows.length === 0,
+    isEmpty: rows.length === 0,
   };
 }

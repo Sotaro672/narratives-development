@@ -124,9 +124,11 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
 
   return (
     <Card
-      className={`svc ${
-        mode === "view" ? "view-mode" : ""
-      }`}
+      className={
+        mode === "view"
+          ? "view-mode"
+          : undefined
+      }
     >
       <CardHeader>
         <CardHeaderLeft>
@@ -148,7 +150,7 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
       </CardHeader>
 
       <CardContent>
-        <Table className="svc__table">
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead>
@@ -223,7 +225,6 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                       size="icon"
                       onClick={() => onRemove(row.id)}
                       aria-label={`${row.sizeLabel} を削除`}
-                      className="svc__remove"
                     >
                       <Trash2 size={16} />
                     </CardButton>
@@ -240,7 +241,6 @@ const SizeVariationCard: React.FC<SizeVariationCardProps> = ({
                     measurementCols.length +
                     (isEdit ? 1 : 0)
                   }
-                  className="svc__empty"
                 >
                   登録されているサイズはありません。
                 </TableCell>

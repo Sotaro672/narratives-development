@@ -135,32 +135,3 @@
   min-height: 28px;
   border-radius: 999px;
 }
-
-/* =========================================================
- * Inventory color
- * ======================================================= */
-
-.ivc__color-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ivc__color-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
-  flex: 0 0 auto;
-  border-radius: 9999px;
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.18);
-}
-
-/* =========================================================
- * Responsive
- * ======================================================= */
-
-@media (min-width: 640px) {
-  .lic__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}

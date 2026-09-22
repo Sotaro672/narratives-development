@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Plus, X } from "lucide-react";
+import { SketchPicker } from "react-color";
 
 import {
   Card,
@@ -12,6 +13,7 @@ import {
   CardTitle,
 } from "../../../../shared/ui";
 import { Button } from "../../../../shared/ui/button";
+import { ColorSwatch } from "../../../../shared/ui/color";
 import {
   Table,
   TableBody,
@@ -20,8 +22,10 @@ import {
   TableHeader,
   TableRow,
 } from "../../../../shared/ui/table";
-
-import { SketchPicker } from "react-color";
+import {
+  coerceRgbInt,
+  rgbIntToHex,
+} from "../../../../shared/util/color";
 
 type ColorVariationCardProps = {
   colors: string[];
@@ -41,13 +45,7 @@ function normalizeColorName(value: unknown): string {
 }
 
 function normalizeHex(value: unknown): string {
-  const raw = String(value ?? "").trim();
-
-  if (!raw) {
-    return "#ffffff";
-  }
-
-  return raw.startsWith("#") ? raw : `#${raw}`;
+  return rgbIntToHex(coerceRgbInt(value)) ?? "#FFFFFF";
 }
 
 const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
@@ -71,8 +69,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
   );
 
   const safeColorRgbMap = colorRgbMap ?? {};
-
-  const [pickerColor, setPickerColor] = React.useState<string>("#ffffff");
+  const [pickerColor, setPickerColor] = React.useState<string>("#FFFFFF");
 
   const handleAddColor = React.useCallback(() => {
     const name = normalizeColorName(colorInput);
@@ -105,9 +102,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
     <Card className="vc">
       <CardHeader>
         <CardHeaderLeft>
-          <CardTitle strong>
-            カラーバリエーション
-          </CardTitle>
+          <CardTitle strong>カラーバリエーション</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
@@ -140,9 +135,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                     className="vc__input"
                     placeholder="例：White, Black, Navy..."
                     value={colorInput}
-                    onChange={(event) =>
-                      onChangeColorInput(event.target.value)
-                    }
+                    onChange={(event) => onChangeColorInput(event.target.value)}
                     onKeyDown={(event) => {
                       if (event.key !== "Enter") {
                         return;
@@ -175,39 +168,31 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                 <Table className="vc__table">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[160px]">
-                        RGB(HEX)
-                      </TableHead>
+                      <TableHead className="w-[160px]">RGB(HEX)</TableHead>
                       <TableHead>色名</TableHead>
-                      {isEdit && (
-                        <TableHead className="w-[40px]" />
-                      )}
+                      {isEdit && <TableHead className="w-[40px]" />}
                     </TableRow>
                   </TableHeader>
 
                   <TableBody>
                     {safeColors.map((colorName) => {
-                      const hexFromMap =
-                        safeColorRgbMap[colorName];
+                      const hexFromMap = safeColorRgbMap[colorName];
                       const hex = normalizeHex(hexFromMap);
 
                       return (
                         <TableRow key={colorName}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span
-                                className="inline-block w-4 h-4 rounded border"
-                                style={{
-                                  backgroundColor: hex,
-                                }}
+                              <ColorSwatch
+                                color={hex}
+                                size="md"
+                                shape="square"
                               />
                               {hexFromMap ? hex : "-"}
                             </div>
                           </TableCell>
 
-                          <TableCell>
-                            {colorName}
-                          </TableCell>
+                          <TableCell>{colorName}</TableCell>
 
                           {isEdit && (
                             <TableCell className="text-right">
@@ -216,9 +201,7 @@ const ColorVariationCard: React.FC<ColorVariationCardProps> = ({
                                 variant="ghost"
                                 size="icon"
                                 className="vc__chip-close"
-                                onClick={() =>
-                                  onRemoveColor(colorName)
-                                }
+                                onClick={() => onRemoveColor(colorName)}
                                 aria-label={`${colorName} を削除`}
                               >
                                 <X size={12} />

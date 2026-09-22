@@ -125,22 +125,16 @@ const AlcoholModelNumberCard: React.FC<AlcoholModelNumberCardProps> = ({
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardTitle strong>
-            容量別モデルナンバー
-          </CardTitle>
+          <CardTitle strong>容量別モデルナンバー</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
       <CardContent>
-        <Table className="mnc__table">
+        <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>
-                容量
-              </TableHead>
-              <TableHead>
-                モデルナンバー
-              </TableHead>
+              <TableHead>容量</TableHead>
+              <TableHead>モデルナンバー</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -153,7 +147,7 @@ const AlcoholModelNumberCard: React.FC<AlcoholModelNumberCardProps> = ({
 
               return (
                 <TableRow key={volume.id}>
-                  <TableCell className="mnc__size">
+                  <TableCell>
                     {volume.volumeLabel}
                   </TableCell>
 
@@ -179,10 +173,7 @@ const AlcoholModelNumberCard: React.FC<AlcoholModelNumberCardProps> = ({
 
             {visibleVolumes.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={2}
-                  className="mnc__empty"
-                >
+                <TableCell colSpan={2}>
                   登録されている容量はありません。
                 </TableCell>
               </TableRow>

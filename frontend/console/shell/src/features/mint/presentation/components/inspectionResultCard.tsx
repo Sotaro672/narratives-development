@@ -11,6 +11,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { ColorValue } from "../../../../shared/ui/color";
 import {
   Table,
   TableBody,
@@ -21,8 +22,6 @@ import {
 } from "../../../../shared/ui/table";
 import { rgbIntToHex } from "../../../../shared/util/color";
 import type { InspectionResultCardData } from "../../application/mapper/buildInspectionResultCardData";
-
-import "../../../../styles/inventory.css";
 
 type InspectionResultCardProps = {
   data: InspectionResultCardData;
@@ -51,10 +50,7 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
           <CardHeaderIcon>
             <Palette className="card__header-icon-svg" />
           </CardHeaderIcon>
-
-          <CardTitle strong>
-            {title || "モデル別検査結果"}
-          </CardTitle>
+          <CardTitle strong>{title || "モデル別検査結果"}</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
@@ -62,31 +58,19 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>
-                型番
-              </TableHead>
+              <TableHead>型番</TableHead>
 
               {showVolumeColumn ? (
-                <TableHead>
-                  容量
-                </TableHead>
+                <TableHead>容量</TableHead>
               ) : (
                 <>
-                  <TableHead>
-                    サイズ
-                  </TableHead>
-                  <TableHead>
-                    カラー
-                  </TableHead>
+                  <TableHead>サイズ</TableHead>
+                  <TableHead>カラー</TableHead>
                 </>
               )}
 
-              <TableHead>
-                合格数
-              </TableHead>
-              <TableHead>
-                生産数
-              </TableHead>
+              <TableHead>合格数</TableHead>
+              <TableHead>生産数</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -97,40 +81,26 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
 
               return (
                 <TableRow key={`${row.modelNumber}-${index}`}>
-                  <TableCell>
-                    {row.modelNumber || "-"}
-                  </TableCell>
+                  <TableCell>{row.modelNumber || "-"}</TableCell>
 
                   {showVolumeColumn ? (
-                    <TableCell>
-                      {row.volumeLabel || "-"}
-                    </TableCell>
+                    <TableCell>{row.volumeLabel || "-"}</TableCell>
                   ) : (
                     <>
+                      <TableCell>{row.size || "-"}</TableCell>
                       <TableCell>
-                        {row.size || "-"}
-                      </TableCell>
-
-                      <TableCell className="ivc__color-cell">
-                        <span
-                          className="ivc__color-dot"
-                          style={{ backgroundColor }}
-                          title={rgbHex ?? ""}
-                        />
-                        <span>
+                        <ColorValue
+                          color={backgroundColor}
+                          swatchTitle={rgbHex ?? undefined}
+                        >
                           {row.color || "-"}
-                        </span>
+                        </ColorValue>
                       </TableCell>
                     </>
                   )}
 
-                  <TableCell>
-                    {row.passedQuantity}
-                  </TableCell>
-
-                  <TableCell>
-                    {row.quantity}
-                  </TableCell>
+                  <TableCell>{row.passedQuantity}</TableCell>
+                  <TableCell>{row.quantity}</TableCell>
                 </TableRow>
               );
             })}
@@ -145,14 +115,10 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
 
             {rows.length > 0 && (
               <TableRow>
-                <TableCell colSpan={totalLabelColSpan}>
-                  合計
-                </TableCell>
-
+                <TableCell colSpan={totalLabelColSpan}>合計</TableCell>
                 <TableCell>
                   <strong>{totalPassed}</strong>
                 </TableCell>
-
                 <TableCell>
                   <strong>{totalQuantity}</strong>
                 </TableCell>
