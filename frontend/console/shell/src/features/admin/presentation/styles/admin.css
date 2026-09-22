@@ -5,5 +5,53 @@
 }
 
 .admin-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
   padding: 16px 20px 18px;
+}
+
+.admin-card__field-label {
+  margin-bottom: 0.25rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.admin-card__field-value {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  color: #1e293b;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.admin-card__assignee-trigger {
+  width: 100%;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.admin-card__empty-assignee {
+  margin-top: 0.5rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.admin-card__metadata {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.admin-card__metadata-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 1rem;
+  row-gap: 0.25rem;
 }

@@ -159,25 +159,25 @@ export const AdminCard: React.FC<AdminCardProps> = ({
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="admin-card__body space-y-4">
+      <CardContent className="admin-card__body">
         {showsTargetAvatarCount ? (
           <div>
-            <div className="mb-1 text-xs text-slate-500">
+            <div className="admin-card__field-label">
               宛先数
             </div>
 
-            <div className="py-1 text-sm text-slate-800">
+            <div className="admin-card__field-value">
               {targetAvatarCount}件
             </div>
           </div>
         ) : showAssignee ? (
           <div>
-            <div className="mb-1 text-xs text-slate-500">
+            <div className="admin-card__field-label">
               担当者
             </div>
 
             {!isEdit ? (
-              <div className="py-1 text-sm text-slate-800">
+              <div className="admin-card__field-value">
                 {effectiveAssigneeName}
               </div>
             ) : (
@@ -187,7 +187,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full justify-between text-left"
+                      className="admin-card__assignee-trigger"
                       disabled={effectiveLoading}
                       aria-label="担当者を選択"
                     >
@@ -235,7 +235,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
 
                 {!effectiveLoading &&
                   effectiveCandidates.length === 0 && (
-                    <p className="mt-2 text-xs text-slate-400">
+                    <p className="admin-card__empty-assignee">
                       担当者候補がありません。
                     </p>
                   )}
@@ -248,9 +248,9 @@ export const AdminCard: React.FC<AdminCardProps> = ({
           createdAt ||
           updatedByName ||
           updatedAt) && (
-          <div className="space-y-1 text-xs text-slate-500">
+          <div className="admin-card__metadata">
             {(createdByName || createdAt) && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <div className="admin-card__metadata-row">
                 {createdByName && (
                   <span>
                     作成者: {createdByName}
@@ -266,7 +266,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
             )}
 
             {(updatedByName || updatedAt) && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <div className="admin-card__metadata-row">
                 {updatedByName && (
                   <span>
                     更新者: {updatedByName}

@@ -2,6 +2,8 @@
 
 import { Card, CardContent } from "../../../../shared/ui/card";
 
+import "../../../../styles/list.css";
+
 type ListSalesSummaryCardProps = {
   totalOrderCount: number;
   totalSalesAmount: number;
@@ -13,26 +15,28 @@ export default function ListSalesSummaryCard({
 }: ListSalesSummaryCardProps) {
   return (
     <Card>
-      <CardContent className="p-4">
-        <div className="text-sm font-medium mb-3">販売実績</div>
+      <CardContent className="list-sales-summary__content">
+        <div className="list-sales-summary__title">
+          販売実績
+        </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="list-sales-summary__grid">
           <div>
-            <div className="text-xs text-slate-500">
+            <div className="list-sales-summary__label">
               累計注文数
             </div>
 
-            <div className="mt-1 text-sm font-medium text-slate-900">
+            <div className="list-sales-summary__value">
               {totalOrderCount.toLocaleString()}件
             </div>
           </div>
 
           <div>
-            <div className="text-xs text-slate-500">
+            <div className="list-sales-summary__label">
               累計売上
             </div>
 
-            <div className="mt-1 text-sm font-medium text-slate-900">
+            <div className="list-sales-summary__value">
               ¥{totalSalesAmount.toLocaleString()}
             </div>
           </div>

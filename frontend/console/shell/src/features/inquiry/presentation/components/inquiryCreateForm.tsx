@@ -8,8 +8,11 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import DeleteButton from "../../../../shared/ui/delete";
 import { ErrorMessage } from "../../../../shared/ui/error";
 import { Label } from "../../../../shared/ui/label";
+import Media from "../../../../shared/ui/media";
+import { Progress } from "../../../../shared/ui/progress";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
@@ -139,21 +142,21 @@ export default function InquiryCreateForm({
                     key={attachment.id}
                     className="inquiry-create-form__attachment"
                   >
-                    <img
+                    <Media
                       src={attachment.previewUrl}
                       alt={attachment.file.name}
-                      className="inquiry-create-form__attachment-image"
+                      name={attachment.file.name}
+                      variant="square"
+                      fit="cover"
+                      className="inquiry-create-form__attachment-media"
                     />
 
-                    <button
-                      type="button"
+                    <DeleteButton
+                      size="sm"
                       disabled={submitting}
-                      className="inquiry-create-form__remove-button"
+                      ariaLabel={`${attachment.file.name}を削除`}
                       onClick={() => onRemoveAttachment(attachment.id)}
-                      aria-label={`${attachment.file.name}を削除`}
-                    >
-                      ×
-                    </button>
+                    />
 
                     <Text
                       as="div"
@@ -171,25 +174,11 @@ export default function InquiryCreateForm({
           </div>
 
           {submitting && attachments.length > 0 ? (
-            <div className="inquiry-create-form__progress">
-              <div className="inquiry-create-form__progress-header">
-                <Text size="xs" tone="muted">
-                  添付ファイルをアップロード中
-                </Text>
-                <Text size="xs" tone="muted">
-                  {uploadProgress}%
-                </Text>
-              </div>
-
-              <progress
-                className="inquiry-create-form__progress-bar"
-                value={uploadProgress}
-                max={100}
-                aria-label="添付ファイルのアップロード進捗"
-              >
-                {uploadProgress}%
-              </progress>
-            </div>
+            <Progress
+              value={uploadProgress}
+              label="添付ファイルをアップロード中"
+              ariaLabel="添付ファイルのアップロード進捗"
+            />
           ) : null}
         </div>
       </CardContent>

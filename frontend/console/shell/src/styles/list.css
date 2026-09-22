@@ -40,6 +40,63 @@
 }
 
 /* =========================================================
+ * List Target Product
+ * ======================================================= */
+
+.list-target-product__content {
+  padding: 1rem;
+}
+
+.list-target-product__title {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.list-target-product__value {
+  color: #1e293b;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  overflow-wrap: break-word;
+}
+
+/* =========================================================
+ * List Sales Summary
+ * ======================================================= */
+
+.list-sales-summary__content {
+  padding: 1rem;
+}
+
+.list-sales-summary__title {
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+.list-sales-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.list-sales-summary__label {
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.list-sales-summary__value {
+  margin-top: 0.25rem;
+  color: #0f172a;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+}
+
+/* =========================================================
  * List Detail
  * ======================================================= */
 

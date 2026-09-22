@@ -2,6 +2,8 @@
 
 import { Card, CardContent } from "../../../../shared/ui/card";
 
+import "../../../../styles/list.css";
+
 type ListTargetProductCardProps = {
   productName: string;
   tokenName: string;
@@ -16,9 +18,12 @@ export default function ListTargetProductCard({
 
   return (
     <Card>
-      <CardContent className="p-4">
-        <div className="text-sm font-medium mb-2">対象商品</div>
-        <div className="text-sm text-slate-800 break-words">
+      <CardContent className="list-target-product__content">
+        <div className="list-target-product__title">
+          対象商品
+        </div>
+
+        <div className="list-target-product__value">
           {displayProductName} / {displayTokenName}
         </div>
       </CardContent>

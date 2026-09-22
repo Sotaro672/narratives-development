@@ -18,6 +18,7 @@ import {
 } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
 import { Label } from "../../../../shared/ui/label";
+import Media from "../../../../shared/ui/media";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
@@ -313,51 +314,27 @@ export default function InputCard({
             <div className="announcement-input-card__image-panel">
               {!hasImages && isEditMode ? (
                 <div
-                  className="announcement-input-card__empty-upload"
-                  onClick={openPicker}
                   onDrop={handleDropImages}
                   onDragOver={handleDragOverImages}
-                  role="button"
-                  tabIndex={0}
                   title="クリックで画像を追加"
                 >
-                  <div className="announcement-input-card__empty-icon">
-                    <ImageIcon />
-                  </div>
-
-                  <Text
-                    as="div"
-                    weight="semibold"
-                    className="announcement-input-card__empty-title"
-                  >
-                    画像を追加
-                  </Text>
-
-                  <Text
-                    as="div"
-                    size="xs"
-                    tone="muted"
-                    className="announcement-input-card__empty-help"
-                  >
-                    クリックで選択（複数可） / ドロップでも追加できます
-                  </Text>
+                  <Media
+                    className="announcement-input-card__empty-media"
+                    emptyIcon={<ImageIcon />}
+                    emptyText="画像を追加"
+                    emptyDescription="クリックで選択（複数可） / ドロップでも追加できます"
+                    onActivate={openPicker}
+                    disabled={isBusy}
+                  />
                 </div>
               ) : null}
 
               {!hasImages && isViewMode ? (
-                <div className="announcement-input-card__empty-view">
-                  <div className="announcement-input-card__empty-icon">
-                    <ImageIcon />
-                  </div>
-
-                  <Text
-                    as="div"
-                    weight="semibold"
-                    className="announcement-input-card__empty-title"
-                  >
-                    画像はありません
-                  </Text>
-                </div>
+                <Media
+                  className="announcement-input-card__empty-media"
+                  emptyIcon={<ImageIcon />}
+                  emptyText="画像はありません"
+                />
               ) : null}
 
               {hasImages ? (
@@ -368,27 +345,16 @@ export default function InputCard({
                     onDragOver={isEditMode ? handleDragOverImages : undefined}
                     title={isEditMode ? "クリックで画像追加" : undefined}
                   >
-                    <div
-                      className={[
-                        "announcement-input-card__main-image-stage",
-                        isEditMode
-                          ? "announcement-input-card__main-image-stage--clickable"
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={openPicker}
-                      role={isEditMode ? "button" : undefined}
-                      tabIndex={isEditMode ? 0 : undefined}
-                    >
-                      {mainImage ? (
-                        <img
-                          src={mainImage.url}
-                          alt={mainImage.name}
-                          className="announcement-input-card__main-image"
-                        />
-                      ) : null}
-                    </div>
+                    <Media
+                      src={mainImage?.url}
+                      alt={mainImage?.name}
+                      name={mainImage?.name}
+                      variant="viewer"
+                      fit="contain"
+                      className="announcement-input-card__main-media"
+                      onActivate={isEditMode ? openPicker : undefined}
+                      disabled={isBusy}
+                    />
 
                     {isEditMode ? (
                       <DeleteButton
@@ -422,30 +388,27 @@ export default function InputCard({
                       return (
                         <div
                           key={item.key}
-                          className={[
-                            "announcement-input-card__thumbnail",
-                            isEditMode
-                              ? "announcement-input-card__thumbnail--clickable"
-                              : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          onClick={() => handleSelectMainImage(index)}
-                          role={isEditMode ? "button" : undefined}
-                          tabIndex={isEditMode ? 0 : undefined}
+                          className="announcement-input-card__thumbnail"
                           title={
                             isEditMode
                               ? "クリックでメインに設定"
                               : undefined
                           }
                         >
-                          <div className="announcement-input-card__thumbnail-image-wrap">
-                            <img
-                              src={item.url}
-                              alt={item.name}
-                              className="announcement-input-card__thumbnail-image"
-                            />
-                          </div>
+                          <Media
+                            src={item.url}
+                            alt={item.name}
+                            name={item.name}
+                            variant="square"
+                            fit="cover"
+                            className="announcement-input-card__thumbnail-media"
+                            onActivate={
+                              isEditMode
+                                ? () => handleSelectMainImage(index)
+                                : undefined
+                            }
+                            disabled={isBusy}
+                          />
 
                           {isEditMode ? (
                             <DeleteButton
@@ -464,27 +427,18 @@ export default function InputCard({
 
                     {isEditMode ? (
                       <div
-                        className="announcement-input-card__add-image"
-                        onClick={openPicker}
                         onDrop={handleDropImages}
                         onDragOver={handleDragOverImages}
-                        role="button"
-                        tabIndex={0}
                         title="クリックで画像を追加"
                       >
-                        <div className="announcement-input-card__add-image-icon">
-                          <PlusIcon />
-                        </div>
-
-                        <Text
-                          as="div"
-                          size="xs"
-                          tone="muted"
-                          weight="medium"
-                          className="announcement-input-card__add-image-label"
-                        >
-                          画像を追加
-                        </Text>
+                        <Media
+                          variant="square"
+                          className="announcement-input-card__add-media"
+                          emptyIcon={<PlusIcon />}
+                          emptyText="画像を追加"
+                          onActivate={openPicker}
+                          disabled={isBusy}
+                        />
                       </div>
                     ) : null}
                   </div>

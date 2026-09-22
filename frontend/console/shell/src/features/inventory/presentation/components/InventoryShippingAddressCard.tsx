@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/
 import Text from "../../../../shared/ui/text";
 import type { InventoryShippingAddressDTO } from "../../../../shared/types/inventory";
 
+import "../../../../styles/inventory.css";
+
 export type InventoryShippingAddressCardProps = {
   shippingAddressId: string;
   shippingAddressOptions: InventoryShippingAddressDTO[];
@@ -49,12 +51,12 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="inventory-shipping-address__header">
         <CardTitle>在庫保管場所</CardTitle>
 
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inventory-shipping-address__create-button"
           onClick={onCreateShippingAddress}
           disabled={disabled}
         >
@@ -63,19 +65,19 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
         </button>
       </CardHeader>
 
-      <CardContent className="space-y-4">
+      <CardContent className="inventory-shipping-address__content">
         <div>
           <Text
             as="div"
             size="xs"
             tone="muted"
-            className="mb-1"
+            className="inventory-shipping-address__label"
           >
             保管場所
           </Text>
 
           <select
-            className="w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inventory-shipping-address__select"
             value={selectedValue}
             onChange={handleChange}
             disabled={disabled || !hasShippingAddressOptions}
@@ -102,7 +104,7 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
               as="p"
               size="xs"
               tone="muted"
-              className="mt-3"
+              className="inventory-shipping-address__empty"
             >
               在庫保管場所が登録されていません。
             </Text>

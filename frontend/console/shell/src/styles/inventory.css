@@ -12,6 +12,85 @@
 }
 
 /* =========================================================
+ * Inventory Shipping Address
+ * ======================================================= */
+
+.inventory-shipping-address__header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.inventory-shipping-address__content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.inventory-shipping-address__create-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  padding: 0.5rem 0.75rem;
+  color: #334155;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.25rem;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.inventory-shipping-address__create-button:hover:not(:disabled) {
+  background: #f8fafc;
+}
+
+.inventory-shipping-address__create-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.inventory-shipping-address__label {
+  margin-bottom: 0.25rem;
+}
+
+.inventory-shipping-address__select {
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.375rem;
+  outline: none;
+  background: #ffffff;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  transition:
+    border-color 150ms ease,
+    opacity 150ms ease;
+}
+
+.inventory-shipping-address__select:focus {
+  border-color: #94a3b8;
+}
+
+.inventory-shipping-address__select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.inventory-shipping-address__empty {
+  margin-top: 0.75rem;
+}
+
+/* =========================================================
  * Inventory List Card
  * ======================================================= */
 
