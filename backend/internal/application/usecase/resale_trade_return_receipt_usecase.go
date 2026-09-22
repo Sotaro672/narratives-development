@@ -50,6 +50,8 @@ var (
 	)
 )
 
+const resaleTradeReturnReceiptCompletedSystemMessageIDPrefix = "return-completed-"
+
 // ResaleTradeReturnReceiptOrderService is the minimum Order application service
 // required when a resale seller confirms physical receipt of a returned item.
 //
@@ -80,6 +82,7 @@ type ResaleTradeReturnReceiptUsecase struct {
 	tradeRepo           tradedom.Repository
 	returnAgreementRepo tradedom.ReturnAgreementRepository
 	returnShipmentRepo  tradedom.ReturnShipmentRepository
+	messageRepo         tradedom.MessageRepository
 	orderService        ResaleTradeReturnReceiptOrderService
 	itemRefundService   ResaleTradeReturnReceiptItemRefundService
 
@@ -92,6 +95,7 @@ type NewResaleTradeReturnReceiptUsecaseInput struct {
 	TradeRepository           tradedom.Repository
 	ReturnAgreementRepository tradedom.ReturnAgreementRepository
 	ReturnShipmentRepository  tradedom.ReturnShipmentRepository
+	MessageRepository         tradedom.MessageRepository
 	OrderService              ResaleTradeReturnReceiptOrderService
 	ItemRefundService         ResaleTradeReturnReceiptItemRefundService
 	RefundCompletionNotifier  ReturnReceiptRefundCompletionNotifier
@@ -104,6 +108,7 @@ func NewResaleTradeReturnReceiptUsecase(
 		tradeRepo:                in.TradeRepository,
 		returnAgreementRepo:      in.ReturnAgreementRepository,
 		returnShipmentRepo:       in.ReturnShipmentRepository,
+		messageRepo:              in.MessageRepository,
 		orderService:             in.OrderService,
 		itemRefundService:        in.ItemRefundService,
 		refundCompletionNotifier: in.RefundCompletionNotifier,
@@ -291,6 +296,16 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 		result.ReturnCompleted = true
 		result.NotificationEnsured = true
 		result.AlreadyCompleted = true
+
+		if err := uc.ensureCompletedSystemMessage(
+			ctx,
+			tradeID,
+			agreement,
+			proposal,
+		); err != nil {
+			return result, err
+		}
+
 		return result, nil
 	}
 
@@ -395,6 +410,15 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 		agreement.CompletedAt.IsZero() {
 		return result,
 			ErrResaleTradeReturnReceiptAgreementCompletionMismatch
+	}
+
+	if err := uc.ensureCompletedSystemMessage(
+		ctx,
+		tradeID,
+		agreement,
+		proposal,
+	); err != nil {
+		return result, err
 	}
 
 	return result, nil
@@ -511,11 +535,52 @@ func (uc *ResaleTradeReturnReceiptUsecase) ensureCompleted(
 	}
 }
 
+func (uc *ResaleTradeReturnReceiptUsecase) ensureCompletedSystemMessage(
+	ctx context.Context,
+	tradeID string,
+	agreement tradedom.ReturnAgreement,
+	proposal tradedom.ReturnProposal,
+) error {
+	if agreement.Status != tradedom.ReturnStatusCompleted ||
+		agreement.CompletedAt == nil ||
+		agreement.CompletedAt.IsZero() {
+		return ErrResaleTradeReturnReceiptAgreementCompletionMismatch
+	}
+
+	proposalID := strings.TrimSpace(proposal.ID)
+	if proposalID == "" {
+		return tradedom.ErrInvalidReturnProposalID
+	}
+
+	message, err := tradedom.NewSystemMessageForCreate(
+		resaleTradeReturnReceiptCompletedSystemMessageIDPrefix+proposalID,
+		tradeID,
+		"出品者が返品商品を受領し、返品・返金が完了しました。",
+	)
+	if err != nil {
+		return err
+	}
+
+	message.CreatedAt = agreement.CompletedAt.UTC()
+
+	_, err = uc.messageRepo.Create(ctx, message)
+	if err != nil {
+		if errors.Is(err, tradedom.ErrMessageAlreadyExists) {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
+}
+
 func (uc *ResaleTradeReturnReceiptUsecase) validateConfigured() error {
 	if uc == nil ||
 		uc.tradeRepo == nil ||
 		uc.returnAgreementRepo == nil ||
 		uc.returnShipmentRepo == nil ||
+		uc.messageRepo == nil ||
 		uc.orderService == nil ||
 		uc.itemRefundService == nil ||
 		uc.refundCompletionNotifier == nil ||

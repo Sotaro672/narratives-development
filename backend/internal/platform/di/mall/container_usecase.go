@@ -796,6 +796,7 @@ func buildMallUsecases(
 			TradeRepository:           r.tradeRepo,
 			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
 			ReturnShipmentRepository:  r.tradeReturnShipmentRepo,
+			MessageRepository:         r.tradeMessageRepo,
 			OrderService:              orderUC,
 			ItemRefundService:         itemRefundUC,
 			RefundCompletionNotifier:  refundCompletionNotificationUC,

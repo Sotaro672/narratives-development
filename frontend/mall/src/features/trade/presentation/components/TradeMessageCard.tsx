@@ -42,7 +42,10 @@ function getReturnSystemMessageActorSide(
     return "buyer";
   }
 
-  if (messageId.startsWith("return-proposal-")) {
+  if (
+    messageId.startsWith("return-proposal-") ||
+    messageId.startsWith("return-completed-")
+  ) {
     return "seller";
   }
 
@@ -84,6 +87,21 @@ function getSenderDisplay(
   }
 }
 
+function getReturnConsultationDetail(
+  message: TradeMessage,
+  trade: TradeDetail,
+): string {
+  if (
+    message.senderSide !== "system" ||
+    message.senderType !== "system" ||
+    message.id.trim() !== "return-consultation"
+  ) {
+    return "";
+  }
+
+  return trade.returnConsultation?.detail?.trim() ?? "";
+}
+
 export default function TradeMessageCard({
   message,
   trade,
@@ -95,8 +113,9 @@ export default function TradeMessageCard({
     !isSystem &&
     displaySenderSide === trade.viewerSide;
 
-  const sender = getSenderDisplay(
-    displaySenderSide,
+  const sender = getSenderDisplay(displaySenderSide, trade);
+  const returnConsultationDetail = getReturnConsultationDetail(
+    message,
     trade,
   );
 
@@ -123,6 +142,13 @@ export default function TradeMessageCard({
           >
             通報
           </button>
+        ) : undefined
+      }
+      afterContent={
+        returnConsultationDetail ? (
+          <p className="chat-detail-page__content">
+            {returnConsultationDetail}
+          </p>
         ) : undefined
       }
     />
