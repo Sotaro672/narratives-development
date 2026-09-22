@@ -9,6 +9,7 @@ import {
 import type {
   ReceiveTradeReturnResult,
   TradeDetail,
+  TradeReturnProposal,
 } from "../../../shared/types/trade";
 import { receiveTradeReturn } from "../../infrastructure/tradeApi";
 import { getErrorMessage } from "../util/tradeChatDetail";
@@ -20,55 +21,45 @@ type UseTradeReturnReceiptInput = {
   blocked: boolean;
 };
 
-function normalizeRefundAmount(
-  value: string | number,
-): number | "" {
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-
-    if (!trimmed) {
-      return "";
-    }
-
-    const normalized = Number(trimmed);
-    return Number.isFinite(normalized)
-      ? normalized
-      : "";
-  }
-
-  return Number.isFinite(value)
-    ? value
-    : "";
-}
-
-function validateMerchandiseRefundAmount(
-  amount: number | "",
-  maxAmount: number,
-): string | null {
-  if (amount === "") {
-    return "返金額を入力してください。";
-  }
-
-  if (!Number.isInteger(amount)) {
-    return "返金額は1円単位の整数で入力してください。";
-  }
-
-  if (amount <= 0) {
-    return "返金額は1円以上で入力してください。";
-  }
+function getAcceptedPhysicalReturnProposal(
+  trade: TradeDetail | null,
+): TradeReturnProposal | null {
+  const proposal = trade?.returnProposal;
 
   if (
-    !Number.isInteger(maxAmount) ||
-    maxAmount <= 0
+    !proposal ||
+    proposal.id.trim() === "" ||
+    proposal.agreement !== "agree" ||
+    proposal.rejectedAt ||
+    proposal.returnRequirement !== "required" ||
+    proposal.refundAmount === undefined ||
+    !Number.isInteger(proposal.refundAmount) ||
+    proposal.refundAmount <= 0
   ) {
-    return "返金可能額を取得できません。取引情報を再読み込みしてください。";
+    return null;
   }
 
-  if (amount > maxAmount) {
-    return `返金額は商品代金（税込）の上限 ${maxAmount.toLocaleString("ja-JP")}円 以下で入力してください。`;
-  }
+  return proposal;
+}
 
-  return null;
+function isReceivableReturnStatus(
+  trade: TradeDetail,
+): boolean {
+  switch (trade.returnStatus) {
+    case "agreed":
+    case "return_shipped":
+    case "return_received":
+    case "refund_processing":
+      return true;
+
+    case "none":
+    case "discussing":
+    case "proposed":
+    case "completed":
+    case "disputed":
+    case undefined:
+      return false;
+  }
 }
 
 function canReceiveReturn(
@@ -85,7 +76,8 @@ function canReceiveReturn(
     !trade.isCancelled &&
     trade.isDispatched &&
     !trade.transferred &&
-    trade.returnStatus === "return_shipped"
+    isReceivableReturnStatus(trade) &&
+    getAcceptedPhysicalReturnProposal(trade) !== null
   );
 }
 
@@ -96,34 +88,16 @@ export function useTradeReturnReceipt({
   blocked,
 }: UseTradeReturnReceiptInput) {
   const [open, setOpen] = useState(false);
-  const [
-    merchandiseRefundAmount,
-    setMerchandiseRefundAmountState,
-  ] = useState<number | "">("");
-  const [
-    refundOutboundShipping,
-    setRefundOutboundShippingState,
-  ] = useState(false);
-  const [
-    coverReturnShipping,
-    setCoverReturnShippingState,
-  ] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] =
     useState<ReceiveTradeReturnResult | null>(null);
 
-  const merchandiseRefundMaxAmount =
-    trade?.merchandiseRefundMaxAmount ?? 0;
+  const proposal =
+    getAcceptedPhysicalReturnProposal(trade);
 
-  const selectionLocked =
-    result !== null;
-
-  const amountValidationError =
-    validateMerchandiseRefundAmount(
-      merchandiseRefundAmount,
-      merchandiseRefundMaxAmount,
-    );
+  const refundAmount =
+    proposal?.refundAmount ?? 0;
 
   const canSubmit =
     canReceiveReturn(
@@ -131,84 +105,15 @@ export function useTradeReturnReceipt({
       trade,
       blocked,
     ) &&
-    amountValidationError === null &&
     !submitting &&
-    !result?.financiallyCompleted;
+    !result?.returnCompleted;
 
   useEffect(() => {
     setOpen(false);
-    setMerchandiseRefundAmountState("");
-    setRefundOutboundShippingState(false);
-    setCoverReturnShippingState(false);
     setError("");
     setSubmitting(false);
     setResult(null);
   }, [tradeId]);
-
-  const setMerchandiseRefundAmount =
-    useCallback(
-      (value: string | number): void => {
-        if (submitting || selectionLocked) {
-          return;
-        }
-
-        const normalized =
-          normalizeRefundAmount(value);
-
-        setMerchandiseRefundAmountState(
-          normalized,
-        );
-
-        if (normalized === "") {
-          setError("");
-          return;
-        }
-
-        setError(
-          validateMerchandiseRefundAmount(
-            normalized,
-            merchandiseRefundMaxAmount,
-          ) ?? "",
-        );
-      },
-      [
-        merchandiseRefundMaxAmount,
-        selectionLocked,
-        submitting,
-      ],
-    );
-
-  const setRefundOutboundShipping =
-    useCallback(
-      (value: boolean): void => {
-        if (submitting || selectionLocked) {
-          return;
-        }
-
-        setRefundOutboundShippingState(value);
-        setError("");
-      },
-      [
-        selectionLocked,
-        submitting,
-      ],
-    );
-
-  const setCoverReturnShipping =
-    useCallback(
-      (value: boolean): void => {
-        if (submitting || selectionLocked) {
-          return;
-        }
-
-        setCoverReturnShippingState(value);
-        setError("");
-      },
-      [
-        selectionLocked,
-        submitting,
-      ],
-    );
 
   const openModal = useCallback(() => {
     if (
@@ -217,15 +122,9 @@ export function useTradeReturnReceipt({
         trade,
         blocked,
       ) ||
-      result?.financiallyCompleted
+      result?.returnCompleted
     ) {
       return;
-    }
-
-    if (!selectionLocked) {
-      setMerchandiseRefundAmountState("");
-      setRefundOutboundShippingState(false);
-      setCoverReturnShippingState(false);
     }
 
     setError("");
@@ -233,7 +132,6 @@ export function useTradeReturnReceipt({
   }, [
     blocked,
     result,
-    selectionLocked,
     trade,
     tradeId,
   ]);
@@ -261,23 +159,7 @@ export function useTradeReturnReceipt({
           return null;
         }
 
-        if (merchandiseRefundAmount === "") {
-          setError("返金額を入力してください。");
-          return null;
-        }
-
-        const validationError =
-          validateMerchandiseRefundAmount(
-            merchandiseRefundAmount,
-            merchandiseRefundMaxAmount,
-          );
-
-        if (validationError) {
-          setError(validationError);
-          return null;
-        }
-
-        if (result?.financiallyCompleted) {
+        if (result?.returnCompleted) {
           return result;
         }
 
@@ -288,13 +170,8 @@ export function useTradeReturnReceipt({
           const response =
             await receiveTradeReturn({
               tradeId,
-              merchandiseRefundAmount,
-              refundOutboundShipping,
-              coverReturnShipping,
             });
 
-          // 現行の receive-return API は返金条件をリクエストで受け取る。
-          // 金融処理が未完了でもRefund作成後は条件変更を防ぐ。
           setResult(response);
 
           try {
@@ -310,12 +187,15 @@ export function useTradeReturnReceipt({
             return response;
           }
 
-          if (response.financiallyCompleted) {
+          if (
+            response.financiallyCompleted &&
+            response.returnCompleted
+          ) {
             setOpen(false);
             setError("");
           } else {
             setError(
-              "返金処理を受け付けました。金融処理が完了していないため、同じ返金条件で再実行できます。",
+              "返金処理を受け付けました。金融処理が完了していないため、再実行できます。",
             );
           }
 
@@ -335,10 +215,6 @@ export function useTradeReturnReceipt({
       },
       [
         blocked,
-        coverReturnShipping,
-        merchandiseRefundAmount,
-        merchandiseRefundMaxAmount,
-        refundOutboundShipping,
         reload,
         result,
         submitting,
@@ -349,20 +225,14 @@ export function useTradeReturnReceipt({
 
   return {
     open,
-    merchandiseRefundAmount,
-    merchandiseRefundMaxAmount,
-    refundOutboundShipping,
-    coverReturnShipping,
+    proposal,
+    refundAmount,
     error,
     submitting,
     result,
-    selectionLocked,
     canSubmit,
     openModal,
     closeModal,
-    setMerchandiseRefundAmount,
-    setRefundOutboundShipping,
-    setCoverReturnShipping,
     submit,
   };
 }

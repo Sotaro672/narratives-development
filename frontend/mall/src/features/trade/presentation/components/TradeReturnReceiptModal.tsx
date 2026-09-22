@@ -1,28 +1,29 @@
 // frontend/mall/src/features/trade/presentation/components/TradeReturnReceiptModal.tsx
 
-import { createPortal } from "react-dom";
-
+import Alert from "../../../../components/ui/Alert";
 import Button from "../../../../components/ui/Button";
+import Modal, {
+  ModalBody,
+  ModalDescription,
+  ModalFooter,
+  ModalHeader,
+  ModalTitle,
+} from "../../../../components/ui/Modal";
+import type { TradeReturnProposal } from "../../../shared/types/trade";
 
 export type TradeReturnReceiptModalProps = {
   open: boolean;
-  merchandiseRefundAmount: number | "";
-  merchandiseRefundMaxAmount: number;
-  refundOutboundShipping: boolean;
-  coverReturnShipping: boolean;
+  proposal: TradeReturnProposal | null;
+  refundAmount: number;
   error?: string | null;
   submitting: boolean;
-  selectionLocked: boolean;
   canSubmit: boolean;
-  onMerchandiseRefundAmountChange: (value: string | number) => void;
-  onRefundOutboundShippingChange: (value: boolean) => void;
-  onCoverReturnShippingChange: (value: boolean) => void;
   onCancel: () => void;
   onSubmit: () => void;
 };
 
 function formatCurrency(value: number): string {
-  if (!Number.isFinite(value) || value < 0) {
+  if (!Number.isInteger(value) || value <= 0) {
     return "-";
   }
 
@@ -31,25 +32,15 @@ function formatCurrency(value: number): string {
 
 export default function TradeReturnReceiptModal({
   open,
-  merchandiseRefundAmount,
-  merchandiseRefundMaxAmount,
-  refundOutboundShipping,
-  coverReturnShipping,
+  proposal,
+  refundAmount,
   error,
   submitting,
-  selectionLocked,
   canSubmit,
-  onMerchandiseRefundAmountChange,
-  onRefundOutboundShippingChange,
-  onCoverReturnShippingChange,
   onCancel,
   onSubmit,
 }: TradeReturnReceiptModalProps) {
-  if (!open || typeof document === "undefined") {
-    return null;
-  }
-
-  const inputDisabled = submitting || selectionLocked;
+  const handleClose = submitting ? undefined : onCancel;
 
   const handleSubmit = (): void => {
     if (!canSubmit || submitting) {
@@ -59,183 +50,141 @@ export default function TradeReturnReceiptModal({
     onSubmit();
   };
 
-  return createPortal(
-    <div
-      className="order-detail-page__return-modal-backdrop"
-      role="presentation"
+  const validProposal =
+    proposal !== null &&
+    proposal.id.trim() !== "" &&
+    proposal.agreement === "agree" &&
+    !proposal.rejectedAt &&
+    proposal.returnRequirement === "required" &&
+    proposal.refundAmount !== undefined &&
+    Number.isInteger(proposal.refundAmount) &&
+    proposal.refundAmount > 0;
+
+  return (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      size="md"
+      mobilePosition="bottom"
+      closeOnBackdrop={!submitting}
+      closeOnEscape={!submitting}
+      ariaLabelledBy="trade-return-receipt-modal-title"
+      ariaDescribedBy="trade-return-receipt-modal-description"
+      ariaBusy={submitting}
     >
-      <div
-        className="order-detail-page__return-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="trade-return-receipt-modal-title"
-      >
-        <div className="order-detail-page__return-modal-header">
-          <h2 id="trade-return-receipt-modal-title">
-            返品受領・返金
-          </h2>
+      <ModalHeader onClose={handleClose}>
+        <ModalTitle id="trade-return-receipt-modal-title">
+          返品受領・返金
+        </ModalTitle>
+      </ModalHeader>
 
-          <button
-            type="button"
-            className="order-detail-page__return-modal-close"
-            onClick={onCancel}
-            disabled={submitting}
-            aria-label="閉じる"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="order-detail-page__return-modal-notice">
-          <h3 className="order-detail-page__return-modal-notice-title">
-            返金内容を確認してください
-          </h3>
-
-          <p>
-            返品商品を受領したことを確認したうえで、購入者へ返金する商品代金と送料条件を指定してください。
-          </p>
-        </div>
-
-        <label
-          className="order-detail-page__return-modal-field"
-          htmlFor="trade-return-receipt-refund-amount"
+      <ModalBody>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 20,
+          }}
         >
-          <span className="order-detail-page__return-modal-label">
-            商品代金の返金額（税込）
+          <ModalDescription id="trade-return-receipt-modal-description">
+            購入者と合意済みの返品条件を確認し、返品商品の受領後に返金処理を進めてください。
+          </ModalDescription>
 
-            <span
-              className="order-detail-page__return-modal-required"
-              aria-hidden="true"
+          <Alert variant="warning">
+            実際に返品商品を受領したことを確認してから処理してください。現在のAMOLは運送業者から配送状況を取得しません。
+          </Alert>
+
+          {validProposal ? (
+            <section
+              aria-label="合意済みの返品条件"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+                padding: 16,
+                border: "1px solid #e5e7eb",
+                borderRadius: 16,
+                background: "#ffffff",
+              }}
             >
-              *
-            </span>
-          </span>
+              <strong>
+                合意済みの返品条件
+              </strong>
 
-          <div className="order-detail-page__return-modal-refund-amount-row">
-            <input
-              id="trade-return-receipt-refund-amount"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={
-                merchandiseRefundMaxAmount > 0
-                  ? merchandiseRefundMaxAmount
-                  : undefined
-              }
-              step={1}
-              value={merchandiseRefundAmount}
-              onChange={(event) => {
-                onMerchandiseRefundAmountChange(event.target.value);
-              }}
-              disabled={inputDisabled}
-              className="order-detail-page__return-modal-input"
-              aria-describedby="trade-return-receipt-refund-limit"
-            />
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 16,
+                }}
+              >
+                <span>商品の返送</span>
+                <strong>必要</strong>
+              </div>
 
-            <span className="order-detail-page__return-modal-refund-amount-unit">
-              円
-            </span>
-          </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 16,
+                }}
+              >
+                <span>商品代金の返金額（税込）</span>
+                <strong>{formatCurrency(refundAmount)}</strong>
+              </div>
+            </section>
+          ) : (
+            <Alert variant="error">
+              合意済みの返品条件を取得できません。取引情報を再読み込みしてください。
+            </Alert>
+          )}
 
-          <span
-            id="trade-return-receipt-refund-limit"
-            className="order-detail-page__return-modal-help"
-          >
-            返金上限: {formatCurrency(merchandiseRefundMaxAmount)}
-          </span>
+          <Alert variant="info">
+            返金額は購入者が同意した返品条件から自動的に適用されます。この画面では返金条件を変更できません。
+          </Alert>
 
-          <span className="order-detail-page__return-modal-help">
-            1円以上、商品代金（税込）の返金上限以内で指定してください。
-          </span>
-        </label>
+          {error ? (
+            <Alert variant="error">
+              {error}
+            </Alert>
+          ) : null}
+        </div>
+      </ModalBody>
 
-        <fieldset
-          className="order-detail-page__return-modal-package-options"
-          disabled={inputDisabled}
+      <ModalFooter>
+        <div
+          style={{
+            display: "flex",
+            width: "100%",
+            flexDirection: "column",
+            gap: 8,
+          }}
         >
-          <legend className="order-detail-page__return-modal-label">
-            送料の返金・負担
-          </legend>
-
-          <label className="order-detail-page__return-modal-package-option">
-            <input
-              type="checkbox"
-              checked={refundOutboundShipping}
-              onChange={(event) => {
-                onRefundOutboundShippingChange(event.target.checked);
-              }}
-              disabled={inputDisabled}
-              className="order-detail-page__return-modal-agreement-checkbox"
-            />
-
-            <span>
-              <strong>
-                購入時の配送料も返金する
-              </strong>
-
-              <span className="order-detail-page__return-modal-option-description">
-                購入者が支払った往路の配送料とその消費税を、購入者への返金額に含めます。
-              </span>
-            </span>
-          </label>
-
-          <label className="order-detail-page__return-modal-package-option">
-            <input
-              type="checkbox"
-              checked={coverReturnShipping}
-              onChange={(event) => {
-                onCoverReturnShippingChange(event.target.checked);
-              }}
-              disabled={inputDisabled}
-              className="order-detail-page__return-modal-agreement-checkbox"
-            />
-
-            <span>
-              <strong>
-                返品時の配送料を出品者側が負担する
-              </strong>
-
-              <span className="order-detail-page__return-modal-option-description">
-                復路の配送料を出品者側の負担として計上します。購入者へのStripe返金額には加算されません。
-              </span>
-            </span>
-          </label>
-        </fieldset>
-
-        {selectionLocked ? (
-          <div className="order-detail-page__return-modal-notice">
-            <p>
-              返金処理を開始済みのため、返金額と送料条件は変更できません。金融処理が未完了の場合は、同じ条件で再実行できます。
-            </p>
-          </div>
-        ) : null}
-
-        {error ? (
-          <div
-            className="order-detail-page__return-modal-error"
-            role="alert"
-          >
-            {error}
-          </div>
-        ) : null}
-
-        <div className="order-detail-page__return-modal-actions">
           <Button
+            type="button"
             variant="primary"
             size="md"
-            className="order-detail-page__return-modal-action"
+            fullWidth
+            disabled={!canSubmit || submitting || !validProposal}
             onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
           >
             {submitting
-              ? "返品処理中..."
-              : selectionLocked
-                ? "同じ条件で再実行する"
-                : "返品受領・返金"}
+              ? "受領・返金処理中..."
+              : "返品受領・返金を進める"}
+          </Button>
+
+          <Button
+            type="button"
+            variant="secondary"
+            size="md"
+            fullWidth
+            disabled={submitting}
+            onClick={onCancel}
+          >
+            戻る
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body,
+      </ModalFooter>
+    </Modal>
   );
 }

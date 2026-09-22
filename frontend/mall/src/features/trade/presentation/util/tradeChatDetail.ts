@@ -3,6 +3,7 @@
 import type {
   TradeDetail,
   TradeMessage,
+  TradeReturnProposal,
 } from "../../../shared/types/trade";
 
 export type TradeOrderActionKind =
@@ -39,6 +40,21 @@ export function sortTradeMessages(
   );
 }
 
+function isAcceptedPhysicalReturnProposal(
+  proposal: TradeReturnProposal | undefined,
+): boolean {
+  return (
+    !!proposal &&
+    proposal.id.trim() !== "" &&
+    proposal.agreement === "agree" &&
+    !proposal.rejectedAt &&
+    proposal.returnRequirement === "required" &&
+    proposal.refundAmount !== undefined &&
+    Number.isInteger(proposal.refundAmount) &&
+    proposal.refundAmount > 0
+  );
+}
+
 export function getTradeOrderAction(
   trade: TradeDetail | null,
 ): TradeOrderActionKind | null {
@@ -59,14 +75,18 @@ export function getTradeOrderAction(
       case "discussing":
         return "respond-return-consultation";
 
+      case "agreed":
       case "return_shipped":
-        return "receive-return";
+      case "return_received":
+      case "refund_processing":
+        return isAcceptedPhysicalReturnProposal(
+          trade.returnProposal,
+        )
+          ? "receive-return"
+          : null;
 
       case "none":
       case "proposed":
-      case "agreed":
-      case "return_received":
-      case "refund_processing":
       case "completed":
       case "disputed":
       case undefined:
@@ -89,24 +109,12 @@ export function getTradeOrderAction(
     case "proposed":
       return "review-return-proposal";
 
-    case "agreed": {
-      const proposal = trade.returnProposal;
-
-      if (
-        proposal &&
-        proposal.id.trim() !== "" &&
-        proposal.agreement === "agree" &&
-        !proposal.rejectedAt &&
-        proposal.returnRequirement === "required" &&
-        proposal.refundAmount !== undefined &&
-        Number.isInteger(proposal.refundAmount) &&
-        proposal.refundAmount > 0
-      ) {
-        return "prepare-return-shipment";
-      }
-
-      return null;
-    }
+    case "agreed":
+      return isAcceptedPhysicalReturnProposal(
+        trade.returnProposal,
+      )
+        ? "prepare-return-shipment"
+        : null;
 
     case "discussing":
     case "return_shipped":

@@ -174,25 +174,16 @@ export type TradeReturnShipmentResponse = {
 };
 
 // ============================================================
-// Return Refund
-// TODO: 返金条件を TradeReturnProposal で確定し、返品受領APIが
-// 保存済み条件を参照する方式へ移行後に整理する。
+// Trade Return Receipt
 // ============================================================
 
-export type ReturnRefundSelection = {
-  merchandiseRefundAmount: number;
-  refundOutboundShipping: boolean;
-  coverReturnShipping: boolean;
+export type ReceiveTradeReturnParams = {
+  tradeId: string;
 };
-
-export type ReceiveTradeReturnParams =
-  ReturnRefundSelection & {
-    tradeId: string;
-  };
 
 export type ReceiveTradeReturnResult = {
   financiallyCompleted: boolean;
-  orderCompleted: boolean;
+  returnCompleted: boolean;
   notificationEnsured: boolean;
   alreadyCompleted: boolean;
 };

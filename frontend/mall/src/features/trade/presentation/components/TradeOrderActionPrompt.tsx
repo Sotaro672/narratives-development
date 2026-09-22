@@ -30,7 +30,7 @@ function getPromptText(action: TradeOrderActionKind): string {
       return "返品用QRを表示しますか？";
 
     case "receive-return":
-      return "返品商品を受領しましたか？";
+      return "返品商品の受領確認と返金処理を進めますか？";
   }
 }
 
@@ -59,7 +59,7 @@ function getActionLabel(
         return "QR準備中...";
 
       case "receive-return":
-        return "返品処理中...";
+        return "受領・返金処理中...";
     }
   }
 
@@ -83,7 +83,7 @@ function getActionLabel(
       return "返品用QRを表示する";
 
     case "receive-return":
-      return "返品商品を受領する";
+      return "返品受領・返金を進める";
   }
 }
 

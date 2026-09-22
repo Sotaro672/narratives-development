@@ -130,19 +130,6 @@ function requireOrderItemIndex(orderItemIndex: number): number {
   return orderItemIndex;
 }
 
-function requireMerchandiseRefundAmount(
-  merchandiseRefundAmount: number,
-): number {
-  if (
-    !Number.isInteger(merchandiseRefundAmount) ||
-    merchandiseRefundAmount <= 0
-  ) {
-    throw new Error("返金額は1円以上の整数で指定してください。");
-  }
-
-  return merchandiseRefundAmount;
-}
-
 function requireMessageContent(content: string): string {
   if (!content || !/\S/u.test(content)) {
     throw new Error("メッセージを入力してください。");
@@ -488,23 +475,12 @@ export async function receiveTradeReturn(
   params: ReceiveTradeReturnParams,
 ): Promise<ReceiveTradeReturnResult> {
   const tradeId = requireTradeId(params.tradeId);
-  const merchandiseRefundAmount =
-    requireMerchandiseRefundAmount(
-      params.merchandiseRefundAmount,
-    );
 
   const response =
     await fetchTradeWithAuth<ReceiveTradeReturnResponse>(
       `${buildTradePath(tradeId)}/receive-return`,
       {
         method: "POST",
-        json: {
-          merchandiseRefundAmount,
-          refundOutboundShipping:
-            params.refundOutboundShipping,
-          coverReturnShipping:
-            params.coverReturnShipping,
-        },
       },
     );
 

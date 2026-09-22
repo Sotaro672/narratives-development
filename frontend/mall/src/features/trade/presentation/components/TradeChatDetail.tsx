@@ -29,8 +29,6 @@ import TradeReturnReceiptModal from "./TradeReturnReceiptModal";
 import TradeReturnShipmentModal from "./TradeReturnShipmentModal";
 import TradeThreadHeader from "./TradeThreadHeader";
 
-import "../../../../styles/order-detail-page.css";
-
 type TradeChatDetailProps = {
   tradeId: string;
 };
@@ -212,11 +210,7 @@ export default function TradeChatDetail({
       }
 
       case "receive-return":
-        if (
-          trade.viewerSide !== "seller" ||
-          !trade.isDispatched ||
-          trade.returnStatus !== "return_shipped"
-        ) {
+        if (!returnReceiptFlow.canSubmit) {
           return;
         }
 
@@ -449,31 +443,11 @@ export default function TradeChatDetail({
 
       <TradeReturnReceiptModal
         open={returnReceiptFlow.open}
-        merchandiseRefundAmount={
-          returnReceiptFlow.merchandiseRefundAmount
-        }
-        merchandiseRefundMaxAmount={
-          returnReceiptFlow.merchandiseRefundMaxAmount
-        }
-        refundOutboundShipping={
-          returnReceiptFlow.refundOutboundShipping
-        }
-        coverReturnShipping={
-          returnReceiptFlow.coverReturnShipping
-        }
+        proposal={returnReceiptFlow.proposal}
+        refundAmount={returnReceiptFlow.refundAmount}
         error={returnReceiptFlow.error}
         submitting={returnReceiptFlow.submitting}
-        selectionLocked={returnReceiptFlow.selectionLocked}
         canSubmit={returnReceiptFlow.canSubmit}
-        onMerchandiseRefundAmountChange={
-          returnReceiptFlow.setMerchandiseRefundAmount
-        }
-        onRefundOutboundShippingChange={
-          returnReceiptFlow.setRefundOutboundShipping
-        }
-        onCoverReturnShippingChange={
-          returnReceiptFlow.setCoverReturnShipping
-        }
         onCancel={returnReceiptFlow.closeModal}
         onSubmit={() => {
           void returnReceiptFlow.submit();
