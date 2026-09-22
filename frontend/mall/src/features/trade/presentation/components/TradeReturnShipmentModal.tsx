@@ -20,7 +20,7 @@ export type TradeReturnShipmentModalProps = {
   error?: string | null;
   loading: boolean;
   onCancel: () => void;
-  onRefresh?: () => void;
+  onRetryPreparation?: () => void;
 };
 
 function isReadyShipment(
@@ -65,7 +65,7 @@ export default function TradeReturnShipmentModal({
   error,
   loading,
   onCancel,
-  onRefresh,
+  onRetryPreparation,
 }: TradeReturnShipmentModalProps) {
   const ready = isReadyShipment(
     shipment,
@@ -74,12 +74,12 @@ export default function TradeReturnShipmentModal({
   const readyAt = formatReadyAt(shipment?.readyAt);
   const handleClose = loading ? undefined : onCancel;
 
-  const handleRefresh = (): void => {
-    if (loading || !onRefresh) {
+  const handleRetryPreparation = (): void => {
+    if (loading || !onRetryPreparation) {
       return;
     }
 
-    onRefresh();
+    onRetryPreparation();
   };
 
   return (
@@ -200,19 +200,9 @@ export default function TradeReturnShipmentModal({
             </>
           ) : null}
 
-          {!loading &&
-          shipment?.status === "pending" ? (
+          {!loading && shipment?.status === "pending" ? (
             <Alert variant="info">
-              返品用QRはまだ準備中です。
-            </Alert>
-          ) : null}
-
-          {!loading &&
-          shipment !== null &&
-          shipment.status !== "pending" &&
-          shipment.status !== "ready_for_dropoff" ? (
-            <Alert variant="error">
-              現在の返品配送状態を表示できません。
+              返品用QRの準備が完了していません。必要に応じて準備を再試行してください。
             </Alert>
           ) : null}
 
@@ -233,16 +223,18 @@ export default function TradeReturnShipmentModal({
             gap: 8,
           }}
         >
-          {!ready && onRefresh ? (
+          {!ready && onRetryPreparation ? (
             <Button
               type="button"
               variant="primary"
               size="md"
               fullWidth
               disabled={loading}
-              onClick={handleRefresh}
+              onClick={handleRetryPreparation}
             >
-              {loading ? "取得中..." : "QRを再取得する"}
+              {loading
+                ? "準備中..."
+                : "QR準備を再試行する"}
             </Button>
           ) : null}
 

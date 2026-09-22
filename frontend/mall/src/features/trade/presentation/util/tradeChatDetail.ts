@@ -76,6 +76,15 @@ export function getTradeOrderAction(
         return "respond-return-consultation";
 
       case "agreed":
+        return (
+          isAcceptedPhysicalReturnProposal(
+            trade.returnProposal,
+          ) &&
+          trade.returnShipmentStatus === "ready_for_dropoff"
+        )
+          ? "receive-return"
+          : null;
+
       case "return_shipped":
       case "return_received":
       case "refund_processing":

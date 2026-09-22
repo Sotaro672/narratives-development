@@ -1,10 +1,6 @@
 // frontend/mall/src/features/trade/presentation/hooks/useTradeReturnReceipt.ts
 
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type {
   ReceiveTradeReturnResult,
@@ -47,6 +43,11 @@ function isReceivableReturnStatus(
 ): boolean {
   switch (trade.returnStatus) {
     case "agreed":
+      return (
+        trade.returnShipmentStatus ===
+        "ready_for_dropoff"
+      );
+
     case "return_shipped":
     case "return_received":
     case "refund_processing":
@@ -145,83 +146,82 @@ export function useTradeReturnReceipt({
     setError("");
   }, [submitting]);
 
-  const submit =
-    useCallback(
-      async (): Promise<ReceiveTradeReturnResult | null> => {
-        if (
-          submitting ||
-          !canReceiveReturn(
+  const submit = useCallback(
+    async (): Promise<ReceiveTradeReturnResult | null> => {
+      if (
+        submitting ||
+        !canReceiveReturn(
+          tradeId,
+          trade,
+          blocked,
+        )
+      ) {
+        return null;
+      }
+
+      if (result?.returnCompleted) {
+        return result;
+      }
+
+      setSubmitting(true);
+      setError("");
+
+      try {
+        const response =
+          await receiveTradeReturn({
             tradeId,
-            trade,
-            blocked,
-          )
-        ) {
-          return null;
-        }
+          });
 
-        if (result?.returnCompleted) {
-          return result;
-        }
-
-        setSubmitting(true);
-        setError("");
+        setResult(response);
 
         try {
-          const response =
-            await receiveTradeReturn({
-              tradeId,
-            });
-
-          setResult(response);
-
-          try {
-            await reload();
-          } catch (reloadError) {
-            setError(
-              getErrorMessage(
-                reloadError,
-                "返品処理後の取引情報の再取得に失敗しました。",
-              ),
-            );
-
-            return response;
-          }
-
-          if (
-            response.financiallyCompleted &&
-            response.returnCompleted
-          ) {
-            setOpen(false);
-            setError("");
-          } else {
-            setError(
-              "返金処理を受け付けました。金融処理が完了していないため、再実行できます。",
-            );
-          }
-
-          return response;
-        } catch (caught) {
+          await reload();
+        } catch (reloadError) {
           setError(
             getErrorMessage(
-              caught,
-              "返品の受領・返金処理に失敗しました。",
+              reloadError,
+              "返品処理後の取引情報の再取得に失敗しました。",
             ),
           );
 
-          return null;
-        } finally {
-          setSubmitting(false);
+          return response;
         }
-      },
-      [
-        blocked,
-        reload,
-        result,
-        submitting,
-        trade,
-        tradeId,
-      ],
-    );
+
+        if (
+          response.financiallyCompleted &&
+          response.returnCompleted
+        ) {
+          setOpen(false);
+          setError("");
+        } else {
+          setError(
+            "返金処理を受け付けました。金融処理が完了していないため、再実行できます。",
+          );
+        }
+
+        return response;
+      } catch (caught) {
+        setError(
+          getErrorMessage(
+            caught,
+            "返品の受領・返金処理に失敗しました。",
+          ),
+        );
+
+        return null;
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    [
+      blocked,
+      reload,
+      result,
+      submitting,
+      trade,
+      tradeId,
+    ],
+  );
 
   return {
     open,

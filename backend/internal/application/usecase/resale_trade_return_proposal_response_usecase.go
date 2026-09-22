@@ -41,6 +41,15 @@ const (
 	resaleTradeReturnProposalRejectedSystemMessageIDPrefix = "return-proposal-rejected-"
 )
 
+// ResaleTradeReturnProposalRefundService executes or resumes the agreed refund
+// when the accepted proposal does not require physical return.
+type ResaleTradeReturnProposalRefundService interface {
+	Refund(
+		ctx context.Context,
+		in RefundResaleTradeReturnInput,
+	) (ResaleTradeReturnRefundResult, error)
+}
+
 // ResaleTradeReturnProposalResponseUsecase records the buyer's explicit response
 // to the seller's latest agreed return proposal.
 //
@@ -53,10 +62,21 @@ const (
 //   - accept or reject the current ReturnAgreement proposal
 //   - persist the ReturnAgreement transition
 //   - create an idempotent system timeline message
+//   - start or resume refund processing immediately when physical return is not required
 //
 // Accept:
 //
 //	proposed -> agreed
+//
+// For returnRequirement=not_required:
+//
+//	proposed
+//	  -> agreed
+//	  -> refund_processing
+//	  -> completed
+//
+// For returnRequirement=required, the accepted proposal remains agreed until the
+// physical return flow proceeds.
 //
 // Reject:
 //
@@ -71,6 +91,7 @@ type ResaleTradeReturnProposalResponseUsecase struct {
 	returnAgreementRepo tradedom.ReturnAgreementRepository
 	orderRepo           orderdom.Repository
 	messageRepo         tradedom.MessageRepository
+	returnRefundService ResaleTradeReturnProposalRefundService
 
 	now func() time.Time
 }
@@ -80,6 +101,7 @@ type NewResaleTradeReturnProposalResponseUsecaseInput struct {
 	ReturnAgreementRepository tradedom.ReturnAgreementRepository
 	OrderRepository           orderdom.Repository
 	MessageRepository         tradedom.MessageRepository
+	ReturnRefundService       ResaleTradeReturnProposalRefundService
 }
 
 func NewResaleTradeReturnProposalResponseUsecase(
@@ -90,6 +112,7 @@ func NewResaleTradeReturnProposalResponseUsecase(
 		returnAgreementRepo: in.ReturnAgreementRepository,
 		orderRepo:           in.OrderRepository,
 		messageRepo:         in.MessageRepository,
+		returnRefundService: in.ReturnRefundService,
 		now:                 time.Now,
 	}
 }
@@ -122,6 +145,8 @@ type ResaleTradeReturnProposalResponseResult struct {
 	Agreement tradedom.ReturnAgreement
 	Proposal  tradedom.ReturnProposal
 
+	RefundResult *ResaleTradeReturnRefundResult
+
 	Changed              bool
 	SystemMessageEnsured bool
 }
@@ -133,8 +158,12 @@ type ResaleTradeReturnProposalResponseResult struct {
 // Accept records explicit buyer acceptance of the seller's current proposal.
 //
 // Repeating acceptance for the same proposal is idempotent when that proposal
-// has already been accepted. This allows recovery when ReturnAgreement was
-// persisted successfully but the system timeline message failed.
+// has already been accepted. This allows recovery when ReturnAgreement,
+// system-message creation, or no-physical-return refund processing succeeded
+// only partially.
+//
+// For returnRequirement=not_required, acceptance immediately starts or resumes
+// ResaleTradeReturnRefundUsecase. No ReturnShipment is created or consulted.
 func (u *ResaleTradeReturnProposalResponseUsecase) Accept(
 	ctx context.Context,
 	in RespondResaleTradeReturnProposalInput,
@@ -148,11 +177,11 @@ func (u *ResaleTradeReturnProposalResponseUsecase) Accept(
 	}
 
 	// The same proposal may already have been accepted by a previous request
-	// whose HTTP response or system-message creation failed.
+	// whose HTTP response, system-message creation, or refund processing failed.
 	//
 	// AgreedAt is authoritative evidence that this proposal passed through
-	// AcceptProposal. Later states such as return_shipped or refund_processing
-	// are therefore also valid idempotent retries.
+	// AcceptProposal. Later states such as return_shipped, refund_processing or
+	// completed are therefore also valid idempotent retries.
 	if isAcceptedResaleTradeReturnProposal(
 		agreement,
 		in.ProposalID,
@@ -160,18 +189,11 @@ func (u *ResaleTradeReturnProposalResponseUsecase) Accept(
 		result.Agreement = agreement
 		result.Proposal = *agreement.Proposal
 
-		ensured, ensureErr :=
-			u.ensureAcceptedSystemMessage(
-				ctx,
-				result.Trade.ID,
-				*agreement.Proposal,
-			)
-		if ensureErr != nil {
-			return result, ensureErr
-		}
-
-		result.SystemMessageEnsured = ensured
-		return result, nil
+		return u.finalizeAcceptedProposal(
+			ctx,
+			in,
+			result,
+		)
 	}
 
 	if agreement.Status != tradedom.ReturnStatusProposed {
@@ -179,9 +201,9 @@ func (u *ResaleTradeReturnProposalResponseUsecase) Accept(
 			tradedom.ErrReturnProposalCannotBeAccepted
 	}
 
-	now := u.nowUTC()
-
-	if err := agreement.AcceptProposal(now); err != nil {
+	if err := agreement.AcceptProposal(
+		u.nowUTC(),
+	); err != nil {
 		return result, err
 	}
 
@@ -206,19 +228,96 @@ func (u *ResaleTradeReturnProposalResponseUsecase) Accept(
 	result.Proposal = *updated.Proposal
 	result.Changed = true
 
+	return u.finalizeAcceptedProposal(
+		ctx,
+		in,
+		result,
+	)
+}
+
+// finalizeAcceptedProposal performs the retry-safe side effects that follow
+// buyer acceptance.
+//
+// Order:
+//
+//  1. ensure deterministic accepted system message
+//  2. for not_required only, execute/resume financial refund
+//
+// If the system message fails, the refund is not started yet. A retry of Accept
+// enters the accepted-proposal branch and resumes from the same point.
+//
+// If the refund partially succeeds and then fails, a retry reaches the same
+// deterministic ItemRefund flow through ResaleTradeReturnRefundUsecase.
+func (u *ResaleTradeReturnProposalResponseUsecase) finalizeAcceptedProposal(
+	ctx context.Context,
+	in RespondResaleTradeReturnProposalInput,
+	result ResaleTradeReturnProposalResponseResult,
+) (ResaleTradeReturnProposalResponseResult, error) {
 	ensured, err := u.ensureAcceptedSystemMessage(
 		ctx,
 		result.Trade.ID,
-		*updated.Proposal,
+		result.Proposal,
 	)
 	if err != nil {
-		// ReturnAgreement has already been persisted. A retry of Accept with
-		// the same proposalId follows the idempotent branch above and retries
-		// only the deterministic system-message creation.
 		return result, err
 	}
 
 	result.SystemMessageEnsured = ensured
+
+	if result.Proposal.ReturnRequirement !=
+		tradedom.ReturnRequirementNotRequired {
+		return result, nil
+	}
+
+	// A dispute stops automatic financial progression. The accepted proposal
+	// remains historically accepted, but dispute resolution owns further action.
+	if result.Agreement.Status ==
+		tradedom.ReturnStatusDisputed {
+		return result, nil
+	}
+
+	switch result.Agreement.Status {
+	case tradedom.ReturnStatusAgreed,
+		tradedom.ReturnStatusRefundProcessing,
+		tradedom.ReturnStatusCompleted:
+
+	default:
+		return result, nil
+	}
+
+	if u.returnRefundService == nil {
+		return result,
+			ErrResaleTradeReturnProposalResponseNotConfigured
+	}
+
+	refundResult, err :=
+		u.returnRefundService.Refund(
+			ctx,
+			RefundResaleTradeReturnInput{
+				TradeID:       result.Trade.ID,
+				BuyerAvatarID: in.BuyerAvatarID,
+			},
+		)
+
+	result.RefundResult = &refundResult
+
+	// Refund may have persisted ReturnAgreement progress before a later
+	// financial or notification operation returned an error. Preserve the
+	// newest known state in the response so callers do not receive stale
+	// "agreed" state after the aggregate has advanced.
+	if refundResult.Agreement.ID != "" {
+		result.Agreement =
+			refundResult.Agreement
+	}
+	if refundResult.Proposal.ID != "" {
+		result.Proposal =
+			refundResult.Proposal
+	}
+
+	if err != nil {
+		return result, err
+	}
+
 	return result, nil
 }
 

@@ -36,11 +36,14 @@ var (
 //
 // Cancellation, dispatch, transfer, and refund-limit state are read from the
 // authoritative Order item. Return negotiation state is read from the
-// authoritative ReturnAgreement aggregate.
+// authoritative ReturnAgreement aggregate. Local reverse-logistics readiness is
+// read from the persisted ReturnShipment aggregate only; this query does not poll
+// or infer carrier delivery state.
 type TradeQuery struct {
 	tradeRepo           tradedom.Repository
 	messageRepo         tradedom.MessageRepository
 	returnAgreementRepo tradedom.ReturnAgreementRepository
+	returnShipmentRepo  tradedom.ReturnShipmentRepository
 	orderRepo           orderdom.Repository
 	resaleRepo          resaledom.Repository
 	resaleImageRepo     applicationport.ResaleImageLister
@@ -52,6 +55,7 @@ func NewTradeQuery(
 	tradeRepo tradedom.Repository,
 	messageRepo tradedom.MessageRepository,
 	returnAgreementRepo tradedom.ReturnAgreementRepository,
+	returnShipmentRepo tradedom.ReturnShipmentRepository,
 	orderRepo orderdom.Repository,
 	resaleRepo resaledom.Repository,
 	resaleImageRepo applicationport.ResaleImageLister,
@@ -62,6 +66,7 @@ func NewTradeQuery(
 		tradeRepo:           tradeRepo,
 		messageRepo:         messageRepo,
 		returnAgreementRepo: returnAgreementRepo,
+		returnShipmentRepo:  returnShipmentRepo,
 		orderRepo:           orderRepo,
 		resaleRepo:          resaleRepo,
 		resaleImageRepo:     resaleImageRepo,
@@ -230,6 +235,7 @@ func (q *TradeQuery) GetByOrderItem(
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
 		q.returnAgreementRepo == nil ||
+		q.returnShipmentRepo == nil ||
 		q.orderRepo == nil ||
 		q.resaleRepo == nil ||
 		q.resaleImageRepo == nil ||
@@ -285,6 +291,15 @@ func (q *TradeQuery) GetByOrderItem(
 		return tradedto.TradeDetail{}, err
 	}
 
+	returnShipmentStatus, err := q.getTradeReturnShipmentStatus(
+		ctx,
+		trade.ID,
+		returnState,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	resaleDetail, err := q.getTradeResaleDetail(
 		ctx,
 		orderItemState.ResaleID,
@@ -317,6 +332,7 @@ func (q *TradeQuery) GetByOrderItem(
 		viewerSide,
 		orderItemState,
 		returnState,
+		returnShipmentStatus,
 		display,
 		resaleDetail,
 		messages,
@@ -342,6 +358,7 @@ func (q *TradeQuery) GetByID(
 		q.tradeRepo == nil ||
 		q.messageRepo == nil ||
 		q.returnAgreementRepo == nil ||
+		q.returnShipmentRepo == nil ||
 		q.orderRepo == nil ||
 		q.resaleRepo == nil ||
 		q.resaleImageRepo == nil ||
@@ -391,6 +408,15 @@ func (q *TradeQuery) GetByID(
 		return tradedto.TradeDetail{}, err
 	}
 
+	returnShipmentStatus, err := q.getTradeReturnShipmentStatus(
+		ctx,
+		trade.ID,
+		returnState,
+	)
+	if err != nil {
+		return tradedto.TradeDetail{}, err
+	}
+
 	resaleDetail, err := q.getTradeResaleDetail(
 		ctx,
 		orderItemState.ResaleID,
@@ -423,6 +449,7 @@ func (q *TradeQuery) GetByID(
 		viewerSide,
 		orderItemState,
 		returnState,
+		returnShipmentStatus,
 		display,
 		resaleDetail,
 		messages,
@@ -580,6 +607,43 @@ func (q *TradeQuery) getTradeReturnState(
 	}
 
 	return state, nil
+}
+
+func (q *TradeQuery) getTradeReturnShipmentStatus(
+	ctx context.Context,
+	tradeID string,
+	returnState tradeReturnState,
+) (*tradedom.ReturnShipmentStatus, error) {
+	if q == nil || q.returnShipmentRepo == nil {
+		return nil, ErrTradeQueryNotConfigured
+	}
+	if tradeID == "" {
+		return nil, tradedom.ErrInvalidID
+	}
+
+	shipment, err := q.returnShipmentRepo.GetByTradeID(
+		ctx,
+		tradeID,
+	)
+	if err != nil {
+		if errors.Is(err, tradedom.ErrReturnShipmentNotFound) {
+			return nil, nil
+		}
+
+		return nil, err
+	}
+
+	if shipment.ID != tradeID ||
+		shipment.TradeID != tradeID ||
+		shipment.ReturnAgreementID != tradeID ||
+		returnState.Proposal == nil ||
+		shipment.ProposalID != returnState.Proposal.ID ||
+		!tradedom.IsValidReturnShipmentStatus(shipment.Status) {
+		return nil, ErrTradeQueryUnsupportedTrade
+	}
+
+	status := shipment.Status
+	return &status, nil
 }
 
 func (q *TradeQuery) getTradeResaleDetail(
@@ -885,6 +949,7 @@ func buildTradeDetailDTO(
 	viewerSide tradedom.MessageSenderSide,
 	orderItemState tradeOrderItemState,
 	returnState tradeReturnState,
+	returnShipmentStatus *tradedom.ReturnShipmentStatus,
 	display tradeDisplay,
 	resale tradedto.TradeResaleDetail,
 	messages []tradedom.Message,
@@ -921,6 +986,7 @@ func buildTradeDetailDTO(
 		ReturnStatus:               returnState.Status,
 		ReturnConsultation:         returnState.Consultation,
 		ReturnProposal:             returnState.Proposal,
+		ReturnShipmentStatus:       returnShipmentStatus,
 		MerchandiseRefundMaxAmount: orderItemState.MerchandiseRefundMaxAmount,
 		Transferred:                orderItemState.Transferred,
 		Messages:                   messageDTOs,

@@ -369,20 +369,6 @@ func buildMallUsecases(
 		)
 	}
 
-	resaleTradeReturnProposalResponseUC := usecase.NewResaleTradeReturnProposalResponseUsecase(
-		usecase.NewResaleTradeReturnProposalResponseUsecaseInput{
-			TradeRepository:           r.tradeRepo,
-			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
-			OrderRepository:           r.orderRepo,
-			MessageRepository:         r.tradeMessageRepo,
-		},
-	)
-	if resaleTradeReturnProposalResponseUC == nil {
-		return nil, errors.New(
-			"di.mall: resale trade return proposal response usecase is nil",
-		)
-	}
-
 	resaleTradeReturnShipmentUC := usecase.NewResaleTradeReturnShipmentUsecase(
 		usecase.NewResaleTradeReturnShipmentUsecaseInput{
 			TradeRepository:           r.tradeRepo,
@@ -772,6 +758,36 @@ func buildMallUsecases(
 	if refundCompletionNotificationUC == nil {
 		return nil, errors.New(
 			"di.mall: refund completion notification usecase is nil",
+		)
+	}
+
+	resaleTradeReturnRefundUC := usecase.NewResaleTradeReturnRefundUsecase(
+		usecase.NewResaleTradeReturnRefundUsecaseInput{
+			TradeRepository:           r.tradeRepo,
+			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
+			OrderService:              orderUC,
+			ItemRefundService:         itemRefundUC,
+			RefundCompletionNotifier:  refundCompletionNotificationUC,
+		},
+	)
+	if resaleTradeReturnRefundUC == nil {
+		return nil, errors.New(
+			"di.mall: resale trade return refund usecase is nil",
+		)
+	}
+
+	resaleTradeReturnProposalResponseUC := usecase.NewResaleTradeReturnProposalResponseUsecase(
+		usecase.NewResaleTradeReturnProposalResponseUsecaseInput{
+			TradeRepository:           r.tradeRepo,
+			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
+			OrderRepository:           r.orderRepo,
+			MessageRepository:         r.tradeMessageRepo,
+			ReturnRefundService:       resaleTradeReturnRefundUC,
+		},
+	)
+	if resaleTradeReturnProposalResponseUC == nil {
+		return nil, errors.New(
+			"di.mall: resale trade return proposal response usecase is nil",
 		)
 	}
 

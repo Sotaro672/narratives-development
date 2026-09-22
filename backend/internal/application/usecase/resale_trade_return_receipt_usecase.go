@@ -161,7 +161,7 @@ type ResaleTradeReturnReceiptResult struct {
 //	-> Trade
 //	-> authoritative Order/item
 //	-> accepted ReturnAgreement proposal
-//	-> local ReturnShipment
+//	-> locally persisted ReturnShipment readiness
 //	-> seller explicit receipt confirmation
 //	-> ReturnAgreement return_received
 //	-> ReturnAgreement refund_processing
@@ -277,6 +277,23 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	result.Agreement = agreement
 	result.Proposal = proposal
 
+	selection := buildResaleTradeReturnReceiptSelection(proposal)
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
+		return result, err
+	}
+
+	// completed is the authoritative terminal state for this Trade return.
+	// Once reached, financial completion and notification delivery were already
+	// confirmed before ReturnAgreement.Complete. An idempotent retry therefore
+	// does not depend on the operational ReturnShipment record remaining readable.
+	if agreement.Status == tradedom.ReturnStatusCompleted {
+		result.FinanciallyCompleted = true
+		result.ReturnCompleted = true
+		result.NotificationEnsured = true
+		result.AlreadyCompleted = true
+		return result, nil
+	}
+
 	shipment, err := uc.returnShipmentRepo.GetByTradeID(ctx, tradeID)
 	if err != nil {
 		return result, err
@@ -292,19 +309,6 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	}
 
 	result.Shipment = shipment
-
-	selection := buildResaleTradeReturnReceiptSelection(proposal)
-	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
-		return result, err
-	}
-
-	if agreement.Status == tradedom.ReturnStatusCompleted {
-		result.FinanciallyCompleted = true
-		result.ReturnCompleted = true
-		result.NotificationEnsured = true
-		result.AlreadyCompleted = true
-		return result, nil
-	}
 
 	agreement, err = uc.ensureSellerReceipt(
 		ctx,
@@ -597,6 +601,9 @@ func validateResaleTradeReturnReceiptAgreement(
 	}
 }
 
+// validateResaleTradeReturnReceiptShipment validates only AMOL's locally
+// persisted reverse-logistics state. It does not query PUDO/Yamato and does not
+// infer carrier acceptance or delivery from the existence of a QR payload.
 func validateResaleTradeReturnReceiptShipment(
 	shipment tradedom.ReturnShipment,
 	trade tradedom.Trade,

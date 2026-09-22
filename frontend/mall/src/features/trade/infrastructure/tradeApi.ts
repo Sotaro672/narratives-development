@@ -12,7 +12,6 @@ import type {
   CreateTradeReturnShipmentParams,
   GetTradeByIDParams,
   GetTradeByOrderItemParams,
-  GetTradeReturnShipmentParams,
   GetTradeUnreadCountParams,
   GetTradeUnreadCountResponse,
   MarkTradeMessagesReadParams,
@@ -449,22 +448,6 @@ export async function createTradeReturnShipment(
       buildTradeReturnShipmentPath(params.tradeId),
       {
         method: "POST",
-      },
-    );
-
-  return response.data;
-}
-
-export async function fetchTradeReturnShipment(
-  params: GetTradeReturnShipmentParams,
-  options: TradeRequestOptions = {},
-): Promise<TradeReturnShipment> {
-  const response =
-    await fetchTradeWithAuth<TradeReturnShipmentResponse>(
-      buildTradeReturnShipmentPath(params.tradeId),
-      {
-        method: "GET",
-        signal: options.signal,
       },
     );
 

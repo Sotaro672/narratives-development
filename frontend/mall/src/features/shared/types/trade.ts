@@ -165,10 +165,6 @@ export type CreateTradeReturnShipmentParams = {
   tradeId: string;
 };
 
-export type GetTradeReturnShipmentParams = {
-  tradeId: string;
-};
-
 export type TradeReturnShipmentResponse = {
   data: TradeReturnShipment;
 };
@@ -264,6 +260,7 @@ export type TradeDetail = {
   returnStatus: TradeReturnStatus;
   returnConsultation?: TradeReturnConsultation;
   returnProposal?: TradeReturnProposal;
+  returnShipmentStatus?: TradeReturnShipmentStatus;
   merchandiseRefundMaxAmount: number;
   transferred: boolean;
   transferredAt?: string;

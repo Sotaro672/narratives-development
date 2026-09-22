@@ -79,6 +79,11 @@ type TradeReturnProposal struct {
 //
 // Return negotiation state is read from the authoritative ReturnAgreement.
 // When no ReturnAgreement exists, ReturnStatus is returned as "none".
+//
+// ReturnShipmentStatus is the locally persisted reverse-logistics state for
+// this Trade. It is omitted when no ReturnShipment exists. This value represents
+// only AMOL's persisted shipment state and does not imply that carrier status
+// has been queried or detected.
 type TradeDetail struct {
 	ID             string `json:"id"`
 	OrderID        string `json:"orderId"`
@@ -102,9 +107,10 @@ type TradeDetail struct {
 	IsCancelled  bool `json:"isCancelled"`
 	IsDispatched bool `json:"isDispatched"`
 
-	ReturnStatus       tradedom.ReturnStatus    `json:"returnStatus"`
-	ReturnConsultation *TradeReturnConsultation `json:"returnConsultation,omitempty"`
-	ReturnProposal     *TradeReturnProposal     `json:"returnProposal,omitempty"`
+	ReturnStatus         tradedom.ReturnStatus          `json:"returnStatus"`
+	ReturnConsultation   *TradeReturnConsultation       `json:"returnConsultation,omitempty"`
+	ReturnProposal       *TradeReturnProposal           `json:"returnProposal,omitempty"`
+	ReturnShipmentStatus *tradedom.ReturnShipmentStatus `json:"returnShipmentStatus,omitempty"`
 
 	MerchandiseRefundMaxAmount int `json:"merchandiseRefundMaxAmount"`
 

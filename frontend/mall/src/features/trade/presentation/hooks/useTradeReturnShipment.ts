@@ -1,19 +1,12 @@
 // frontend/mall/src/features/trade/presentation/hooks/useTradeReturnShipment.ts
 
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type {
   TradeDetail,
   TradeReturnShipment,
 } from "../../../shared/types/trade";
-import {
-  createTradeReturnShipment,
-  fetchTradeReturnShipment,
-} from "../../infrastructure/tradeApi";
+import { createTradeReturnShipment } from "../../infrastructure/tradeApi";
 import { getErrorMessage } from "../util/tradeChatDetail";
 
 type UseTradeReturnShipmentInput = {
@@ -95,8 +88,7 @@ export function useTradeReturnShipment({
   );
 
   const ready = isReadyReturnShipment(shipment);
-  const qrCodePayload =
-    ready ? shipment.qrCodePayload : "";
+  const qrCodePayload = ready ? shipment.qrCodePayload : "";
 
   useEffect(() => {
     setOpen(false);
@@ -105,7 +97,7 @@ export function useTradeReturnShipment({
     setLoading(false);
   }, [tradeId]);
 
-  const refresh = useCallback(
+  const prepare = useCallback(
     async (): Promise<TradeReturnShipment | null> => {
       if (
         loading ||
@@ -122,18 +114,36 @@ export function useTradeReturnShipment({
       setError("");
 
       try {
-        const loadedShipment =
-          await fetchTradeReturnShipment({
+        // POSTは冪等。
+        // 未作成ならReturnShipmentを作成してmock PUDO QRを準備し、
+        // pendingなら準備処理を再試行し、
+        // ready_for_dropoffなら保存済みReturnShipmentを返す。
+        const preparedShipment =
+          await createTradeReturnShipment({
             tradeId,
           });
 
-        setShipment(loadedShipment);
-        return loadedShipment;
+        setShipment(preparedShipment);
+
+        try {
+          // ReturnShipment準備時にsystem messageが追加されるため、
+          // 最新の取引情報とメッセージ一覧を再取得する。
+          await reload();
+        } catch (reloadError) {
+          setError(
+            getErrorMessage(
+              reloadError,
+              "返品用QRは取得できましたが、取引情報の再取得に失敗しました。",
+            ),
+          );
+        }
+
+        return preparedShipment;
       } catch (caught) {
         setError(
           getErrorMessage(
             caught,
-            "返品用QRの取得に失敗しました。",
+            "返品用QRを準備できませんでした。",
           ),
         );
         return null;
@@ -144,6 +154,7 @@ export function useTradeReturnShipment({
     [
       blocked,
       loading,
+      reload,
       trade,
       tradeId,
     ],
@@ -163,50 +174,30 @@ export function useTradeReturnShipment({
       }
 
       setOpen(true);
-      setLoading(true);
       setError("");
 
-      try {
-        // POSTは冪等。
-        // 未作成ならmock PUDO QRを作成し、
-        // 作成済みなら保存済みReturnShipmentを返す。
-        const preparedShipment =
-          await createTradeReturnShipment({
-            tradeId,
-          });
-
-        setShipment(preparedShipment);
-
-        try {
-          // ReturnShipment準備時にsystem messageが追加されるため、
-          // Tradeのメッセージ一覧だけ再取得する。
-          await reload();
-        } catch (reloadError) {
-          setError(
-            getErrorMessage(
-              reloadError,
-              "返品用QRは取得できましたが、取引情報の再取得に失敗しました。",
-            ),
-          );
-        }
-      } catch (caught) {
-        setShipment(null);
-        setError(
-          getErrorMessage(
-            caught,
-            "返品用QRを発行できませんでした。",
-          ),
-        );
-      } finally {
-        setLoading(false);
-      }
+      await prepare();
     },
     [
       blocked,
       loading,
-      reload,
+      prepare,
       trade,
       tradeId,
+    ],
+  );
+
+  const retryPreparation = useCallback(
+    async (): Promise<TradeReturnShipment | null> => {
+      if (!open) {
+        return null;
+      }
+
+      return prepare();
+    },
+    [
+      open,
+      prepare,
     ],
   );
 
@@ -229,7 +220,7 @@ export function useTradeReturnShipment({
     ready,
     openModal,
     closeModal,
-    refresh,
+    retryPreparation,
   };
 }
 

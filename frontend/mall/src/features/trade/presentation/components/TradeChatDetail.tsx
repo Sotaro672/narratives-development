@@ -436,8 +436,8 @@ export default function TradeChatDetail({
         error={returnShipmentFlow.error}
         loading={returnShipmentFlow.loading}
         onCancel={returnShipmentFlow.closeModal}
-        onRefresh={() => {
-          void returnShipmentFlow.refresh();
+        onRetryPreparation={() => {
+          void returnShipmentFlow.retryPreparation();
         }}
       />
 
