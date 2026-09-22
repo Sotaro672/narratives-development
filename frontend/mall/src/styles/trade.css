@@ -1,0 +1,131 @@
+/* frontend/mall/src/styles/trade.css */
+
+/* =========================================================
+ * Trade Return Modal
+ * ======================================================= */
+
+.trade-return-modal__footer-actions {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* =========================================================
+ * Trade Return Agreement Modal
+ * ======================================================= */
+
+.trade-return-agreement-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.trade-return-agreement-modal__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trade-return-agreement-modal__refund-value {
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.trade-return-agreement-modal__requirement-value {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* =========================================================
+ * Trade Return Proposal Modal
+ * ======================================================= */
+
+.trade-return-proposal-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.trade-return-proposal-modal__option-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+/* =========================================================
+ * Trade Return Receipt Modal
+ * ======================================================= */
+
+.trade-return-receipt-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.trade-return-receipt-modal__summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+}
+
+.trade-return-receipt-modal__summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+/* =========================================================
+ * Trade Return Shipment Modal
+ * ======================================================= */
+
+.trade-return-shipment-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.trade-return-shipment-modal__qr-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.trade-return-shipment-modal__qr-frame {
+  display: flex;
+  width: 100%;
+  max-width: 280px;
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  background: var(--color-surface);
+}
+
+.trade-return-shipment-modal__qr-code {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.trade-return-shipment-modal__meta {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.trade-return-shipment-modal__meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+}

@@ -13,6 +13,8 @@ import Modal, {
 } from "../../../../components/ui/Modal";
 import type { TradeReturnShipment } from "../../../shared/types/trade";
 
+import "../../../../styles/trade.css";
+
 export type TradeReturnShipmentModalProps = {
   open: boolean;
   shipment: TradeReturnShipment | null;
@@ -67,10 +69,7 @@ export default function TradeReturnShipmentModal({
   onCancel,
   onRetryPreparation,
 }: TradeReturnShipmentModalProps) {
-  const ready = isReadyShipment(
-    shipment,
-    qrCodePayload,
-  );
+  const ready = isReadyShipment(shipment, qrCodePayload);
   const readyAt = formatReadyAt(shipment?.readyAt);
   const handleClose = loading ? undefined : onCancel;
 
@@ -101,13 +100,7 @@ export default function TradeReturnShipmentModal({
       </ModalHeader>
 
       <ModalBody>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 24,
-          }}
-        >
+        <div className="trade-return-shipment-modal__body">
           <ModalDescription id="trade-return-shipment-modal-description">
             PUDOを利用した匿名返品用のQRを確認できます。
           </ModalDescription>
@@ -125,68 +118,26 @@ export default function TradeReturnShipmentModal({
           {ready ? (
             <>
               <section
+                className="trade-return-shipment-modal__qr-section"
                 aria-label="返品用QRコード"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 16,
-                }}
               >
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: "100%",
-                    maxWidth: 280,
-                    aspectRatio: "1",
-                    padding: 20,
-                    boxSizing: "border-box",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 16,
-                    background: "#ffffff",
-                  }}
-                >
+                <div className="trade-return-shipment-modal__qr-frame">
                   <QRCodeSVG
+                    className="trade-return-shipment-modal__qr-code"
                     value={qrCodePayload}
                     size={240}
                     level="M"
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      height: "100%",
-                    }}
                   />
                 </div>
 
-                <div
-                  style={{
-                    display: "flex",
-                    width: "100%",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 16,
-                    }}
-                  >
+                <div className="trade-return-shipment-modal__meta">
+                  <div className="trade-return-shipment-modal__meta-row">
                     <span>返送方法</span>
                     <strong>PUDO</strong>
                   </div>
 
                   {readyAt ? (
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 16,
-                      }}
-                    >
+                    <div className="trade-return-shipment-modal__meta-row">
                       <span>QR準備日時</span>
                       <strong>{readyAt}</strong>
                     </div>
@@ -206,23 +157,12 @@ export default function TradeReturnShipmentModal({
             </Alert>
           ) : null}
 
-          {error ? (
-            <Alert variant="error">
-              {error}
-            </Alert>
-          ) : null}
+          {error ? <Alert variant="error">{error}</Alert> : null}
         </div>
       </ModalBody>
 
       <ModalFooter>
-        <div
-          style={{
-            display: "flex",
-            width: "100%",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
+        <div className="trade-return-modal__footer-actions">
           {!ready && onRetryPreparation ? (
             <Button
               type="button"
@@ -232,9 +172,7 @@ export default function TradeReturnShipmentModal({
               disabled={loading}
               onClick={handleRetryPreparation}
             >
-              {loading
-                ? "準備中..."
-                : "QR準備を再試行する"}
+              {loading ? "準備中..." : "QR準備を再試行する"}
             </Button>
           ) : null}
 

@@ -11,6 +11,8 @@ import Modal, {
 } from "../../../../components/ui/Modal";
 import type { TradeReturnProposal } from "../../../shared/types/trade";
 
+import "../../../../styles/trade.css";
+
 export type TradeReturnReceiptModalProps = {
   open: boolean;
   proposal: TradeReturnProposal | null;
@@ -79,13 +81,7 @@ export default function TradeReturnReceiptModal({
       </ModalHeader>
 
       <ModalBody>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 20,
-          }}
-        >
+        <div className="trade-return-receipt-modal__body">
           <ModalDescription id="trade-return-receipt-modal-description">
             購入者と合意済みの返品条件を確認し、返品商品の受領後に返金処理を進めてください。
           </ModalDescription>
@@ -96,39 +92,17 @@ export default function TradeReturnReceiptModal({
 
           {validProposal ? (
             <section
+              className="trade-return-receipt-modal__summary"
               aria-label="合意済みの返品条件"
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-                padding: 16,
-                border: "1px solid #e5e7eb",
-                borderRadius: 16,
-                background: "#ffffff",
-              }}
             >
-              <strong>
-                合意済みの返品条件
-              </strong>
+              <strong>合意済みの返品条件</strong>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 16,
-                }}
-              >
+              <div className="trade-return-receipt-modal__summary-row">
                 <span>商品の返送</span>
                 <strong>必要</strong>
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 16,
-                }}
-              >
+              <div className="trade-return-receipt-modal__summary-row">
                 <span>商品代金の返金額（税込）</span>
                 <strong>{formatCurrency(refundAmount)}</strong>
               </div>
@@ -143,23 +117,12 @@ export default function TradeReturnReceiptModal({
             返金額は購入者が同意した返品条件から自動的に適用されます。この画面では返金条件を変更できません。
           </Alert>
 
-          {error ? (
-            <Alert variant="error">
-              {error}
-            </Alert>
-          ) : null}
+          {error ? <Alert variant="error">{error}</Alert> : null}
         </div>
       </ModalBody>
 
       <ModalFooter>
-        <div
-          style={{
-            display: "flex",
-            width: "100%",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
+        <div className="trade-return-modal__footer-actions">
           <Button
             type="button"
             variant="primary"
@@ -168,9 +131,7 @@ export default function TradeReturnReceiptModal({
             disabled={!canSubmit || submitting || !validProposal}
             onClick={handleSubmit}
           >
-            {submitting
-              ? "受領・返金処理中..."
-              : "返品受領・返金を進める"}
+            {submitting ? "受領・返金処理中..." : "返品受領・返金を進める"}
           </Button>
 
           <Button

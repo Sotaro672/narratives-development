@@ -16,6 +16,8 @@ import type {
   TradeReturnRequirement,
 } from "../../../shared/types/trade";
 
+import "../../../../styles/trade.css";
+
 export type TradeReturnProposalModalProps = {
   open: boolean;
   agreement: TradeReturnAgreement | null;
@@ -119,13 +121,7 @@ export default function TradeReturnProposalModal({
       </ModalHeader>
 
       <ModalBody>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 24,
-          }}
-        >
+        <div className="trade-return-proposal-modal__body">
           <ModalDescription id="trade-return-proposal-modal-description">
             購入者からの返品相談に対する回答内容を入力してください。提示した条件は購入者に表示され、購入者が同意した場合に返品手続きへ進みます。
           </ModalDescription>
@@ -136,14 +132,9 @@ export default function TradeReturnProposalModal({
             </ModalDescription>
 
             <div
+              className="trade-return-proposal-modal__option-group"
               role="group"
               aria-labelledby="trade-return-agreement-label"
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 8,
-                marginTop: 12,
-              }}
             >
               <Chip
                 selected={agreement === "agree"}
@@ -171,14 +162,9 @@ export default function TradeReturnProposalModal({
                 </ModalDescription>
 
                 <div
+                  className="trade-return-proposal-modal__option-group"
                   role="group"
                   aria-labelledby="trade-return-requirement-label"
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: 8,
-                    marginTop: 12,
-                  }}
                 >
                   <Chip
                     selected={returnRequirement === "required"}
@@ -245,11 +231,7 @@ export default function TradeReturnProposalModal({
             </Alert>
           ) : null}
 
-          {error ? (
-            <Alert variant="error">
-              {error}
-            </Alert>
-          ) : null}
+          {error ? <Alert variant="error">{error}</Alert> : null}
         </div>
       </ModalBody>
 

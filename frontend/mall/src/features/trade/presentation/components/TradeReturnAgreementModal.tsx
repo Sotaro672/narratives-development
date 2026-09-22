@@ -11,6 +11,8 @@ import Modal, {
 } from "../../../../components/ui/Modal";
 import type { TradeReturnProposal } from "../../../shared/types/trade";
 
+import "../../../../styles/trade.css";
+
 export type TradeReturnAgreementModalProps = {
   open: boolean;
   proposal: TradeReturnProposal | null;
@@ -115,13 +117,7 @@ export default function TradeReturnAgreementModal({
       </ModalHeader>
 
       <ModalBody>
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 24,
-          }}
-        >
+        <div className="trade-return-agreement-modal__body">
           <ModalDescription id="trade-return-agreement-modal-description">
             出品者から返品条件が提示されました。内容を確認し、同意するか選択してください。同意するとこの条件が返品・返金条件として確定します。
           </ModalDescription>
@@ -129,45 +125,27 @@ export default function TradeReturnAgreementModal({
           {validProposal ? (
             <>
               <section
+                className="trade-return-agreement-modal__section"
                 aria-labelledby="trade-return-agreement-refund-label"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
               >
                 <ModalDescription id="trade-return-agreement-refund-label">
                   返金額
                 </ModalDescription>
 
-                <strong
-                  style={{
-                    fontSize: 20,
-                    lineHeight: 1.4,
-                  }}
-                >
+                <strong className="trade-return-agreement-modal__refund-value">
                   {formatCurrency(proposal.refundAmount)}
                 </strong>
               </section>
 
               <section
+                className="trade-return-agreement-modal__section"
                 aria-labelledby="trade-return-agreement-requirement-label"
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 8,
-                }}
               >
                 <ModalDescription id="trade-return-agreement-requirement-label">
                   商品の返送
                 </ModalDescription>
 
-                <strong
-                  style={{
-                    fontSize: 16,
-                    lineHeight: 1.5,
-                  }}
-                >
+                <strong className="trade-return-agreement-modal__requirement-value">
                   {getReturnRequirementLabel(proposal)}
                 </strong>
               </section>
@@ -190,23 +168,12 @@ export default function TradeReturnAgreementModal({
             </Alert>
           )}
 
-          {error ? (
-            <Alert variant="error">
-              {error}
-            </Alert>
-          ) : null}
+          {error ? <Alert variant="error">{error}</Alert> : null}
         </div>
       </ModalBody>
 
       <ModalFooter>
-        <div
-          style={{
-            display: "flex",
-            width: "100%",
-            flexDirection: "column",
-            gap: 8,
-          }}
-        >
+        <div className="trade-return-modal__footer-actions">
           <Button
             type="button"
             variant="primary"
@@ -226,9 +193,7 @@ export default function TradeReturnAgreementModal({
             disabled={submitting || !validProposal}
             onClick={handleReject}
           >
-            {rejecting
-              ? "送信中..."
-              : "この条件に同意しない"}
+            {rejecting ? "送信中..." : "この条件に同意しない"}
           </Button>
         </div>
       </ModalFooter>
