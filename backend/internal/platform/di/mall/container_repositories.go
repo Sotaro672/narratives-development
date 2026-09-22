@@ -55,6 +55,7 @@ type mallRepositories struct {
 	tradeRepo                        *fs.TradeRepositoryFS
 	tradeMessageRepo                 *fs.TradeMessageRepositoryFS
 	tradeReturnAgreementRepo         *fs.TradeReturnAgreementRepositoryFS
+	tradeReturnShipmentRepo          *fs.TradeReturnShipmentRepositoryFS
 	transferRepo                     *fs.TransferRepositoryFS
 	transportationRepo               *fs.TransportationRepositoryFS
 	userRepo                         *fs.UserRepositoryFS
@@ -111,6 +112,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 	tradeRepo := fs.NewTradeRepositoryFS(fsClient)
 	tradeMessageRepo := fs.NewTradeMessageRepositoryFS(fsClient)
 	tradeReturnAgreementRepo := fs.NewTradeReturnAgreementRepositoryFS(fsClient)
+	tradeReturnShipmentRepo := fs.NewTradeReturnShipmentRepositoryFS(fsClient)
 	transferRepo := fs.NewTransferRepositoryFS(fsClient)
 	refundCompletionNotificationRepo := fs.NewRefundCompletionNotificationRepositoryFS(fsClient)
 	resalePayoutNotificationRepo := fs.NewResalePayoutNotificationRepositoryFS(fsClient)
@@ -168,6 +170,7 @@ func buildMallRepositories(fsClient *firestore.Client) *mallRepositories {
 		tradeRepo:                        tradeRepo,
 		tradeMessageRepo:                 tradeMessageRepo,
 		tradeReturnAgreementRepo:         tradeReturnAgreementRepo,
+		tradeReturnShipmentRepo:          tradeReturnShipmentRepo,
 		transferRepo:                     transferRepo,
 		transportationRepo:               transportationRepo,
 		userRepo:                         userRepo,

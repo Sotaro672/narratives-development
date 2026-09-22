@@ -56,6 +56,7 @@ type mallUsecases struct {
 	resaleTradeReturnConsultationUC     *usecase.ResaleTradeReturnConsultationUsecase
 	resaleTradeReturnProposalUC         *usecase.ResaleTradeReturnProposalUsecase
 	resaleTradeReturnProposalResponseUC *usecase.ResaleTradeReturnProposalResponseUsecase
+	resaleTradeReturnShipmentUC         *usecase.ResaleTradeReturnShipmentUsecase
 	resaleTradeReturnReceiptUC          *usecase.ResaleTradeReturnReceiptUsecase
 	inquiryUC                           *usecase.InquiryUsecase
 	returnRequestUC                     *usecase.ReturnRequestUsecase
@@ -105,6 +106,9 @@ func buildMallUsecases(
 	}
 	if r.tradeReturnAgreementRepo == nil {
 		return nil, errors.New("di.mall: trade return agreement repository is nil")
+	}
+	if r.tradeReturnShipmentRepo == nil {
+		return nil, errors.New("di.mall: trade return shipment repository is nil")
 	}
 	if r.reportRepo == nil {
 		return nil, errors.New("di.mall: report repository is nil")
@@ -210,7 +214,12 @@ func buildMallUsecases(
 		nil,
 	)
 
-	likeUC := usecase.NewLikeUsecase(r.likeRepo, r.listRepoFS, r.resaleRepo, nil)
+	likeUC := usecase.NewLikeUsecase(
+		r.likeRepo,
+		r.listRepoFS,
+		r.resaleRepo,
+		nil,
+	)
 
 	avatarUC := usecase.NewAvatarUsecase(
 		r.avatarRepo,
@@ -244,7 +253,10 @@ func buildMallUsecases(
 		cfg.AutoCreateStripeTestPaymentMethod,
 	)
 
-	userUC := usecase.NewUserUsecase(r.userRepo, nil)
+	userUC := usecase.NewUserUsecase(
+		r.userRepo,
+		nil,
+	)
 
 	onchainReader := solana.NewOnchainWalletReaderDevnet()
 
@@ -371,6 +383,21 @@ func buildMallUsecases(
 		)
 	}
 
+	resaleTradeReturnShipmentUC := usecase.NewResaleTradeReturnShipmentUsecase(
+		usecase.NewResaleTradeReturnShipmentUsecaseInput{
+			TradeRepository:           r.tradeRepo,
+			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
+			ReturnShipmentRepository:  r.tradeReturnShipmentRepo,
+			OrderRepository:           r.orderRepo,
+			MessageRepository:         r.tradeMessageRepo,
+		},
+	)
+	if resaleTradeReturnShipmentUC == nil {
+		return nil, errors.New(
+			"di.mall: resale trade return shipment usecase is nil",
+		)
+	}
+
 	paymentUC := usecase.NewPaymentUsecase(
 		usecase.NewPaymentUsecaseInput{
 			PaymentRepo:     r.paymentRepo,
@@ -380,7 +407,9 @@ func buildMallUsecases(
 		},
 	)
 	if paymentUC == nil {
-		return nil, errors.New("di.mall: payment usecase is nil")
+		return nil, errors.New(
+			"di.mall: payment usecase is nil",
+		)
 	}
 
 	settlementDependencies, err := shared.BuildSettlementDependencies(
@@ -617,7 +646,9 @@ func buildMallUsecases(
 		r.shippingAddressRepo,
 		shippingQuoteUC,
 	).
-		WithCartRepository(r.cartRepo).
+		WithCartRepository(
+			r.cartRepo,
+		).
 		WithSellerRepositories(
 			r.brandRepo,
 			r.accountRepo,
@@ -714,7 +745,9 @@ func buildMallUsecases(
 		)
 	}
 
-	inventoryUC := usecase.NewInventoryUsecase(r.inventoryRepo)
+	inventoryUC := usecase.NewInventoryUsecase(
+		r.inventoryRepo,
+	)
 
 	refundCompletionNotificationQueue, err :=
 		cloudtasksadp.NewRefundCompletionNotificationQueueFromEnv(ctx)
@@ -788,6 +821,7 @@ func buildMallUsecases(
 		resaleTradeReturnConsultationUC:     resaleTradeReturnConsultationUC,
 		resaleTradeReturnProposalUC:         resaleTradeReturnProposalUC,
 		resaleTradeReturnProposalResponseUC: resaleTradeReturnProposalResponseUC,
+		resaleTradeReturnShipmentUC:         resaleTradeReturnShipmentUC,
 		resaleTradeReturnReceiptUC:          resaleTradeReturnReceiptUC,
 		inquiryUC:                           inquiryUC,
 		returnRequestUC:                     returnRequestUC,
@@ -837,6 +871,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.ResaleTradeReturnConsultationUC = u.resaleTradeReturnConsultationUC
 	c.ResaleTradeReturnProposalUC = u.resaleTradeReturnProposalUC
 	c.ResaleTradeReturnProposalResponseUC = u.resaleTradeReturnProposalResponseUC
+	c.ResaleTradeReturnShipmentUC = u.resaleTradeReturnShipmentUC
 	c.ResaleTradeReturnReceiptUC = u.resaleTradeReturnReceiptUC
 	c.InquiryUC = u.inquiryUC
 	c.ReturnRequestUC = u.returnRequestUC
