@@ -22,7 +22,7 @@ export default function MintProgressCard({
   progress,
 }: MintProgressCardProps) {
   return (
-    <Card className="pb-select" role="status" aria-live="polite">
+    <Card role="status" aria-live="polite">
       <CardHeader>
         <CardTitle>ミント進捗</CardTitle>
       </CardHeader>

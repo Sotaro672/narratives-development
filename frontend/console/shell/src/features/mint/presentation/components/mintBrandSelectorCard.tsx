@@ -24,13 +24,12 @@ export type MintBrandSelectorCardProps = {
 
 export default function MintBrandSelectorCard({
   brandOptions,
-  selectedBrandId,
   selectedBrandName,
   disabled = false,
   onSelectBrand,
 }: MintBrandSelectorCardProps) {
   return (
-    <Card className="pb-select">
+    <Card>
       <CardHeader>
         <CardTitle>ブランド選択</CardTitle>
       </CardHeader>
@@ -38,23 +37,17 @@ export default function MintBrandSelectorCard({
       <CardContent>
         <Popover>
           <PopoverTrigger>
-            <div className="pb-select__trigger">
+            <div>
               {selectedBrandName || "ブランドを選択"}
             </div>
           </PopoverTrigger>
 
           <PopoverContent>
-            <div className="pb-select__list">
+            <div>
               {brandOptions.map((brand) => (
                 <button
                   key={brand.id}
                   type="button"
-                  className={
-                    "pb-select__row" +
-                    (selectedBrandId === brand.id
-                      ? " is-active"
-                      : "")
-                  }
                   onClick={() => onSelectBrand(brand.id)}
                   disabled={disabled}
                 >
@@ -63,7 +56,7 @@ export default function MintBrandSelectorCard({
               ))}
 
               {brandOptions.length === 0 && (
-                <div className="pb-select__empty">
+                <div>
                   ブランド候補が未設定です
                 </div>
               )}

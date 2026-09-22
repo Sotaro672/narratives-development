@@ -25,29 +25,26 @@ export default function MintTokenBlueprintSelectorCard({
   onSelectTokenBlueprint,
 }: MintTokenBlueprintSelectorCardProps) {
   return (
-    <Card className="pb-select">
+    <Card>
       <CardHeader>
         <CardTitle>トークン設計一覧</CardTitle>
       </CardHeader>
 
       <CardContent>
         {!selectedBrandId && (
-          <div className="pb-select__empty">
+          <div>
             先にブランドを選択してください。
           </div>
         )}
 
         {selectedBrandId && tokenBlueprintOptions.length > 0 && (
-          <div className="pb-select__list">
+          <div>
             {tokenBlueprintOptions.map((tokenBlueprint) => (
               <button
                 key={tokenBlueprint.id}
                 type="button"
-                className={
-                  "pb-select__row" +
-                  (selectedTokenBlueprintId === tokenBlueprint.id
-                    ? " is-active"
-                    : "")
+                aria-pressed={
+                  selectedTokenBlueprintId === tokenBlueprint.id
                 }
                 onClick={() =>
                   onSelectTokenBlueprint(tokenBlueprint.id)
@@ -61,7 +58,7 @@ export default function MintTokenBlueprintSelectorCard({
         )}
 
         {selectedBrandId && tokenBlueprintOptions.length === 0 && (
-          <div className="pb-select__empty">
+          <div>
             選択中のブランドに紐づくトークン設計がありません。
           </div>
         )}

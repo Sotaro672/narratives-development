@@ -25,7 +25,7 @@ export default function MintInfoCard({
   );
 
   return (
-    <Card className="pb-select">
+    <Card>
       <CardHeader>
         <CardTitle>ミント情報</CardTitle>
       </CardHeader>
