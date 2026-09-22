@@ -27,6 +27,7 @@ type TradeHandler struct {
 	returnConsultationUC     *usecase.ResaleTradeReturnConsultationUsecase
 	returnProposalUC         *usecase.ResaleTradeReturnProposalUsecase
 	returnProposalResponseUC *usecase.ResaleTradeReturnProposalResponseUsecase
+	returnShipmentUC         *usecase.ResaleTradeReturnShipmentUsecase
 	returnReceiptUC          *usecase.ResaleTradeReturnReceiptUsecase
 }
 
@@ -38,6 +39,7 @@ func NewTradeHandler(
 	returnConsultationUC *usecase.ResaleTradeReturnConsultationUsecase,
 	returnProposalUC *usecase.ResaleTradeReturnProposalUsecase,
 	returnProposalResponseUC *usecase.ResaleTradeReturnProposalResponseUsecase,
+	returnShipmentUC *usecase.ResaleTradeReturnShipmentUsecase,
 	returnReceiptUC *usecase.ResaleTradeReturnReceiptUsecase,
 ) http.Handler {
 	return &TradeHandler{
@@ -48,6 +50,7 @@ func NewTradeHandler(
 		returnConsultationUC:     returnConsultationUC,
 		returnProposalUC:         returnProposalUC,
 		returnProposalResponseUC: returnProposalResponseUC,
+		returnShipmentUC:         returnShipmentUC,
 		returnReceiptUC:          returnReceiptUC,
 	}
 }
@@ -68,6 +71,8 @@ func NewTradeHandler(
 //	POST /mall/me/trades/{tradeId}/return-proposals
 //	POST /mall/me/trades/{tradeId}/return-proposals/{proposalId}/accept
 //	POST /mall/me/trades/{tradeId}/return-proposals/{proposalId}/reject
+//	POST /mall/me/trades/{tradeId}/return-shipment
+//	GET  /mall/me/trades/{tradeId}/return-shipment
 //	POST /mall/me/trades/{tradeId}/receive-return
 func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
@@ -219,6 +224,18 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		h.createReturnProposal(w, r, tradeID)
 
+	case "return-shipment":
+		switch r.Method {
+		case http.MethodPost:
+			h.createReturnShipment(w, r, tradeID)
+
+		case http.MethodGet:
+			h.getReturnShipment(w, r, tradeID)
+
+		default:
+			methodNotAllowed(w)
+		}
+
 	case "receive-return":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
@@ -320,6 +337,142 @@ func (h *TradeHandler) rejectReturnProposal(
 	writeJSON(w, http.StatusOK, map[string]any{
 		"data": result.Agreement,
 	})
+}
+
+func (h *TradeHandler) createReturnShipment(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	tradeID = strings.TrimSpace(tradeID)
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	if h == nil || h.returnShipmentUC == nil {
+		internalError(w, "resale trade return shipment usecase is nil")
+		return
+	}
+
+	result, err := h.returnShipmentUC.Create(
+		r.Context(),
+		usecase.CreateResaleTradeReturnShipmentInput{
+			TradeID:       tradeID,
+			BuyerAvatarID: avatarID,
+		},
+	)
+	if err != nil {
+		writeTradeReturnShipmentErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": buildTradeReturnShipmentResponse(result.Shipment),
+	})
+}
+
+func (h *TradeHandler) getReturnShipment(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	tradeID = strings.TrimSpace(tradeID)
+	if tradeID == "" {
+		badRequest(w, "invalid trade id")
+		return
+	}
+
+	if h == nil || h.returnShipmentUC == nil {
+		internalError(w, "resale trade return shipment usecase is nil")
+		return
+	}
+
+	result, err := h.returnShipmentUC.Get(
+		r.Context(),
+		usecase.GetResaleTradeReturnShipmentInput{
+			TradeID:       tradeID,
+			BuyerAvatarID: avatarID,
+		},
+	)
+	if err != nil {
+		writeTradeReturnShipmentErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data": buildTradeReturnShipmentResponse(result.Shipment),
+	})
+}
+
+func buildTradeReturnShipmentResponse(
+	shipment tradedom.ReturnShipment,
+) map[string]any {
+	return map[string]any{
+		"status":        shipment.Status,
+		"dropOffMethod": shipment.DropOffMethod,
+		"qrCodePayload": shipment.QRCodePayload,
+		"readyAt":       shipment.ReadyAt,
+	}
+}
+
+func writeTradeReturnShipmentErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	switch {
+	case err == nil:
+		return
+
+	case errors.Is(err, tradedom.ErrNotFound),
+		errors.Is(err, tradedom.ErrReturnAgreementNotFound),
+		errors.Is(err, tradedom.ErrReturnProposalNotFound),
+		errors.Is(err, tradedom.ErrReturnShipmentNotFound),
+		errors.Is(err, usecase.ErrResaleTradeReturnShipmentTradeMismatch):
+		notFound(w)
+
+	case errors.Is(err, usecase.ErrResaleTradeReturnShipmentInvalidBuyer):
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "avatar context is required",
+		})
+
+	case errors.Is(err, tradedom.ErrInvalidID),
+		errors.Is(err, tradedom.ErrInvalidReturnProposalID),
+		errors.Is(err, tradedom.ErrInvalidReturnRequirement),
+		errors.Is(err, tradedom.ErrInvalidReturnRefundAmount):
+		badRequest(w, err.Error())
+
+	case errors.Is(err, tradedom.ErrTradeAlreadyClosed),
+		errors.Is(err, tradedom.ErrConflict),
+		errors.Is(err, tradedom.ErrReturnAgreementConflict),
+		errors.Is(err, tradedom.ErrReturnShipmentConflict),
+		errors.Is(err, tradedom.ErrReturnShipmentAlreadyExists),
+		errors.Is(err, usecase.ErrResaleTradeReturnShipmentOrderNotPaid),
+		errors.Is(err, usecase.ErrResaleTradeReturnShipmentNotEligible),
+		errors.Is(err, usecase.ErrResaleTradeReturnShipmentAgreementNotReady),
+		errors.Is(err, usecase.ErrResaleTradeReturnShipmentPhysicalReturnNotRequired),
+		errors.Is(err, usecase.ErrResaleTradeReturnShipmentDisputed),
+		errors.Is(err, usecase.ErrResaleTradeReturnShipmentStateConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": err.Error(),
+		})
+
+	case errors.Is(err, usecase.ErrResaleTradeReturnShipmentNotConfigured):
+		internalError(w, err.Error())
+
+	default:
+		writeOrderErr(w, err)
+	}
 }
 
 func writeTradeReturnProposalResponseErr(

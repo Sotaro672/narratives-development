@@ -2,21 +2,14 @@
 package mallHandler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	usecase "narratives/internal/application/usecase"
-	inquirydom "narratives/internal/domain/inquiry"
 	refunddom "narratives/internal/domain/refund"
 	tradedom "narratives/internal/domain/trade"
 )
-
-type receiveTradeReturnRequest struct {
-	MerchandiseRefundAmount int  `json:"merchandiseRefundAmount"`
-	RefundOutboundShipping  bool `json:"refundOutboundShipping"`
-	CoverReturnShipping     bool `json:"coverReturnShipping"`
-}
 
 type receiveTradeReturnResponse struct {
 	Data receiveTradeReturnResultResponse `json:"data"`
@@ -24,7 +17,7 @@ type receiveTradeReturnResponse struct {
 
 type receiveTradeReturnResultResponse struct {
 	FinanciallyCompleted bool `json:"financiallyCompleted"`
-	OrderCompleted       bool `json:"orderCompleted"`
+	ReturnCompleted      bool `json:"returnCompleted"`
 	NotificationEnsured  bool `json:"notificationEnsured"`
 	AlreadyCompleted     bool `json:"alreadyCompleted"`
 }
@@ -34,22 +27,29 @@ type receiveTradeReturnResultResponse struct {
 // SellerAvatarID is never accepted from the client. The authenticated Avatar
 // from AvatarContextMiddleware is authoritative.
 //
-// Request body for both unopened and opened returns:
+// This endpoint does not accept refund conditions in the request body.
 //
-//	{
-//	  "merchandiseRefundAmount": 5000,
-//	  "refundOutboundShipping": true,
-//	  "coverReturnShipping": true
-//	}
+// The accepted ReturnProposal is authoritative for:
 //
-// MerchandiseRefundAmount is tax-inclusive and must not exceed the authoritative
-// merchandise amount including tax. Consumption tax is automatically allocated
-// by the backend from the persisted Order snapshot.
+//   - whether physical return is required
+//   - merchandise refund amount
 //
-// The usecase resolves Trade, Order, Order item, return Inquiry, tax amounts and
-// shipping amounts from authoritative persisted state. Order ID, item index,
-// Inquiry ID, tax amount, shipping amount and seller identity are never accepted
-// from the client.
+// The usecase resolves Trade, Order, Order item, ReturnAgreement,
+// ReturnProposal and ReturnShipment from authoritative persisted state.
+//
+// The seller's explicit receipt confirmation is the authoritative local event
+// while AMOL does not recognize carrier shipment notifications.
+//
+// Current flow:
+//
+//	agreed
+//	-> seller confirms physical receipt
+//	-> return_received
+//	-> refund_processing
+//	-> completed
+//
+// The frontend must never provide Order ID, item index, proposal ID, shipment
+// identity, refund amount, tax amount, shipping amount or seller identity.
 func (h *TradeHandler) receiveReturn(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -60,6 +60,7 @@ func (h *TradeHandler) receiveReturn(
 		return
 	}
 
+	tradeID = strings.TrimSpace(tradeID)
 	if tradeID == "" {
 		badRequest(w, "invalid trade id")
 		return
@@ -70,30 +71,11 @@ func (h *TradeHandler) receiveReturn(
 		return
 	}
 
-	var req receiveTradeReturnRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		badRequest(w, "invalid json")
-		return
-	}
-
-	selection := refunddom.ReturnRefundSelection{
-		MerchandiseRefundAmount: req.MerchandiseRefundAmount,
-		RefundOutboundShipping:  req.RefundOutboundShipping,
-		CoverReturnShipping:     req.CoverReturnShipping,
-	}
-	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-
 	result, err := h.returnReceiptUC.ReceiveReturn(
 		r.Context(),
 		usecase.ReceiveResaleTradeReturnInput{
 			TradeID:        tradeID,
 			SellerAvatarID: avatarID,
-			Selection:      selection,
 		},
 	)
 	if err != nil {
@@ -109,7 +91,7 @@ func (h *TradeHandler) receiveReturn(
 	writeJSON(w, status, receiveTradeReturnResponse{
 		Data: receiveTradeReturnResultResponse{
 			FinanciallyCompleted: result.FinanciallyCompleted,
-			OrderCompleted:       result.OrderCompleted,
+			ReturnCompleted:      result.ReturnCompleted,
 			NotificationEnsured:  result.NotificationEnsured,
 			AlreadyCompleted:     result.AlreadyCompleted,
 		},
@@ -125,32 +107,72 @@ func writeTradeReturnReceiptErr(
 		return
 
 	case errors.Is(err, tradedom.ErrNotFound),
-		errors.Is(err, inquirydom.ErrNotFound),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptTradeMismatch),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptInquiryMismatch):
+		errors.Is(err, tradedom.ErrReturnAgreementNotFound),
+		errors.Is(err, tradedom.ErrReturnProposalNotFound),
+		errors.Is(err, tradedom.ErrReturnShipmentNotFound),
+		errors.Is(err, usecase.ErrResaleTradeReturnReceiptTradeMismatch):
 		notFound(w)
 
-	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptInvalidSeller):
+	case errors.Is(
+		err,
+		usecase.ErrResaleTradeReturnReceiptInvalidSeller,
+	):
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
 			"error": "avatar context is required",
 		})
 
-	case errors.Is(err, refunddom.ErrInvalidReturnRefundAmount),
+	case errors.Is(err, tradedom.ErrInvalidID),
+		errors.Is(err, tradedom.ErrInvalidReturnRequirement),
+		errors.Is(err, tradedom.ErrInvalidReturnRefundAmount),
+		errors.Is(err, refunddom.ErrInvalidReturnRefundAmount),
 		errors.Is(err, refunddom.ErrInvalidReturnRefundAmounts):
 		badRequest(w, err.Error())
 
-	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptOrderNotPaid),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptReturnNotRequested),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptInquiryClosed),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptInquiryResolved),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptReturnKindMismatch),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptUnopenedStateInvalid),
-		errors.Is(err, usecase.ErrResaleTradeReturnReceiptOrderCompletionMismatch):
+	case errors.Is(
+		err,
+		usecase.ErrResaleTradeReturnReceiptOrderNotPaid,
+	),
+		errors.Is(
+			err,
+			usecase.ErrResaleTradeReturnReceiptNotEligible,
+		),
+		errors.Is(
+			err,
+			usecase.ErrResaleTradeReturnReceiptAgreementNotReady,
+		),
+		errors.Is(
+			err,
+			usecase.ErrResaleTradeReturnReceiptPhysicalReturnNotRequired,
+		),
+		errors.Is(
+			err,
+			usecase.ErrResaleTradeReturnReceiptDisputed,
+		),
+		errors.Is(
+			err,
+			usecase.ErrResaleTradeReturnReceiptShipmentNotReady,
+		),
+		errors.Is(
+			err,
+			usecase.ErrResaleTradeReturnReceiptRefundMismatch,
+		),
+		errors.Is(
+			err,
+			usecase.ErrResaleTradeReturnReceiptAgreementCompletionMismatch,
+		),
+		errors.Is(err, tradedom.ErrReturnAgreementConflict),
+		errors.Is(err, tradedom.ErrReturnShipmentConflict),
+		errors.Is(err, tradedom.ErrReturnReceiptNotAllowed),
+		errors.Is(err, tradedom.ErrReturnRefundProcessingNotAllowed),
+		errors.Is(err, tradedom.ErrReturnCompletionNotAllowed):
 		writeJSON(w, http.StatusConflict, map[string]string{
 			"error": err.Error(),
 		})
 
-	case errors.Is(err, usecase.ErrResaleTradeReturnReceiptNotConfigured):
+	case errors.Is(
+		err,
+		usecase.ErrResaleTradeReturnReceiptNotConfigured,
+	):
 		internalError(w, err.Error())
 
 	default:

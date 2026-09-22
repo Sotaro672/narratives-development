@@ -16,6 +16,7 @@ import useTradeReturnAgreement from "../hooks/useTradeReturnAgreement";
 import useTradeReturnConsultation from "../hooks/useTradeReturnConsultation";
 import useTradeReturnProposal from "../hooks/useTradeReturnProposal";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
+import useTradeReturnShipment from "../hooks/useTradeReturnShipment";
 import useTradeThread from "../hooks/useTradeThread";
 import { getTradeOrderAction, getTradeTitle } from "../util/tradeChatDetail";
 
@@ -25,6 +26,7 @@ import TradeReturnAgreementModal from "./TradeReturnAgreementModal";
 import TradeReturnConsultationModal from "./TradeReturnConsultationModal";
 import TradeReturnProposalModal from "./TradeReturnProposalModal";
 import TradeReturnReceiptModal from "./TradeReturnReceiptModal";
+import TradeReturnShipmentModal from "./TradeReturnShipmentModal";
 import TradeThreadHeader from "./TradeThreadHeader";
 
 import "../../../../styles/order-detail-page.css";
@@ -71,7 +73,7 @@ export default function TradeChatDetail({
       returnProposalFlow.submitting,
   });
 
-  const returnReceiptFlow = useTradeReturnReceipt({
+  const returnShipmentFlow = useTradeReturnShipment({
     tradeId: thread.tradeId,
     trade: thread.trade,
     reload: thread.reload,
@@ -80,6 +82,18 @@ export default function TradeChatDetail({
       returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting,
+  });
+
+  const returnReceiptFlow = useTradeReturnReceipt({
+    tradeId: thread.tradeId,
+    trade: thread.trade,
+    reload: thread.reload,
+    blocked:
+      cancelFlow.cancelling ||
+      returnConsultationFlow.submitting ||
+      returnProposalFlow.submitting ||
+      returnAgreementFlow.submitting ||
+      returnShipmentFlow.loading,
   });
 
   const reply = useTradeReply({
@@ -92,6 +106,7 @@ export default function TradeChatDetail({
       returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
+      returnShipmentFlow.loading ||
       returnReceiptFlow.submitting,
   });
 
@@ -112,6 +127,7 @@ export default function TradeChatDetail({
       returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
+      returnShipmentFlow.loading ||
       returnReceiptFlow.submitting ||
       !trade ||
       !orderAction ||
@@ -175,6 +191,26 @@ export default function TradeChatDetail({
         returnAgreementFlow.openModal();
         return;
 
+      case "prepare-return-shipment": {
+        const proposal = trade.returnProposal;
+
+        if (
+          trade.viewerSide !== "buyer" ||
+          !trade.isDispatched ||
+          trade.transferred ||
+          trade.returnStatus !== "agreed" ||
+          !proposal ||
+          proposal.agreement !== "agree" ||
+          proposal.rejectedAt ||
+          proposal.returnRequirement !== "required"
+        ) {
+          return;
+        }
+
+        void returnShipmentFlow.openModal();
+        return;
+      }
+
       case "receive-return":
         if (
           trade.viewerSide !== "seller" ||
@@ -198,18 +234,21 @@ export default function TradeChatDetail({
     returnConsultationFlow.submitting ||
     returnProposalFlow.submitting ||
     returnAgreementFlow.submitting ||
+    returnShipmentFlow.loading ||
     returnReceiptFlow.submitting;
 
   const orderActionError =
-    orderAction === "receive-return"
-      ? returnReceiptFlow.error
-      : orderAction === "review-return-proposal"
-        ? returnAgreementFlow.error
-        : orderAction === "respond-return-consultation"
-          ? returnProposalFlow.error
-          : orderAction === "start-return-consultation"
-            ? returnConsultationFlow.error
-            : undefined;
+    orderAction === "prepare-return-shipment"
+      ? returnShipmentFlow.error
+      : orderAction === "receive-return"
+        ? returnReceiptFlow.error
+        : orderAction === "review-return-proposal"
+          ? returnAgreementFlow.error
+          : orderAction === "respond-return-consultation"
+            ? returnProposalFlow.error
+            : orderAction === "start-return-consultation"
+              ? returnConsultationFlow.error
+              : undefined;
 
   return (
     <>
@@ -221,6 +260,7 @@ export default function TradeChatDetail({
           !returnConsultationFlow.open &&
           !returnProposalFlow.open &&
           !returnAgreementFlow.open &&
+          !returnShipmentFlow.open &&
           !returnReceiptFlow.open &&
           !report.isOpen
         }
@@ -392,6 +432,18 @@ export default function TradeChatDetail({
         }}
         onReject={() => {
           void returnAgreementFlow.reject();
+        }}
+      />
+
+      <TradeReturnShipmentModal
+        open={returnShipmentFlow.open}
+        shipment={returnShipmentFlow.shipment}
+        qrCodePayload={returnShipmentFlow.qrCodePayload}
+        error={returnShipmentFlow.error}
+        loading={returnShipmentFlow.loading}
+        onCancel={returnShipmentFlow.closeModal}
+        onRefresh={() => {
+          void returnShipmentFlow.refresh();
         }}
       />
 

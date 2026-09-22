@@ -9,9 +9,7 @@ type TradeOrderActionPromptProps = {
   onAction: () => void;
 };
 
-function getPromptText(
-  action: TradeOrderActionKind,
-): string {
+function getPromptText(action: TradeOrderActionKind): string {
   switch (action) {
     case "cancel":
       return "注文をキャンセルしますか？";
@@ -27,6 +25,9 @@ function getPromptText(
 
     case "review-return-proposal":
       return "出品者から返品条件が提示されています。";
+
+    case "prepare-return-shipment":
+      return "返品用QRを表示しますか？";
 
     case "receive-return":
       return "返品商品を受領しましたか？";
@@ -54,6 +55,9 @@ function getActionLabel(
       case "review-return-proposal":
         return "処理中...";
 
+      case "prepare-return-shipment":
+        return "QR準備中...";
+
       case "receive-return":
         return "返品処理中...";
     }
@@ -74,6 +78,9 @@ function getActionLabel(
 
     case "review-return-proposal":
       return "返品条件を確認する";
+
+    case "prepare-return-shipment":
+      return "返品用QRを表示する";
 
     case "receive-return":
       return "返品商品を受領する";

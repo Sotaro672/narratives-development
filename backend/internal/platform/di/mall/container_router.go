@@ -285,6 +285,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.ResaleTradeReturnConsultationUC != nil &&
 		cont.ResaleTradeReturnProposalUC != nil &&
 		cont.ResaleTradeReturnProposalResponseUC != nil &&
+		cont.ResaleTradeReturnShipmentUC != nil &&
 		cont.ResaleTradeReturnReceiptUC != nil {
 
 		tradeH = mallhandler.NewTradeHandler(
@@ -295,6 +296,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 			cont.ResaleTradeReturnConsultationUC,
 			cont.ResaleTradeReturnProposalUC,
 			cont.ResaleTradeReturnProposalResponseUC,
+			cont.ResaleTradeReturnShipmentUC,
 			cont.ResaleTradeReturnReceiptUC,
 		)
 	}

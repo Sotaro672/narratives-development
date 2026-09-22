@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
-	inquirydom "narratives/internal/domain/inquiry"
 	orderdom "narratives/internal/domain/order"
 	refunddom "narratives/internal/domain/refund"
 	salesreceivabledom "narratives/internal/domain/salesReceivable"
@@ -27,54 +27,48 @@ var (
 	ErrResaleTradeReturnReceiptOrderNotPaid = errors.New(
 		"resale trade return receipt: order is not paid",
 	)
-	ErrResaleTradeReturnReceiptReturnNotRequested = errors.New(
-		"resale trade return receipt: return is not requested",
+	ErrResaleTradeReturnReceiptNotEligible = errors.New(
+		"resale trade return receipt: trade is not eligible for return receipt",
 	)
-	ErrResaleTradeReturnReceiptInquiryMismatch = errors.New(
-		"resale trade return receipt: inquiry does not match trade",
+	ErrResaleTradeReturnReceiptAgreementNotReady = errors.New(
+		"resale trade return receipt: return agreement is not ready for receipt",
 	)
-	ErrResaleTradeReturnReceiptInquiryClosed = errors.New(
-		"resale trade return receipt: inquiry is closed",
+	ErrResaleTradeReturnReceiptPhysicalReturnNotRequired = errors.New(
+		"resale trade return receipt: physical return is not required",
 	)
-	ErrResaleTradeReturnReceiptInquiryResolved = errors.New(
-		"resale trade return receipt: inquiry was resolved before return completion",
+	ErrResaleTradeReturnReceiptDisputed = errors.New(
+		"resale trade return receipt: return is disputed",
 	)
-	ErrResaleTradeReturnReceiptReturnKindMismatch = errors.New(
-		"resale trade return receipt: return kind does not match inquiry",
-	)
-	ErrResaleTradeReturnReceiptUnopenedStateInvalid = errors.New(
-		"resale trade return receipt: item is no longer unopened",
+	ErrResaleTradeReturnReceiptShipmentNotReady = errors.New(
+		"resale trade return receipt: return shipment is not ready",
 	)
 	ErrResaleTradeReturnReceiptRefundMismatch = errors.New(
-		"resale trade return receipt: refund does not match return target",
+		"resale trade return receipt: refund does not match agreed return",
 	)
-	ErrResaleTradeReturnReceiptOrderCompletionMismatch = errors.New(
-		"resale trade return receipt: order return completion mismatch",
+	ErrResaleTradeReturnReceiptAgreementCompletionMismatch = errors.New(
+		"resale trade return receipt: return agreement completion mismatch",
 	)
 )
 
 // ResaleTradeReturnReceiptOrderService is the minimum Order application service
 // required when a resale seller confirms physical receipt of a returned item.
+//
+// Trade return lifecycle state is owned by ReturnAgreement. Order is read only
+// here and remains authoritative for purchaser identity, paid state, item
+// identity and immutable resale seller snapshot.
 type ResaleTradeReturnReceiptOrderService interface {
 	GetByID(
 		ctx context.Context,
 		id string,
 	) (orderdom.Order, error)
-
-	CompleteReturnItem(
-		ctx context.Context,
-		in CompleteReturnOrderItemInput,
-	) (orderdom.Order, error)
 }
 
 // ResaleTradeReturnReceiptItemRefundService is the financial boundary used by
-// resale return receipt.
+// resale Trade return receipt.
 //
-// ItemRefundUsecase supports consumer resale items. Seller identity, refund
-// amounts, SalesReceivable, BrandFeeSettlement and payment-provider operations
-// are resolved from authoritative persisted state rather than request values.
-//
-// Both unopened and opened returns use the same ReturnRefundSelection.
+// ItemRefundUsecase still accepts an InquiryID-shaped correlation field. This
+// usecase supplies the deterministic legacy return correlation ID only for the
+// Refund aggregate boundary. It does not load or validate Inquiry state.
 type ResaleTradeReturnReceiptItemRefundService interface {
 	RefundOrderItem(
 		ctx context.Context,
@@ -83,27 +77,24 @@ type ResaleTradeReturnReceiptItemRefundService interface {
 }
 
 type ResaleTradeReturnReceiptUsecase struct {
-	tradeRepo tradedom.Repository
-
-	orderService ResaleTradeReturnReceiptOrderService
-
-	inquiryRepo inquirydom.Repository
-
-	itemRefundService ResaleTradeReturnReceiptItemRefundService
+	tradeRepo           tradedom.Repository
+	returnAgreementRepo tradedom.ReturnAgreementRepository
+	returnShipmentRepo  tradedom.ReturnShipmentRepository
+	orderService        ResaleTradeReturnReceiptOrderService
+	itemRefundService   ResaleTradeReturnReceiptItemRefundService
 
 	refundCompletionNotifier ReturnReceiptRefundCompletionNotifier
+
+	now func() time.Time
 }
 
 type NewResaleTradeReturnReceiptUsecaseInput struct {
-	TradeRepository tradedom.Repository
-
-	OrderService ResaleTradeReturnReceiptOrderService
-
-	InquiryRepository inquirydom.Repository
-
-	ItemRefundService ResaleTradeReturnReceiptItemRefundService
-
-	RefundCompletionNotifier ReturnReceiptRefundCompletionNotifier
+	TradeRepository           tradedom.Repository
+	ReturnAgreementRepository tradedom.ReturnAgreementRepository
+	ReturnShipmentRepository  tradedom.ReturnShipmentRepository
+	OrderService              ResaleTradeReturnReceiptOrderService
+	ItemRefundService         ResaleTradeReturnReceiptItemRefundService
+	RefundCompletionNotifier  ReturnReceiptRefundCompletionNotifier
 }
 
 func NewResaleTradeReturnReceiptUsecase(
@@ -111,86 +102,87 @@ func NewResaleTradeReturnReceiptUsecase(
 ) *ResaleTradeReturnReceiptUsecase {
 	return &ResaleTradeReturnReceiptUsecase{
 		tradeRepo:                in.TradeRepository,
+		returnAgreementRepo:      in.ReturnAgreementRepository,
+		returnShipmentRepo:       in.ReturnShipmentRepository,
 		orderService:             in.OrderService,
-		inquiryRepo:              in.InquiryRepository,
 		itemRefundService:        in.ItemRefundService,
 		refundCompletionNotifier: in.RefundCompletionNotifier,
+		now:                      time.Now,
 	}
 }
 
-// ReceiveResaleTradeReturnInput identifies one seller-side return receipt.
+// SetNowFunc replaces the server clock for tests.
+func (uc *ResaleTradeReturnReceiptUsecase) SetNowFunc(
+	now func() time.Time,
+) {
+	if uc == nil || now == nil {
+		return
+	}
+
+	uc.now = now
+}
+
+// ReceiveResaleTradeReturnInput identifies one seller-side physical receipt.
 //
-// TradeID comes from the route.
+// TradeID comes from the route. SellerAvatarID must come from authenticated
+// Mall AvatarContext and must never be trusted from the request body.
 //
-// SellerAvatarID must come from authenticated Mall AvatarContext and must never
-// be trusted from the request body.
-//
-// Selection is required for both unopened and opened returns.
-//
-// MerchandiseRefundAmount is the tax-inclusive merchandise refund amount selected
-// through the return agreement.
-//
-// RefundOutboundShipping determines whether the purchaser's original outbound
-// shipping and its consumption tax are refunded.
-//
-// CoverReturnShipping determines whether the resale seller bears return shipping
-// and its consumption tax.
-//
-// Tax amounts and actual shipping monetary values must never be accepted from the
-// frontend.
+// Financial conditions are derived from the accepted ReturnProposal instead of
+// frontend input.
 type ReceiveResaleTradeReturnInput struct {
 	TradeID        string
 	SellerAvatarID string
-	Selection      refunddom.ReturnRefundSelection
 }
 
-// ResaleTradeReturnReceiptResult represents one seller return-receipt attempt.
+// ResaleTradeReturnReceiptResult represents one seller receipt/refund attempt.
 //
-// FinanciallyCompleted becomes true only after the purchaser refund and every
-// required resale seller/Brand financial operation have completed.
-//
-// OrderCompleted becomes true only after the target Order item has persisted
-// IsReturnCompleted=true.
-//
-// NotificationEnsured means refund-completion notification delivery has been
-// scheduled or confirmed idempotently.
-//
-// Inquiry resolution is intentionally outside this usecase. The current Inquiry
-// domain exposes member-side resolve and purchaser Avatar close semantics; this
-// usecase must not impersonate a company member with the resale seller Avatar.
+// ReturnAgreement is authoritative for the Trade return lifecycle. Order is
+// not mutated into the legacy ReturnRequest/Inquiry completion state.
 type ResaleTradeReturnReceiptResult struct {
-	Trade   tradedom.Trade
-	Inquiry inquirydom.Inquiry
-	Order   orderdom.Order
-	Refund  refunddom.Refund
+	Trade     tradedom.Trade
+	Agreement tradedom.ReturnAgreement
+	Proposal  tradedom.ReturnProposal
+	Shipment  tradedom.ReturnShipment
+	Order     orderdom.Order
+	Refund    refunddom.Refund
 
 	FinanciallyCompleted bool
-	OrderCompleted       bool
+	ReturnCompleted      bool
 	NotificationEnsured  bool
 	AlreadyCompleted     bool
 }
 
-// ReceiveReturn confirms physical receipt of one returned consumer-resale item.
+// ReceiveReturn confirms seller-side physical receipt and coordinates the
+// agreed purchaser refund.
 //
-// Execution:
+// Current execution:
 //
 //	seller Avatar
 //	-> Trade
-//	-> authoritative Order item
-//	-> deterministic return Inquiry
-//	-> ReturnRefundSelection validation
-//	-> ItemRefundUsecase
-//	-> purchaser refund
-//	-> resale SalesReceivable / BrandFeeSettlement handling
-//	-> Order IsReturnCompleted
+//	-> authoritative Order/item
+//	-> accepted ReturnAgreement proposal
+//	-> local ReturnShipment
+//	-> seller explicit receipt confirmation
+//	-> ReturnAgreement return_received
+//	-> ReturnAgreement refund_processing
+//	-> ItemRefundUsecase using accepted Proposal.RefundAmount
 //	-> refund completion notification
+//	-> ReturnAgreement completed
 //
-// Unopened and opened returns use the same financial refund mechanism. Their
-// difference is limited to authoritative physical-return state validation.
+// Current shipping-refund policy:
+//   - RefundOutboundShipping=false
+//   - CoverReturnShipping=false
 //
-// The operation is designed to remain safe under retries. ItemRefundUsecase,
-// Refund aggregate IDs and payment-provider idempotency keys are deterministic,
-// and CompleteReturnItem is idempotent for an already-completed return.
+// These flags are not currently represented by ReturnProposal, so they must not
+// be accepted again from the seller at receipt time. If they become negotiable,
+// they should be added to ReturnProposal and locked at buyer acceptance.
+//
+// This usecase intentionally does not depend on:
+//   - Order.IsReturnRequested
+//   - Order.ReturnRequestKind
+//   - purchaser Inquiry state
+//   - carrier shipment notifications
+//   - frontend-selected refund conditions
 func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	ctx context.Context,
 	in ReceiveResaleTradeReturnInput,
@@ -210,35 +202,26 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 			ErrResaleTradeReturnReceiptInvalidSeller
 	}
 
-	if err := refunddom.ValidateReturnRefundSelection(in.Selection); err != nil {
-		return ResaleTradeReturnReceiptResult{}, err
-	}
-
-	trade, err := uc.tradeRepo.GetByID(
-		ctx,
-		tradeID,
-	)
+	trade, err := uc.tradeRepo.GetByID(ctx, tradeID)
 	if err != nil {
 		return ResaleTradeReturnReceiptResult{}, err
 	}
 
 	if trade.ID != tradeID ||
 		trade.SellerType != tradedom.SellerTypeAvatar ||
-		trade.SellerAvatarID == "" ||
+		strings.TrimSpace(trade.SellerAvatarID) == "" ||
 		trade.SellerAvatarID != sellerAvatarID {
 		return ResaleTradeReturnReceiptResult{}, tradedom.ErrNotFound
 	}
 
-	if trade.OrderID == "" || trade.OrderItemIndex < 0 {
+	if strings.TrimSpace(trade.OrderID) == "" ||
+		trade.OrderItemIndex < 0 {
 		return ResaleTradeReturnReceiptResult{
 			Trade: trade,
 		}, ErrResaleTradeReturnReceiptTradeMismatch
 	}
 
-	order, err := uc.orderService.GetByID(
-		ctx,
-		trade.OrderID,
-	)
+	order, err := uc.orderService.GetByID(ctx, trade.OrderID)
 	if err != nil {
 		return ResaleTradeReturnReceiptResult{
 			Trade: trade,
@@ -251,7 +234,7 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	}
 
 	if order.ID != trade.OrderID ||
-		order.AvatarID == "" ||
+		strings.TrimSpace(order.AvatarID) == "" ||
 		order.AvatarID != trade.BuyerAvatarID ||
 		trade.OrderItemIndex >= len(order.Items) {
 		return result, ErrResaleTradeReturnReceiptTradeMismatch
@@ -274,66 +257,86 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 
 	if targetItem.IsCancelled ||
 		!targetItem.IsDispatched ||
-		!targetItem.IsReturnRequested ||
-		targetItem.ReturnRequestedAt == nil ||
-		targetItem.ReturnRequestedAt.IsZero() {
-		return result, ErrResaleTradeReturnReceiptReturnNotRequested
+		targetItem.Transferred {
+		return result, ErrResaleTradeReturnReceiptNotEligible
 	}
 
-	inquiryID := returnInquiryID(
-		order.ID,
-		itemIndex,
-	)
+	agreement, err := uc.returnAgreementRepo.GetByTradeID(ctx, tradeID)
+	if err != nil {
+		return result, err
+	}
 
-	inquiry, err := uc.inquiryRepo.GetByID(
-		ctx,
-		inquiryID,
+	proposal, err := validateResaleTradeReturnReceiptAgreement(
+		agreement,
+		trade,
 	)
 	if err != nil {
 		return result, err
 	}
 
-	result.Inquiry = inquiry
+	result.Agreement = agreement
+	result.Proposal = proposal
 
-	if err := validateResaleTradeReturnInquiry(
-		inquiry,
+	shipment, err := uc.returnShipmentRepo.GetByTradeID(ctx, tradeID)
+	if err != nil {
+		return result, err
+	}
+
+	if err := validateResaleTradeReturnReceiptShipment(
+		shipment,
 		trade,
-		order,
-		targetItem,
+		agreement,
+		proposal,
 	); err != nil {
 		return result, err
 	}
 
-	alreadyCompleted := targetItem.IsReturnCompleted
+	result.Shipment = shipment
 
-	switch targetItem.ReturnRequestKind {
-	case orderdom.ReturnRequestKindUnopened:
-		if targetItem.Transferred ||
-			targetItem.TokenTransferVerifiedAt != nil {
-			return result, ErrResaleTradeReturnReceiptUnopenedStateInvalid
-		}
-
-	case orderdom.ReturnRequestKindOpened:
-		// Opened state is already represented authoritatively by
-		// ReturnRequestKindOpened and validated against Inquiry type below.
-
-	default:
-		return result, ErrResaleTradeReturnReceiptReturnKindMismatch
+	selection := buildResaleTradeReturnReceiptSelection(proposal)
+	if err := refunddom.ValidateReturnRefundSelection(selection); err != nil {
+		return result, err
 	}
+
+	if agreement.Status == tradedom.ReturnStatusCompleted {
+		result.FinanciallyCompleted = true
+		result.ReturnCompleted = true
+		result.NotificationEnsured = true
+		result.AlreadyCompleted = true
+		return result, nil
+	}
+
+	agreement, err = uc.ensureSellerReceipt(
+		ctx,
+		agreement,
+	)
+	if err != nil {
+		return result, err
+	}
+	result.Agreement = agreement
+
+	agreement, err = uc.ensureRefundProcessing(
+		ctx,
+		agreement,
+	)
+	if err != nil {
+		return result, err
+	}
+	result.Agreement = agreement
+
+	// ItemRefundUsecase still persists an InquiryID-shaped correlation value.
+	// Use the existing deterministic return ID for compatibility only. No Inquiry
+	// is loaded and this value is not used to authorize or validate the return.
+	refundSourceID := returnInquiryID(order.ID, itemIndex)
 
 	refund, err := uc.itemRefundService.RefundOrderItem(
 		ctx,
 		RefundOrderItemInput{
-			InquiryID: inquiry.ID,
+			InquiryID: refundSourceID,
 			OrderID:   order.ID,
 			ItemIndex: itemIndex,
-
-			// Consumer resale does not use CompanyID as seller identity.
-			// ItemRefundUsecase resolves immutable Avatar/User/PayoutAccount
-			// identity from OrderItemSnapshot.SellerSnapshot.
 			CompanyID: "",
-
-			Selection: in.Selection,
+			Selection: selection,
 		},
 	)
 	if err != nil {
@@ -342,10 +345,10 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	}
 
 	if err := validateResaleTradeReturnReceiptRefund(
-		inquiry,
+		refundSourceID,
 		order,
 		itemIndex,
-		in.Selection,
+		selection,
 		refund,
 	); err != nil {
 		result.Refund = refund
@@ -358,33 +361,6 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	if !result.FinanciallyCompleted {
 		return result, nil
 	}
-
-	if !alreadyCompleted {
-		completedOrder, err := uc.orderService.CompleteReturnItem(
-			ctx,
-			CompleteReturnOrderItemInput{
-				ID:        order.ID,
-				ItemIndex: itemIndex,
-			},
-		)
-		if err != nil {
-			return result, err
-		}
-
-		order = completedOrder
-		result.Order = completedOrder
-	}
-
-	if itemIndex < 0 ||
-		itemIndex >= len(order.Items) ||
-		!order.Items[itemIndex].IsReturnCompleted ||
-		order.Items[itemIndex].ReturnCompletedAt == nil ||
-		order.Items[itemIndex].ReturnCompletedAt.IsZero() {
-		return result,
-			ErrResaleTradeReturnReceiptOrderCompletionMismatch
-	}
-
-	result.OrderCompleted = true
 
 	_, err = uc.refundCompletionNotifier.EnsureDelivery(
 		ctx,
@@ -401,31 +377,261 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	}
 
 	result.NotificationEnsured = true
-	result.AlreadyCompleted = alreadyCompleted
+
+	agreement, err = uc.ensureCompleted(ctx, agreement)
+	if err != nil {
+		return result, err
+	}
+
+	result.Agreement = agreement
+	result.ReturnCompleted = agreement.Status == tradedom.ReturnStatusCompleted
+
+	if !result.ReturnCompleted ||
+		agreement.CompletedAt == nil ||
+		agreement.CompletedAt.IsZero() {
+		return result,
+			ErrResaleTradeReturnReceiptAgreementCompletionMismatch
+	}
 
 	return result, nil
+}
+
+func (uc *ResaleTradeReturnReceiptUsecase) ensureSellerReceipt(
+	ctx context.Context,
+	agreement tradedom.ReturnAgreement,
+) (tradedom.ReturnAgreement, error) {
+	switch agreement.Status {
+	case tradedom.ReturnStatusAgreed:
+		if err := agreement.MarkReturnReceivedBySeller(
+			uc.nowUTC(),
+		); err != nil {
+			return agreement, err
+		}
+
+		return uc.returnAgreementRepo.Update(
+			ctx,
+			agreement.TradeID,
+			agreement,
+		)
+
+	case tradedom.ReturnStatusReturnShipped:
+		if err := agreement.MarkReturnReceived(
+			uc.nowUTC(),
+		); err != nil {
+			return agreement, err
+		}
+
+		return uc.returnAgreementRepo.Update(
+			ctx,
+			agreement.TradeID,
+			agreement,
+		)
+
+	case tradedom.ReturnStatusReturnReceived,
+		tradedom.ReturnStatusRefundProcessing:
+		return agreement, nil
+
+	case tradedom.ReturnStatusCompleted:
+		return agreement, nil
+
+	case tradedom.ReturnStatusDisputed:
+		return agreement,
+			ErrResaleTradeReturnReceiptDisputed
+
+	default:
+		return agreement,
+			ErrResaleTradeReturnReceiptAgreementNotReady
+	}
+}
+
+func (uc *ResaleTradeReturnReceiptUsecase) ensureRefundProcessing(
+	ctx context.Context,
+	agreement tradedom.ReturnAgreement,
+) (tradedom.ReturnAgreement, error) {
+	switch agreement.Status {
+	case tradedom.ReturnStatusReturnReceived:
+		if err := agreement.MarkRefundProcessing(
+			uc.nowUTC(),
+		); err != nil {
+			return agreement, err
+		}
+
+		return uc.returnAgreementRepo.Update(
+			ctx,
+			agreement.TradeID,
+			agreement,
+		)
+
+	case tradedom.ReturnStatusRefundProcessing,
+		tradedom.ReturnStatusCompleted:
+		return agreement, nil
+
+	case tradedom.ReturnStatusDisputed:
+		return agreement,
+			ErrResaleTradeReturnReceiptDisputed
+
+	default:
+		return agreement,
+			ErrResaleTradeReturnReceiptAgreementNotReady
+	}
+}
+
+func (uc *ResaleTradeReturnReceiptUsecase) ensureCompleted(
+	ctx context.Context,
+	agreement tradedom.ReturnAgreement,
+) (tradedom.ReturnAgreement, error) {
+	switch agreement.Status {
+	case tradedom.ReturnStatusRefundProcessing:
+		if err := agreement.Complete(
+			uc.nowUTC(),
+		); err != nil {
+			return agreement, err
+		}
+
+		return uc.returnAgreementRepo.Update(
+			ctx,
+			agreement.TradeID,
+			agreement,
+		)
+
+	case tradedom.ReturnStatusCompleted:
+		return agreement, nil
+
+	case tradedom.ReturnStatusDisputed:
+		return agreement,
+			ErrResaleTradeReturnReceiptDisputed
+
+	default:
+		return agreement,
+			ErrResaleTradeReturnReceiptAgreementNotReady
+	}
 }
 
 func (uc *ResaleTradeReturnReceiptUsecase) validateConfigured() error {
 	if uc == nil ||
 		uc.tradeRepo == nil ||
+		uc.returnAgreementRepo == nil ||
+		uc.returnShipmentRepo == nil ||
 		uc.orderService == nil ||
-		uc.inquiryRepo == nil ||
 		uc.itemRefundService == nil ||
-		uc.refundCompletionNotifier == nil {
+		uc.refundCompletionNotifier == nil ||
+		uc.now == nil {
 		return ErrResaleTradeReturnReceiptNotConfigured
 	}
 
 	return nil
 }
 
+func (uc *ResaleTradeReturnReceiptUsecase) nowUTC() time.Time {
+	return uc.now().UTC()
+}
+
+func buildResaleTradeReturnReceiptSelection(
+	proposal tradedom.ReturnProposal,
+) refunddom.ReturnRefundSelection {
+	return refunddom.ReturnRefundSelection{
+		MerchandiseRefundAmount: proposal.RefundAmount,
+		RefundOutboundShipping:  false,
+		CoverReturnShipping:     false,
+	}
+}
+
+func validateResaleTradeReturnReceiptAgreement(
+	agreement tradedom.ReturnAgreement,
+	trade tradedom.Trade,
+) (tradedom.ReturnProposal, error) {
+	if agreement.ID != trade.ID ||
+		agreement.TradeID != trade.ID {
+		return tradedom.ReturnProposal{},
+			tradedom.ErrReturnAgreementConflict
+	}
+
+	if agreement.Proposal == nil {
+		return tradedom.ReturnProposal{},
+			tradedom.ErrReturnProposalNotFound
+	}
+
+	proposal := *agreement.Proposal
+
+	if strings.TrimSpace(proposal.ID) == "" ||
+		proposal.Agreement != tradedom.ReturnProposalAgreementAgree ||
+		proposal.RejectedAt != nil ||
+		agreement.AgreedAt == nil ||
+		agreement.AgreedAt.IsZero() {
+		return tradedom.ReturnProposal{},
+			ErrResaleTradeReturnReceiptAgreementNotReady
+	}
+
+	if proposal.ReturnRequirement ==
+		tradedom.ReturnRequirementNotRequired {
+		return tradedom.ReturnProposal{},
+			ErrResaleTradeReturnReceiptPhysicalReturnNotRequired
+	}
+
+	if proposal.ReturnRequirement !=
+		tradedom.ReturnRequirementRequired {
+		return tradedom.ReturnProposal{},
+			tradedom.ErrInvalidReturnRequirement
+	}
+
+	if proposal.RefundAmount <= 0 {
+		return tradedom.ReturnProposal{},
+			tradedom.ErrInvalidReturnRefundAmount
+	}
+
+	switch agreement.Status {
+	case tradedom.ReturnStatusAgreed,
+		tradedom.ReturnStatusReturnShipped,
+		tradedom.ReturnStatusReturnReceived,
+		tradedom.ReturnStatusRefundProcessing,
+		tradedom.ReturnStatusCompleted:
+		return proposal, nil
+
+	case tradedom.ReturnStatusDisputed:
+		return tradedom.ReturnProposal{},
+			ErrResaleTradeReturnReceiptDisputed
+
+	default:
+		return tradedom.ReturnProposal{},
+			ErrResaleTradeReturnReceiptAgreementNotReady
+	}
+}
+
+func validateResaleTradeReturnReceiptShipment(
+	shipment tradedom.ReturnShipment,
+	trade tradedom.Trade,
+	agreement tradedom.ReturnAgreement,
+	proposal tradedom.ReturnProposal,
+) error {
+	if shipment.ID != trade.ID ||
+		shipment.TradeID != trade.ID ||
+		shipment.ReturnAgreementID != agreement.ID ||
+		shipment.ProposalID != proposal.ID ||
+		shipment.Carrier != tradedom.ReturnShipmentCarrierYamato ||
+		shipment.DropOffMethod != tradedom.ReturnShipmentDropOffMethodPUDO {
+		return tradedom.ErrReturnShipmentConflict
+	}
+
+	switch shipment.Status {
+	case tradedom.ReturnShipmentStatusReadyForDropOff,
+		tradedom.ReturnShipmentStatusShipped,
+		tradedom.ReturnShipmentStatusDelivered:
+		return nil
+
+	case tradedom.ReturnShipmentStatusPending,
+		tradedom.ReturnShipmentStatusCancelled:
+		return ErrResaleTradeReturnReceiptShipmentNotReady
+
+	default:
+		return ErrResaleTradeReturnReceiptShipmentNotReady
+	}
+}
+
 // validateResaleTradeReturnReceiptRefund validates that the Refund persisted by
-// ItemRefundUsecase represents exactly the same consumer-resale return,
-// ReturnRefundSelection and authoritative monetary calculation.
-//
-// Both unopened and opened resale returns use this same financial validation.
+// ItemRefundUsecase represents exactly the same consumer-resale return and the
+// immutable conditions accepted in ReturnProposal.
 func validateResaleTradeReturnReceiptRefund(
-	inquiry inquirydom.Inquiry,
+	refundSourceID string,
 	order orderdom.Order,
 	itemIndex int,
 	selection refunddom.ReturnRefundSelection,
@@ -439,7 +645,8 @@ func validateResaleTradeReturnReceiptRefund(
 		)
 	}
 
-	if refund.InquiryID != inquiry.ID ||
+	if strings.TrimSpace(refundSourceID) == "" ||
+		refund.InquiryID != refundSourceID ||
 		refund.OrderID != order.ID ||
 		refund.PaymentID != order.ID ||
 		refund.OrderItemIndex != itemIndex {
@@ -528,86 +735,26 @@ func validateResaleTradeReturnReceiptTarget(
 	sellerAvatarID string,
 ) error {
 	if targetItem.Type != orderdom.OrderItemTypeResale ||
-		targetItem.ResaleID == "" {
+		strings.TrimSpace(targetItem.ResaleID) == "" {
 		return ErrResaleTradeReturnReceiptTradeMismatch
 	}
 
 	seller := targetItem.SellerSnapshot
 
-	if seller.AvatarID == "" ||
+	if strings.TrimSpace(seller.AvatarID) == "" ||
 		seller.AvatarID != sellerAvatarID ||
 		seller.AvatarID != trade.SellerAvatarID {
 		return tradedom.ErrNotFound
 	}
 
-	if seller.UserID == "" ||
-		seller.PayoutAccountID == "" ||
+	if strings.TrimSpace(seller.UserID) == "" ||
+		strings.TrimSpace(seller.PayoutAccountID) == "" ||
 		seller.PayoutAccountID != seller.UserID ||
 		seller.BrandID != "" ||
 		seller.CompanyID != "" ||
 		seller.AccountID != "" ||
 		seller.StripeAccountID != "" {
 		return ErrResaleTradeReturnReceiptTradeMismatch
-	}
-
-	return nil
-}
-
-// validateResaleTradeReturnInquiry confirms that the deterministic purchaser
-// return Inquiry belongs to the same buyer, Order and Order item represented by
-// the Trade.
-//
-// A seller cannot receive a return through an arbitrary Inquiry ID because the
-// HTTP layer does not supply an Inquiry ID. The usecase derives the deterministic
-// return Inquiry ID from authoritative Order identity.
-func validateResaleTradeReturnInquiry(
-	inquiry inquirydom.Inquiry,
-	trade tradedom.Trade,
-	order orderdom.Order,
-	targetItem orderdom.OrderItemSnapshot,
-) error {
-	expectedInquiryID := returnInquiryID(
-		order.ID,
-		trade.OrderItemIndex,
-	)
-
-	if inquiry.ID == "" ||
-		inquiry.ID != expectedInquiryID ||
-		inquiry.DeletedAt != nil {
-		return ErrResaleTradeReturnReceiptInquiryMismatch
-	}
-
-	if inquiry.OrderID != order.ID ||
-		inquiry.OrderItemIndex == nil ||
-		*inquiry.OrderItemIndex != trade.OrderItemIndex ||
-		inquiry.AvatarID == "" ||
-		inquiry.AvatarID != trade.BuyerAvatarID ||
-		inquiry.AvatarID != order.AvatarID {
-		return ErrResaleTradeReturnReceiptInquiryMismatch
-	}
-
-	if inquiry.Status == inquirydom.InquiryStatusClosed {
-		return ErrResaleTradeReturnReceiptInquiryClosed
-	}
-
-	if inquiry.Status == inquirydom.InquiryStatusResolved &&
-		!targetItem.IsReturnCompleted {
-		return ErrResaleTradeReturnReceiptInquiryResolved
-	}
-
-	switch targetItem.ReturnRequestKind {
-	case orderdom.ReturnRequestKindUnopened:
-		if inquiry.InquiryType != inquirydom.InquiryTypeReturnUnopened {
-			return ErrResaleTradeReturnReceiptReturnKindMismatch
-		}
-
-	case orderdom.ReturnRequestKindOpened:
-		if inquiry.InquiryType != inquirydom.InquiryTypeReturnOpened {
-			return ErrResaleTradeReturnReceiptReturnKindMismatch
-		}
-
-	default:
-		return ErrResaleTradeReturnReceiptReturnKindMismatch
 	}
 
 	return nil

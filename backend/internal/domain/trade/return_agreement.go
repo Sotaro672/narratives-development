@@ -167,7 +167,7 @@ var (
 // Order remains authoritative for the transaction itself. ReturnAgreement owns
 // only the negotiation and mutually agreed return/refund conditions.
 //
-// Typical flow:
+// Typical flow when carrier shipment state is available:
 //
 //	discussing
 //	  -> proposed
@@ -176,6 +176,11 @@ var (
 //	  -> return_received
 //	  -> refund_processing
 //	  -> completed
+//
+// Current flow without carrier-state recognition may use the seller's explicit
+// receipt confirmation instead:
+//
+//	agreed -> return_received -> refund_processing -> completed
 //
 // If the seller rejects the requested return, the aggregate remains discussing.
 // If the buyer rejects a seller proposal, it also returns to discussing.
@@ -437,6 +442,40 @@ func (a *ReturnAgreement) MarkReturnReceived(at time.Time) error {
 	at = at.UTC()
 	if err := a.validateTransitionTime(at); err != nil ||
 		at.Before(*a.ReturnShippedAt) {
+		return ErrInvalidReturnReceivedAt
+	}
+
+	a.Status = ReturnStatusReturnReceived
+	a.ReturnReceivedAt = cloneReturnTimePtr(&at)
+	a.UpdatedAt = at
+	return nil
+}
+
+// MarkReturnReceivedBySeller records the seller's explicit confirmation that a
+// physically required returned item has been received.
+//
+// This transition is used while AMOL does not recognize carrier shipment
+// notifications. It allows an agreed physical return to move directly from
+// agreed to return_received without fabricating return_shipped.
+//
+// ReturnShippedAt intentionally remains nil. Future carrier integration may use
+// MarkReturnShipped followed by MarkReturnReceived instead.
+func (a *ReturnAgreement) MarkReturnReceivedBySeller(at time.Time) error {
+	if a == nil ||
+		a.Status != ReturnStatusAgreed ||
+		a.Proposal == nil ||
+		a.Proposal.Agreement != ReturnProposalAgreementAgree ||
+		a.Proposal.ReturnRequirement != ReturnRequirementRequired ||
+		a.AgreedAt == nil {
+		return ErrReturnReceiptNotAllowed
+	}
+	if at.IsZero() {
+		return ErrInvalidReturnReceivedAt
+	}
+
+	at = at.UTC()
+	if err := a.validateTransitionTime(at); err != nil ||
+		at.Before(*a.AgreedAt) {
 		return ErrInvalidReturnReceivedAt
 	}
 
@@ -802,13 +841,18 @@ func (a ReturnAgreement) validatePersistedState() error {
 
 	case ReturnStatusReturnReceived:
 		if a.Proposal.ReturnRequirement != ReturnRequirementRequired ||
-			a.ReturnShippedAt == nil ||
 			a.ReturnReceivedAt == nil ||
-			a.ReturnShippedAt.IsZero() ||
 			a.ReturnReceivedAt.IsZero() ||
-			a.ReturnReceivedAt.Before(*a.ReturnShippedAt) ||
+			a.ReturnReceivedAt.Before(*a.AgreedAt) ||
 			a.RefundProcessingAt != nil ||
 			a.CompletedAt != nil {
+			return ErrInvalidReturnAgreementState
+		}
+
+		if a.ReturnShippedAt != nil &&
+			(a.ReturnShippedAt.IsZero() ||
+				a.ReturnShippedAt.Before(*a.AgreedAt) ||
+				a.ReturnReceivedAt.Before(*a.ReturnShippedAt)) {
 			return ErrInvalidReturnAgreementState
 		}
 
@@ -821,9 +865,17 @@ func (a ReturnAgreement) validatePersistedState() error {
 
 		switch a.Proposal.ReturnRequirement {
 		case ReturnRequirementRequired:
-			if a.ReturnShippedAt == nil ||
-				a.ReturnReceivedAt == nil ||
+			if a.ReturnReceivedAt == nil ||
+				a.ReturnReceivedAt.IsZero() ||
+				a.ReturnReceivedAt.Before(*a.AgreedAt) ||
 				a.RefundProcessingAt.Before(*a.ReturnReceivedAt) {
+				return ErrInvalidReturnAgreementState
+			}
+
+			if a.ReturnShippedAt != nil &&
+				(a.ReturnShippedAt.IsZero() ||
+					a.ReturnShippedAt.Before(*a.AgreedAt) ||
+					a.ReturnReceivedAt.Before(*a.ReturnShippedAt)) {
 				return ErrInvalidReturnAgreementState
 			}
 

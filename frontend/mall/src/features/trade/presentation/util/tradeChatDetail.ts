@@ -10,6 +10,7 @@ export type TradeOrderActionKind =
   | "start-return-consultation"
   | "respond-return-consultation"
   | "review-return-proposal"
+  | "prepare-return-shipment"
   | "receive-return"
   | "cancel";
 
@@ -88,8 +89,26 @@ export function getTradeOrderAction(
     case "proposed":
       return "review-return-proposal";
 
+    case "agreed": {
+      const proposal = trade.returnProposal;
+
+      if (
+        proposal &&
+        proposal.id.trim() !== "" &&
+        proposal.agreement === "agree" &&
+        !proposal.rejectedAt &&
+        proposal.returnRequirement === "required" &&
+        proposal.refundAmount !== undefined &&
+        Number.isInteger(proposal.refundAmount) &&
+        proposal.refundAmount > 0
+      ) {
+        return "prepare-return-shipment";
+      }
+
+      return null;
+    }
+
     case "discussing":
-    case "agreed":
     case "return_shipped":
     case "return_received":
     case "refund_processing":

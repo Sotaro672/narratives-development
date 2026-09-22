@@ -9,8 +9,10 @@ import type {
   CreateTradeMessageResponse,
   CreateTradeReturnConsultationParams,
   CreateTradeReturnProposalParams,
+  CreateTradeReturnShipmentParams,
   GetTradeByIDParams,
   GetTradeByOrderItemParams,
+  GetTradeReturnShipmentParams,
   GetTradeUnreadCountParams,
   GetTradeUnreadCountResponse,
   MarkTradeMessagesReadParams,
@@ -25,6 +27,8 @@ import type {
   TradeReturnAgreement,
   TradeReturnConsultationReason,
   TradeReturnRequirement,
+  TradeReturnShipment,
+  TradeReturnShipmentResponse,
   TradeReturnStatus,
   TradeStatus,
   TradeViewerSide,
@@ -203,9 +207,7 @@ function requireReturnRequirement(
       return returnRequirement;
 
     default:
-      throw new Error(
-        "商品を返品してもらうか選択してください。",
-      );
+      throw new Error("商品を返品してもらうか選択してください。");
   }
 }
 
@@ -217,9 +219,7 @@ function requireReturnProposalRefundAmount(
     !Number.isInteger(refundAmount) ||
     refundAmount <= 0
   ) {
-    throw new Error(
-      "返金額は1円以上の整数で指定してください。",
-    );
+    throw new Error("返金額は1円以上の整数で指定してください。");
   }
 
   return refundAmount;
@@ -241,6 +241,10 @@ function buildTradePath(tradeId: string): string {
   return `${TRADE_BASE_PATH}/${encodeURIComponent(
     requireTradeId(tradeId),
   )}`;
+}
+
+function buildTradeReturnShipmentPath(tradeId: string): string {
+  return `${buildTradePath(tradeId)}/return-shipment`;
 }
 
 async function fetchTradeWithAuth<T>(
@@ -448,6 +452,36 @@ export async function rejectTradeReturnProposal(
       method: "POST",
     },
   );
+}
+
+export async function createTradeReturnShipment(
+  params: CreateTradeReturnShipmentParams,
+): Promise<TradeReturnShipment> {
+  const response =
+    await fetchTradeWithAuth<TradeReturnShipmentResponse>(
+      buildTradeReturnShipmentPath(params.tradeId),
+      {
+        method: "POST",
+      },
+    );
+
+  return response.data;
+}
+
+export async function fetchTradeReturnShipment(
+  params: GetTradeReturnShipmentParams,
+  options: TradeRequestOptions = {},
+): Promise<TradeReturnShipment> {
+  const response =
+    await fetchTradeWithAuth<TradeReturnShipmentResponse>(
+      buildTradeReturnShipmentPath(params.tradeId),
+      {
+        method: "GET",
+        signal: options.signal,
+      },
+    );
+
+  return response.data;
 }
 
 export async function receiveTradeReturn(

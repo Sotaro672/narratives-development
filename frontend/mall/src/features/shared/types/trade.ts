@@ -136,6 +136,44 @@ export type RejectTradeReturnProposalParams = {
 };
 
 // ============================================================
+// Trade Return Shipment
+// ============================================================
+
+export const TRADE_RETURN_SHIPMENT_STATUSES = [
+  "pending",
+  "ready_for_dropoff",
+] as const;
+
+export type TradeReturnShipmentStatus =
+  (typeof TRADE_RETURN_SHIPMENT_STATUSES)[number];
+
+export const TRADE_RETURN_SHIPMENT_DROP_OFF_METHODS = [
+  "pudo",
+] as const;
+
+export type TradeReturnShipmentDropOffMethod =
+  (typeof TRADE_RETURN_SHIPMENT_DROP_OFF_METHODS)[number];
+
+export type TradeReturnShipment = {
+  status: TradeReturnShipmentStatus;
+  dropOffMethod: TradeReturnShipmentDropOffMethod;
+  qrCodePayload?: string;
+  readyAt?: string;
+};
+
+export type CreateTradeReturnShipmentParams = {
+  tradeId: string;
+};
+
+export type GetTradeReturnShipmentParams = {
+  tradeId: string;
+};
+
+export type TradeReturnShipmentResponse = {
+  data: TradeReturnShipment;
+};
+
+// ============================================================
 // Return Refund
 // TODO: 返金条件を TradeReturnProposal で確定し、返品受領APIが
 // 保存済み条件を参照する方式へ移行後に整理する。

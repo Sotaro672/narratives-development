@@ -777,11 +777,12 @@ func buildMallUsecases(
 
 	resaleTradeReturnReceiptUC := usecase.NewResaleTradeReturnReceiptUsecase(
 		usecase.NewResaleTradeReturnReceiptUsecaseInput{
-			TradeRepository:          r.tradeRepo,
-			OrderService:             orderUC,
-			InquiryRepository:        r.inquiryRepo,
-			ItemRefundService:        itemRefundUC,
-			RefundCompletionNotifier: refundCompletionNotificationUC,
+			TradeRepository:           r.tradeRepo,
+			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
+			ReturnShipmentRepository:  r.tradeReturnShipmentRepo,
+			OrderService:              orderUC,
+			ItemRefundService:         itemRefundUC,
+			RefundCompletionNotifier:  refundCompletionNotificationUC,
 		},
 	)
 	if resaleTradeReturnReceiptUC == nil {
