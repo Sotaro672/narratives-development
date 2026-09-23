@@ -27,7 +27,6 @@ import {
 import Empty from "../shared/ui/empty";
 import { ErrorMessage } from "../shared/ui/error";
 import Pagination from "../shared/ui/pagination";
-import RefreshButton from "../shared/ui/refresh";
 import Stack from "../shared/ui/stack";
 import Text from "../shared/ui/text";
 import type { ReviewStatus } from "../shared/types/productBlueprintReview";
@@ -163,7 +162,13 @@ export default function ProductBlueprintReviewDetail() {
 
   return (
     <>
-      <PageStyle layout="grid-2" title={Title} onBack={OnBack}>
+      <PageStyle
+        layout="grid-2"
+        title={Title}
+        onBack={OnBack}
+        onRefresh={OnReload}
+        isRefreshing={IsLoading}
+      >
         <div>
           <div className="pbrd-toolbar">
             <div />
@@ -208,13 +213,6 @@ export default function ProductBlueprintReviewDetail() {
               >
                 投稿日時 {sortLabel("ReviewedAt")}
               </Button>
-
-              <RefreshButton
-                onClick={OnReload}
-                loading={IsLoading}
-                title="リフレッシュ"
-                ariaLabel="リフレッシュ"
-              />
             </div>
           </div>
 
