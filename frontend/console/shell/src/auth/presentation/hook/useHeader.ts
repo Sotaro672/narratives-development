@@ -11,7 +11,10 @@ type UseHeaderParams = {
   email?: string;
 };
 
-export function useHeader(_params: UseHeaderParams = {}) {
+export function useHeader({
+  username,
+  email,
+}: UseHeaderParams = {}) {
   const navigate = useNavigate();
   const [openAdmin, setOpenAdmin] = useState(false);
   const panelContainerRef = useRef<HTMLDivElement | null>(null);
@@ -24,34 +27,26 @@ export function useHeader(_params: UseHeaderParams = {}) {
     const handleDocumentMouseDown = (event: MouseEvent) => {
       const target = event.target as Node;
 
-      if (!panelContainerRef.current) {
-        return;
-      }
-
-      if (panelContainerRef.current.contains(target)) {
-        return;
-      }
-
-      setOpenAdmin(false);
-    };
-
-    document.addEventListener("mousedown", handleDocumentMouseDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handleDocumentMouseDown);
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleDocumentKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (
+        panelContainerRef.current &&
+        !panelContainerRef.current.contains(target)
+      ) {
         setOpenAdmin(false);
       }
     };
 
+    const handleDocumentKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpenAdmin(false);
+        triggerRef.current?.focus();
+      }
+    };
+
+    document.addEventListener("mousedown", handleDocumentMouseDown);
     document.addEventListener("keydown", handleDocumentKeyDown);
 
     return () => {
+      document.removeEventListener("mousedown", handleDocumentMouseDown);
       document.removeEventListener("keydown", handleDocumentKeyDown);
     };
   }, []);
@@ -75,8 +70,8 @@ export function useHeader(_params: UseHeaderParams = {}) {
   };
 
   const brandMain = companyName ?? "Company Name";
-  const fullName = currentMember?.displayName ?? "ゲスト";
-  const displayEmail = currentMember?.email ?? "";
+  const fullName = currentMember?.displayName ?? username ?? "ゲスト";
+  const displayEmail = currentMember?.email ?? email ?? "";
 
   return {
     openAdmin,

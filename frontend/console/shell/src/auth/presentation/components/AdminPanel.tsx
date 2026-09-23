@@ -2,14 +2,24 @@
 
 import { LogOut } from "lucide-react";
 
-import "../../../styles/auth.css";
-
-import { Button } from "../../../shared/ui/button";
+import {
+  CardField,
+  CardFields,
+} from "../../../shared/ui/card";
 import { Input } from "../../../shared/ui/input";
 import { Label } from "../../../shared/ui/label";
-import { Modal } from "../../../shared/ui/modal";
+import {
+  Modal,
+  ModalButton,
+  ModalCloseButton,
+} from "../../../shared/ui/modal";
 import { Separator } from "../../../shared/ui/separator";
+import Stack from "../../../shared/ui/stack";
+import Text from "../../../shared/ui/text";
+import { Button } from "../../../shared/ui/button";
 import { useAdminPanel } from "../hook/useAdminPanel";
+
+import "../../../styles/auth.css";
 
 interface AdminPanelProps {
   fullName?: string;
@@ -130,8 +140,22 @@ export default function AdminPanel({
         aria-label="アカウントメニュー"
       >
         <div className="admin-dropdown-header">
-          <div className="admin-dropdown-title">{fullName}</div>
-          {email && <div className="admin-dropdown-email">{email}</div>}
+          <Stack gap="xs">
+            <Text as="div" weight="bold">
+              {fullName}
+            </Text>
+
+            {email ? (
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                wrap="anywhere"
+              >
+                {email}
+              </Text>
+            ) : null}
+          </Stack>
         </div>
 
         <Separator className="admin-dropdown-sep" />
@@ -175,7 +199,10 @@ export default function AdminPanel({
           role="menuitem"
           onClick={onLogout}
         >
-          <LogOut className="logout-icon" aria-hidden />
+          <LogOut
+            size={16}
+            aria-hidden="true"
+          />
           ログアウト
         </Button>
       </div>
@@ -186,70 +213,68 @@ export default function AdminPanel({
         onClose={() => setShowProfileDialog(false)}
         footer={
           <>
-            <Button
-              type="button"
-              variant="outline"
+            <ModalCloseButton
               onClick={() => setShowProfileDialog(false)}
             >
               キャンセル
-            </Button>
+            </ModalCloseButton>
 
-            <Button
-              type="button"
+            <ModalButton
+              variant="primary"
               onClick={() => void handleProfileSave()}
             >
               保存
-            </Button>
+            </ModalButton>
           </>
         }
       >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="admin-profile-last-name">姓</Label>
-              <Input
-                id="admin-profile-last-name"
-                value={lastName}
-                onChange={(event) => setLastName(event.target.value)}
-                placeholder="山田"
-              />
-            </div>
+        <CardFields>
+          <CardField>
+            <Label htmlFor="admin-profile-last-name">姓</Label>
+            <Input
+              id="admin-profile-last-name"
+              value={lastName}
+              onChange={(event) => setLastName(event.target.value)}
+              placeholder="山田"
+            />
+          </CardField>
 
-            <div className="space-y-2">
-              <Label htmlFor="admin-profile-last-name-kana">姓（かな）</Label>
-              <Input
-                id="admin-profile-last-name-kana"
-                value={lastNameKana}
-                onChange={(event) => setLastNameKana(event.target.value)}
-                placeholder="やまだ"
-                inputMode="text"
-              />
-            </div>
-          </div>
+          <CardField>
+            <Label htmlFor="admin-profile-last-name-kana">
+              姓（かな）
+            </Label>
+            <Input
+              id="admin-profile-last-name-kana"
+              value={lastNameKana}
+              onChange={(event) => setLastNameKana(event.target.value)}
+              placeholder="やまだ"
+              inputMode="text"
+            />
+          </CardField>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="admin-profile-first-name">名</Label>
-              <Input
-                id="admin-profile-first-name"
-                value={firstName}
-                onChange={(event) => setFirstName(event.target.value)}
-                placeholder="太郎"
-              />
-            </div>
+          <CardField>
+            <Label htmlFor="admin-profile-first-name">名</Label>
+            <Input
+              id="admin-profile-first-name"
+              value={firstName}
+              onChange={(event) => setFirstName(event.target.value)}
+              placeholder="太郎"
+            />
+          </CardField>
 
-            <div className="space-y-2">
-              <Label htmlFor="admin-profile-first-name-kana">名（かな）</Label>
-              <Input
-                id="admin-profile-first-name-kana"
-                value={firstNameKana}
-                onChange={(event) => setFirstNameKana(event.target.value)}
-                placeholder="たろう"
-                inputMode="text"
-              />
-            </div>
-          </div>
-        </div>
+          <CardField>
+            <Label htmlFor="admin-profile-first-name-kana">
+              名（かな）
+            </Label>
+            <Input
+              id="admin-profile-first-name-kana"
+              value={firstNameKana}
+              onChange={(event) => setFirstNameKana(event.target.value)}
+              placeholder="たろう"
+              inputMode="text"
+            />
+          </CardField>
+        </CardFields>
       </Modal>
 
       <Modal
@@ -258,26 +283,26 @@ export default function AdminPanel({
         onClose={() => setShowEmailDialog(false)}
         footer={
           <>
-            <Button
-              type="button"
-              variant="outline"
+            <ModalCloseButton
               onClick={() => setShowEmailDialog(false)}
             >
               キャンセル
-            </Button>
+            </ModalCloseButton>
 
-            <Button
-              type="button"
+            <ModalButton
+              variant="primary"
               onClick={() => void handleEmailSave()}
             >
               認証メールを送信
-            </Button>
+            </ModalButton>
           </>
         }
       >
-        <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="admin-email-new">新しいメールアドレス</Label>
+        <Stack gap="md">
+          <CardField>
+            <Label htmlFor="admin-email-new">
+              新しいメールアドレス
+            </Label>
             <Input
               id="admin-email-new"
               type="email"
@@ -285,10 +310,12 @@ export default function AdminPanel({
               onChange={(event) => setNewEmail(event.target.value)}
               placeholder="new@example.com"
             />
-          </div>
+          </CardField>
 
-          <div className="space-y-2">
-            <Label htmlFor="admin-email-current-password">パスワード</Label>
+          <CardField>
+            <Label htmlFor="admin-email-current-password">
+              パスワード
+            </Label>
             <Input
               id="admin-email-current-password"
               type="password"
@@ -298,8 +325,8 @@ export default function AdminPanel({
               }
               placeholder="現在のパスワード"
             />
-          </div>
-        </div>
+          </CardField>
+        </Stack>
       </Modal>
 
       <Modal
@@ -309,20 +336,18 @@ export default function AdminPanel({
         onClose={() => setShowPasswordDialog(false)}
         footer={
           <>
-            <Button
-              type="button"
-              variant="outline"
+            <ModalCloseButton
               onClick={() => setShowPasswordDialog(false)}
             >
               キャンセル
-            </Button>
+            </ModalCloseButton>
 
-            <Button
-              type="button"
+            <ModalButton
+              variant="primary"
               onClick={() => void handlePasswordSave()}
             >
               再設定メールを送信
-            </Button>
+            </ModalButton>
           </>
         }
       />

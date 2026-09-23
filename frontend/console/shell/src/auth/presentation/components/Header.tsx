@@ -8,13 +8,14 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import "../../../styles/auth.css";
-
 import { useNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useNotificationUnreadCount";
 import { Badge } from "../../../shared/ui/badge";
 import { Button } from "../../../shared/ui/button";
+import Text from "../../../shared/ui/text";
 import AdminPanel from "./AdminPanel";
 import { useHeader } from "../hook/useHeader";
+
+import "../../../styles/auth.css";
 
 interface HeaderProps {
   username?: string;
@@ -69,7 +70,14 @@ export default function Header(props: HeaderProps) {
         }}
       >
         <span className="brand-main">{brandMain}</span>
-        <span className="brand-sub">Console</span>
+
+        <Text
+          size="md"
+          tone="muted"
+          className="brand-sub"
+        >
+          Console
+        </Text>
       </button>
 
       <div className="actions">
@@ -82,16 +90,20 @@ export default function Header(props: HeaderProps) {
           title="通知"
           onClick={handleOpenNotifications}
         >
-          <Bell className="icon" aria-hidden />
+          <Bell
+            size={22}
+            strokeWidth={1.8}
+            aria-hidden="true"
+          />
 
-          {unreadCount > 0 && (
+          {unreadCount > 0 ? (
             <Badge
               variant="danger"
               className="header-notification-badge"
             >
               {unreadCount > 99 ? "99+" : unreadCount}
             </Badge>
-          )}
+          ) : null}
         </Button>
 
         <div className="relative" ref={panelContainerRef}>
@@ -99,8 +111,7 @@ export default function Header(props: HeaderProps) {
             ref={triggerRef}
             type="button"
             variant="ghost"
-            size="icon"
-            className="user-trigger"
+            size="sm"
             aria-haspopup="menu"
             aria-expanded={openAdmin}
             aria-controls={openAdmin ? "admin-dropdown" : undefined}
@@ -111,22 +122,34 @@ export default function Header(props: HeaderProps) {
             }
             onClick={handleToggleAdmin}
           >
-            <UserRound className="icon" aria-hidden />
+            <UserRound
+              size={22}
+              strokeWidth={1.8}
+              aria-hidden="true"
+            />
 
             {openAdmin ? (
-              <ChevronUp className="caret" aria-hidden />
+              <ChevronUp
+                size={14}
+                strokeWidth={1.8}
+                aria-hidden="true"
+              />
             ) : (
-              <ChevronDown className="caret" aria-hidden />
+              <ChevronDown
+                size={14}
+                strokeWidth={1.8}
+                aria-hidden="true"
+              />
             )}
           </Button>
 
-          {openAdmin && (
+          {openAdmin ? (
             <AdminPanel
               fullName={fullName}
               email={displayEmail}
               onLogout={handleLogout}
             />
-          )}
+          ) : null}
         </div>
       </div>
     </header>
