@@ -27,31 +27,24 @@ export type AdminAssigneeCandidate = {
 
 export type AdminCardProps = {
   title?: string;
-
   /**
    * 指定した場合、担当者欄の代わりに
    * 同じ位置へ宛先数を表示する。
    */
   targetAvatarCount?: number;
-
   showAssignee?: boolean;
-
+  assigneeLabel?: string;
   assigneeName?: string;
   assigneeId?: string;
-
   assigneeCandidates?: AdminAssigneeCandidate[];
   loadingMembers?: boolean;
-
   onSelectAssignee?: (id: string) => void;
-
   createdByName?: string | null;
   createdAt?: string | null;
   updatedByName?: string | null;
   updatedAt?: string | null;
-
   onEditAssignee?: () => void;
   onClickAssignee?: () => void;
-
   mode?: "edit" | "view";
 };
 
@@ -66,6 +59,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
   title = "管理情報",
   targetAvatarCount,
   showAssignee = true,
+  assigneeLabel = "担当者",
   assigneeName,
   assigneeId,
   assigneeCandidates,
@@ -111,11 +105,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
     );
 
     return matched?.id ?? "";
-  }, [
-    assigneeId,
-    effectiveCandidates,
-    effectiveAssigneeName,
-  ]);
+  }, [assigneeId, effectiveCandidates, effectiveAssigneeName]);
 
   const selectedCandidateName = React.useMemo(() => {
     const selectedCandidate = effectiveCandidates.find(
@@ -125,9 +115,10 @@ export const AdminCard: React.FC<AdminCardProps> = ({
     return (
       selectedCandidate?.name ||
       effectiveAssigneeName ||
-      "担当者を選択してください"
+      `${assigneeLabel}を選択してください`
     );
   }, [
+    assigneeLabel,
     effectiveAssigneeName,
     effectiveCandidates,
     selectedValue,
@@ -144,12 +135,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
       onSelectAssignee?.(nextId);
       closePopover();
     },
-    [
-      isEdit,
-      onClickAssignee,
-      onEditAssignee,
-      onSelectAssignee,
-    ],
+    [isEdit, onClickAssignee, onEditAssignee, onSelectAssignee],
   );
 
   return (
@@ -167,7 +153,6 @@ export const AdminCard: React.FC<AdminCardProps> = ({
               <div className="admin-card__field-label">
                 宛先数
               </div>
-
               <div className="admin-card__field-value">
                 {targetAvatarCount}件
               </div>
@@ -175,7 +160,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
           ) : showAssignee ? (
             <div>
               <div className="admin-card__field-label">
-                担当者
+                {assigneeLabel}
               </div>
 
               {!isEdit ? (
@@ -191,10 +176,10 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                         variant="outline"
                         className="admin-card__assignee-trigger"
                         disabled={effectiveLoading}
-                        aria-label="担当者を選択"
+                        aria-label={`${assigneeLabel}を選択`}
                       >
                         {effectiveLoading
-                          ? "担当者を読み込み中です…"
+                          ? `${assigneeLabel}を読み込み中です…`
                           : selectedCandidateName}
                       </Button>
                     </PopoverTrigger>
@@ -205,11 +190,11 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                     >
                       {effectiveLoading ? (
                         <div className="popover__empty">
-                          担当者を読み込み中です…
+                          {assigneeLabel}を読み込み中です…
                         </div>
                       ) : effectiveCandidates.length === 0 ? (
                         <div className="popover__empty">
-                          担当者候補がありません。
+                          {assigneeLabel}候補がありません。
                         </div>
                       ) : (
                         <div className="popover__list">
@@ -238,7 +223,7 @@ export const AdminCard: React.FC<AdminCardProps> = ({
                   {!effectiveLoading &&
                     effectiveCandidates.length === 0 && (
                       <p className="admin-card__empty-assignee">
-                        担当者候補がありません。
+                        {assigneeLabel}候補がありません。
                       </p>
                     )}
                 </>
@@ -246,43 +231,19 @@ export const AdminCard: React.FC<AdminCardProps> = ({
             </div>
           ) : null}
 
-          {(createdByName ||
-            createdAt ||
-            updatedByName ||
-            updatedAt) && (
-            <Stack
-              gap="xs"
-              className="admin-card__metadata"
-            >
+          {(createdByName || createdAt || updatedByName || updatedAt) && (
+            <Stack gap="xs" className="admin-card__metadata">
               {(createdByName || createdAt) && (
                 <div className="admin-card__metadata-row">
-                  {createdByName && (
-                    <span>
-                      作成者: {createdByName}
-                    </span>
-                  )}
-
-                  {createdAt && (
-                    <span>
-                      作成日: {createdAt}
-                    </span>
-                  )}
+                  {createdByName && <span>作成者: {createdByName}</span>}
+                  {createdAt && <span>作成日: {createdAt}</span>}
                 </div>
               )}
 
               {(updatedByName || updatedAt) && (
                 <div className="admin-card__metadata-row">
-                  {updatedByName && (
-                    <span>
-                      更新者: {updatedByName}
-                    </span>
-                  )}
-
-                  {updatedAt && (
-                    <span>
-                      更新日: {updatedAt}
-                    </span>
-                  )}
+                  {updatedByName && <span>更新者: {updatedByName}</span>}
+                  {updatedAt && <span>更新日: {updatedAt}</span>}
                 </div>
               )}
             </Stack>

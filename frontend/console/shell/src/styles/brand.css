@@ -35,62 +35,6 @@
 }
 
 /* =========================================================
- * Account Select Card
- * ======================================================= */
-
-.account-select-card__label {
-  margin-bottom: 0.25rem;
-}
-
-.account-select-card__loading,
-.account-select-card__error,
-.account-select-card__value,
-.account-select-card__id {
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-}
-
-.account-select-card__id {
-  word-break: break-all;
-}
-
-/* =========================================================
- * Manager Card
- * ======================================================= */
-
-.manager-card__label {
-  margin-bottom: 0.25rem;
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-.manager-card__value {
-  padding-top: 0.25rem;
-  padding-bottom: 0.25rem;
-  color: #1e293b;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.manager-card__trigger {
-  width: 100%;
-  justify-content: space-between;
-}
-
-.manager-card__trigger-label {
-  color: #94a3b8;
-  font-size: 11px;
-  line-height: 1rem;
-}
-
-.manager-card__dates {
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-/* =========================================================
  * Brand Hero
  * ======================================================= */
 

@@ -12,8 +12,6 @@ import { ErrorMessage } from "../../../../shared/ui/error";
 import Stack from "../../../../shared/ui/stack";
 import { Text } from "../../../../shared/ui/text";
 
-import "../../../../styles/brand.css";
-
 export type AccountStatus =
   | "active"
   | "inactive"
@@ -58,58 +56,36 @@ export const AccountSelectCard: React.FC<AccountSelectCardProps> = ({
     "未設定";
 
   return (
-    <Card className="admin-card">
-      <CardHeader className="admin-card__header">
-        <CardTitle className="admin-card__title">{title}</CardTitle>
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
       </CardHeader>
 
       <CardContent>
         <Stack gap="md">
-          <div className="admin-card__section">
-            <Text
-              as="div"
-              size="xs"
-              tone="muted"
-              className="account-select-card__label"
-            >
+          <Stack gap="xs">
+            <Text as="div" size="xs" tone="muted">
               接続口座
             </Text>
 
             {loading ? (
-              <Text
-                as="div"
-                size="sm"
-                tone="muted"
-                className="account-select-card__loading"
-              >
+              <Text as="div" size="sm" tone="muted">
                 口座を読み込み中です…
               </Text>
             ) : accountError ? (
-              <ErrorMessage
-                size="xs"
-                className="account-select-card__error"
-              >
+              <ErrorMessage size="xs">
                 {accountError}
               </ErrorMessage>
             ) : (
-              <Text
-                as="div"
-                size="sm"
-                className="account-select-card__value"
-              >
+              <Text as="div" size="sm">
                 {displayLabel}
               </Text>
             )}
-          </div>
+          </Stack>
 
           {accountId && (
-            <div className="admin-card__section">
-              <Text
-                as="div"
-                size="xs"
-                tone="muted"
-                className="account-select-card__label"
-              >
+            <Stack gap="xs">
+              <Text as="div" size="xs" tone="muted">
                 Account ID
               </Text>
 
@@ -118,11 +94,10 @@ export const AccountSelectCard: React.FC<AccountSelectCardProps> = ({
                 size="xs"
                 tone="muted"
                 wrap="anywhere"
-                className="account-select-card__id"
               >
                 {accountId}
               </Text>
-            </div>
+            </Stack>
           )}
         </Stack>
       </CardContent>

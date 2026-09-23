@@ -5,6 +5,7 @@ import { Upload } from "lucide-react";
 import "../styles/brand.css";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
+import { Button } from "../shared/ui/button";
 import {
   Card,
   CardContent,
@@ -22,10 +23,10 @@ import { Media } from "../shared/ui/media";
 import { Text } from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
-import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
-import { ManagerCard } from "../features/brand/presentation/components/ManagerCard";
+import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
 import BrandCreateProgressModal from "../features/brand/presentation/components/brandProgressModal";
+import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
 
 export default function BrandDetail() {
   const {
@@ -134,21 +135,21 @@ export default function BrandDetail() {
 
             {isEditing && (
               <>
-                <div className="brand-hero__toolbar brand-hero__toolbar--cover">
-                  <button
+                <div>
+                  <Button
                     type="button"
-                    className="brand-hero__action-btn"
+                    variant="outline"
+                    size="sm"
                     onClick={handlePickBrandBackground}
                     disabled={saving}
                   >
                     <Upload size={16} />
                     背景画像をアップロード
-                  </button>
+                  </Button>
 
                   {(brandBackgroundFile || draft.brandBackgroundImage) && (
                     <DeleteButton
                       size="lg"
-                      className="brand-hero__background-delete"
                       disabled={saving}
                       ariaLabel="ブランド背景画像を削除"
                       onClick={(event) => {
@@ -191,7 +192,6 @@ export default function BrandDetail() {
                     alt="ブランドアイコン"
                     size="fluid"
                     className="brand-hero__avatar"
-                    imageClassName="brand-hero__avatar-image"
                     fallbackClassName="brand-hero__avatar-empty"
                     fallback={isEditing ? "アイコンを選択" : "アイコン未設定"}
                     onClick={canEditImage ? handlePickBrandIcon : undefined}
@@ -212,21 +212,21 @@ export default function BrandDetail() {
 
                 {isEditing && (
                   <>
-                    <div className="brand-hero__toolbar brand-hero__toolbar--avatar">
-                      <button
+                    <div>
+                      <Button
                         type="button"
-                        className="brand-hero__action-btn brand-hero__action-btn--plain"
+                        variant="outline"
+                        size="sm"
                         onClick={handlePickBrandIcon}
                         disabled={saving}
                       >
                         <Upload size={16} />
                         アイコンをアップロード
-                      </button>
+                      </Button>
 
                       {(brandIconFile || draft.brandIcon) && (
                         <DeleteButton
                           size="md"
-                          className="brand-hero__icon-delete"
                           disabled={saving}
                           ariaLabel="ブランドアイコンを削除"
                           onClick={(event) => {
@@ -251,7 +251,9 @@ export default function BrandDetail() {
               </div>
 
               <div className="brand-hero__meta">
-                <div className="brand-hero__title">{displayBrandName}</div>
+                <div className="brand-hero__title">
+                  {displayBrandName}
+                </div>
                 <div className="brand-hero__sub">
                   {isEditing
                     ? editingManagerName
@@ -293,7 +295,9 @@ export default function BrandDetail() {
                 </ErrorMessage>
               )}
 
-              <CardLabel htmlFor="brand-name">ブランド名</CardLabel>
+              <CardLabel htmlFor="brand-name">
+                ブランド名
+              </CardLabel>
 
               {!isEditing ? (
                 <Text as="div" size="sm" wrap="anywhere">
@@ -314,7 +318,9 @@ export default function BrandDetail() {
                 />
               )}
 
-              <CardLabel htmlFor="brand-description">説明</CardLabel>
+              <CardLabel htmlFor="brand-description">
+                説明
+              </CardLabel>
 
               {!isEditing ? (
                 <Text as="div" size="sm" wrap="anywhere">
@@ -366,15 +372,22 @@ export default function BrandDetail() {
 
   const right = (
     <div className="page-column">
-      <ManagerCard
-        managerName={
-          isEditing ? editingManagerName : brand.memberName ?? ""
+      <AdminCard
+        assigneeLabel="責任者"
+        assigneeName={
+          isEditing
+            ? editingManagerName
+            : brand.memberName ?? ""
         }
-        managerId={isEditing ? managerId : brand.managerId}
-        managerCandidates={managerCandidates}
+        assigneeId={
+          isEditing
+            ? managerId ?? undefined
+            : brand.managerId ?? undefined
+        }
+        assigneeCandidates={managerCandidates}
         loadingMembers={loadingMembers}
-        onSelectManager={handleSelectManager}
-        registeredAt={registeredAt}
+        onSelectAssignee={handleSelectManager}
+        createdAt={registeredAt}
         updatedAt={updatedAt}
         mode={isEditing ? "edit" : "view"}
       />
