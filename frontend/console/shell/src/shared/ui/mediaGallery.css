@@ -56,6 +56,10 @@
     transform 160ms ease;
 }
 
+.ui-media-gallery__thumb > .ui-media {
+  border-radius: inherit;
+}
+
 .ui-media-gallery__thumb:hover {
   transform: translateY(-1px);
 }

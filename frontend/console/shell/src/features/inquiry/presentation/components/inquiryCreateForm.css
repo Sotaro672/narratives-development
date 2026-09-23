@@ -7,3 +7,16 @@
 .inquiry-create-form__counter {
   text-align: right;
 }
+
+.inquiry-create-form__uploader {
+  width: 100%;
+}
+
+.inquiry-create-form__header-uploader {
+  width: auto;
+  margin-left: auto;
+}
+
+.inquiry-create-form__header-uploader .ui-media-uploader__picker-button {
+  align-self: flex-end;
+}
