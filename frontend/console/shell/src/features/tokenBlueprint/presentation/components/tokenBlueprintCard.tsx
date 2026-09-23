@@ -7,7 +7,6 @@ import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePol
 import type { IconCropPosition } from "../../../../shared/types/iconCrop";
 import {
   Card,
-  CardBadge,
   CardContent,
   CardField,
   CardFields,
@@ -118,15 +117,12 @@ export default function TokenBlueprintCard({
             items={iconItems}
             accept={IMAGE_STORAGE_ACCEPT}
             variant="single"
-            pickerVariant="button"
             title={null}
             showCount={false}
             showFileNames={Boolean(selectedIconFile)}
-            showPicker={canEditIcon}
+            showPicker={false}
             showRemoveButton={Boolean(selectedIconFile)}
             previewFramed={false}
-            pickerLabel="アップロード"
-            replaceLabel="アイコンを変更"
             className="token-blueprint-card__icon-area"
             disabled={!canEditIcon}
             renderPreview={(_item, { openPicker }) =>
