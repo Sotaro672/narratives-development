@@ -13,6 +13,7 @@ import { useTransportationFeeDetail } from "../features/transportation/presentat
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card } from "../shared/ui/card";
 import Empty from "../shared/ui/empty";
+import Loading from "../shared/ui/loading";
 import { Modal, ModalButton } from "../shared/ui/modal";
 import Stack from "../shared/ui/stack";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
@@ -60,9 +61,9 @@ export default function TransportationFeeDetail() {
     <Stack gap="lg">
       {vm.loading ? (
         <Card>
-          <Empty
-            compact
-            description="配送料金設定を読み込んでいます..."
+          <Loading
+            variant="card"
+            message="配送料金設定を読み込み中です..."
           />
         </Card>
       ) : transportation ? (
@@ -126,9 +127,9 @@ export default function TransportationFeeDetail() {
     <div className="page-column">
       {vm.loading ? (
         <Card>
-          <Empty
-            compact
-            description="管理情報を読み込んでいます..."
+          <Loading
+            variant="card"
+            message="管理情報を読み込み中です..."
           />
         </Card>
       ) : transportation ? (

@@ -27,8 +27,6 @@ import {
 import type { ProductionQuantityRow } from "../../../../shared/types/production";
 import { rgbIntToHex } from "../../../../shared/util/color";
 
-import "../../../../styles/production.css";
-
 type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 
 type ProductionQuantityCardProps = {

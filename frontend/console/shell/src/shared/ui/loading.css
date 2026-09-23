@@ -1,0 +1,95 @@
+/* frontend/console/shell/src/shared/ui/loading.css */
+
+/* =========================================================
+ * Base
+ * ======================================================= */
+
+.loading {
+  box-sizing: border-box;
+  min-width: 0;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.loading__indicator {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+.loading__message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* =========================================================
+ * Page
+ * ======================================================= */
+
+.loading--page {
+  display: flex;
+  width: 100%;
+  min-height: 160px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+
+/* =========================================================
+ * Card
+ * ======================================================= */
+
+.loading--card {
+  display: flex;
+  width: 100%;
+  min-height: 96px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+}
+
+/* =========================================================
+ * Inline
+ * ======================================================= */
+
+.loading--inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* =========================================================
+ * Table
+ * ======================================================= */
+
+.loading--table {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+/* =========================================================
+ * Animation
+ * ======================================================= */
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading__indicator {
+    animation: none;
+  }
+}

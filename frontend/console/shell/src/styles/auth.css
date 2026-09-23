@@ -141,6 +141,8 @@
 
 .admin-dropdown-sep {
   margin: 8px 0;
+  border: 0;
+  border-top: 1px solid hsl(var(--border));
 }
 
 .admin-dropdown-item {

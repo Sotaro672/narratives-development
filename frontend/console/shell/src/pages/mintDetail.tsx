@@ -3,7 +3,7 @@
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
-import Text from "../shared/ui/text";
+import Loading from "../shared/ui/loading";
 
 import MintBrandSelectorCard from "../features/mint/presentation/components/mintBrandSelectorCard";
 import MintFundingEstimateCard from "../features/mint/presentation/components/mintFundingEstimateCard";
@@ -61,9 +61,10 @@ export default function MintRequestDetail() {
         {productBlueprintLoading ? (
           <Card largeRadius>
             <CardContent>
-              <Text tone="muted">
-                プロダクト基本情報を読み込み中です…
-              </Text>
+              <Loading
+                variant="card"
+                message="プロダクト基本情報を読み込み中です..."
+              />
             </CardContent>
           </Card>
         ) : productBlueprintError ? (
@@ -86,9 +87,10 @@ export default function MintRequestDetail() {
         ) : (
           <Card largeRadius>
             <CardContent>
-              <Text tone="muted">
-                プロダクト基本情報を読み込み中です…
-              </Text>
+              <Loading
+                variant="card"
+                message="プロダクト基本情報を読み込み中です..."
+              />
             </CardContent>
           </Card>
         )}
@@ -96,9 +98,10 @@ export default function MintRequestDetail() {
         {loading ? (
           <Card largeRadius>
             <CardContent>
-              <Text tone="muted">
-                検査結果を読み込み中です…
-              </Text>
+              <Loading
+                variant="card"
+                message="検査結果を読み込み中です..."
+              />
             </CardContent>
           </Card>
         ) : error ? (

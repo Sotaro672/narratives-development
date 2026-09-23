@@ -12,7 +12,7 @@ import ProductBlueprintCard, { type ProductBlueprintPatchInput } from "../featur
 import TokenBlueprintCard, { type TokenBlueprintCardViewModel } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { ErrorMessage } from "../shared/ui/error";
-import Text from "../shared/ui/text";
+import Loading from "../shared/ui/loading";
 
 export default function InventoryDetail() {
   const navigate = useNavigate();
@@ -149,9 +149,10 @@ export default function InventoryDetail() {
         ) : null}
 
         {loading ? (
-          <Text as="div" tone="muted">
-            読み込み中...
-          </Text>
+          <Loading
+            variant="inline"
+            message="在庫情報を読み込み中です..."
+          />
         ) : null}
 
         {error ? (

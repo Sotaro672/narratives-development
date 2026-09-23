@@ -17,6 +17,7 @@ import { ErrorMessage } from "../shared/ui/error";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
+import Loading from "../shared/ui/loading";
 import { Media } from "../shared/ui/media";
 import { Text } from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
@@ -91,14 +92,10 @@ export default function BrandDetail() {
     <Card>
       <CardContent>
         {loading ? (
-          <Text
-            as="div"
-            size="sm"
-            tone="muted"
-            className="brand-detail__state--padded"
-          >
-            読み込み中...
-          </Text>
+          <Loading
+            variant="card"
+            message="ブランド情報を読み込み中です..."
+          />
         ) : error && !isEditing ? (
           <ErrorMessage className="brand-detail__state--padded">
             {error.message}
@@ -284,9 +281,10 @@ export default function BrandDetail() {
 
         <CardContent>
           {loading ? (
-            <Text as="div" size="sm" tone="muted">
-              読み込み中...
-            </Text>
+            <Loading
+              variant="card"
+              message="基本情報を読み込み中です..."
+            />
           ) : (
             <>
               {error && isEditing && (

@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import Loading from "../../../../shared/ui/loading";
 import {
   Table,
   TableBody,
@@ -42,13 +43,10 @@ export default function OrderBuyerCard({
 
         <CardContent>
           {loading ? (
-            <Text
-              as="div"
-              tone="muted"
-              className="order-detail__message"
-            >
-              読み込み中...
-            </Text>
+            <Loading
+              variant="card"
+              message="購入者情報を読み込み中です..."
+            />
           ) : error ? (
             <ErrorMessage className="order-detail__message">
               {error}

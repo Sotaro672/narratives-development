@@ -13,6 +13,7 @@ import {
   BadgeGroup,
 } from "../shared/ui/badge";
 import { ErrorMessage } from "../shared/ui/error";
+import Loading from "../shared/ui/loading";
 import Pagination from "../shared/ui/pagination";
 import {
   TableCell,
@@ -49,13 +50,10 @@ export default function MemberManagementPage() {
 
   if (loading) {
     return (
-      <Text
-        as="div"
-        tone="muted"
-        className="member-management__message"
-      >
-        読み込み中...
-      </Text>
+      <Loading
+        variant="page"
+        message="メンバー情報を読み込み中です..."
+      />
     );
   }
 
@@ -161,10 +159,7 @@ export default function MemberManagementPage() {
 
               <TableCell>
                 {categories.length === 0 ? (
-                  <Text
-                    as="span"
-                    tone="muted"
-                  >
+                  <Text as="span" tone="muted">
                     なし
                   </Text>
                 ) : (
@@ -195,9 +190,7 @@ export default function MemberManagementPage() {
       <Pagination
         currentPage={page.number}
         totalPages={page.totalPages ?? 1}
-        onPageChange={(pageNumber) =>
-          setPageNumber(pageNumber)
-        }
+        onPageChange={(pageNumber) => setPageNumber(pageNumber)}
       />
     </div>
   );

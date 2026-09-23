@@ -5,6 +5,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
 import { Input } from "../shared/ui/input";
+import Loading from "../shared/ui/loading";
 import Stack from "../shared/ui/stack";
 import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
@@ -92,9 +93,10 @@ export default function ListDetail() {
       >
         <div className="page-column">
           {vm.loading && (
-            <Text as="div" size="sm" tone="muted">
-              読み込み中...
-            </Text>
+            <Loading
+              variant="inline"
+              message="出品情報を読み込み中です..."
+            />
           )}
 
           {vm.error && (

@@ -13,6 +13,5 @@ export * from "./pagination";
 export * from "./popover";
 export * from "./progress";
 export * from "./refresh";
-export * from "./separator";
 export * from "./sort-able-table-header";
 export * from "./text";

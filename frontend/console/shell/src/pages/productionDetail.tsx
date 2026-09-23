@@ -9,9 +9,9 @@ import { toProductBlueprintCategoryPathKey } from "../features/productBlueprint/
 import ProductionQuantityCard from "../features/production/presentation/components/productionQuantityCard";
 import { useProductionDetail } from "../features/production/presentation/hook/useProductionDetail";
 import { usePrintCard } from "../features/print/presentation/hook/usePrintCard";
+import { Empty } from "../shared/ui/empty";
 import { ErrorMessage } from "../shared/ui/error";
-
-import "../styles/production.css";
+import Loading from "../shared/ui/loading";
 
 export default function ProductionDetail() {
   const {
@@ -173,9 +173,10 @@ export default function ProductionDetail() {
     >
       <div className="page-column">
         {loading && (
-          <div className="production-detail__state">
-            生産情報を読み込み中です…
-          </div>
+          <Loading
+            variant="page"
+            message="生産情報を読み込み中です…"
+          />
         )}
 
         {!loading && error && (
@@ -185,9 +186,10 @@ export default function ProductionDetail() {
         )}
 
         {!loading && !error && !production && (
-          <div className="production-detail__state">
-            対象の生産情報が見つかりません。
-          </div>
+          <Empty
+            compact
+            description="対象の生産情報が見つかりません。"
+          />
         )}
 
         {!loading && !error && production && (

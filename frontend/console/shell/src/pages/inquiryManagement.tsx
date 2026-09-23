@@ -13,11 +13,11 @@ import List, {
 } from "../layout/List/List";
 import Empty from "../shared/ui/empty";
 import { ErrorMessage } from "../shared/ui/error";
+import Loading from "../shared/ui/loading";
 import {
   TableCell,
   TableRow,
 } from "../shared/ui/table";
-import Text from "../shared/ui/text";
 
 export default function InquiryManagementPage() {
   const navigate = useNavigate();
@@ -146,9 +146,10 @@ export default function InquiryManagementPage() {
         {loading ? (
           <TableRow>
             <TableCell colSpan={headers.length}>
-              <Text as="div" tone="muted">
-                問い合わせ一覧を読み込み中です。
-              </Text>
+              <Loading
+                variant="table"
+                message="問い合わせ一覧を読み込み中です..."
+              />
             </TableCell>
           </TableRow>
         ) : errorMessage ? (

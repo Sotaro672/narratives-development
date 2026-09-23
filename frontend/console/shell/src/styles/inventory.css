@@ -17,36 +17,3 @@
 .inventory-list-card__item + .inventory-list-card__item {
   border-top: 1px solid hsl(var(--border));
 }
-
-/* =========================================================
- * List Image Card
- * ======================================================= */
-
-.lic__main {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid hsl(var(--border));
-  border-radius: 16px;
-  background: hsl(var(--card));
-}
-
-.lic__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 12px;
-  border-top: 1px solid hsl(var(--border));
-}
-
-.lic__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.lic__thumb {
-  position: relative;
-  min-width: 0;
-}

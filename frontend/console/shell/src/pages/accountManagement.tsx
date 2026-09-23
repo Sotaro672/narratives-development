@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { useAccountManagement } from "../features/account/presentation/hook/useAccountManagement";
 import List from "../layout/List/List";
 import { ErrorMessage } from "../shared/ui/error";
+import Loading from "../shared/ui/loading";
 import { TableCell, TableRow } from "../shared/ui/table";
 
 import "../styles/account.css";
@@ -21,7 +22,12 @@ export default function AccountManagementPage() {
   } = useAccountManagement();
 
   if (loading) {
-    return <div className="p-4">読み込み中...</div>;
+    return (
+      <Loading
+        variant="page"
+        message="口座情報を読み込み中です..."
+      />
+    );
   }
 
   if (error) {

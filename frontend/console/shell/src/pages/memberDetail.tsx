@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
+import Loading from "../shared/ui/loading";
 import Stack from "../shared/ui/stack";
 import Text from "../shared/ui/text";
 
@@ -109,9 +110,10 @@ export default function MemberDetail() {
 
           <CardContent>
             {loading ? (
-              <Text as="p" tone="muted">
-                権限情報を読み込み中です…
-              </Text>
+              <Loading
+                variant="card"
+                message="権限情報を読み込み中です..."
+              />
             ) : permissions.length === 0 ? (
               <Text as="p" tone="muted">
                 権限は未設定です。

@@ -13,7 +13,6 @@ import {
   Modal,
   ModalButton,
 } from "../../../shared/ui/modal";
-import { Separator } from "../../../shared/ui/separator";
 import Stack from "../../../shared/ui/stack";
 import Text from "../../../shared/ui/text";
 import { useAdminPanel } from "../hook/useAdminPanel";
@@ -157,7 +156,7 @@ export default function AdminPanel({
           </Stack>
         </div>
 
-        <Separator className="admin-dropdown-sep" />
+        <hr className="admin-dropdown-sep" />
 
         <Button
           type="button"
@@ -189,7 +188,7 @@ export default function AdminPanel({
           パスワード変更
         </Button>
 
-        <Separator className="admin-dropdown-sep" />
+        <hr className="admin-dropdown-sep" />
 
         <Button
           type="button"

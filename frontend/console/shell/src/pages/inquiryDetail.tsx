@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "../../../shell/src/shared/ui/card";
 import Empty from "../../../shell/src/shared/ui/empty";
+import Loading from "../../../shell/src/shared/ui/loading";
 
 import InquiryContentCard from "../features/inquiry/presentation/components/inquiryContentCard";
 import InquiryInfoCard from "../features/inquiry/presentation/components/inquiryInfoCard";
@@ -173,9 +174,7 @@ export default function InquiryDetail() {
   );
 
   const statusBadge = (
-    <Badge
-      variant={getInquiryStatusBadgeVariant(inquiry?.status)}
-    >
+    <Badge variant={getInquiryStatusBadgeVariant(inquiry?.status)}>
       {status}
     </Badge>
   );
@@ -216,9 +215,9 @@ export default function InquiryDetail() {
           </CardHeader>
 
           <CardContent>
-            <Empty
-              compact
-              description="問い合わせ詳細を読み込み中です。"
+            <Loading
+              variant="card"
+              message="問い合わせ詳細を読み込み中です..."
             />
           </CardContent>
         </Card>
@@ -230,9 +229,9 @@ export default function InquiryDetail() {
             </CardHeader>
 
             <CardContent>
-              <Empty
-                compact
-                description="問い合わせ情報を読み込み中です。"
+              <Loading
+                variant="card"
+                message="問い合わせ情報を読み込み中です..."
               />
             </CardContent>
           </Card>
@@ -243,9 +242,9 @@ export default function InquiryDetail() {
             </CardHeader>
 
             <CardContent>
-              <Empty
-                compact
-                description="商品・注文情報を読み込み中です。"
+              <Loading
+                variant="card"
+                message="商品・注文情報を読み込み中です..."
               />
             </CardContent>
           </Card>
