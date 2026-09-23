@@ -15,6 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
+import Stack from "../../../../shared/ui/stack";
 import { Text } from "../../../../shared/ui/text";
 
 import "../../../../styles/member.css";
@@ -36,8 +37,8 @@ export function BrandSelect({
   );
 
   return (
-    <div className="brand-select">
-      <Label className="brand-select__label">
+    <Stack gap="sm">
+      <Label>
         ブランド（任意・複数選択可）
       </Label>
 
@@ -87,7 +88,7 @@ export function BrandSelect({
         </PopoverContent>
       </Popover>
 
-      <BadgeGroup className="brand-select__badges">
+      <BadgeGroup>
         {selectedCount === 0 ? (
           <Text
             as="span"
@@ -106,6 +107,6 @@ export function BrandSelect({
             ))
         )}
       </BadgeGroup>
-    </div>
+    </Stack>
   );
 }

@@ -2,18 +2,7 @@
 
 /* =========================================================
  * Member Management
- * Table row interaction is handled by shared/ui/table.
- * Pagination layout is handled by shared/ui/pagination.
- * Text and badges are handled by shared/ui.
  * ======================================================= */
-
-.member-management {
-  padding: 0;
-}
-
-.member-management__message {
-  padding: 1rem;
-}
 
 .member-management__permission-badges {
   max-width: 240px;
@@ -21,14 +10,7 @@
 
 /* =========================================================
  * Brand Select
- * Popover の幅・候補レイアウトは shared/ui/popover を利用する。
- * Label / Button / Badge / Text は shared/ui を利用する。
  * ======================================================= */
-
-.brand-select__label {
-  display: block;
-  margin-bottom: 0.25rem;
-}
 
 .brand-select__trigger {
   width: 100%;
@@ -36,27 +18,9 @@
   text-align: left;
 }
 
-.brand-select__badges {
-  margin-top: 0.5rem;
-}
-
 /* =========================================================
  * Member Card
- * Card / CardHeader / CardHeaderLeft / CardHeaderIcon /
- * CardTitle / CardContent / CardFields / CardField は
- * shared/ui/card を利用する。
- * 文字スタイルは shared/ui/text を利用する。
  * ======================================================= */
-
-.member-card__grid {
-  column-gap: 56px;
-  row-gap: 24px;
-  align-items: flex-start;
-}
-
-.member-card__section {
-  gap: 16px;
-}
 
 .member-card__value {
   display: flex;
@@ -74,20 +38,6 @@
 /* =========================================================
  * Member Detail
  * ======================================================= */
-
-.member-detail__message {
-  padding: 16px;
-}
-
-.member-permissions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.member-permissions__category {
-  margin-bottom: 4px;
-}
 
 .member-permissions__list {
   display: flex;
@@ -110,19 +60,8 @@
   padding: 16px;
 }
 
-.member-create__error {
-  margin-bottom: 12px;
-}
-
-.member-create__form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 /* =========================================================
  * Invitation
- * Input / Button は shared/ui を利用する。
  * ======================================================= */
 
 .invitation-page {
@@ -146,9 +85,6 @@
 
 .invitation-page__description {
   margin: 0 0 1.5rem;
-  color: #334155;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
 }
 
 .invitation-page__error {
@@ -159,48 +95,6 @@
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 1.5rem;
-}
-
-.invitation-page__section {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.invitation-page__section--compact {
-  gap: 0.75rem;
-}
-
-.invitation-page__label {
-  display: block;
-  margin-bottom: 0.25rem;
-  color: #475569;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.invitation-page__readonly-value {
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 0.25rem;
-  background-color: #ffffff;
-  color: #0f172a;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-.invitation-page__readonly-value--brands {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  word-break: break-all;
-}
-
-.invitation-page__grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
 }
 
 .invitation-page__spacer {
@@ -212,10 +106,4 @@
   justify-content: center;
   margin-top: 1.5rem;
   margin-bottom: 2rem;
-}
-
-.invitation-page__submit {
-  border-radius: 9999px;
-  padding-right: 2.5rem;
-  padding-left: 2.5rem;
 }

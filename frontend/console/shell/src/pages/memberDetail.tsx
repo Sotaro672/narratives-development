@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
+import Stack from "../shared/ui/stack";
 import Text from "../shared/ui/text";
 
 import "../styles/member.css";
@@ -68,8 +69,12 @@ export default function MemberDetail() {
 
   if (!memberId) {
     return (
-      <PageStyle layout="single" title="メンバー詳細" onBack={handleBack}>
-        <ErrorMessage className="member-detail__message">
+      <PageStyle
+        layout="single"
+        title="メンバー詳細"
+        onBack={handleBack}
+      >
+        <ErrorMessage variant="panel">
           メンバーIDが指定されていません。
         </ErrorMessage>
       </PageStyle>
@@ -116,16 +121,15 @@ export default function MemberDetail() {
                 権限情報を表示できません。
               </Text>
             ) : (
-              <div className="member-permissions">
+              <Stack gap="md">
                 {Object.entries(groupedPermissionsByCategory).map(
                   ([category, perms]) => (
-                    <div key={category}>
+                    <Stack key={category} gap="xs">
                       <Text
                         as="div"
                         size="xs"
                         tone="muted"
                         weight="semibold"
-                        className="member-permissions__category"
                       >
                         {category}
                       </Text>
@@ -137,10 +141,10 @@ export default function MemberDetail() {
                           </li>
                         ))}
                       </ul>
-                    </div>
+                    </Stack>
                   ),
                 )}
-              </div>
+              </Stack>
             )}
           </CardContent>
         </Card>

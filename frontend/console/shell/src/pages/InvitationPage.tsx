@@ -5,9 +5,16 @@ import { useSearchParams } from "react-router-dom";
 
 import { useInvitationPage } from "../auth/presentation/hook/useInvitationPage";
 import { Button } from "../shared/ui/button";
+import {
+  CardField,
+  CardFields,
+  CardReadonly,
+} from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
 import { Input } from "../shared/ui/input";
 import { Label } from "../shared/ui/label";
+import Stack from "../shared/ui/stack";
+import Text from "../shared/ui/text";
 
 import "../styles/member.css";
 
@@ -19,9 +26,7 @@ import "../styles/member.css";
  */
 export default function InvitationPage() {
   const [searchParams] = useSearchParams();
-
-  const invitationToken =
-    searchParams.get("token") ?? "";
+  const invitationToken = searchParams.get("token") ?? "";
 
   const {
     setToken,
@@ -50,10 +55,7 @@ export default function InvitationPage() {
 
   React.useEffect(() => {
     setToken(invitationToken);
-  }, [
-    invitationToken,
-    setToken,
-  ]);
+  }, [invitationToken, setToken]);
 
   const companyText = loadingInvitationInfo
     ? "読み込み中..."
@@ -68,9 +70,13 @@ export default function InvitationPage() {
   return (
     <div className="invitation-page">
       <main className="invitation-page__main">
-        <p className="invitation-page__description">
+        <Text
+          as="p"
+          size="sm"
+          className="invitation-page__description"
+        >
           招待内容を確認し、メールアドレス、氏名、パスワードを設定してください。
-        </p>
+        </Text>
 
         {error && (
           <ErrorMessage
@@ -87,180 +93,145 @@ export default function InvitationPage() {
           aria-busy={loading}
           noValidate
         >
-          <section className="invitation-page__section invitation-page__section--compact">
-            <div>
-              <Label className="invitation-page__label">
-                会社名
-              </Label>
+          <Stack gap="lg">
+            <section>
+              <Stack gap="md">
+                <CardField>
+                  <Label>会社名</Label>
+                  <CardReadonly>
+                    {companyText}
+                  </CardReadonly>
+                </CardField>
 
-              <p className="invitation-page__readonly-value">
-                {companyText}
-              </p>
-            </div>
+                <CardField>
+                  <Label>割り当てブランド</Label>
+                  <CardReadonly>
+                    {assignedBrandText}
+                  </CardReadonly>
+                </CardField>
+              </Stack>
+            </section>
 
-            <div>
-              <Label className="invitation-page__label">
-                割り当てブランド
-              </Label>
-
-              <p className="invitation-page__readonly-value invitation-page__readonly-value--brands">
-                {assignedBrandText}
-              </p>
-            </div>
-          </section>
-
-          <section className="invitation-page__section">
-            <div>
-              <Label
-                htmlFor="invitation-email"
-                className="invitation-page__label"
-              >
-                メールアドレス
-              </Label>
-
-              <Input
-                id="invitation-email"
-                type="email"
-                autoComplete="email"
-                value={email}
-                onChange={(event) =>
-                  setEmail(event.target.value)
-                }
-                placeholder="example@example.com"
-                disabled={submitting}
-              />
-            </div>
-          </section>
-
-          <section className="invitation-page__section">
-            <div className="invitation-page__grid">
-              <div>
-                <Label
-                  htmlFor="invitation-last-name"
-                  className="invitation-page__label"
-                >
-                  姓
+            <section>
+              <CardField>
+                <Label htmlFor="invitation-email">
+                  メールアドレス
                 </Label>
 
                 <Input
-                  id="invitation-last-name"
-                  autoComplete="family-name"
-                  value={lastName}
-                  onChange={(event) =>
-                    setLastName(event.target.value)
-                  }
-                  placeholder="山田"
+                  id="invitation-email"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="example@example.com"
                   disabled={submitting}
                 />
-              </div>
+              </CardField>
+            </section>
 
-              <div>
-                <Label
-                  htmlFor="invitation-last-name-kana"
-                  className="invitation-page__label"
-                >
-                  姓（かな）
-                </Label>
+            <section>
+              <Stack gap="md">
+                <CardFields>
+                  <CardField>
+                    <Label htmlFor="invitation-last-name">
+                      姓
+                    </Label>
 
-                <Input
-                  id="invitation-last-name-kana"
-                  value={lastNameKana}
-                  onChange={(event) =>
-                    setLastNameKana(event.target.value)
-                  }
-                  placeholder="やまだ"
-                  disabled={submitting}
-                />
-              </div>
-            </div>
+                    <Input
+                      id="invitation-last-name"
+                      autoComplete="family-name"
+                      value={lastName}
+                      onChange={(event) => setLastName(event.target.value)}
+                      placeholder="山田"
+                      disabled={submitting}
+                    />
+                  </CardField>
 
-            <div className="invitation-page__grid">
-              <div>
-                <Label
-                  htmlFor="invitation-first-name"
-                  className="invitation-page__label"
-                >
-                  名
-                </Label>
+                  <CardField>
+                    <Label htmlFor="invitation-last-name-kana">
+                      姓（かな）
+                    </Label>
 
-                <Input
-                  id="invitation-first-name"
-                  autoComplete="given-name"
-                  value={firstName}
-                  onChange={(event) =>
-                    setFirstName(event.target.value)
-                  }
-                  placeholder="太郎"
-                  disabled={submitting}
-                />
-              </div>
+                    <Input
+                      id="invitation-last-name-kana"
+                      value={lastNameKana}
+                      onChange={(event) => setLastNameKana(event.target.value)}
+                      placeholder="やまだ"
+                      disabled={submitting}
+                    />
+                  </CardField>
+                </CardFields>
 
-              <div>
-                <Label
-                  htmlFor="invitation-first-name-kana"
-                  className="invitation-page__label"
-                >
-                  名（かな）
-                </Label>
+                <CardFields>
+                  <CardField>
+                    <Label htmlFor="invitation-first-name">
+                      名
+                    </Label>
 
-                <Input
-                  id="invitation-first-name-kana"
-                  value={firstNameKana}
-                  onChange={(event) =>
-                    setFirstNameKana(event.target.value)
-                  }
-                  placeholder="たろう"
-                  disabled={submitting}
-                />
-              </div>
-            </div>
-          </section>
+                    <Input
+                      id="invitation-first-name"
+                      autoComplete="given-name"
+                      value={firstName}
+                      onChange={(event) => setFirstName(event.target.value)}
+                      placeholder="太郎"
+                      disabled={submitting}
+                    />
+                  </CardField>
 
-          <section className="invitation-page__section">
-            <div className="invitation-page__grid">
-              <div>
-                <Label
-                  htmlFor="invitation-password"
-                  className="invitation-page__label"
-                >
-                  パスワード
-                </Label>
+                  <CardField>
+                    <Label htmlFor="invitation-first-name-kana">
+                      名（かな）
+                    </Label>
 
-                <Input
-                  id="invitation-password"
-                  type="password"
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={(event) =>
-                    setPassword(event.target.value)
-                  }
-                  placeholder="8文字以上"
-                  disabled={submitting}
-                />
-              </div>
+                    <Input
+                      id="invitation-first-name-kana"
+                      value={firstNameKana}
+                      onChange={(event) => setFirstNameKana(event.target.value)}
+                      placeholder="たろう"
+                      disabled={submitting}
+                    />
+                  </CardField>
+                </CardFields>
+              </Stack>
+            </section>
 
-              <div>
-                <Label
-                  htmlFor="invitation-password-confirm"
-                  className="invitation-page__label"
-                >
-                  パスワード（確認用）
-                </Label>
+            <section>
+              <CardFields>
+                <CardField>
+                  <Label htmlFor="invitation-password">
+                    パスワード
+                  </Label>
 
-                <Input
-                  id="invitation-password-confirm"
-                  type="password"
-                  autoComplete="new-password"
-                  value={passwordConfirm}
-                  onChange={(event) =>
-                    setPasswordConfirm(event.target.value)
-                  }
-                  placeholder="もう一度入力"
-                  disabled={submitting}
-                />
-              </div>
-            </div>
-          </section>
+                  <Input
+                    id="invitation-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    placeholder="8文字以上"
+                    disabled={submitting}
+                  />
+                </CardField>
+
+                <CardField>
+                  <Label htmlFor="invitation-password-confirm">
+                    パスワード（確認用）
+                  </Label>
+
+                  <Input
+                    id="invitation-password-confirm"
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordConfirm}
+                    onChange={(event) => setPasswordConfirm(event.target.value)}
+                    placeholder="もう一度入力"
+                    disabled={submitting}
+                  />
+                </CardField>
+              </CardFields>
+            </section>
+          </Stack>
 
           <div className="invitation-page__spacer" />
 
@@ -269,7 +240,6 @@ export default function InvitationPage() {
               type="submit"
               variant="solid"
               size="lg"
-              className="invitation-page__submit"
               disabled={loading}
             >
               {submitting
