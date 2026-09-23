@@ -14,6 +14,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
+import Stack from "../../../../shared/ui/stack";
 
 import { useAdminCard as useAdminCardHook } from "../hook/useAdminCard";
 
@@ -159,129 +160,134 @@ export const AdminCard: React.FC<AdminCardProps> = ({
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="admin-card__body">
-        {showsTargetAvatarCount ? (
-          <div>
-            <div className="admin-card__field-label">
-              宛先数
-            </div>
+      <CardContent>
+        <Stack gap="md">
+          {showsTargetAvatarCount ? (
+            <div>
+              <div className="admin-card__field-label">
+                宛先数
+              </div>
 
-            <div className="admin-card__field-value">
-              {targetAvatarCount}件
-            </div>
-          </div>
-        ) : showAssignee ? (
-          <div>
-            <div className="admin-card__field-label">
-              担当者
-            </div>
-
-            {!isEdit ? (
               <div className="admin-card__field-value">
-                {effectiveAssigneeName}
+                {targetAvatarCount}件
               </div>
-            ) : (
-              <>
-                <Popover>
-                  <PopoverTrigger>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="admin-card__assignee-trigger"
-                      disabled={effectiveLoading}
-                      aria-label="担当者を選択"
+            </div>
+          ) : showAssignee ? (
+            <div>
+              <div className="admin-card__field-label">
+                担当者
+              </div>
+
+              {!isEdit ? (
+                <div className="admin-card__field-value">
+                  {effectiveAssigneeName}
+                </div>
+              ) : (
+                <>
+                  <Popover>
+                    <PopoverTrigger>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="admin-card__assignee-trigger"
+                        disabled={effectiveLoading}
+                        aria-label="担当者を選択"
+                      >
+                        {effectiveLoading
+                          ? "担当者を読み込み中です…"
+                          : selectedCandidateName}
+                      </Button>
+                    </PopoverTrigger>
+
+                    <PopoverContent
+                      align="start"
+                      className="popover__content--compact popover__content--medium"
                     >
-                      {effectiveLoading
-                        ? "担当者を読み込み中です…"
-                        : selectedCandidateName}
-                    </Button>
-                  </PopoverTrigger>
+                      {effectiveLoading ? (
+                        <div className="popover__empty">
+                          担当者を読み込み中です…
+                        </div>
+                      ) : effectiveCandidates.length === 0 ? (
+                        <div className="popover__empty">
+                          担当者候補がありません。
+                        </div>
+                      ) : (
+                        <div className="popover__list">
+                          {effectiveCandidates.map((candidate) => {
+                            const isSelected =
+                              candidate.id === selectedValue;
 
-                  <PopoverContent
-                    align="start"
-                    className="popover__content--compact popover__content--medium"
-                  >
-                    {effectiveLoading ? (
-                      <div className="popover__empty">
-                        担当者を読み込み中です…
-                      </div>
-                    ) : effectiveCandidates.length === 0 ? (
-                      <div className="popover__empty">
+                            return (
+                              <button
+                                key={candidate.id}
+                                type="button"
+                                className={`popover__item${isSelected ? " is-active" : ""}`}
+                                onClick={() =>
+                                  handleSelectAssignee(candidate.id)
+                                }
+                              >
+                                {candidate.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+
+                  {!effectiveLoading &&
+                    effectiveCandidates.length === 0 && (
+                      <p className="admin-card__empty-assignee">
                         担当者候補がありません。
-                      </div>
-                    ) : (
-                      <div className="popover__list">
-                        {effectiveCandidates.map((candidate) => {
-                          const isSelected =
-                            candidate.id === selectedValue;
-
-                          return (
-                            <button
-                              key={candidate.id}
-                              type="button"
-                              className={`popover__item${isSelected ? " is-active" : ""}`}
-                              onClick={() =>
-                                handleSelectAssignee(candidate.id)
-                              }
-                            >
-                              {candidate.name}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      </p>
                     )}
-                  </PopoverContent>
-                </Popover>
+                </>
+              )}
+            </div>
+          ) : null}
 
-                {!effectiveLoading &&
-                  effectiveCandidates.length === 0 && (
-                    <p className="admin-card__empty-assignee">
-                      担当者候補がありません。
-                    </p>
+          {(createdByName ||
+            createdAt ||
+            updatedByName ||
+            updatedAt) && (
+            <Stack
+              gap="xs"
+              className="admin-card__metadata"
+            >
+              {(createdByName || createdAt) && (
+                <div className="admin-card__metadata-row">
+                  {createdByName && (
+                    <span>
+                      作成者: {createdByName}
+                    </span>
                   )}
-              </>
-            )}
-          </div>
-        ) : null}
 
-        {(createdByName ||
-          createdAt ||
-          updatedByName ||
-          updatedAt) && (
-          <div className="admin-card__metadata">
-            {(createdByName || createdAt) && (
-              <div className="admin-card__metadata-row">
-                {createdByName && (
-                  <span>
-                    作成者: {createdByName}
-                  </span>
-                )}
+                  {createdAt && (
+                    <span>
+                      作成日: {createdAt}
+                    </span>
+                  )}
+                </div>
+              )}
 
-                {createdAt && (
-                  <span>
-                    作成日: {createdAt}
-                  </span>
-                )}
-              </div>
-            )}
+              {(updatedByName || updatedAt) && (
+                <div className="admin-card__metadata-row">
+                  {updatedByName && (
+                    <span>
+                      更新者: {updatedByName}
+                    </span>
+                  )}
 
-            {(updatedByName || updatedAt) && (
-              <div className="admin-card__metadata-row">
-                {updatedByName && (
-                  <span>
-                    更新者: {updatedByName}
-                  </span>
-                )}
-
-                {updatedAt && (
-                  <span>
-                    更新日: {updatedAt}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+                  {updatedAt && (
+                    <span>
+                      更新日: {updatedAt}
+                    </span>
+                  )}
+                </div>
+              )}
+            </Stack>
+          )}
+        </Stack>
       </CardContent>
     </Card>
   );

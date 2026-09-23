@@ -1,61 +1,57 @@
-// frontend/console/shell/src/pages/brandDetail.tsx
+// frontend/console/shell/src/pages/brandCreate.tsx
 
 import { Upload, X } from "lucide-react";
-
-import "../styles/brand.css";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
 import {
   Card,
   CardContent,
   CardHeader,
+  CardInput,
   CardLabel,
   CardTitle,
 } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
-import { Input } from "../shared/ui/input";
 import { Media } from "../shared/ui/media";
-import { Text } from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
-import { useBrandDetail } from "../features/brand/presentation/hook/useBrandDetail";
-import { ManagerCard } from "../features/brand/presentation/components/ManagerCard";
+import { AdminCard } from "../features/admin/presentation/components/AdminCard";
 import { AccountSelectCard } from "../features/brand/presentation/components/accountSelectCard";
 import BrandCreateProgressModal from "../features/brand/presentation/components/brandProgressModal";
+import { useBrandCreate } from "../features/brand/presentation/hook/useBrandCreate";
 
-export default function BrandDetail() {
+import "../styles/brand.css";
+
+export default function BrandCreate() {
   const {
-    brand,
-    registeredAt,
-    updatedAt,
-    handleBack,
-    isEditing,
-    draft,
-    setDraft,
-    handleEdit,
-    handleCancelEdit,
-    handleSave,
-    loading,
-    saving,
-    error,
-    progress,
-    progressOpen,
-    onCloseProgress,
-    managerId,
-    managerCandidates,
-    loadingMembers,
-    editingManagerName,
-    handleSelectManager,
+    accountId,
+    accountIdError,
     accountCandidates,
     loadingAccounts,
-    accountError,
+    accountLoadError,
+    name,
+    setName,
+    nameError,
+    description,
+    setDescription,
+    websiteUrl,
+    setWebsiteUrl,
+    managerId,
+    managerIdError,
+    managerDisplayName,
+    managerCandidates,
+    loadingManagers,
+    handleSelectManager,
+    displayBrandName,
+    displayWebsiteUrl,
     brandImageAccept,
+    hasBrandIconSelection,
+    hasBrandBackgroundSelection,
     brandIconInputRef,
     brandBackgroundInputRef,
     brandIconFile,
-    brandBackgroundFile,
     brandIconPreviewUrl,
     brandBackgroundPreviewUrl,
     brandIconCropPosition,
@@ -71,38 +67,23 @@ export default function BrandDetail() {
     handleBrandBackgroundChange,
     handleClearBrandIcon,
     handleClearBrandBackground,
-  } = useBrandDetail();
-
-  const canEditImage = isEditing && !saving;
-  const isCroppingBrandIcon = Boolean(
-    isEditing && brandIconFile && brandIconPreviewUrl,
-  );
+    saving,
+    progress,
+    progressOpen,
+    onCloseProgress,
+    handleBack,
+    handleSave,
+  } = useBrandCreate();
 
   const accountLabel =
-    accountCandidates.find((candidate) => candidate.id === brand.accountId)
-      ?.label ?? null;
+    accountCandidates.find((candidate) => candidate.id === accountId)?.label ?? null;
 
-  const displayBrandName = isEditing
-    ? draft.name || "ブランド名未入力"
-    : brand.name || "ブランド名未設定";
+  const isCroppingBrandIcon = Boolean(brandIconFile && brandIconPreviewUrl);
 
-  const hero = (
-    <Card>
-      <CardContent>
-        {loading ? (
-          <Text
-            as="div"
-            size="sm"
-            tone="muted"
-            className="brand-detail__state--padded"
-          >
-            読み込み中...
-          </Text>
-        ) : error && !isEditing ? (
-          <ErrorMessage className="brand-detail__state--padded">
-            {error.message}
-          </ErrorMessage>
-        ) : (
+  const left = (
+    <div className="page-column">
+      <Card>
+        <CardContent>
           <div className="brand-hero">
             <Media
               src={brandBackgroundPreviewUrl}
@@ -111,65 +92,53 @@ export default function BrandDetail() {
               variant="cover"
               fit="cover"
               bordered={false}
-              emptyText={isEditing ? "背景画像を選択" : "背景画像未設定"}
-              emptyDescription={
-                canEditImage
-                  ? "クリックして背景画像を選択できます"
-                  : undefined
-              }
-              onActivate={
-                canEditImage ? handlePickBrandBackground : undefined
-              }
+              emptyText="背景画像を選択"
+              emptyDescription={saving ? undefined : "クリックして背景画像を選択できます"}
+              onActivate={saving ? undefined : handlePickBrandBackground}
               disabled={saving}
             />
 
-            {isEditing && (
-              <input
-                ref={brandBackgroundInputRef}
-                type="file"
-                accept={brandImageAccept}
-                hidden
-                onChange={handleBrandBackgroundChange}
+            <input
+              ref={brandBackgroundInputRef}
+              type="file"
+              accept={brandImageAccept}
+              hidden
+              onChange={handleBrandBackgroundChange}
+              disabled={saving}
+            />
+
+            <div className="brand-hero__toolbar brand-hero__toolbar--cover">
+              <button
+                type="button"
+                className="brand-hero__action-btn"
+                onClick={handlePickBrandBackground}
                 disabled={saving}
-              />
-            )}
+              >
+                <Upload size={16} />
+                背景画像をアップロード
+              </button>
 
-            {isEditing && (
-              <>
-                <div className="brand-hero__toolbar brand-hero__toolbar--cover">
-                  <button
-                    type="button"
-                    className="brand-hero__action-btn"
-                    onClick={handlePickBrandBackground}
-                    disabled={saving}
-                  >
-                    <Upload size={16} />
-                    背景画像をアップロード
-                  </button>
+              {hasBrandBackgroundSelection && (
+                <button
+                  type="button"
+                  className="brand-hero__action-btn"
+                  onClick={handleClearBrandBackground}
+                  disabled={saving}
+                >
+                  <X size={16} />
+                  取り消す
+                </button>
+              )}
+            </div>
 
-                  {(brandBackgroundFile || draft.brandBackgroundImage) && (
-                    <button
-                      type="button"
-                      className="brand-hero__action-btn"
-                      onClick={handleClearBrandBackground}
-                      disabled={saving}
-                    >
-                      <X size={16} />
-                      取り消す
-                    </button>
-                  )}
-                </div>
-
-                {brandBackgroundImageError && (
-                  <ErrorMessage
-                    as="p"
-                    size="xs"
-                    className="brand-detail__media-error"
-                  >
-                    {brandBackgroundImageError}
-                  </ErrorMessage>
-                )}
-              </>
+            {brandBackgroundImageError && (
+              <ErrorMessage
+                as="p"
+                size="xs"
+                className="brand-create__error--media"
+              >
+                {brandBackgroundImageError}
+              </ErrorMessage>
             )}
 
             <div className="brand-hero__header">
@@ -194,170 +163,114 @@ export default function BrandDetail() {
                     className="brand-hero__avatar"
                     imageClassName="brand-hero__avatar-image"
                     fallbackClassName="brand-hero__avatar-empty"
-                    fallback={isEditing ? "アイコンを選択" : "アイコン未設定"}
-                    onClick={canEditImage ? handlePickBrandIcon : undefined}
+                    fallback="アイコンを選択"
+                    onClick={saving ? undefined : handlePickBrandIcon}
                     disabled={saving}
                   />
                 )}
 
-                {isEditing && (
-                  <input
-                    ref={brandIconInputRef}
-                    type="file"
-                    accept={brandImageAccept}
-                    hidden
-                    onChange={handleBrandIconChange}
+                <input
+                  ref={brandIconInputRef}
+                  type="file"
+                  accept={brandImageAccept}
+                  hidden
+                  onChange={handleBrandIconChange}
+                  disabled={saving}
+                />
+
+                <div className="brand-hero__toolbar brand-hero__toolbar--avatar">
+                  <button
+                    type="button"
+                    className="brand-hero__action-btn brand-hero__action-btn--plain"
+                    onClick={handlePickBrandIcon}
                     disabled={saving}
-                  />
-                )}
+                  >
+                    <Upload size={16} />
+                    アイコンをアップロード
+                  </button>
 
-                {isEditing && (
-                  <>
-                    <div className="brand-hero__toolbar brand-hero__toolbar--avatar">
-                      <button
-                        type="button"
-                        className="brand-hero__action-btn brand-hero__action-btn--plain"
-                        onClick={handlePickBrandIcon}
-                        disabled={saving}
-                      >
-                        <Upload size={16} />
-                        アイコンをアップロード
-                      </button>
+                  {hasBrandIconSelection && (
+                    <button
+                      type="button"
+                      className="brand-hero__action-btn brand-hero__action-btn--plain"
+                      onClick={handleClearBrandIcon}
+                      disabled={saving}
+                    >
+                      <X size={16} />
+                      取り消す
+                    </button>
+                  )}
+                </div>
 
-                      {(brandIconFile || draft.brandIcon) && (
-                        <button
-                          type="button"
-                          className="brand-hero__action-btn brand-hero__action-btn--plain"
-                          onClick={handleClearBrandIcon}
-                          disabled={saving}
-                        >
-                          <X size={16} />
-                          取り消す
-                        </button>
-                      )}
-                    </div>
-
-                    {brandIconError && (
-                      <ErrorMessage
-                        as="p"
-                        size="xs"
-                        className="brand-detail__media-error"
-                      >
-                        {brandIconError}
-                      </ErrorMessage>
-                    )}
-                  </>
+                {brandIconError && (
+                  <ErrorMessage
+                    as="p"
+                    size="xs"
+                    className="brand-create__error--media"
+                  >
+                    {brandIconError}
+                  </ErrorMessage>
                 )}
               </div>
 
               <div className="brand-hero__meta">
                 <div className="brand-hero__title">{displayBrandName}</div>
                 <div className="brand-hero__sub">
-                  {isEditing
-                    ? editingManagerName
-                    : brand.memberName || "責任者未設定"}
+                  {managerDisplayName || "責任者未設定"}
                 </div>
-                <div className="brand-hero__sub">
-                  {isEditing
-                    ? draft.websiteUrl || "Webサイト未設定"
-                    : brand.websiteUrl || "Webサイト未設定"}
-                </div>
+                <div className="brand-hero__sub">{displayWebsiteUrl}</div>
               </div>
             </div>
           </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-
-  const left = (
-    <div className="page-column">
-      {hero}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>基本情報</CardTitle>
+          <CardTitle>ブランド情報</CardTitle>
         </CardHeader>
 
         <CardContent>
-          {loading ? (
-            <Text as="div" size="sm" tone="muted">
-              読み込み中...
-            </Text>
-          ) : (
-            <>
-              {error && isEditing && (
-                <ErrorMessage className="brand-detail__form-error">
-                  {error.message}
-                </ErrorMessage>
-              )}
+          <CardLabel htmlFor="name">ブランド名（必須）</CardLabel>
 
-              <CardLabel htmlFor="brand-name">ブランド名</CardLabel>
+          <CardInput
+            id="name"
+            placeholder="ブランド名"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            disabled={saving}
+          />
 
-              {!isEditing ? (
-                <Text as="div" size="sm" wrap="anywhere">
-                  {brand.name || "（未設定）"}
-                </Text>
-              ) : (
-                <Input
-                  id="brand-name"
-                  value={draft.name}
-                  placeholder="ブランド名"
-                  onChange={(event) =>
-                    setDraft((currentDraft) => ({
-                      ...currentDraft,
-                      name: event.target.value,
-                    }))
-                  }
-                  disabled={saving}
-                />
-              )}
-
-              <CardLabel htmlFor="brand-description">説明</CardLabel>
-
-              {!isEditing ? (
-                <Text as="div" size="sm" wrap="anywhere">
-                  {brand.description || "（未設定）"}
-                </Text>
-              ) : (
-                <Textarea
-                  id="brand-description"
-                  value={draft.description}
-                  placeholder="説明"
-                  onChange={(event) =>
-                    setDraft((currentDraft) => ({
-                      ...currentDraft,
-                      description: event.target.value,
-                    }))
-                  }
-                  disabled={saving}
-                />
-              )}
-
-              <CardLabel htmlFor="brand-website-url">
-                WebサイトURL
-              </CardLabel>
-
-              {!isEditing ? (
-                <Text as="div" size="sm" wrap="anywhere">
-                  {brand.websiteUrl || "（未設定）"}
-                </Text>
-              ) : (
-                <Input
-                  id="brand-website-url"
-                  value={draft.websiteUrl}
-                  placeholder="https://example.com"
-                  onChange={(event) =>
-                    setDraft((currentDraft) => ({
-                      ...currentDraft,
-                      websiteUrl: event.target.value,
-                    }))
-                  }
-                  disabled={saving}
-                />
-              )}
-            </>
+          {nameError && (
+            <ErrorMessage
+              as="p"
+              size="xs"
+              className="brand-create__error--field"
+            >
+              {nameError}
+            </ErrorMessage>
           )}
+
+          <CardLabel htmlFor="description">説明</CardLabel>
+
+          <Textarea
+            id="description"
+            value={description}
+            placeholder="ブランドの説明を入力してください"
+            className="brand-create__textarea"
+            onChange={(event) => setDescription(event.target.value)}
+            disabled={saving}
+          />
+
+          <CardLabel htmlFor="websiteUrl">WebサイトURL</CardLabel>
+
+          <CardInput
+            id="websiteUrl"
+            placeholder="https://example.com"
+            value={websiteUrl}
+            onChange={(event) => setWebsiteUrl(event.target.value)}
+            disabled={saving}
+          />
         </CardContent>
       </Card>
     </div>
@@ -365,24 +278,26 @@ export default function BrandDetail() {
 
   const right = (
     <div className="page-column">
-      <ManagerCard
-        managerName={
-          isEditing ? editingManagerName : brand.memberName ?? ""
-        }
-        managerId={isEditing ? managerId : brand.managerId}
-        managerCandidates={managerCandidates}
-        loadingMembers={loadingMembers}
-        onSelectManager={handleSelectManager}
-        registeredAt={registeredAt}
-        updatedAt={updatedAt}
-        mode={isEditing ? "edit" : "view"}
+      <AdminCard
+        mode="edit"
+        assigneeId={managerId}
+        assigneeName={managerDisplayName || "未設定"}
+        assigneeCandidates={managerCandidates}
+        loadingMembers={loadingManagers}
+        onSelectAssignee={handleSelectManager}
       />
+
+      {managerIdError && (
+        <ErrorMessage as="p" size="xs">
+          {managerIdError}
+        </ErrorMessage>
+      )}
 
       <AccountSelectCard
         accountLabel={accountLabel}
         accountCandidates={accountCandidates}
         loadingAccounts={loadingAccounts}
-        accountError={accountError}
+        accountError={accountLoadError || accountIdError}
       />
     </div>
   );
@@ -391,11 +306,10 @@ export default function BrandDetail() {
     <>
       <PageStyle
         layout="grid-2"
-        title={brand.name || "ブランド詳細"}
+        title="ブランド登録"
         onBack={handleBack}
-        onEdit={!isEditing && !loading ? handleEdit : undefined}
-        onSave={isEditing && !saving ? handleSave : undefined}
-        onCancel={isEditing && !saving ? handleCancelEdit : undefined}
+        onSave={handleSave}
+        isSaving={saving}
       >
         {[left, right]}
       </PageStyle>
@@ -403,11 +317,7 @@ export default function BrandDetail() {
       <BrandCreateProgressModal
         open={progressOpen}
         progress={progress}
-        onClose={
-          progress.isBlockingNavigation
-            ? undefined
-            : onCloseProgress
-        }
+        onClose={progress.isBlockingNavigation ? undefined : onCloseProgress}
       />
     </>
   );

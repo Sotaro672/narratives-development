@@ -4,13 +4,6 @@
   color: var(--pbp-text-dim);
 }
 
-.admin-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  padding: 16px 20px 18px;
-}
-
 .admin-card__field-label {
   margin-bottom: 0.25rem;
   color: #64748b;
@@ -40,9 +33,6 @@
 }
 
 .admin-card__metadata {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
   color: #64748b;
   font-size: 0.75rem;
   line-height: 1rem;

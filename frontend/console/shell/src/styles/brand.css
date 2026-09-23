@@ -38,12 +38,6 @@
  * Account Select Card
  * ======================================================= */
 
-.account-select-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .account-select-card__label {
   margin-bottom: 0.25rem;
 }
@@ -63,12 +57,6 @@
 /* =========================================================
  * Manager Card
  * ======================================================= */
-
-.manager-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
 
 .manager-card__label {
   margin-bottom: 0.25rem;
@@ -97,9 +85,6 @@
 }
 
 .manager-card__dates {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
   color: #64748b;
   font-size: 0.75rem;
   line-height: 1rem;

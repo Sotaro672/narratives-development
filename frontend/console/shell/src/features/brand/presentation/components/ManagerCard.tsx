@@ -15,6 +15,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
+import Stack from "../../../../shared/ui/stack";
 
 import "../../../../styles/brand.css";
 
@@ -80,70 +81,83 @@ export const ManagerCard: React.FC<ManagerCardProps> = ({
         <CardTitle className="admin-card__title">{title}</CardTitle>
       </CardHeader>
 
-      <CardContent className="admin-card__body manager-card__body">
-        <div className="admin-card__section">
-          <div className="admin-card__label manager-card__label">責任者</div>
+      <CardContent>
+        <Stack gap="md">
+          <div className="admin-card__section">
+            <div className="admin-card__label manager-card__label">
+              責任者
+            </div>
 
-          {!isEdit && (
-            <div className="manager-card__value">{effectiveManagerName}</div>
-          )}
+            {!isEdit && (
+              <div className="manager-card__value">
+                {effectiveManagerName}
+              </div>
+            )}
 
-          {isEdit && (
-            <Popover>
-              <PopoverTrigger>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="admin-card__assignee-btn manager-card__trigger"
-                  onClick={handleTriggerClick}
+            {isEdit && (
+              <Popover>
+                <PopoverTrigger>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="admin-card__assignee-btn manager-card__trigger"
+                    onClick={handleTriggerClick}
+                  >
+                    <span>{effectiveManagerName}</span>
+                    <span className="manager-card__trigger-label">選択</span>
+                  </Button>
+                </PopoverTrigger>
+
+                <PopoverContent
+                  align="start"
+                  className="popover__content--compact popover__content--medium"
                 >
-                  <span>{effectiveManagerName}</span>
-                  <span className="manager-card__trigger-label">選択</span>
-                </Button>
-              </PopoverTrigger>
+                  {effectiveLoading ? (
+                    <div className="popover__empty">
+                      責任者を読み込み中です…
+                    </div>
+                  ) : memberError ? (
+                    <ErrorMessage as="div" size="xs">
+                      {memberError}
+                    </ErrorMessage>
+                  ) : effectiveCandidates.length > 0 ? (
+                    <div className="popover__list">
+                      {effectiveCandidates.map((candidate) => {
+                        const isSelected = candidate.id === managerId;
 
-              <PopoverContent
-                align="start"
-                className="popover__content--compact popover__content--medium"
-              >
-                {effectiveLoading ? (
-                  <div className="popover__empty">責任者を読み込み中です…</div>
-                ) : memberError ? (
-                  <ErrorMessage as="div" size="xs">
-                    {memberError}
-                  </ErrorMessage>
-                ) : effectiveCandidates.length > 0 ? (
-                  <div className="popover__list">
-                    {effectiveCandidates.map((candidate) => {
-                      const isSelected = candidate.id === managerId;
-
-                      return (
-                        <button
-                          key={candidate.id}
-                          type="button"
-                          className={`popover__item${isSelected ? " is-active" : ""}`}
-                          onClick={() => handleSelect(candidate.id)}
-                        >
-                          {candidate.name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="popover__empty">責任者候補がありません。</div>
-                )}
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
-
-        {(registeredAt || updatedAt) && (
-          <div className="admin-card__section manager-card__dates">
-            {registeredAt && <div>登録日: {registeredAt}</div>}
-            {updatedAt && <div>更新日: {updatedAt}</div>}
+                        return (
+                          <button
+                            key={candidate.id}
+                            type="button"
+                            className={`popover__item${isSelected ? " is-active" : ""}`}
+                            onClick={() => handleSelect(candidate.id)}
+                          >
+                            {candidate.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="popover__empty">
+                      責任者候補がありません。
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
-        )}
+
+          {(registeredAt || updatedAt) && (
+            <Stack
+              gap="xs"
+              className="admin-card__section manager-card__dates"
+            >
+              {registeredAt && <div>登録日: {registeredAt}</div>}
+              {updatedAt && <div>更新日: {updatedAt}</div>}
+            </Stack>
+          )}
+        </Stack>
       </CardContent>
     </Card>
   );

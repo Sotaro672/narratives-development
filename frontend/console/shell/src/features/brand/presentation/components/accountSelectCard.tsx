@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import Stack from "../../../../shared/ui/stack";
 import { Text } from "../../../../shared/ui/text";
 
 import "../../../../styles/brand.css";
@@ -62,45 +63,8 @@ export const AccountSelectCard: React.FC<AccountSelectCardProps> = ({
         <CardTitle className="admin-card__title">{title}</CardTitle>
       </CardHeader>
 
-      <CardContent className="admin-card__body account-select-card__body">
-        <div className="admin-card__section">
-          <Text
-            as="div"
-            size="xs"
-            tone="muted"
-            className="account-select-card__label"
-          >
-            接続口座
-          </Text>
-
-          {loading ? (
-            <Text
-              as="div"
-              size="sm"
-              tone="muted"
-              className="account-select-card__loading"
-            >
-              口座を読み込み中です…
-            </Text>
-          ) : accountError ? (
-            <ErrorMessage
-              size="xs"
-              className="account-select-card__error"
-            >
-              {accountError}
-            </ErrorMessage>
-          ) : (
-            <Text
-              as="div"
-              size="sm"
-              className="account-select-card__value"
-            >
-              {displayLabel}
-            </Text>
-          )}
-        </div>
-
-        {accountId && (
+      <CardContent>
+        <Stack gap="md">
           <div className="admin-card__section">
             <Text
               as="div"
@@ -108,20 +72,59 @@ export const AccountSelectCard: React.FC<AccountSelectCardProps> = ({
               tone="muted"
               className="account-select-card__label"
             >
-              Account ID
+              接続口座
             </Text>
 
-            <Text
-              as="div"
-              size="xs"
-              tone="muted"
-              wrap="anywhere"
-              className="account-select-card__id"
-            >
-              {accountId}
-            </Text>
+            {loading ? (
+              <Text
+                as="div"
+                size="sm"
+                tone="muted"
+                className="account-select-card__loading"
+              >
+                口座を読み込み中です…
+              </Text>
+            ) : accountError ? (
+              <ErrorMessage
+                size="xs"
+                className="account-select-card__error"
+              >
+                {accountError}
+              </ErrorMessage>
+            ) : (
+              <Text
+                as="div"
+                size="sm"
+                className="account-select-card__value"
+              >
+                {displayLabel}
+              </Text>
+            )}
           </div>
-        )}
+
+          {accountId && (
+            <div className="admin-card__section">
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                className="account-select-card__label"
+              >
+                Account ID
+              </Text>
+
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                wrap="anywhere"
+                className="account-select-card__id"
+              >
+                {accountId}
+              </Text>
+            </div>
+          )}
+        </Stack>
       </CardContent>
     </Card>
   );
