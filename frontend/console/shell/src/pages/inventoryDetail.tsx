@@ -3,17 +3,16 @@
 import * as React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import PageStyle from "../layout/PageStyle/PageStyle";
-import ProductBlueprintCard, { type ProductBlueprintPatchInput } from "../features/productBlueprint/presentation/components/productBlueprintForm";
 import InventoryCard from "../features/inventory/presentation/components/inventoryCard";
-import InventoryShippingAddressCard from "../features/inventory/presentation/components/InventoryShippingAddressCard";
 import InventoryListCard from "../features/inventory/presentation/components/InventoryListCard";
-import TransportOptionCard from "../features/list/presentation/components/transportOptionCard";
-import TokenBlueprintCard, { type TokenBlueprintCardViewModel } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+import InventoryShippingAddressCard from "../features/inventory/presentation/components/InventoryShippingAddressCard";
 import { useInventoryDetail } from "../features/inventory/presentation/hook/useInventoryDetail";
+import TransportOptionCard from "../features/list/presentation/components/transportOptionCard";
+import ProductBlueprintCard, { type ProductBlueprintPatchInput } from "../features/productBlueprint/presentation/components/productBlueprintForm";
+import TokenBlueprintCard, { type TokenBlueprintCardViewModel } from "../features/tokenBlueprint/presentation/components/tokenBlueprintCard";
+import PageStyle from "../layout/PageStyle/PageStyle";
 import { ErrorMessage } from "../shared/ui/error";
-
-import "../styles/inventory.css";
+import Text from "../shared/ui/text";
 
 export default function InventoryDetail() {
   const navigate = useNavigate();
@@ -150,9 +149,9 @@ export default function InventoryDetail() {
         ) : null}
 
         {loading ? (
-          <div className="inventory-detail__status">
+          <Text as="div" tone="muted">
             読み込み中...
-          </div>
+          </Text>
         ) : null}
 
         {error ? (

@@ -3,17 +3,20 @@
 import * as React from "react";
 import { Plus } from "lucide-react";
 
+import type { InventoryShippingAddressDTO } from "../../../../shared/types/inventory";
+import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardContent,
+  CardField,
   CardHeader,
+  CardSelect,
+  CardSelectWrap,
   CardTitle,
 } from "../../../../shared/ui/card";
+import { Label } from "../../../../shared/ui/label";
 import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
-import type { InventoryShippingAddressDTO } from "../../../../shared/types/inventory";
-
-import "../../../../styles/inventory.css";
 
 export type InventoryShippingAddressCardProps = {
   shippingAddressId: string;
@@ -59,61 +62,55 @@ export const InventoryShippingAddressCard: React.FC<
 
   return (
     <Card>
-      <CardHeader className="inventory-shipping-address__header">
+      <CardHeader>
         <CardTitle>在庫保管場所</CardTitle>
 
-        <button
+        <Button
           type="button"
-          className="inventory-shipping-address__create-button"
+          variant="outline"
           onClick={onCreateShippingAddress}
           disabled={disabled}
         >
           <Plus size={16} aria-hidden />
           新規登録
-        </button>
+        </Button>
       </CardHeader>
 
       <CardContent>
-        <Stack gap="md">
-          <Text
-            as="div"
-            size="xs"
-            tone="muted"
-            className="inventory-shipping-address__label"
-          >
-            保管場所
-          </Text>
+        <Stack gap="sm">
+          <CardField>
+            <Label htmlFor="inventory-shipping-address">
+              保管場所
+            </Label>
 
-          <select
-            className="inventory-shipping-address__select"
-            value={selectedValue}
-            onChange={handleChange}
-            disabled={disabled || !hasShippingAddressOptions}
-          >
-            <option value="" disabled>
-              {loading
-                ? "保管場所を読み込み中です…"
-                : saving
-                  ? "保存中です…"
-                  : hasShippingAddressOptions
-                    ? "保管場所を選択してください"
-                    : "在庫保管場所が登録されていません"}
-            </option>
+            <CardSelectWrap>
+              <CardSelect
+                id="inventory-shipping-address"
+                value={selectedValue}
+                onChange={handleChange}
+                disabled={disabled || !hasShippingAddressOptions}
+              >
+                <option value="" disabled>
+                  {loading
+                    ? "保管場所を読み込み中です…"
+                    : saving
+                      ? "保存中です…"
+                      : hasShippingAddressOptions
+                        ? "保管場所を選択してください"
+                        : "在庫保管場所が登録されていません"}
+                </option>
 
-            {shippingAddressOptions.map((address) => (
-              <option key={address.id} value={address.id}>
-                {address.name}
-              </option>
-            ))}
-          </select>
+                {shippingAddressOptions.map((address) => (
+                  <option key={address.id} value={address.id}>
+                    {address.name}
+                  </option>
+                ))}
+              </CardSelect>
+            </CardSelectWrap>
+          </CardField>
 
           {!loading && !hasShippingAddressOptions ? (
-            <Text
-              as="p"
-              size="xs"
-              tone="muted"
-              className="inventory-shipping-address__empty"
-            >
+            <Text as="p" size="xs" tone="muted">
               在庫保管場所が登録されていません。
             </Text>
           ) : null}

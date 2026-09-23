@@ -16,6 +16,7 @@ import {
 import DeleteButton from "../../../../shared/ui/delete";
 import { Media } from "../../../../shared/ui/media";
 import MediaUploader from "../../../../shared/ui/mediaUploader";
+import Text from "../../../../shared/ui/text";
 
 import { useListImageCard } from "../hook/useListImageCard";
 
@@ -57,17 +58,15 @@ export default function ListImageCard(props: ListImageCardProps) {
         </CardHeaderLeft>
 
         {props.isEdit && vm.effectiveImageUrls.length > 0 && (
-          <div className="lic__actions">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={vm.handleClear}
-              disabled={Boolean(props.saving)}
-            >
-              クリア
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={vm.handleClear}
+            disabled={Boolean(props.saving)}
+          >
+            クリア
+          </Button>
         )}
       </CardHeader>
 
@@ -95,11 +94,7 @@ export default function ListImageCard(props: ListImageCardProps) {
                       ? "クリックで選択（複数可）"
                       : "編集モードで追加できます"
                   }
-                  onActivate={
-                    canAddImages
-                      ? openPicker
-                      : undefined
-                  }
+                  onActivate={canAddImages ? openPicker : undefined}
                 />
               )}
 
@@ -113,17 +108,12 @@ export default function ListImageCard(props: ListImageCardProps) {
                       variant="landscape"
                       fit="cover"
                       bordered={false}
-                      onActivate={
-                        canAddImages
-                          ? openPicker
-                          : undefined
-                      }
+                      onActivate={canAddImages ? openPicker : undefined}
                     />
 
                     {props.isEdit && (
                       <DeleteButton
                         size="md"
-                        className="lic__remove-btn"
                         ariaLabel="メイン画像を削除"
                         disabled={Boolean(props.saving)}
                         onClick={(event) => {
@@ -134,25 +124,24 @@ export default function ListImageCard(props: ListImageCardProps) {
                     )}
 
                     <div className="lic__footer">
-                      <div className="lic__footer-left">
+                      <Text as="div" size="xs" tone="muted">
                         {vm.effectiveImageUrls.length} 枚
                         {props.isEdit
                           ? "（×で削除 / クリックで追加）"
                           : "（サムネでメイン切替）"}
-                      </div>
+                      </Text>
 
                       {!props.isEdit && (
-                        <div className="lic__footer-note">
+                        <Text as="div" size="xs" tone="muted">
                           ※ 画像変更は編集モードで行えます
-                        </div>
+                        </Text>
                       )}
                     </div>
                   </div>
 
                   <div className="lic__grid">
                     {vm.thumbIndices.map((idx: number) => {
-                      const url =
-                        vm.effectiveImageUrls[idx] ?? "";
+                      const url = vm.effectiveImageUrls[idx] ?? "";
 
                       return (
                         <div
@@ -165,16 +154,12 @@ export default function ListImageCard(props: ListImageCardProps) {
                             alt={`商品画像 ${idx + 1}`}
                             variant="square"
                             fit="cover"
-                            bordered={false}
-                            onActivate={() =>
-                              vm.handleSetMainIndex(idx)
-                            }
+                            onActivate={() => vm.handleSetMainIndex(idx)}
                           />
 
                           {props.isEdit && (
                             <DeleteButton
                               size="sm"
-                              className="lic__thumb-remove"
                               ariaLabel={`商品画像 ${idx + 1} を削除`}
                               disabled={Boolean(props.saving)}
                               onClick={(event) => {
@@ -192,11 +177,7 @@ export default function ListImageCard(props: ListImageCardProps) {
                         variant="square"
                         emptyIcon={<Plus />}
                         emptyText="画像を追加"
-                        onActivate={
-                          canAddImages
-                            ? openPicker
-                            : undefined
-                        }
+                        onActivate={canAddImages ? openPicker : undefined}
                         disabled={!canAddImages}
                       />
                     )}

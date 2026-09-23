@@ -7,6 +7,8 @@ import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardContent,
+  CardField,
+  CardFields,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -40,7 +42,7 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
 }) => {
   return (
     <Card>
-      <CardHeader className="inventory-list-card__header">
+      <CardHeader>
         <CardTitle>出品</CardTitle>
 
         {onList ? (
@@ -80,33 +82,25 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
                   {item.readableId || item.id}
                 </Button>
 
-                <div className="inventory-list-card__metrics">
-                  <div>
-                    <Text as="div" tone="muted">
+                <CardFields>
+                  <CardField>
+                    <Text as="div" size="xs" tone="muted">
                       累計注文数
                     </Text>
-                    <Text
-                      as="div"
-                      weight="medium"
-                      className="inventory-list-card__metric-value"
-                    >
+                    <Text as="div" weight="medium">
                       {item.totalOrderCount.toLocaleString()}件
                     </Text>
-                  </div>
+                  </CardField>
 
-                  <div>
-                    <Text as="div" tone="muted">
+                  <CardField>
+                    <Text as="div" size="xs" tone="muted">
                       累計売上
                     </Text>
-                    <Text
-                      as="div"
-                      weight="medium"
-                      className="inventory-list-card__metric-value"
-                    >
+                    <Text as="div" weight="medium">
                       ¥{item.totalSalesAmount.toLocaleString()}
                     </Text>
-                  </div>
-                </div>
+                  </CardField>
+                </CardFields>
               </div>
             ))}
           </div>
