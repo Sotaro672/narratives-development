@@ -2,6 +2,7 @@
 
 import { LogOut } from "lucide-react";
 
+import { Button } from "../../../shared/ui/button";
 import {
   CardField,
   CardFields,
@@ -11,12 +12,10 @@ import { Label } from "../../../shared/ui/label";
 import {
   Modal,
   ModalButton,
-  ModalCloseButton,
 } from "../../../shared/ui/modal";
 import { Separator } from "../../../shared/ui/separator";
 import Stack from "../../../shared/ui/stack";
 import Text from "../../../shared/ui/text";
-import { Button } from "../../../shared/ui/button";
 import { useAdminPanel } from "../hook/useAdminPanel";
 
 import "../../../styles/auth.css";
@@ -212,20 +211,12 @@ export default function AdminPanel({
         title="プロフィール変更"
         onClose={() => setShowProfileDialog(false)}
         footer={
-          <>
-            <ModalCloseButton
-              onClick={() => setShowProfileDialog(false)}
-            >
-              キャンセル
-            </ModalCloseButton>
-
-            <ModalButton
-              variant="primary"
-              onClick={() => void handleProfileSave()}
-            >
-              保存
-            </ModalButton>
-          </>
+          <ModalButton
+            variant="primary"
+            onClick={() => void handleProfileSave()}
+          >
+            保存
+          </ModalButton>
         }
       >
         <CardFields>
@@ -282,20 +273,12 @@ export default function AdminPanel({
         title="メールアドレス変更"
         onClose={() => setShowEmailDialog(false)}
         footer={
-          <>
-            <ModalCloseButton
-              onClick={() => setShowEmailDialog(false)}
-            >
-              キャンセル
-            </ModalCloseButton>
-
-            <ModalButton
-              variant="primary"
-              onClick={() => void handleEmailSave()}
-            >
-              認証メールを送信
-            </ModalButton>
-          </>
+          <ModalButton
+            variant="primary"
+            onClick={() => void handleEmailSave()}
+          >
+            認証メールを送信
+          </ModalButton>
         }
       >
         <Stack gap="md">
@@ -335,20 +318,12 @@ export default function AdminPanel({
         description="現在ログイン中のメールアドレス宛に、パスワード再設定用のメールを送信します。メールに記載されたリンクから新しいパスワードを設定してください。"
         onClose={() => setShowPasswordDialog(false)}
         footer={
-          <>
-            <ModalCloseButton
-              onClick={() => setShowPasswordDialog(false)}
-            >
-              キャンセル
-            </ModalCloseButton>
-
-            <ModalButton
-              variant="primary"
-              onClick={() => void handlePasswordSave()}
-            >
-              再設定メールを送信
-            </ModalButton>
-          </>
+          <ModalButton
+            variant="primary"
+            onClick={() => void handlePasswordSave()}
+          >
+            再設定メールを送信
+          </ModalButton>
         }
       />
     </>
