@@ -3,28 +3,34 @@
 import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
-import PageStyle from "../layout/PageStyle/PageStyle";
 import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
-import ReportModal from "../features/report/presentation/components/ReportModal";
-
-import AvatarIcon from "../shared/ui/avatarIcon";
-import { Badge, type BadgeVariant } from "../shared/ui/badge";
-import { Button } from "../shared/ui/button";
-import Empty from "../shared/ui/empty";
-import { ErrorMessage } from "../shared/ui/error";
-import Pagination from "../shared/ui/pagination";
-import RefreshButton from "../shared/ui/refresh";
-import Text from "../shared/ui/text";
-
 import {
   ratingToStars,
   statusLabelJa,
 } from "../features/productBlueprintReview/presentation/component/review";
-
-import type { ReviewStatus } from "../shared/types/productBlueprintReview";
-
 import { useProductBlueprintReviewDetail } from "../features/productBlueprintReview/presentation/hook/useProductBlueprintReviewDetail";
+import ReportModal from "../features/report/presentation/components/ReportModal";
+import PageStyle from "../layout/PageStyle/PageStyle";
+import AvatarIcon from "../shared/ui/avatarIcon";
+import {
+  Badge,
+  BadgeGroup,
+  type BadgeVariant,
+} from "../shared/ui/badge";
+import { Button } from "../shared/ui/button";
+import {
+  Card,
+  CardContent,
+  CardFooter,
+} from "../shared/ui/card";
+import Empty from "../shared/ui/empty";
+import { ErrorMessage } from "../shared/ui/error";
+import Pagination from "../shared/ui/pagination";
+import RefreshButton from "../shared/ui/refresh";
+import Stack from "../shared/ui/stack";
+import Text from "../shared/ui/text";
+import type { ReviewStatus } from "../shared/types/productBlueprintReview";
 
 import "../styles/productBlueprintReview.css";
 
@@ -160,7 +166,7 @@ export default function ProductBlueprintReviewDetail() {
       <PageStyle layout="grid-2" title={Title} onBack={OnBack}>
         <div>
           <div className="pbrd-toolbar">
-            <div className="pbrd-toolbar-left" />
+            <div />
 
             <div className="pbrd-toolbar-right">
               <select
@@ -212,13 +218,13 @@ export default function ProductBlueprintReviewDetail() {
             </div>
           </div>
 
-          {ErrorMessageText ? (
-            <ErrorMessage className="pbrd-error">
-              {ErrorMessageText}
-            </ErrorMessage>
-          ) : null}
+          <Stack gap="md">
+            {ErrorMessageText ? (
+              <ErrorMessage variant="panel">
+                {ErrorMessageText}
+              </ErrorMessage>
+            ) : null}
 
-          <div className="pbrd-reviewcard-wrapper">
             {IsLoading ? (
               <Text as="div" size="xs" tone="muted">
                 読み込み中...
@@ -226,7 +232,7 @@ export default function ProductBlueprintReviewDetail() {
             ) : SortedItems.length === 0 ? (
               <Empty description="現在登録されているレビューはございません。" />
             ) : (
-              <div className="pbrd-grid">
+              <Stack gap="sm">
                 {SortedItems.map((review, index) => {
                   const ReviewID = String(review.ID ?? "").trim();
                   const ReviewKey = ReviewID || `rv_${index}`;
@@ -242,97 +248,89 @@ export default function ProductBlueprintReviewDetail() {
                     review.Status !== "REMOVED";
 
                   return (
-                    <div
-                      key={ReviewKey}
-                      className="pbrd-review-item-card"
-                    >
-                      <div className="pbrd-author-row">
-                        <AvatarIcon
-                          src={AvatarIconUrl}
-                          alt={`${AuthorName}のアイコン`}
-                        />
+                    <Card key={ReviewKey} largeRadius>
+                      <CardContent>
+                        <Stack gap="sm">
+                          <BadgeGroup>
+                            <AvatarIcon
+                              src={AvatarIconUrl}
+                              alt={`${AuthorName}のアイコン`}
+                            />
 
-                        <Text
-                          size="xs"
-                          weight="semibold"
-                          className="pbrd-author-primary"
-                        >
-                          {AuthorName}
-                        </Text>
+                            <Text size="xs" weight="semibold">
+                              {AuthorName}
+                            </Text>
 
-                        <Badge
-                          variant={getReviewStatusBadgeVariant(
-                            review.Status,
-                          )}
-                        >
-                          {StatusLabel}
-                        </Badge>
+                            <Badge
+                              variant={getReviewStatusBadgeVariant(
+                                review.Status,
+                              )}
+                            >
+                              {StatusLabel}
+                            </Badge>
 
-                        <Badge variant="secondary">
-                          {RatingStars}
-                        </Badge>
-                      </div>
+                            <Badge variant="secondary">
+                              {RatingStars}
+                            </Badge>
+                          </BadgeGroup>
 
-                      <Text
-                        as="div"
-                        wrap="pre-wrap"
-                        className="pbrd-body"
-                      >
-                        {Body || (
-                          <Text tone="muted">
-                            （本文なし）
+                          <Text
+                            as="div"
+                            wrap="pre-wrap"
+                          >
+                            {Body || (
+                              <Text tone="muted">
+                                （本文なし）
+                              </Text>
+                            )}
                           </Text>
-                        )}
-                      </Text>
 
-                      <Text
-                        as="div"
-                        size="xs"
-                        tone="muted"
-                        className="pbrd-datetime"
-                      >
-                        投稿日時: {ReviewedAt || "-"}
-                      </Text>
+                          <Text
+                            as="div"
+                            size="xs"
+                            tone="muted"
+                          >
+                            投稿日時: {ReviewedAt || "-"}
+                          </Text>
+                        </Stack>
+                      </CardContent>
 
                       {CanReport ? (
-                        <div className="pbrd-report-actions">
+                        <CardFooter>
                           <Button
                             type="button"
-                            variant="outline"
+                            variant="destructive-outline"
                             size="sm"
-                            className="pbrd-report-button"
                             disabled={ReportSubmitting}
                             onClick={() => OpenReport(ReviewID)}
                           >
                             通報
                           </Button>
-                        </div>
+                        </CardFooter>
                       ) : null}
-                    </div>
+                    </Card>
                   );
                 })}
-              </div>
+              </Stack>
             )}
-          </div>
 
-          <Pagination
-            currentPage={Page}
-            totalPages={TotalPages}
-            onPageChange={SetPage}
-          />
+            <Pagination
+              currentPage={Page}
+              totalPages={TotalPages}
+              onPageChange={SetPage}
+            />
+          </Stack>
         </div>
 
-        <div>
+        <Stack gap="md">
           <AdminCard
             title="管理情報"
             assigneeName={HeaderAssigneeName}
             mode="view"
           />
 
-          <div className="pbrd-log-section">
-            <LogCard />
-          </div>
-        </div>
+          <LogCard />
+        </Stack>
       </PageStyle>
 
       <ReportModal

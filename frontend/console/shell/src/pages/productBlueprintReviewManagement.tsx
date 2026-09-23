@@ -6,8 +6,6 @@ import { useProductBlueprintReviewManagement } from "../features/productBlueprin
 import List, { FilterableTableHeader } from "../layout/List/List";
 import { TableCell, TableRow } from "../shared/ui/table";
 
-import "../styles/productBlueprintReview.css";
-
 type FilterOption = {
   value: string;
   label: string;
@@ -74,7 +72,7 @@ export default function ProductBlueprintReviewManagement() {
       {Rows.map((Row) => (
         <TableRow
           key={Row.ID || Row.ProductBlueprintID}
-          className="pbrm-row"
+          interactive
           role="button"
           tabIndex={0}
           onClick={() => HandleRowClick(Row)}
