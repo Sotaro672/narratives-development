@@ -1,17 +1,14 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/inquiryCreateForm.tsx
 
-import type { ChangeEventHandler } from "react";
-
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
-import DeleteButton from "../../../../shared/ui/delete";
 import { ErrorMessage } from "../../../../shared/ui/error";
 import { Label } from "../../../../shared/ui/label";
-import Media from "../../../../shared/ui/media";
+import MediaUploader from "../../../../shared/ui/mediaUploader";
 import { Progress } from "../../../../shared/ui/progress";
 import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
@@ -31,7 +28,7 @@ type InquiryCreateFormProps = {
   maxImages: number;
   maxImageSizeMB: number;
   onChangeMessage: (value: string) => void;
-  onChangeFiles: ChangeEventHandler<HTMLInputElement>;
+  onChangeFiles: (files: File[]) => void;
   onRemoveAttachment: (id: string) => void;
 };
 
@@ -48,6 +45,15 @@ export default function InquiryCreateForm({
   onChangeFiles,
   onRemoveAttachment,
 }: InquiryCreateFormProps) {
+  const mediaItems = attachments.map((attachment) => ({
+    id: attachment.id,
+    src: attachment.previewUrl,
+    name: attachment.file.name,
+    alt: attachment.file.name,
+    type: "image" as const,
+    contentType: attachment.file.type,
+  }));
+
   return (
     <Card>
       <CardHeader>
@@ -92,87 +98,22 @@ export default function InquiryCreateForm({
             </Text>
           </Stack>
 
-          <div className="inquiry-create-form__attachments">
-            <div className="inquiry-create-form__attachment-header">
-              <Text
-                weight="semibold"
-                className="inquiry-create-form__attachment-title"
-              >
-                添付ファイル
-              </Text>
-
-              <Text
-                size="xs"
-                tone="muted"
-                className="inquiry-create-form__attachment-count"
-              >
-                {attachments.length} / {maxImages}
-              </Text>
-            </div>
-
-            <label className="inquiry-create-form__file-picker">
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="inquiry-create-form__file-input"
-                disabled={submitting || attachments.length >= maxImages}
-                onChange={onChangeFiles}
-              />
-
-              <Text
-                weight="semibold"
-                className="inquiry-create-form__file-picker-title"
-              >
-                画像を選択
-              </Text>
-
-              <Text
-                size="xs"
-                tone="muted"
-                className="inquiry-create-form__file-picker-help"
-              >
-                JPG / PNG / WebP / GIF、1枚 {maxImageSizeMB}MBまで
-              </Text>
-            </label>
-
-            {attachments.length > 0 ? (
-              <div className="inquiry-create-form__attachment-grid">
-                {attachments.map((attachment) => (
-                  <div
-                    key={attachment.id}
-                    className="inquiry-create-form__attachment"
-                  >
-                    <Media
-                      src={attachment.previewUrl}
-                      alt={attachment.file.name}
-                      name={attachment.file.name}
-                      variant="square"
-                      fit="cover"
-                      className="inquiry-create-form__attachment-media"
-                    />
-
-                    <DeleteButton
-                      size="sm"
-                      disabled={submitting}
-                      ariaLabel={`${attachment.file.name}を削除`}
-                      onClick={() => onRemoveAttachment(attachment.id)}
-                    />
-
-                    <Text
-                      as="div"
-                      size="xs"
-                      wrap="nowrap"
-                      className="inquiry-create-form__attachment-name"
-                      title={attachment.file.name}
-                    >
-                      {attachment.file.name}
-                    </Text>
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
+          <MediaUploader
+            items={mediaItems}
+            accept="image/*"
+            multiple
+            maxFiles={maxImages}
+            variant="grid"
+            pickerVariant="dropzone"
+            mediaVariant="square"
+            mediaFit="cover"
+            title="添付ファイル"
+            pickerLabel="画像を選択"
+            pickerDescription={`JPG / PNG / WebP / GIF、1枚 ${maxImageSizeMB}MBまで`}
+            disabled={submitting}
+            onFilesSelected={onChangeFiles}
+            onRemove={onRemoveAttachment}
+          />
 
           {submitting && attachments.length > 0 ? (
             <Progress

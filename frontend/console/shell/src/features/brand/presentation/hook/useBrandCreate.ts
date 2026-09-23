@@ -4,9 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ChangeEvent,
 } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -123,9 +121,6 @@ export function useBrandCreate() {
     () => createInitialBrandProgress("create"),
   );
   const [createdBrandId, setCreatedBrandId] = useState("");
-
-  const brandIconInputRef = useRef<HTMLInputElement | null>(null);
-  const brandBackgroundInputRef = useRef<HTMLInputElement | null>(null);
 
   const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
   const [brandBackgroundFile, setBrandBackgroundFile] =
@@ -280,16 +275,6 @@ export function useBrandCreate() {
     [handleSelectAssignee],
   );
 
-  const handlePickBrandIcon = useCallback(() => {
-    if (saving) return;
-    brandIconInputRef.current?.click();
-  }, [saving]);
-
-  const handlePickBrandBackground = useCallback(() => {
-    if (saving) return;
-    brandBackgroundInputRef.current?.click();
-  }, [saving]);
-
   const validateSelectedImage = useCallback(
     (file: File, target: BrandImageTarget): string | null => {
       const validation = validateImageForStorage(file, target);
@@ -298,11 +283,9 @@ export function useBrandCreate() {
     [],
   );
 
-  const handleBrandIconChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.currentTarget.files?.[0] ?? null;
-      event.currentTarget.value = "";
-
+  const handleBrandIconFilesSelected = useCallback(
+    (files: File[]) => {
+      const file = files[0] ?? null;
       if (!file) return;
 
       const validationError = validateSelectedImage(file, "brandIcon");
@@ -324,15 +307,10 @@ export function useBrandCreate() {
     [validateSelectedImage, resetBrandIconCrop],
   );
 
-  const handleBrandBackgroundChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.currentTarget.files?.[0] ?? null;
-
-      if (!file) {
-        setBrandBackgroundFile(null);
-        setBrandBackgroundImageError(null);
-        return;
-      }
+  const handleBrandBackgroundFilesSelected = useCallback(
+    (files: File[]) => {
+      const file = files[0] ?? null;
+      if (!file) return;
 
       const validationError = validateSelectedImage(
         file,
@@ -343,7 +321,6 @@ export function useBrandCreate() {
         setBrandBackgroundFile(null);
         setBrandBackgroundImage("");
         setBrandBackgroundImageError(validationError);
-        event.currentTarget.value = "";
         alert(validationError);
         return;
       }
@@ -360,20 +337,12 @@ export function useBrandCreate() {
     setBrandIcon("");
     setBrandIconError(null);
     resetBrandIconCrop();
-
-    if (brandIconInputRef.current) {
-      brandIconInputRef.current.value = "";
-    }
   }, [resetBrandIconCrop]);
 
   const handleClearBrandBackground = useCallback(() => {
     setBrandBackgroundFile(null);
     setBrandBackgroundImage("");
     setBrandBackgroundImageError(null);
-
-    if (brandBackgroundInputRef.current) {
-      brandBackgroundInputRef.current.value = "";
-    }
   }, []);
 
   const validateSelectedImagesBeforeSave = useCallback((): boolean => {
@@ -793,9 +762,6 @@ export function useBrandCreate() {
     hasBrandIconSelection,
     hasBrandBackgroundSelection,
 
-    brandIconInputRef,
-    brandBackgroundInputRef,
-
     brandIconFile,
     brandBackgroundFile,
 
@@ -814,11 +780,8 @@ export function useBrandCreate() {
     brandIconError,
     brandBackgroundImageError,
 
-    handlePickBrandIcon,
-    handlePickBrandBackground,
-
-    handleBrandIconChange,
-    handleBrandBackgroundChange,
+    handleBrandIconFilesSelected,
+    handleBrandBackgroundFilesSelected,
 
     handleClearBrandIcon,
     handleClearBrandBackground,

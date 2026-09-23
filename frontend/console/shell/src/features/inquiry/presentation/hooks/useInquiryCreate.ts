@@ -1,7 +1,6 @@
 // frontend/console/shell/src/features/inquiry/presentation/hooks/useInquiryCreate.ts
 
 import {
-  type ChangeEvent,
   useEffect,
   useMemo,
   useRef,
@@ -94,12 +93,7 @@ export function useInquiryCreate() {
     }
   };
 
-  const handleFilesSelected = (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
-    const selectedFiles = Array.from(event.target.files ?? []);
-    event.target.value = "";
-
+  const handleFilesSelected = (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) {
       return;
     }

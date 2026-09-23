@@ -1,7 +1,5 @@
 // frontend/console/shell/src/pages/brandCreate.tsx
 
-import { Upload, X } from "lucide-react";
-
 import PageStyle from "../layout/PageStyle/PageStyle";
 import {
   Card,
@@ -15,6 +13,7 @@ import { ErrorMessage } from "../shared/ui/error";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Media } from "../shared/ui/media";
+import MediaUploader from "../shared/ui/mediaUploader";
 import Textarea from "../shared/ui/textarea";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
@@ -47,11 +46,8 @@ export default function BrandCreate() {
     displayBrandName,
     displayWebsiteUrl,
     brandImageAccept,
-    hasBrandIconSelection,
-    hasBrandBackgroundSelection,
-    brandIconInputRef,
-    brandBackgroundInputRef,
     brandIconFile,
+    brandBackgroundFile,
     brandIconPreviewUrl,
     brandBackgroundPreviewUrl,
     brandIconCropPosition,
@@ -61,10 +57,8 @@ export default function BrandCreate() {
     handleBrandIconCropViewportSizeChange,
     brandIconError,
     brandBackgroundImageError,
-    handlePickBrandIcon,
-    handlePickBrandBackground,
-    handleBrandIconChange,
-    handleBrandBackgroundChange,
+    handleBrandIconFilesSelected,
+    handleBrandBackgroundFilesSelected,
     handleClearBrandIcon,
     handleClearBrandBackground,
     saving,
@@ -80,56 +74,80 @@ export default function BrandCreate() {
 
   const isCroppingBrandIcon = Boolean(brandIconFile && brandIconPreviewUrl);
 
+  const brandBackgroundItems = brandBackgroundPreviewUrl
+    ? [
+        {
+          id: "brand-background",
+          src: brandBackgroundPreviewUrl,
+          name: brandBackgroundFile?.name ?? "ブランド背景画像",
+          alt: "ブランド背景画像",
+          contentType: brandBackgroundFile?.type,
+        },
+      ]
+    : [];
+
+  const brandIconItems = brandIconPreviewUrl
+    ? [
+        {
+          id: "brand-icon",
+          src: brandIconPreviewUrl,
+          name: brandIconFile?.name ?? "ブランドアイコン",
+          alt: "ブランドアイコン",
+          contentType: brandIconFile?.type,
+        },
+      ]
+    : [];
+
   const left = (
     <div className="page-column">
       <Card>
         <CardContent>
           <div className="brand-hero">
-            <Media
-              src={brandBackgroundPreviewUrl}
-              type="image"
-              alt="ブランド背景画像"
-              variant="cover"
-              fit="cover"
-              bordered={false}
-              emptyText="背景画像を選択"
-              emptyDescription={saving ? undefined : "クリックして背景画像を選択できます"}
-              onActivate={saving ? undefined : handlePickBrandBackground}
-              disabled={saving}
-            />
-
-            <input
-              ref={brandBackgroundInputRef}
-              type="file"
+            <MediaUploader
+              items={brandBackgroundItems}
               accept={brandImageAccept}
-              hidden
-              onChange={handleBrandBackgroundChange}
+              variant="single"
+              pickerVariant="button"
+              title={null}
+              showCount={false}
+              showFileNames={false}
+              previewFramed={false}
+              pickerLabel="背景画像をアップロード"
+              replaceLabel="背景画像を変更"
               disabled={saving}
-            />
-
-            <div className="brand-hero__toolbar brand-hero__toolbar--cover">
-              <button
-                type="button"
-                className="brand-hero__action-btn"
-                onClick={handlePickBrandBackground}
-                disabled={saving}
-              >
-                <Upload size={16} />
-                背景画像をアップロード
-              </button>
-
-              {hasBrandBackgroundSelection && (
-                <button
-                  type="button"
-                  className="brand-hero__action-btn"
-                  onClick={handleClearBrandBackground}
+              className="brand-hero__background-uploader"
+              renderPreview={(item, { openPicker }) => (
+                <Media
+                  src={item.src}
+                  type="image"
+                  alt="ブランド背景画像"
+                  variant="cover"
+                  fit="cover"
+                  bordered={false}
+                  onActivate={saving ? undefined : openPicker}
                   disabled={saving}
-                >
-                  <X size={16} />
-                  取り消す
-                </button>
+                />
               )}
-            </div>
+              renderEmpty={({ openPicker }) => (
+                <Media
+                  type="image"
+                  alt="ブランド背景画像"
+                  variant="cover"
+                  fit="cover"
+                  bordered={false}
+                  emptyText="背景画像を選択"
+                  emptyDescription={
+                    saving
+                      ? undefined
+                      : "クリックして背景画像を選択できます"
+                  }
+                  onActivate={saving ? undefined : openPicker}
+                  disabled={saving}
+                />
+              )}
+              onFilesSelected={handleBrandBackgroundFilesSelected}
+              onRemove={() => handleClearBrandBackground()}
+            />
 
             {brandBackgroundImageError && (
               <ErrorMessage
@@ -143,64 +161,62 @@ export default function BrandCreate() {
 
             <div className="brand-hero__header">
               <div className="brand-hero__avatar-wrap">
-                {isCroppingBrandIcon ? (
-                  <IconCropper
-                    src={brandIconPreviewUrl}
-                    position={brandIconCropPosition}
-                    scale={brandIconCropScale}
-                    onPositionChange={handleBrandIconCropPositionChange}
-                    onScaleChange={handleBrandIconCropScaleChange}
-                    onViewportSizeChange={handleBrandIconCropViewportSizeChange}
-                    alt="ブランドアイコンの切り抜きプレビュー"
-                    disabled={saving}
-                  />
-                ) : (
-                  <EntityIcon
-                    src={brandIconPreviewUrl}
-                    name={displayBrandName}
-                    alt="ブランドアイコン"
-                    size="fluid"
-                    className="brand-hero__avatar"
-                    imageClassName="brand-hero__avatar-image"
-                    fallbackClassName="brand-hero__avatar-empty"
-                    fallback="アイコンを選択"
-                    onClick={saving ? undefined : handlePickBrandIcon}
-                    disabled={saving}
-                  />
-                )}
-
-                <input
-                  ref={brandIconInputRef}
-                  type="file"
+                <MediaUploader
+                  items={brandIconItems}
                   accept={brandImageAccept}
-                  hidden
-                  onChange={handleBrandIconChange}
+                  variant="single"
+                  pickerVariant="button"
+                  title={null}
+                  showCount={false}
+                  showFileNames={false}
+                  previewFramed={false}
+                  pickerLabel="アイコンをアップロード"
+                  replaceLabel="アイコンを変更"
                   disabled={saving}
-                />
-
-                <div className="brand-hero__toolbar brand-hero__toolbar--avatar">
-                  <button
-                    type="button"
-                    className="brand-hero__action-btn brand-hero__action-btn--plain"
-                    onClick={handlePickBrandIcon}
-                    disabled={saving}
-                  >
-                    <Upload size={16} />
-                    アイコンをアップロード
-                  </button>
-
-                  {hasBrandIconSelection && (
-                    <button
-                      type="button"
-                      className="brand-hero__action-btn brand-hero__action-btn--plain"
-                      onClick={handleClearBrandIcon}
+                  className="brand-hero__avatar-uploader"
+                  renderPreview={(_item, { openPicker }) =>
+                    isCroppingBrandIcon ? (
+                      <IconCropper
+                        src={brandIconPreviewUrl}
+                        position={brandIconCropPosition}
+                        scale={brandIconCropScale}
+                        onPositionChange={handleBrandIconCropPositionChange}
+                        onScaleChange={handleBrandIconCropScaleChange}
+                        onViewportSizeChange={handleBrandIconCropViewportSizeChange}
+                        alt="ブランドアイコンの切り抜きプレビュー"
+                        disabled={saving}
+                      />
+                    ) : (
+                      <EntityIcon
+                        src={brandIconPreviewUrl}
+                        name={displayBrandName}
+                        alt="ブランドアイコン"
+                        size="fluid"
+                        className="brand-hero__avatar"
+                        imageClassName="brand-hero__avatar-image"
+                        fallbackClassName="brand-hero__avatar-empty"
+                        fallback="アイコンを選択"
+                        onClick={saving ? undefined : openPicker}
+                        disabled={saving}
+                      />
+                    )
+                  }
+                  renderEmpty={({ openPicker }) => (
+                    <EntityIcon
+                      name={displayBrandName}
+                      alt="ブランドアイコン"
+                      size="fluid"
+                      className="brand-hero__avatar"
+                      imageClassName="brand-hero__avatar-image"
+                      fallbackClassName="brand-hero__avatar-empty"
+                      fallback="アイコンを選択"
+                      onClick={saving ? undefined : openPicker}
                       disabled={saving}
-                    >
-                      <X size={16} />
-                      取り消す
-                    </button>
+                    />
                   )}
-                </div>
+                  onFilesSelected={handleBrandIconFilesSelected}
+                  onRemove={() => handleClearBrandIcon()}
+                />
 
                 {brandIconError && (
                   <ErrorMessage

@@ -1,0 +1,135 @@
+/* frontend/console/shell/src/shared/ui/mediaUploader.css */
+
+.ui-media-uploader {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ui-media-uploader__header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.ui-media-uploader__input {
+  display: none;
+}
+
+/* =========================================================
+ * Picker
+ * ======================================================= */
+
+.ui-media-uploader__dropzone {
+  display: flex;
+  width: 100%;
+  min-height: 112px;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 2rem 1.5rem;
+  border: 1px dashed hsl(var(--border));
+  border-radius: 0.5rem;
+  background: hsl(var(--background));
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.ui-media-uploader__dropzone:hover,
+.ui-media-uploader__dropzone--dragging {
+  border-color: hsl(var(--primary) / 0.55);
+  background: hsl(var(--muted) / 0.5);
+}
+
+.ui-media-uploader__dropzone:focus-visible {
+  outline: none;
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--ring) / 0.18);
+}
+
+.ui-media-uploader__picker-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--muted-foreground));
+}
+
+.ui-media-uploader__picker-description {
+  text-align: center;
+}
+
+.ui-media-uploader__picker-button {
+  align-self: flex-start;
+  gap: 0.5rem;
+}
+
+/* =========================================================
+ * Preview
+ * ======================================================= */
+
+.ui-media-uploader__single {
+  width: 100%;
+  min-width: 0;
+}
+
+.ui-media-uploader__grid {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.ui-media-uploader__item {
+  position: relative;
+  min-width: 0;
+}
+
+.ui-media-uploader__item--framed {
+  overflow: hidden;
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  background: hsl(var(--card));
+}
+
+.ui-media-uploader__preview {
+  position: relative;
+  min-width: 0;
+}
+
+.ui-media-uploader__media {
+  border: 0;
+  border-radius: 0;
+}
+
+.ui-media-uploader__name {
+  overflow: hidden;
+  padding: 0.5rem;
+  text-overflow: ellipsis;
+}
+
+.ui-media-uploader__custom-empty {
+  min-width: 0;
+}
+
+/* =========================================================
+ * Disabled
+ * ======================================================= */
+
+.ui-media-uploader--disabled {
+  opacity: 0.6;
+}
+
+.ui-media-uploader--disabled .ui-media-uploader__dropzone,
+.ui-media-uploader--disabled .ui-media-uploader__picker-button {
+  cursor: not-allowed;
+}
