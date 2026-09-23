@@ -39,27 +39,9 @@
   word-break: break-word;
 }
 
-.inq-detail__body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 /* =========================================================
    Return refund
 ========================================================= */
-
-.inq-return-refund {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.inq-return-refund__field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
 
 .inq-return-refund__label {
   line-height: 1.25rem;

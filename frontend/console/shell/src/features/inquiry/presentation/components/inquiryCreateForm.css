@@ -1,17 +1,5 @@
 /* frontend/console/shell/src/features/inquiry/presentation/components/inquiryCreateForm.css */
 
-.inquiry-create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.inquiry-create-form__message {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
 .inquiry-create-form__label {
   font-weight: 600;
 }

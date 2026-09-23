@@ -3,7 +3,13 @@
 import * as React from "react";
 import { Plus } from "lucide-react";
 
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../../shared/ui/card";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 import type { InventoryShippingAddressDTO } from "../../../../shared/types/inventory";
 
@@ -25,7 +31,9 @@ export type InventoryShippingAddressCardProps = {
  * shippingAddress は GET /inventory/{inventoryId} の shippingAddressOptions を唯一の正とする。
  * ヘッダーの新規登録ボタンから stockLocation 画面への遷移を親componentへ委譲する。
  */
-export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCardProps> = ({
+export const InventoryShippingAddressCard: React.FC<
+  InventoryShippingAddressCardProps
+> = ({
   shippingAddressId,
   shippingAddressOptions,
   loading = false,
@@ -65,8 +73,8 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
         </button>
       </CardHeader>
 
-      <CardContent className="inventory-shipping-address__content">
-        <div>
+      <CardContent>
+        <Stack gap="md">
           <Text
             as="div"
             size="xs"
@@ -109,7 +117,7 @@ export const InventoryShippingAddressCard: React.FC<InventoryShippingAddressCard
               在庫保管場所が登録されていません。
             </Text>
           ) : null}
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );

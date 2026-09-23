@@ -13,6 +13,7 @@ import { ErrorMessage } from "../../../../shared/ui/error";
 import { Label } from "../../../../shared/ui/label";
 import Media from "../../../../shared/ui/media";
 import { Progress } from "../../../../shared/ui/progress";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
@@ -54,14 +55,14 @@ export default function InquiryCreateForm({
       </CardHeader>
 
       <CardContent>
-        <div className="inquiry-create-form">
+        <Stack gap="lg">
           {errorMessage ? (
             <ErrorMessage className="inquiry-create-form__error">
               {errorMessage}
             </ErrorMessage>
           ) : null}
 
-          <div className="inquiry-create-form__message">
+          <Stack gap="sm">
             <Label
               htmlFor="amol-inquiry-message"
               className="inquiry-create-form__label"
@@ -89,7 +90,7 @@ export default function InquiryCreateForm({
               {message.length.toLocaleString()} /{" "}
               {maxMessageLength.toLocaleString()}
             </Text>
-          </div>
+          </Stack>
 
           <div className="inquiry-create-form__attachments">
             <div className="inquiry-create-form__attachment-header">
@@ -180,7 +181,7 @@ export default function InquiryCreateForm({
               ariaLabel="添付ファイルのアップロード進捗"
             />
           ) : null}
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );

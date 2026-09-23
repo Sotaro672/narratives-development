@@ -28,17 +28,9 @@ export default function InquiryCreate() {
       title="AMOLに問い合わせ"
       onBack={handleBack}
       onSave={undefined}
-      actions={
-        <button
-          type="button"
-          className="page-header__btn"
-          disabled={!canSubmit}
-          aria-busy={submitting}
-          onClick={() => void handleSubmit()}
-        >
-          {submitting ? "送信中" : "送信"}
-        </button>
-      }
+      onSend={handleSubmit}
+      isSending={submitting}
+      sendDisabled={!canSubmit}
     >
       <div className="mx-auto w-full max-w-4xl">
         <InquiryCreateForm

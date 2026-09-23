@@ -22,12 +22,6 @@
   justify-content: space-between;
 }
 
-.inventory-shipping-address__content {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .inventory-shipping-address__create-button {
   display: inline-flex;
   align-items: center;

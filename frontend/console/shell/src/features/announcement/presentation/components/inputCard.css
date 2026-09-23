@@ -1,11 +1,5 @@
 /* frontend/console/shell/src/features/announcement/presentation/components/inputCard.css */
 
-.announcement-input-card__content {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
 .announcement-input-card__section-header {
   display: flex;
   align-items: center;

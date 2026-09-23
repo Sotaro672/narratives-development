@@ -10,6 +10,7 @@ import {
 import { ErrorMessage } from "../../../../shared/ui/error";
 import { Input } from "../../../../shared/ui/input";
 import { Label } from "../../../../shared/ui/label";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 
 import type { InquiryImageFile } from "../../../../shared/types/inquiry";
@@ -88,7 +89,7 @@ export default function InquiryContentCard({
             </ErrorMessage>
           ) : null}
 
-          <div className="inq-detail__body">
+          <Stack gap="sm">
             <Text
               as="p"
               size="md"
@@ -96,21 +97,21 @@ export default function InquiryContentCard({
             >
               {body}
             </Text>
-          </div>
+          </Stack>
 
           {images && images.length > 0 ? (
-            <div className="inq-detail__body">
+            <Stack gap="sm">
               <div className="inq-detail__label">添付画像</div>
               <InquiryImageGrid images={images} />
-            </div>
+            </Stack>
           ) : null}
 
           {showReturnRefund ? (
-            <div className="inq-detail__body">
+            <Stack gap="sm">
               <div className="inq-detail__label">返品の返金内容</div>
 
-              <div className="inq-return-refund">
-                <div className="inq-return-refund__field">
+              <Stack gap="md">
+                <Stack gap="sm">
                   <Label
                     htmlFor="merchandise-refund-amount"
                     className="inq-return-refund__label"
@@ -161,7 +162,7 @@ export default function InquiryContentCard({
                   >
                     1円以上、商品代金（税込）の範囲内で返金額を指定してください。
                   </Text>
-                </div>
+                </Stack>
 
                 <label className="inq-return-refund__option">
                   <input
@@ -249,8 +250,8 @@ export default function InquiryContentCard({
                       : "返品受領・返金"}
                   </Button>
                 </div>
-              </div>
-            </div>
+              </Stack>
+            </Stack>
           ) : null}
         </div>
       </CardContent>

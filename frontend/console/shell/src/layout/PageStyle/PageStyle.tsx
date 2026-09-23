@@ -88,6 +88,7 @@ interface PageStyleProps {
   isSaving?: boolean;
   onSend?: () => void | Promise<void>;
   isSending?: boolean;
+  sendDisabled?: boolean;
   onReply?: () => void | Promise<void>;
   isReplying?: boolean;
   onCreate?: () => void | Promise<void>;
@@ -133,6 +134,7 @@ export default function PageStyle({
   isSaving: controlledIsSaving,
   onSend,
   isSending: controlledIsSending,
+  sendDisabled,
   onReply,
   isReplying: controlledIsReplying,
   onCreate,
@@ -219,7 +221,7 @@ export default function PageStyle({
   }, [onSave, isSaving]);
 
   const handleSend = React.useCallback(async () => {
-    if (!onSend || isSending) return;
+    if (!onSend || isSending || sendDisabled) return;
 
     try {
       setInternalIsSending(true);
@@ -227,7 +229,7 @@ export default function PageStyle({
     } finally {
       setInternalIsSending(false);
     }
-  }, [onSend, isSending]);
+  }, [onSend, isSending, sendDisabled]);
 
   const handleReply = React.useCallback(async () => {
     if (!onReply || isReplying) return;
@@ -567,7 +569,10 @@ export default function PageStyle({
                 variant="outline"
                 size="sm"
                 onClick={() => void handleSend()}
-                disabled={isSending}
+                disabled={
+                  isSending ||
+                  Boolean(sendDisabled)
+                }
                 aria-busy={isSending}
               >
                 {isSending ? <SpinnerArrow /> : <Send />}

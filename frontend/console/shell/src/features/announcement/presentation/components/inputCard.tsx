@@ -19,6 +19,7 @@ import {
 import { Input } from "../../../../shared/ui/input";
 import { Label } from "../../../../shared/ui/label";
 import Media from "../../../../shared/ui/media";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
@@ -282,7 +283,7 @@ export default function InputCard({
       </CardHeader>
 
       <CardContent>
-        <div className="announcement-input-card__content">
+        <Stack gap="md">
           <div className="card__field">
             <div className="announcement-input-card__section-header">
               <Label>画像アップロード</Label>
@@ -487,7 +488,7 @@ export default function InputCard({
               </Text>
             )}
           </div>
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );

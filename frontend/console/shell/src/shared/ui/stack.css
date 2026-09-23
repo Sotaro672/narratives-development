@@ -1,0 +1,23 @@
+/* frontend/console/shell/src/shared/ui/stack.css */
+
+.stack {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.stack--gap-xs {
+  gap: 0.25rem;
+}
+
+.stack--gap-sm {
+  gap: 0.5rem;
+}
+
+.stack--gap-md {
+  gap: 1rem;
+}
+
+.stack--gap-lg {
+  gap: 1.5rem;
+}
