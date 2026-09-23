@@ -27,6 +27,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../shared/ui/popover";
+import Preview from "../../../../shared/ui/preview";
 import Text from "../../../../shared/ui/text";
 
 export type TokenBlueprintCardViewModel = {
@@ -71,18 +72,22 @@ export default function TokenBlueprintCard({
   vm: TokenBlueprintCardViewModel;
   handlers?: TokenBlueprintCardHandlers;
 }) {
+  const [iconPreviewOpen, setIconPreviewOpen] = React.useState(false);
+
   const canEditIcon = vm.isEditMode;
   const isIdentityLocked = Boolean(vm.isEditMode && vm.minted);
   const selectedIconFile = vm.iconFile ?? null;
+  const iconUrl = String(vm.iconUrl ?? "").trim();
+  const hasIcon = Boolean(iconUrl);
   const isCroppingIcon = Boolean(
-    canEditIcon && selectedIconFile && vm.iconUrl,
+    canEditIcon && selectedIconFile && iconUrl,
   );
 
-  const iconItems = vm.iconUrl
+  const iconItems = hasIcon
     ? [
         {
           id: "token-blueprint-icon",
-          src: vm.iconUrl,
+          src: iconUrl,
           name: selectedIconFile
             ? `選択中：${selectedIconFile.name}（${Math.round(
                 selectedIconFile.size / 1024,
@@ -95,243 +100,260 @@ export default function TokenBlueprintCard({
       ]
     : [];
 
-  return (
-    <Card elevated largeRadius>
-      <CardHeader>
-        <CardHeaderLeft>
-          <CardTitle strong truncate>
-            {vm.id ? "トークン設計" : "トークン：新規トークン設計"}
-          </CardTitle>
-        </CardHeaderLeft>
-      </CardHeader>
+  const handleOpenIconPreview = React.useCallback(() => {
+    if (!hasIcon) {
+      return;
+    }
 
-      <CardContent size="large">
-        <div className="token-blueprint-card__top">
-          <MediaUploader
-            items={iconItems}
-            accept={IMAGE_STORAGE_ACCEPT}
-            variant="single"
-            title={null}
-            showCount={false}
-            showFileNames={Boolean(selectedIconFile)}
-            showPicker={false}
-            showRemoveButton={Boolean(selectedIconFile)}
-            previewFramed={false}
-            className="token-blueprint-card__icon-area"
-            disabled={!canEditIcon}
-            renderPreview={(_item, { openPicker }) =>
-              isCroppingIcon ? (
-                <IconCropper
-                  src={vm.iconUrl ?? ""}
-                  position={vm.iconCropPosition}
-                  scale={vm.iconCropScale}
-                  onPositionChange={(position) => {
-                    handlers.onIconCropPositionChange?.(position);
-                  }}
-                  onScaleChange={(scale) => {
-                    handlers.onIconCropScaleChange?.(scale);
-                  }}
-                  onViewportSizeChange={(size) => {
-                    handlers.onIconCropViewportSizeChange?.(size);
-                  }}
-                  alt="トークンアイコンの切り抜きプレビュー"
-                />
-              ) : (
+    setIconPreviewOpen(true);
+  }, [hasIcon]);
+
+  const handleCloseIconPreview = React.useCallback(() => {
+    setIconPreviewOpen(false);
+  }, []);
+
+  return (
+    <>
+      <Card elevated largeRadius>
+        <CardHeader>
+          <CardHeaderLeft>
+            <CardTitle strong truncate>
+              {vm.id ? "トークン設計" : "トークン：新規トークン設計"}
+            </CardTitle>
+          </CardHeaderLeft>
+        </CardHeader>
+
+        <CardContent size="large">
+          <div className="token-blueprint-card__top">
+            <MediaUploader
+              items={iconItems}
+              accept={IMAGE_STORAGE_ACCEPT}
+              variant="single"
+              title={null}
+              showCount={false}
+              showFileNames={Boolean(selectedIconFile)}
+              showPicker={false}
+              showRemoveButton={Boolean(selectedIconFile)}
+              previewFramed={false}
+              className="token-blueprint-card__icon-area"
+              disabled={!canEditIcon}
+              renderPreview={(_item, { openPicker }) =>
+                isCroppingIcon ? (
+                  <IconCropper
+                    src={iconUrl}
+                    position={vm.iconCropPosition}
+                    scale={vm.iconCropScale}
+                    onPositionChange={(position) => {
+                      handlers.onIconCropPositionChange?.(position);
+                    }}
+                    onScaleChange={(scale) => {
+                      handlers.onIconCropScaleChange?.(scale);
+                    }}
+                    onViewportSizeChange={(size) => {
+                      handlers.onIconCropViewportSizeChange?.(size);
+                    }}
+                    alt="トークンアイコンの切り抜きプレビュー"
+                  />
+                ) : (
+                  <EntityIcon
+                    src={iconUrl}
+                    name={vm.name}
+                    alt="トークンアイコン"
+                    size="fluid"
+                    variant="upload"
+                    fallback="アイコン未設定"
+                    onClick={
+                      canEditIcon
+                        ? openPicker
+                        : handleOpenIconPreview
+                    }
+                  />
+                )
+              }
+              renderEmpty={({ openPicker }) => (
                 <EntityIcon
-                  src={vm.iconUrl}
                   name={vm.name}
                   alt="トークンアイコン"
                   size="fluid"
                   variant="upload"
-                  fallback="アイコン未設定"
+                  fallback={
+                    canEditIcon ? (
+                      <>
+                        アイコン画像を
+                        <br />
+                        アップロード
+                      </>
+                    ) : (
+                      "アイコン未設定"
+                    )
+                  }
                   onClick={canEditIcon ? openPicker : undefined}
                 />
-              )
-            }
-            renderEmpty={({ openPicker }) => (
-              <EntityIcon
-                name={vm.name}
-                alt="トークンアイコン"
-                size="fluid"
-                variant="upload"
-                fallback={
-                  canEditIcon ? (
-                    <>
-                      アイコン画像を
-                      <br />
-                      アップロード
-                    </>
-                  ) : (
-                    "アイコン未設定"
-                  )
-                }
-                onClick={canEditIcon ? openPicker : undefined}
-              />
-            )}
-            onFilesSelected={(files) => {
-              handlers.onIconFilesSelected?.(files);
-            }}
-            onRemove={() => {
-              handlers.onClearLocalIconFile?.();
-            }}
-          />
-
-          <CardFields>
-            <CardField>
-              <CardLabel strong>
-                トークン名
-              </CardLabel>
-
-              {vm.isEditMode ? (
-                isIdentityLocked ? (
-                  <CardReadonly inputLike size="large">
-                    {vm.name || "未設定"}
-                  </CardReadonly>
-                ) : (
-                  <CardInput
-                    sizeVariant="large"
-                    value={vm.name}
-                    placeholder="例：LUMINA VIP 会員トークン"
-                    onChange={(event) => {
-                      handlers.onChangeName?.(event.target.value);
-                    }}
-                  />
-                )
-              ) : (
-                <CardViewValue>
-                  {vm.name || "未設定"}
-                </CardViewValue>
               )}
-            </CardField>
-
-            <CardField>
-              <CardLabel strong>
-                シンボル
-              </CardLabel>
-
-              {vm.isEditMode ? (
-                isIdentityLocked ? (
-                  <CardReadonly inputLike size="large">
-                    {vm.symbol || "未設定"}
-                  </CardReadonly>
-                ) : (
-                  <CardInput
-                    sizeVariant="large"
-                    value={vm.symbol}
-                    placeholder="例：LUMI"
-                    onChange={(event) => {
-                      handlers.onChangeSymbol?.(
-                        event.target.value.toUpperCase(),
-                      );
-                    }}
-                  />
-                )
-              ) : (
-                <CardViewValue>
-                  {vm.symbol || "未設定"}
-                </CardViewValue>
-              )}
-            </CardField>
-
-            <CardField full>
-              <CardLabel strong>
-                ブランド
-              </CardLabel>
-
-              {vm.isEditMode && !isIdentityLocked ? (
-                <Popover>
-                  <PopoverTrigger>
-                    <CardSelectWrap
-                      role="button"
-                      aria-label="ブランドを選択"
-                    >
-                      <CardInput
-                        sizeVariant="large"
-                        readOnly
-                        value={
-                          vm.brandName ||
-                          vm.brandId ||
-                          "ブランド未設定"
-                        }
-                      />
-                    </CardSelectWrap>
-                  </PopoverTrigger>
-
-                  <PopoverContent
-                    align="start"
-                    className="popover__content--compact popover__content--medium"
-                  >
-                    {vm.brandOptions.length === 0 ? (
-                      <div className="popover__empty">
-                        ブランド候補が未設定です
-                      </div>
-                    ) : (
-                      <div className="popover__list">
-                        {vm.brandOptions.map((brand) => (
-                          <button
-                            key={brand.id}
-                            type="button"
-                            className={
-                              "popover__item" +
-                              (brand.id === vm.brandId
-                                ? " is-active"
-                                : "")
-                            }
-                            onClick={() => {
-                              handlers.onChangeBrand?.(
-                                brand.id,
-                                brand.name,
-                              );
-                            }}
-                          >
-                            {brand.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </PopoverContent>
-                </Popover>
-              ) : (
-                <CardReadonly inputLike size="large">
-                  {vm.brandName || vm.brandId || "ブランド未設定"}
-                </CardReadonly>
-              )}
-            </CardField>
-
-            {isIdentityLocked ? (
-              <Text
-                as="div"
-                size="xs"
-                tone="muted"
-                className="token-blueprint-card__identity-lock-message"
-              >
-                このトークン設計はmint済みのため、トークン名・シンボル・ブランドは変更できません。
-              </Text>
-            ) : null}
-          </CardFields>
-        </div>
-
-        <CardField className="token-blueprint-card__description">
-          <CardLabel strong>
-            説明
-          </CardLabel>
-
-          {vm.isEditMode ? (
-            <CardTextarea
-              ref={handlers.descriptionRef ?? undefined}
-              value={vm.description}
-              placeholder="このトークンで付与する権利・特典を記載してください。"
-              onChange={(event) => {
-                handlers.onChangeDescription?.(event.target.value);
+              onFilesSelected={(files) => {
+                handlers.onIconFilesSelected?.(files);
+              }}
+              onRemove={() => {
+                handlers.onClearLocalIconFile?.();
               }}
             />
-          ) : (
-            <CardViewValue className="token-blueprint-card__description-value">
-              {vm.description || "未設定"}
-            </CardViewValue>
-          )}
-        </CardField>
-      </CardContent>
-    </Card>
+
+            <CardFields>
+              <CardField>
+                <CardLabel strong>トークン名</CardLabel>
+
+                {vm.isEditMode ? (
+                  isIdentityLocked ? (
+                    <CardReadonly inputLike size="large">
+                      {vm.name || "未設定"}
+                    </CardReadonly>
+                  ) : (
+                    <CardInput
+                      sizeVariant="large"
+                      value={vm.name}
+                      placeholder="例：LUMINA VIP 会員トークン"
+                      onChange={(event) => {
+                        handlers.onChangeName?.(event.target.value);
+                      }}
+                    />
+                  )
+                ) : (
+                  <CardViewValue>
+                    {vm.name || "未設定"}
+                  </CardViewValue>
+                )}
+              </CardField>
+
+              <CardField>
+                <CardLabel strong>シンボル</CardLabel>
+
+                {vm.isEditMode ? (
+                  isIdentityLocked ? (
+                    <CardReadonly inputLike size="large">
+                      {vm.symbol || "未設定"}
+                    </CardReadonly>
+                  ) : (
+                    <CardInput
+                      sizeVariant="large"
+                      value={vm.symbol}
+                      placeholder="例：LUMI"
+                      onChange={(event) => {
+                        handlers.onChangeSymbol?.(
+                          event.target.value.toUpperCase(),
+                        );
+                      }}
+                    />
+                  )
+                ) : (
+                  <CardViewValue>
+                    {vm.symbol || "未設定"}
+                  </CardViewValue>
+                )}
+              </CardField>
+
+              <CardField full>
+                <CardLabel strong>ブランド</CardLabel>
+
+                {vm.isEditMode && !isIdentityLocked ? (
+                  <Popover>
+                    <PopoverTrigger>
+                      <CardSelectWrap
+                        role="button"
+                        aria-label="ブランドを選択"
+                      >
+                        <CardInput
+                          sizeVariant="large"
+                          readOnly
+                          value={
+                            vm.brandName ||
+                            vm.brandId ||
+                            "ブランド未設定"
+                          }
+                        />
+                      </CardSelectWrap>
+                    </PopoverTrigger>
+
+                    <PopoverContent
+                      align="start"
+                      className="popover__content--compact popover__content--medium"
+                    >
+                      {vm.brandOptions.length === 0 ? (
+                        <div className="popover__empty">
+                          ブランド候補が未設定です
+                        </div>
+                      ) : (
+                        <div className="popover__list">
+                          {vm.brandOptions.map((brand) => (
+                            <button
+                              key={brand.id}
+                              type="button"
+                              className={
+                                "popover__item" +
+                                (brand.id === vm.brandId
+                                  ? " is-active"
+                                  : "")
+                              }
+                              onClick={() => {
+                                handlers.onChangeBrand?.(
+                                  brand.id,
+                                  brand.name,
+                                );
+                              }}
+                            >
+                              {brand.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                ) : (
+                  <CardReadonly inputLike size="large">
+                    {vm.brandName || vm.brandId || "ブランド未設定"}
+                  </CardReadonly>
+                )}
+              </CardField>
+
+              {isIdentityLocked ? (
+                <Text
+                  as="div"
+                  size="xs"
+                  tone="muted"
+                  className="token-blueprint-card__identity-lock-message"
+                >
+                  このトークン設計はmint済みのため、トークン名・シンボル・ブランドは変更できません。
+                </Text>
+              ) : null}
+            </CardFields>
+          </div>
+
+          <CardField className="token-blueprint-card__description">
+            <CardLabel strong>説明</CardLabel>
+
+            {vm.isEditMode ? (
+              <CardTextarea
+                ref={handlers.descriptionRef ?? undefined}
+                value={vm.description}
+                placeholder="このトークンで付与する権利・特典を記載してください。"
+                onChange={(event) => {
+                  handlers.onChangeDescription?.(event.target.value);
+                }}
+              />
+            ) : (
+              <CardViewValue className="token-blueprint-card__description-value">
+                {vm.description || "未設定"}
+              </CardViewValue>
+            )}
+          </CardField>
+        </CardContent>
+      </Card>
+
+      <Preview
+        open={iconPreviewOpen}
+        src={iconUrl}
+        alt={`${vm.name || "トークン"}のアイコン`}
+        onClose={handleCloseIconPreview}
+      />
+    </>
   );
 }

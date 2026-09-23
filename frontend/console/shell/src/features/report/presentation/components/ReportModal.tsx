@@ -86,25 +86,14 @@ export default function ReportModal({
       閉じる
     </Button>
   ) : (
-    <>
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={submitting}
-        onClick={onClose}
-      >
-        キャンセル
-      </Button>
-
-      <Button
-        type="button"
-        variant="destructive"
-        disabled={!canSubmit}
-        onClick={handleSubmit}
-      >
-        {submitting ? "送信中" : "通報する"}
-      </Button>
-    </>
+    <Button
+      type="button"
+      variant="destructive"
+      disabled={!canSubmit}
+      onClick={handleSubmit}
+    >
+      {submitting ? "送信中" : "通報する"}
+    </Button>
   );
 
   return (

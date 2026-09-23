@@ -1,11 +1,23 @@
 /* frontend/console/shell/src/features/report/presentation/components/ReportModal.css */
 
 .report-modal__panel {
-  max-height: min(760px, calc(100vh - 48px));
+  display: flex;
+  max-height: min(760px, calc(100dvh - 48px));
+  flex-direction: column;
+}
+
+.report-modal__panel .modal__header {
+  flex-shrink: 0;
 }
 
 .report-modal__panel .modal__body {
+  min-height: 0;
+  flex: 1 1 auto;
   overflow-y: auto;
+}
+
+.report-modal__panel .modal__footer {
+  flex-shrink: 0;
 }
 
 .report-modal__content {

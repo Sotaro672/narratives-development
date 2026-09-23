@@ -15,6 +15,10 @@
   min-width: 0;
 }
 
+.token-blueprint-card__icon-area.ui-media-uploader--disabled {
+  opacity: 1;
+}
+
 .token-blueprint-card__icon-area .icon-cropper {
   width: 100%;
 }

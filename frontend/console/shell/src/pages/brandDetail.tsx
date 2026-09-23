@@ -1,5 +1,6 @@
 // frontend/console/shell/src/pages/brandDetail.tsx
 
+import * as React from "react";
 import { Upload } from "lucide-react";
 
 import "../styles/brand.css";
@@ -20,6 +21,7 @@ import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
 import Loading from "../shared/ui/loading";
 import { Media } from "../shared/ui/media";
+import Preview from "../shared/ui/preview";
 import { Text } from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
@@ -76,7 +78,19 @@ export default function BrandDetail() {
     handleClearBrandBackground,
   } = useBrandDetail();
 
+  const [backgroundPreviewOpen, setBackgroundPreviewOpen] =
+    React.useState(false);
+  const [iconPreviewOpen, setIconPreviewOpen] =
+    React.useState(false);
+
   const canEditImage = isEditing && !saving;
+  const hasBackgroundImage = Boolean(
+    String(brandBackgroundPreviewUrl ?? "").trim(),
+  );
+  const hasBrandIcon = Boolean(
+    String(brandIconPreviewUrl ?? "").trim(),
+  );
+
   const isCroppingBrandIcon = Boolean(
     isEditing && brandIconFile && brandIconPreviewUrl,
   );
@@ -88,6 +102,36 @@ export default function BrandDetail() {
   const displayBrandName = isEditing
     ? draft.name || "ブランド名未入力"
     : brand.name || "ブランド名未設定";
+
+  const handleBackgroundActivate = React.useCallback(() => {
+    if (canEditImage) {
+      handlePickBrandBackground();
+      return;
+    }
+
+    if (hasBackgroundImage) {
+      setBackgroundPreviewOpen(true);
+    }
+  }, [
+    canEditImage,
+    handlePickBrandBackground,
+    hasBackgroundImage,
+  ]);
+
+  const handleIconActivate = React.useCallback(() => {
+    if (canEditImage) {
+      handlePickBrandIcon();
+      return;
+    }
+
+    if (hasBrandIcon) {
+      setIconPreviewOpen(true);
+    }
+  }, [
+    canEditImage,
+    handlePickBrandIcon,
+    hasBrandIcon,
+  ]);
 
   const hero = (
     <Card>
@@ -117,7 +161,9 @@ export default function BrandDetail() {
                   : undefined
               }
               onActivate={
-                canEditImage ? handlePickBrandBackground : undefined
+                canEditImage || hasBackgroundImage
+                  ? handleBackgroundActivate
+                  : undefined
               }
               disabled={saving}
             />
@@ -194,7 +240,11 @@ export default function BrandDetail() {
                     className="brand-hero__avatar"
                     fallbackClassName="brand-hero__avatar-empty"
                     fallback={isEditing ? "アイコンを選択" : "アイコン未設定"}
-                    onClick={canEditImage ? handlePickBrandIcon : undefined}
+                    onClick={
+                      canEditImage || hasBrandIcon
+                        ? handleIconActivate
+                        : undefined
+                    }
                     disabled={saving}
                   />
                 )}
@@ -254,11 +304,13 @@ export default function BrandDetail() {
                 <div className="brand-hero__title">
                   {displayBrandName}
                 </div>
+
                 <div className="brand-hero__sub">
                   {isEditing
                     ? editingManagerName
                     : brand.memberName || "責任者未設定"}
                 </div>
+
                 <div className="brand-hero__sub">
                   {isEditing
                     ? draft.websiteUrl || "Webサイト未設定"
@@ -422,6 +474,20 @@ export default function BrandDetail() {
             ? undefined
             : onCloseProgress
         }
+      />
+
+      <Preview
+        open={backgroundPreviewOpen}
+        src={brandBackgroundPreviewUrl}
+        alt={`${displayBrandName}の背景画像`}
+        onClose={() => setBackgroundPreviewOpen(false)}
+      />
+
+      <Preview
+        open={iconPreviewOpen}
+        src={brandIconPreviewUrl}
+        alt={`${displayBrandName}のブランドアイコン`}
+        onClose={() => setIconPreviewOpen(false)}
       />
     </>
   );
