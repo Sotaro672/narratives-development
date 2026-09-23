@@ -23,6 +23,8 @@ import {
 
 import {
   buildMintRequestManagementFilterValues,
+  getMintRequestManagementFilterStatus,
+  type MintRequestManagementFilterStatus,
 } from "../../application/selector/buildMintRequestManagementFilterValues";
 
 import {
@@ -45,8 +47,24 @@ type ManagementPresentationRow =
     statusLabel: string;
   };
 
-type ManagementInspectionStatus =
-  ManagementRow["inspectionStatus"];
+/**
+ * 一覧画面上で使用するステータスラベルを返す。
+ *
+ * Mint処理中・完了の場合はMint状態を優先し、
+ * それ以前は検査ステータスを使用する。
+ */
+function mintRequestManagementStatusLabel(
+  status: MintRequestManagementFilterStatus,
+): string {
+  switch (status) {
+    case "minted":
+      return "ミント完了";
+    case "minting":
+      return "ミント中";
+    default:
+      return inspectionStatusLabel(status);
+  }
+}
 
 /**
  * Application層から受け取った行を、
@@ -58,19 +76,10 @@ type ManagementInspectionStatus =
 function toPresentationRow(
   row: ManagementRow,
 ): ManagementPresentationRow {
-  /**
-   * mintedの場合は「ミント完了」、
-   * mintingの場合は「ミント中」を優先し、
-   * それ以外は検品ステータスを表示する。
-   */
   const statusLabel =
-    row.status === "minted"
-      ? "ミント完了"
-      : row.status === "minting"
-        ? "ミント中"
-        : inspectionStatusLabel(
-            row.inspectionStatus,
-          );
+    mintRequestManagementStatusLabel(
+      getMintRequestManagementFilterStatus(row),
+    );
 
   return {
     ...row,
@@ -91,25 +100,17 @@ function toPresentationRow(
   };
 }
 
-function asManagementInspectionStatus(
+function asManagementFilterStatus(
   value: string,
-): ManagementInspectionStatus | null {
+): MintRequestManagementFilterStatus | null {
   if (
+    value === "notYet" ||
     value === "inspecting" ||
-    value === "completed"
+    value === "completed" ||
+    value === "minting" ||
+    value === "minted"
   ) {
     return value;
-  }
-
-  /**
-   * 一覧APIでは検品レコードが存在しない場合に
-   * notYetが返る。
-   *
-   * 現行のInspectionStatus型にはnotYetが含まれていないため、
-   * ManagementRowのinspectionStatusとして扱う。
-   */
-  if (value === "notYet") {
-    return value as ManagementInspectionStatus;
   }
 
   return null;
@@ -174,7 +175,7 @@ export const useMintRequestManagement =
       statusFilter,
       setStatusFilter,
     ] = useState<
-      ManagementInspectionStatus[]
+      MintRequestManagementFilterStatus[]
     >([]);
 
     /**
@@ -328,19 +329,16 @@ export const useMintRequestManagement =
     const statusOptions =
       useMemo(
         () =>
-          filterValues.inspectionStatuses.map(
+          filterValues.statuses.map(
             (value) => ({
               value,
               label:
-                inspectionStatusLabel(
+                mintRequestManagementStatusLabel(
                   value,
                 ),
             }),
           ),
-        [
-          filterValues
-            .inspectionStatuses,
-        ],
+        [filterValues.statuses],
       );
 
     /**
@@ -364,7 +362,7 @@ export const useMintRequestManagement =
               requesterNames:
                 requesterFilter,
 
-              inspectionStatuses:
+              statuses:
                 statusFilter,
 
               sortKey,
@@ -484,12 +482,12 @@ export const useMintRequestManagement =
           const statuses =
             nextValues
               .map(
-                asManagementInspectionStatus,
+                asManagementFilterStatus,
               )
               .filter(
                 (
                   value,
-                ): value is ManagementInspectionStatus =>
+                ): value is MintRequestManagementFilterStatus =>
                   value !== null,
               );
 

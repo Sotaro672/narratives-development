@@ -2,6 +2,11 @@
 
 import type { ViewRow as MintRequestManagementRow } from "../usecase/loadMintRequestManagementRows";
 
+import {
+  getMintRequestManagementFilterStatus,
+  type MintRequestManagementFilterStatus,
+} from "./buildMintRequestManagementFilterValues";
+
 export type MintRequestManagementSortKey =
   | "mintedAt"
   | "mintQuantity"
@@ -17,7 +22,7 @@ export type MintRequestManagementQuery = {
   tokenNames: readonly string[];
   productNames: readonly string[];
   requesterNames: readonly string[];
-  inspectionStatuses: readonly MintRequestManagementRow["inspectionStatus"][];
+  statuses: readonly MintRequestManagementFilterStatus[];
   sortKey: MintRequestManagementSortKey;
   sortDirection: MintRequestManagementSortDirection;
 };
@@ -71,6 +76,9 @@ function compareNullableTimestamps(
 /**
  * Mint申請一覧へフィルターとソートを適用する。
  *
+ * ステータスは一覧画面上に実際に表示される状態を使用する。
+ * minted / minting はMint状態を優先し、それ以前は検査状態を使用する。
+ *
  * 入力配列は変更せず、新しい配列を返す。
  * mintedAtはBackendから受け取った値をそのままソートに使用する。
  */
@@ -95,9 +103,9 @@ export function applyMintRequestManagementQuery(
     );
 
     const statusMatches =
-      query.inspectionStatuses.length === 0 ||
-      query.inspectionStatuses.includes(
-        row.inspectionStatus,
+      query.statuses.length === 0 ||
+      query.statuses.includes(
+        getMintRequestManagementFilterStatus(row),
       );
 
     return (
