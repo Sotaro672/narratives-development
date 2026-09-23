@@ -7,6 +7,7 @@ import {
   Card,
   CardContent,
 } from "../../../../shared/ui/card";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 
 export type MintInspectionCompleteCardProps = {
@@ -21,10 +22,10 @@ export default function MintInspectionCompleteCard({
   onComplete,
 }: MintInspectionCompleteCardProps) {
   return (
-    <Card className="mint-request-card">
-      <CardContent className="mint-request-card__body">
-        <div className="mint-inspection-complete">
-          <div>
+    <Card largeRadius>
+      <CardContent>
+        <Stack gap="md">
+          <Stack gap="xs">
             <Text as="div" weight="medium">
               検品完了
             </Text>
@@ -33,12 +34,11 @@ export default function MintInspectionCompleteCard({
               as="p"
               size="xs"
               tone="muted"
-              className="mint-inspection-complete__description"
             >
               除外対象がない場合でも、ここで検品完了を確定できます。
               完了後、未入力の検品結果は合格として扱われます。
             </Text>
-          </div>
+          </Stack>
 
           <Button
             type="button"
@@ -48,7 +48,7 @@ export default function MintInspectionCompleteCard({
             <CheckCircle2 size={16} />
             {completing ? "検品完了中..." : "検品を完了する"}
           </Button>
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );

@@ -59,14 +59,16 @@ export default function MintRequestDetail() {
     <PageStyle layout="grid-2" title={title} onBack={onBack}>
       <div className="page-column page-column--offset-top">
         {productBlueprintLoading ? (
-          <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">
-              <Text tone="muted">プロダクト基本情報を読み込み中です…</Text>
+          <Card largeRadius>
+            <CardContent>
+              <Text tone="muted">
+                プロダクト基本情報を読み込み中です…
+              </Text>
             </CardContent>
           </Card>
         ) : productBlueprintError ? (
-          <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">
+          <Card largeRadius>
+            <CardContent>
               <ErrorMessage>
                 {productBlueprintError}
               </ErrorMessage>
@@ -82,22 +84,26 @@ export default function MintRequestDetail() {
             }
           />
         ) : (
-          <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">
-              <Text tone="muted">プロダクト基本情報を読み込み中です…</Text>
+          <Card largeRadius>
+            <CardContent>
+              <Text tone="muted">
+                プロダクト基本情報を読み込み中です…
+              </Text>
             </CardContent>
           </Card>
         )}
 
         {loading ? (
-          <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">
-              <Text tone="muted">検査結果を読み込み中です…</Text>
+          <Card largeRadius>
+            <CardContent>
+              <Text tone="muted">
+                検査結果を読み込み中です…
+              </Text>
             </CardContent>
           </Card>
         ) : error ? (
-          <Card className="mint-request-card">
-            <CardContent className="mint-request-card__body">
+          <Card largeRadius>
+            <CardContent>
               <ErrorMessage>
                 {error}
               </ErrorMessage>

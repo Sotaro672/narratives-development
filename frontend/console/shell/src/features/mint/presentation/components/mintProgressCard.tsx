@@ -1,12 +1,17 @@
 // frontend/console/shell/src/features/mint/presentation/components/mintProgressCard.tsx
 
+import { Badge } from "../../../../shared/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
-import { Progress } from "../../../../shared/ui/progress";
+import {
+  Progress,
+  ProgressMetric,
+} from "../../../../shared/ui/progress";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 
 import type { MintTaskProgressDTO } from "../../infrastructure/dto/mintRequestManagementRow";
@@ -28,8 +33,8 @@ export default function MintProgressCard({
       </CardHeader>
 
       <CardContent>
-        <div className="mint-progress">
-          <div className="mint-progress__progress">
+        <Stack gap="md">
+          <Stack gap="sm">
             <Progress
               value={progress.percentage}
               label="進捗"
@@ -47,55 +52,53 @@ export default function MintProgressCard({
               </Text>{" "}
               / {progress.total} 完了
             </Text>
+          </Stack>
+
+          <div className="mint-section">
+            <Stack gap="sm">
+              <ProgressMetric
+                label="待機中"
+                value={progress.pending}
+              />
+
+              <ProgressMetric
+                label="ミント中"
+                value={progress.minting}
+              />
+
+              <ProgressMetric
+                label="完了"
+                value={progress.minted}
+              />
+
+              <ProgressMetric
+                label="再試行待ち"
+                value={
+                  progress.failedRetryable > 0 ? (
+                    <Badge variant="warning">
+                      {progress.failedRetryable}
+                    </Badge>
+                  ) : (
+                    progress.failedRetryable
+                  )
+                }
+              />
+
+              <ProgressMetric
+                label="失敗"
+                value={
+                  progress.failedFatal > 0 ? (
+                    <Badge variant="danger">
+                      {progress.failedFatal}
+                    </Badge>
+                  ) : (
+                    progress.failedFatal
+                  )
+                }
+              />
+            </Stack>
           </div>
-
-          <div className="mint-progress__details">
-            <div className="mint-progress__rows">
-              <div className="mint-progress__row">
-                <Text tone="muted">待機中</Text>
-                <Text weight="semibold">{progress.pending}</Text>
-              </div>
-
-              <div className="mint-progress__row">
-                <Text tone="muted">ミント中</Text>
-                <Text weight="semibold">{progress.minting}</Text>
-              </div>
-
-              <div className="mint-progress__row">
-                <Text tone="muted">完了</Text>
-                <Text weight="semibold">{progress.minted}</Text>
-              </div>
-
-              <div className="mint-progress__row">
-                <Text tone="muted">再試行待ち</Text>
-                <Text
-                  weight="semibold"
-                  className={
-                    progress.failedRetryable > 0
-                      ? "mint-progress__value--warning"
-                      : undefined
-                  }
-                >
-                  {progress.failedRetryable}
-                </Text>
-              </div>
-
-              <div className="mint-progress__row">
-                <Text tone="muted">失敗</Text>
-                <Text
-                  weight="semibold"
-                  className={
-                    progress.failedFatal > 0
-                      ? "mint-progress__value--danger"
-                      : undefined
-                  }
-                >
-                  {progress.failedFatal}
-                </Text>
-              </div>
-            </div>
-          </div>
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );

@@ -10,6 +10,12 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import {
+  ProgressIndeterminate,
+  ProgressMessage,
+  ProgressMetric,
+} from "../../../../shared/ui/progress";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 
 import type { MintFundingEstimate } from "../../infrastructure/dto/MintRequestRepository";
@@ -43,119 +49,86 @@ export default function MintFundingEstimateCard({
   onMint,
 }: MintFundingEstimateCardProps) {
   return (
-    <Card className="mint-request-card">
+    <Card largeRadius>
       <CardHeader>
         <CardTitle>SOL見積</CardTitle>
       </CardHeader>
 
-      <CardContent className="mint-request-card__body">
-        <div className="mint-funding">
+      <CardContent>
+        <Stack gap="md">
           {!selectedTokenBlueprintId ? (
             <Text as="div" tone="muted">
               トークン設計を選択すると、ミントに必要なSOLを見積もります。
             </Text>
           ) : loading ? (
-            <div
-              className="mint-funding__loading"
-              role="status"
-              aria-live="polite"
-            >
-              <div
-                className="mint-funding__spinner"
-                aria-hidden="true"
-              />
+            <Stack gap="sm" role="status" aria-live="polite">
               <Text tone="muted">
                 SOL見積を取得中です…
               </Text>
-            </div>
+              <ProgressIndeterminate ariaLabel="SOL見積を取得中" />
+            </Stack>
           ) : error ? (
             <ErrorMessage>
               {error}
             </ErrorMessage>
           ) : estimate ? (
-            <div className="mint-funding__estimate">
-              <div className="mint-funding__rows">
-                <div className="mint-funding__row">
-                  <Text tone="muted">
-                    Reserve Wallet残高
-                  </Text>
-                  <Text weight="semibold">
-                    {formatSol(estimate.reserve.balanceSol)} SOL
-                  </Text>
-                </div>
+            <Stack gap="md">
+              <Stack gap="sm">
+                <ProgressMetric
+                  label="Reserve Wallet残高"
+                  value={`${formatSol(estimate.reserve.balanceSol)} SOL`}
+                />
+              </Stack>
+
+              <div className="mint-section">
+                <Stack gap="sm">
+                  <ProgressMetric
+                    label="1件あたりMint手数料"
+                    value={`${formatSol(
+                      estimate.estimate.mintTransactionFeePerItemSol,
+                    )} SOL`}
+                  />
+
+                  <ProgressMetric
+                    label="Mint手数料合計"
+                    value={`${formatSol(
+                      estimate.estimate.mintTransactionFeeTotalSol,
+                    )} SOL`}
+                  />
+
+                  <ProgressMetric
+                    label="初回作成費"
+                    value={`${formatSol(
+                      estimate.estimate.initialCreationCostSol,
+                    )} SOL`}
+                  />
+                </Stack>
               </div>
 
-              <div className="mint-funding__section">
-                <div className="mint-funding__rows">
-                  <div className="mint-funding__row">
-                    <Text tone="muted">
-                      1件あたりMint手数料
-                    </Text>
-                    <Text weight="semibold">
-                      {formatSol(
-                        estimate.estimate.mintTransactionFeePerItemSol,
-                      )}{" "}
-                      SOL
-                    </Text>
-                  </div>
-
-                  <div className="mint-funding__row">
-                    <Text tone="muted">
-                      Mint手数料合計
-                    </Text>
-                    <Text weight="semibold">
-                      {formatSol(
-                        estimate.estimate.mintTransactionFeeTotalSol,
-                      )}{" "}
-                      SOL
-                    </Text>
-                  </div>
-
-                  <div className="mint-funding__row">
-                    <Text tone="muted">
-                      初回作成費
-                    </Text>
-                    <Text weight="semibold">
-                      {formatSol(
-                        estimate.estimate.initialCreationCostSol,
-                      )}{" "}
-                      SOL
-                    </Text>
-                  </div>
-                </div>
+              <div className="mint-section">
+                <ProgressMetric
+                  label="最終必要SOL合計"
+                  value={`${formatSol(
+                    estimate.estimate.totalRequiredSol,
+                  )} SOL`}
+                />
               </div>
 
-              <div className="mint-funding__section">
-                <div className="mint-funding__row">
-                  <Text weight="semibold">
-                    最終必要SOL合計
-                  </Text>
-                  <Text weight="semibold">
-                    {formatSol(
-                      estimate.estimate.totalRequiredSol,
-                    )}{" "}
-                    SOL
-                  </Text>
-                </div>
-              </div>
-
-              <Text
-                as="div"
-                weight="medium"
-                className={
+              <ProgressMessage
+                variant={
                   estimate.estimate.sufficient
-                    ? "mint-funding__status mint-funding__status--sufficient"
-                    : "mint-funding__status mint-funding__status--insufficient"
+                    ? "notice"
+                    : "warning"
                 }
               >
                 {estimate.estimate.sufficient
                   ? "SOL残高はミント実行に必要な条件を満たしています。"
                   : "Reserve WalletのSOL残高が不足しています。"}
-              </Text>
-            </div>
+              </ProgressMessage>
+            </Stack>
           ) : null}
 
-          <div className="mint-request-card__actions">
+          <div>
             <Button
               type="button"
               onClick={onMint}
@@ -165,7 +138,7 @@ export default function MintFundingEstimateCard({
               ミント申請を実行
             </Button>
           </div>
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );

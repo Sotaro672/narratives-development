@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 
 import type { MintRequestManagementRowDTO } from "../../infrastructure/dto/mintRequestManagementRow";
@@ -31,7 +32,7 @@ export default function MintInfoCard({
       </CardHeader>
 
       <CardContent>
-        <div className="mint-info">
+        <Stack gap="sm">
           <Text as="div">
             生産数:{" "}
             <Text weight="semibold">
@@ -63,7 +64,7 @@ export default function MintInfoCard({
           <Text as="div">
             ミント日時: {mintedAtLabel}
           </Text>
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );
