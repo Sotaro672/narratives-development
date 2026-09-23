@@ -1,17 +1,12 @@
 // frontend/console/shell/src/features/tokenBlueprint/presentation/components/tokenContentsCard.tsx
 
-import * as React from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
   FileText,
-  Trash2,
   Upload,
 } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import type { ContentFile } from "../../../../shared/types/tokenBlueprint";
-import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardButton,
@@ -21,7 +16,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
-import { Media } from "../../../../shared/ui/media";
+import MediaGallery from "../../../../shared/ui/mediaGallery";
 import MediaUploader from "../../../../shared/ui/mediaUploader";
 
 type Mode = "edit" | "view";
@@ -36,81 +31,6 @@ type TokenContentsCardProps = {
   ) => void | Promise<void>;
 };
 
-function ContentMainMedia({
-  item,
-}: {
-  item?: ContentFile;
-}) {
-  if (!item) {
-    return (
-      <Media
-        variant="viewer"
-        fit="contain"
-        emptyIcon={<FileText />}
-        emptyText="コンテンツがまだ登録されていません"
-      />
-    );
-  }
-
-  return (
-    <Media
-      src={item.url}
-      type={item.type}
-      name={item.name}
-      alt={item.name}
-      contentType={item.contentType}
-      variant="viewer"
-      fit="contain"
-      imageProps={{
-        onError: (event) => {
-          event.currentTarget.style.display = "none";
-        },
-      }}
-      videoProps={{
-        controls: true,
-        preload: "metadata",
-        playsInline: true,
-        controlsList: "nodownload",
-        crossOrigin: "anonymous",
-      }}
-    />
-  );
-}
-
-function ContentThumbnail({
-  item,
-  index,
-  onActivate,
-}: {
-  item: ContentFile;
-  index: number;
-  onActivate: () => void;
-}) {
-  if (item.type === "image") {
-    return (
-      <Media
-        src={item.url}
-        type="image"
-        alt={`コンテンツ サムネイル ${index + 1}`}
-        variant="square"
-        fit="cover"
-        bordered={false}
-        onActivate={onActivate}
-      />
-    );
-  }
-
-  return (
-    <Media
-      variant="square"
-      bordered={false}
-      emptyText={item.type.toUpperCase()}
-      emptyDescription={item.name}
-      onActivate={onActivate}
-    />
-  );
-}
-
 export default function TokenContentsCard({
   contents = [],
   mode = "edit",
@@ -118,56 +38,16 @@ export default function TokenContentsCard({
   onDelete,
 }: TokenContentsCardProps) {
   const isEditMode = mode === "edit";
-  const [index, setIndex] = React.useState(0);
   const hasItems = contents.length > 0;
 
-  const safeIndex = React.useMemo(() => {
-    if (contents.length === 0) {
-      return 0;
-    }
-
-    return Math.min(index, contents.length - 1);
-  }, [index, contents.length]);
-
-  const currentItem = hasItems
-    ? contents[safeIndex]
-    : undefined;
-
-  React.useEffect(() => {
-    setIndex((currentIndex) => {
-      if (contents.length === 0) {
-        return 0;
-      }
-
-      return Math.min(
-        currentIndex,
-        contents.length - 1,
-      );
-    });
-  }, [contents.length]);
-
-  const prev = () => {
-    if (!hasItems) {
-      return;
-    }
-
-    setIndex(
-      (currentIndex) =>
-        (currentIndex - 1 + contents.length) %
-        contents.length,
-    );
-  };
-
-  const next = () => {
-    if (!hasItems) {
-      return;
-    }
-
-    setIndex(
-      (currentIndex) =>
-        (currentIndex + 1) % contents.length,
-    );
-  };
+  const galleryItems = contents.map((item) => ({
+    id: item.id,
+    src: item.url,
+    name: item.name,
+    alt: item.name,
+    type: item.type,
+    contentType: item.contentType,
+  }));
 
   const handleFilesSelected = (
     files: File[],
@@ -175,20 +55,20 @@ export default function TokenContentsCard({
     void onFilesSelected?.(files);
   };
 
-  const handleDelete = async (
-    targetIndex: number,
-  ): Promise<void> => {
+  const handleDelete = (
+    itemIndex: number,
+  ): void => {
     if (!isEditMode || !onDelete) {
       return;
     }
 
-    const target = contents[targetIndex];
+    const target = contents[itemIndex];
 
     if (!target) {
       return;
     }
 
-    await onDelete(target, targetIndex);
+    void onDelete(target, itemIndex);
   };
 
   return (
@@ -241,95 +121,35 @@ export default function TokenContentsCard({
             className="token-contents-card__empty-uploader"
             onFilesSelected={handleFilesSelected}
           />
-        ) : hasItems ? (
-          <>
-            <div className="token-contents-card__viewer">
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="token-contents-card__nav token-contents-card__nav--left"
-                onClick={prev}
-                aria-label="前のコンテンツ"
-              >
-                <ChevronLeft className="token-contents-card__nav-icon" />
-              </Button>
-
-              <div className="token-contents-card__image-main-wrap">
-                <ContentMainMedia item={currentItem} />
-
-                {currentItem && isEditMode ? (
-                  <Button
-                    type="button"
-                    variant="destructive-outline"
-                    size="icon"
-                    className="token-contents-card__delete-btn"
-                    onClick={() => {
-                      void handleDelete(safeIndex);
-                    }}
-                    aria-label="このコンテンツを削除"
-                    title="削除"
-                  >
-                    <Trash2 className="token-contents-card__delete-icon" />
-                  </Button>
-                ) : null}
-              </div>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className="token-contents-card__nav token-contents-card__nav--right"
-                onClick={next}
-                aria-label="次のコンテンツ"
-              >
-                <ChevronRight className="token-contents-card__nav-icon" />
-              </Button>
-            </div>
-
-            {contents.length > 1 ? (
-              <div className="token-contents-card__thumbs">
-                {contents.map((item, itemIndex) => {
-                  const isActive = itemIndex === safeIndex;
-
-                  return (
-                    <div
-                      key={`${item.id}-${itemIndex}`}
-                      className={`token-contents-card__thumb-wrap${
-                        isActive ? " is-active" : ""
-                      }`}
-                    >
-                      <ContentThumbnail
-                        item={item}
-                        index={itemIndex}
-                        onActivate={() => {
-                          setIndex(itemIndex);
-                        }}
-                      />
-
-                      {isEditMode ? (
-                        <Button
-                          type="button"
-                          variant="destructive-outline"
-                          size="icon"
-                          className="token-contents-card__thumb-delete-btn"
-                          onClick={() => {
-                            void handleDelete(itemIndex);
-                          }}
-                          aria-label={`コンテンツ ${itemIndex + 1}を削除`}
-                          title="削除"
-                        >
-                          <Trash2 className="token-contents-card__thumb-delete-icon" />
-                        </Button>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </>
         ) : (
-          <ContentMainMedia />
+          <MediaGallery
+            items={galleryItems}
+            editable={isEditMode}
+            emptyIcon={<FileText />}
+            emptyText="コンテンツがまだ登録されていません"
+            mainVariant="viewer"
+            mainFit="contain"
+            thumbnailFit="cover"
+            imageProps={{
+              onError: (event) => {
+                event.currentTarget.style.display = "none";
+              },
+            }}
+            videoProps={{
+              controls: true,
+              preload: "metadata",
+              playsInline: true,
+              controlsList: "nodownload",
+              crossOrigin: "anonymous",
+            }}
+            onDelete={
+              onDelete
+                ? (_item, itemIndex) => {
+                    handleDelete(itemIndex);
+                  }
+                : undefined
+            }
+          />
         )}
       </CardContent>
     </Card>

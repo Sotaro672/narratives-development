@@ -35,8 +35,8 @@
 
 /* =========================================================
  * TokenContentsCard
- * メディア本体は shared/ui/media を利用
- * ファイル選択は shared/ui/mediaUploader を利用
+ * 表示は shared/ui/mediaGallery
+ * ファイル選択は shared/ui/mediaUploader
  * ======================================================= */
 
 .token-contents-card__uploader {
@@ -45,78 +45,4 @@
 
 .token-contents-card__empty-uploader {
   width: 100%;
-}
-
-.token-contents-card__viewer {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) 42px;
-  gap: 12px;
-  align-items: center;
-}
-
-.token-contents-card__nav {
-  width: 42px;
-  height: 42px;
-  min-height: 42px;
-  border-radius: 50%;
-}
-
-.token-contents-card__image-main-wrap {
-  position: relative;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.token-contents-card__delete-btn {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-  width: 38px;
-  height: 38px;
-  min-height: 38px;
-}
-
-/* =========================================================
- * Thumbnails
- * ======================================================= */
-
-.token-contents-card__thumbs {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(82px, 1fr));
-  gap: 10px;
-  margin-top: 16px;
-}
-
-.token-contents-card__thumb-wrap {
-  position: relative;
-  min-width: 0;
-  overflow: hidden;
-  border: 2px solid transparent;
-  border-radius: 11px;
-  background: hsl(var(--muted));
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
-}
-
-.token-contents-card__thumb-wrap:hover {
-  transform: translateY(-1px);
-}
-
-.token-contents-card__thumb-wrap.is-active {
-  border-color: hsl(var(--primary));
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.18);
-}
-
-.token-contents-card__thumb-delete-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  z-index: 2;
-  width: 25px;
-  height: 25px;
-  min-height: 25px;
-  border-radius: 7px;
 }

@@ -121,3 +121,23 @@
 .list-detail__description-input {
   min-height: 120px;
 }
+
+/* =========================================================
+ * List Image Card
+ * 表示は shared/ui/mediaGallery
+ * ファイル選択は shared/ui/mediaUploader
+ * ======================================================= */
+
+.list-image-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.list-image-card__uploader {
+  width: auto;
+}
+
+.list-image-card__empty-uploader {
+  width: 100%;
+}
