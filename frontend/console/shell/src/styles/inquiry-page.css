@@ -1,6 +1,22 @@
 /* frontend/console/shell/src/styles/inquiry-page.css */
 
 /* =========================================================
+ * Inquiry info
+ * ======================================================= */
+
+.inq-info-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(96px, max-content) minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 12px;
+}
+
+.inq-info-row > * {
+  min-width: 0;
+}
+
+/* =========================================================
  * Return refund
  * ======================================================= */
 

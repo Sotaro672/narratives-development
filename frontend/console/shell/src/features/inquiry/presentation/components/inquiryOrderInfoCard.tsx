@@ -5,7 +5,6 @@ import { Link as RouterLink } from "react-router-dom";
 import {
   Card,
   CardContent,
-  CardField,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -15,6 +14,8 @@ import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 import type { InquiryOrderSummary } from "../../../../shared/types/inquiry";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+
+import "../../../../styles/inquiry-page.css";
 
 export type InquiryOrderInfoCardProps = {
   productName?: string | null;
@@ -71,13 +72,14 @@ export default function InquiryOrderInfoCard({
       </CardHeader>
 
       <CardContent>
-        <Stack gap="md">
-          <CardField>
+        <Stack gap="sm">
+          <div className="inq-info-row">
             <Text
               as="div"
               size="xs"
               tone="muted"
-              weight="bold"
+              weight="semibold"
+              wrap="nowrap"
             >
               商品名
             </Text>
@@ -89,14 +91,15 @@ export default function InquiryOrderInfoCard({
             >
               {productDisplayName}
             </Text>
-          </CardField>
+          </div>
 
-          <CardField>
+          <div className="inq-info-row">
             <Text
               as="div"
               size="xs"
               tone="muted"
-              weight="bold"
+              weight="semibold"
+              wrap="nowrap"
             >
               トークン名
             </Text>
@@ -108,14 +111,15 @@ export default function InquiryOrderInfoCard({
             >
               {tokenDisplayName}
             </Text>
-          </CardField>
+          </div>
 
-          <CardField>
+          <div className="inq-info-row">
             <Text
               as="div"
               size="xs"
               tone="muted"
-              weight="bold"
+              weight="semibold"
+              wrap="nowrap"
             >
               数量
             </Text>
@@ -123,16 +127,17 @@ export default function InquiryOrderInfoCard({
             <Text as="div" size="sm">
               {quantity}
             </Text>
-          </CardField>
+          </div>
 
           {isUnopenedReturn ? (
             <>
-              <CardField>
+              <div className="inq-info-row">
                 <Text
                   as="div"
                   size="xs"
                   tone="muted"
-                  weight="bold"
+                  weight="semibold"
+                  wrap="nowrap"
                 >
                   返品ステータス
                 </Text>
@@ -140,14 +145,15 @@ export default function InquiryOrderInfoCard({
                 <Text as="div" size="sm">
                   {returnStatus}
                 </Text>
-              </CardField>
+              </div>
 
-              <CardField>
+              <div className="inq-info-row">
                 <Text
                   as="div"
                   size="xs"
                   tone="muted"
-                  weight="bold"
+                  weight="semibold"
+                  wrap="nowrap"
                 >
                   返品申請日
                 </Text>
@@ -155,14 +161,15 @@ export default function InquiryOrderInfoCard({
                 <Text as="div" size="sm">
                   {returnRequestedAt}
                 </Text>
-              </CardField>
+              </div>
 
-              <CardField>
+              <div className="inq-info-row">
                 <Text
                   as="div"
                   size="xs"
                   tone="muted"
-                  weight="bold"
+                  weight="semibold"
+                  wrap="nowrap"
                 >
                   返品完了日
                 </Text>
@@ -170,19 +177,20 @@ export default function InquiryOrderInfoCard({
                 <Text as="div" size="sm">
                   {returnCompletedAt}
                 </Text>
-              </CardField>
+              </div>
             </>
           ) : null}
 
           {orders.length > 0 ? (
             orders.map((order: InquiryOrderSummary, index: number) => (
-              <Stack key={`${order.id}-${index}`} gap="md">
-                <CardField>
+              <Stack key={`${order.id}-${index}`} gap="sm">
+                <div className="inq-info-row">
                   <Text
                     as="div"
                     size="xs"
                     tone="muted"
-                    weight="bold"
+                    weight="semibold"
+                    wrap="nowrap"
                   >
                     注文ID
                   </Text>
@@ -200,14 +208,15 @@ export default function InquiryOrderInfoCard({
                       </RouterLink>
                     </Link>
                   </Text>
-                </CardField>
+                </div>
 
-                <CardField>
+                <div className="inq-info-row">
                   <Text
                     as="div"
                     size="xs"
                     tone="muted"
-                    weight="bold"
+                    weight="semibold"
+                    wrap="nowrap"
                   >
                     発注日時
                   </Text>
@@ -219,7 +228,7 @@ export default function InquiryOrderInfoCard({
                   >
                     {safeDateTimeLabelJa(order.createdAt, "-")}
                   </Text>
-                </CardField>
+                </div>
               </Stack>
             ))
           ) : (

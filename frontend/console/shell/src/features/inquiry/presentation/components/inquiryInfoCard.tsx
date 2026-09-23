@@ -3,13 +3,14 @@
 import {
   Card,
   CardContent,
-  CardField,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
 import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+
+import "../../../../styles/inquiry-page.css";
 
 export type InquiryInfoCardProps = {
   userName?: string | null;
@@ -40,13 +41,14 @@ export default function InquiryInfoCard({
       </CardHeader>
 
       <CardContent>
-        <Stack gap="md">
-          <CardField>
+        <Stack gap="sm">
+          <div className="inq-info-row">
             <Text
               as="div"
               size="xs"
               tone="muted"
-              weight="bold"
+              weight="semibold"
+              wrap="nowrap"
             >
               ユーザー名
             </Text>
@@ -58,14 +60,15 @@ export default function InquiryInfoCard({
             >
               {userNameLabel}
             </Text>
-          </CardField>
+          </div>
 
-          <CardField>
+          <div className="inq-info-row">
             <Text
               as="div"
               size="xs"
               tone="muted"
-              weight="bold"
+              weight="semibold"
+              wrap="nowrap"
             >
               問い合わせ日
             </Text>
@@ -77,14 +80,15 @@ export default function InquiryInfoCard({
             >
               {createdAtLabel}
             </Text>
-          </CardField>
+          </div>
 
-          <CardField>
+          <div className="inq-info-row">
             <Text
               as="div"
               size="xs"
               tone="muted"
-              weight="bold"
+              weight="semibold"
+              wrap="nowrap"
             >
               最終更新日
             </Text>
@@ -96,7 +100,7 @@ export default function InquiryInfoCard({
             >
               {updatedAtLabel}
             </Text>
-          </CardField>
+          </div>
         </Stack>
       </CardContent>
     </Card>
