@@ -15,6 +15,7 @@ import Media, {
   type MediaType,
   type MediaVariant,
 } from "./media";
+import Preview from "./preview";
 
 import "./mediaGallery.css";
 
@@ -103,6 +104,8 @@ export default function MediaGallery({
   const [internalIndex, setInternalIndex] = React.useState(
     defaultActiveIndex,
   );
+  const [previewItem, setPreviewItem] =
+    React.useState<MediaGalleryItem | null>(null);
 
   const isControlled = activeIndex !== undefined;
   const requestedIndex = isControlled
@@ -215,6 +218,24 @@ export default function MediaGallery({
     ],
   );
 
+  const handlePreviewOpen = React.useCallback(
+    (item: MediaGalleryItem) => {
+      const type = item.type ?? "image";
+      const source = String(item.src ?? "").trim();
+
+      if (type !== "image" || !source) {
+        return;
+      }
+
+      setPreviewItem(item);
+    },
+    [],
+  );
+
+  const handlePreviewClose = React.useCallback(() => {
+    setPreviewItem(null);
+  }, []);
+
   const renderThumbnail = (
     item: MediaGalleryItem,
     itemIndex: number,
@@ -274,125 +295,149 @@ export default function MediaGallery({
     );
   }
 
+  const isCurrentItemPreviewable =
+    (currentItem.type ?? "image") === "image" &&
+    Boolean(String(currentItem.src ?? "").trim());
+
   return (
-    <div
-      className={cn(
-        "ui-media-gallery",
-        !showViewer && "ui-media-gallery--thumbnails-only",
-        className,
-      )}
-    >
-      {showViewer ? (
-        <div
-          className={cn(
-            "ui-media-gallery__viewer",
-            (!hasMultipleItems || !showNavigation) &&
-              "ui-media-gallery__viewer--single",
-          )}
-        >
-          {hasMultipleItems && showNavigation ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="ui-media-gallery__nav"
-              onClick={prev}
-              aria-label="前のメディア"
-            >
-              <ChevronLeft className="ui-media-gallery__nav-icon" />
-            </Button>
-          ) : null}
+    <>
+      <div
+        className={cn(
+          "ui-media-gallery",
+          !showViewer && "ui-media-gallery--thumbnails-only",
+          className,
+        )}
+      >
+        {showViewer ? (
+          <div
+            className={cn(
+              "ui-media-gallery__viewer",
+              (!hasMultipleItems || !showNavigation) &&
+                "ui-media-gallery__viewer--single",
+            )}
+          >
+            {hasMultipleItems && showNavigation ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="ui-media-gallery__nav"
+                onClick={prev}
+                aria-label="前のメディア"
+              >
+                <ChevronLeft className="ui-media-gallery__nav-icon" />
+              </Button>
+            ) : null}
 
-          <div className="ui-media-gallery__main">
-            <Media
-              src={currentItem.src}
-              type={currentItem.type ?? "image"}
-              name={currentItem.name}
-              alt={
-                currentItem.alt ??
-                currentItem.name ??
-                `メディア ${safeIndex + 1}`
-              }
-              contentType={currentItem.contentType}
-              variant={mainVariant}
-              fit={mainFit}
-              bordered={false}
-              imageProps={imageProps}
-              videoProps={videoProps}
-            />
-
-            {editable && onDelete ? (
-              <DeleteButton
-                size="lg"
-                className="ui-media-gallery__delete"
-                disabled={deleteDisabled}
-                ariaLabel="このメディアを削除"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleDelete(
-                    currentItem,
-                    safeIndex,
-                  );
-                }}
+            <div className="ui-media-gallery__main">
+              <Media
+                src={currentItem.src}
+                type={currentItem.type ?? "image"}
+                name={currentItem.name}
+                alt={
+                  currentItem.alt ??
+                  currentItem.name ??
+                  `メディア ${safeIndex + 1}`
+                }
+                contentType={currentItem.contentType}
+                variant={mainVariant}
+                fit={mainFit}
+                bordered={false}
+                imageProps={imageProps}
+                videoProps={videoProps}
+                onActivate={
+                  isCurrentItemPreviewable
+                    ? () => {
+                        handlePreviewOpen(currentItem);
+                      }
+                    : undefined
+                }
               />
+
+              {editable && onDelete ? (
+                <DeleteButton
+                  size="lg"
+                  className="ui-media-gallery__delete"
+                  disabled={deleteDisabled}
+                  ariaLabel="このメディアを削除"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    handleDelete(
+                      currentItem,
+                      safeIndex,
+                    );
+                  }}
+                />
+              ) : null}
+            </div>
+
+            {hasMultipleItems && showNavigation ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="ui-media-gallery__nav"
+                onClick={next}
+                aria-label="次のメディア"
+              >
+                <ChevronRight className="ui-media-gallery__nav-icon" />
+              </Button>
             ) : null}
           </div>
+        ) : null}
 
-          {hasMultipleItems && showNavigation ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="ui-media-gallery__nav"
-              onClick={next}
-              aria-label="次のメディア"
-            >
-              <ChevronRight className="ui-media-gallery__nav-icon" />
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
+        {shouldShowThumbnails ? (
+          <div className="ui-media-gallery__thumbs">
+            {items.map((item, itemIndex) => {
+              const isActive =
+                itemIndex === safeIndex;
 
-      {shouldShowThumbnails ? (
-        <div className="ui-media-gallery__thumbs">
-          {items.map((item, itemIndex) => {
-            const isActive =
-              itemIndex === safeIndex;
+              return (
+                <div
+                  key={`${item.id}-${itemIndex}`}
+                  className={cn(
+                    "ui-media-gallery__thumb",
+                    isActive &&
+                      "ui-media-gallery__thumb--active",
+                  )}
+                >
+                  {renderThumbnail(
+                    item,
+                    itemIndex,
+                  )}
 
-            return (
-              <div
-                key={`${item.id}-${itemIndex}`}
-                className={cn(
-                  "ui-media-gallery__thumb",
-                  isActive &&
-                    "ui-media-gallery__thumb--active",
-                )}
-              >
-                {renderThumbnail(
-                  item,
-                  itemIndex,
-                )}
+                  {editable && onDelete ? (
+                    <DeleteButton
+                      size="sm"
+                      className="ui-media-gallery__thumb-delete"
+                      disabled={deleteDisabled}
+                      ariaLabel={`メディア ${itemIndex + 1}を削除`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleDelete(
+                          item,
+                          itemIndex,
+                        );
+                      }}
+                    />
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
 
-                {editable && onDelete ? (
-                  <DeleteButton
-                    size="sm"
-                    className="ui-media-gallery__thumb-delete"
-                    disabled={deleteDisabled}
-                    ariaLabel={`メディア ${itemIndex + 1}を削除`}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleDelete(
-                        item,
-                        itemIndex,
-                      );
-                    }}
-                  />
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+      <Preview
+        open={previewItem !== null}
+        src={previewItem?.src}
+        alt={
+          previewItem?.alt ??
+          previewItem?.name ??
+          "画像プレビュー"
+        }
+        onClose={handlePreviewClose}
+      />
+    </>
   );
 }

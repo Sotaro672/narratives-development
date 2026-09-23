@@ -1,0 +1,58 @@
+/* frontend/console/shell/src/shared/ui/preview.css */
+
+.ui-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.88);
+  padding: 48px;
+  backdrop-filter: blur(4px);
+}
+
+.ui-preview__close {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  z-index: 3;
+  background: hsl(var(--background));
+}
+
+.ui-preview__nav {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  transform: translateY(-50%);
+  background: hsl(var(--background));
+}
+
+.ui-preview__nav--prev {
+  left: 24px;
+}
+
+.ui-preview__nav--next {
+  right: 24px;
+}
+
+.ui-preview__content {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-preview__image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
