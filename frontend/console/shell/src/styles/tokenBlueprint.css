@@ -43,6 +43,10 @@
   width: auto;
 }
 
+.token-contents-card__empty-uploader {
+  width: 100%;
+}
+
 .token-contents-card__viewer {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr) 42px;

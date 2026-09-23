@@ -119,7 +119,6 @@ export default function TokenContentsCard({
 }: TokenContentsCardProps) {
   const isEditMode = mode === "edit";
   const [index, setIndex] = React.useState(0);
-
   const hasItems = contents.length > 0;
 
   const safeIndex = React.useMemo(() => {
@@ -170,6 +169,12 @@ export default function TokenContentsCard({
     );
   };
 
+  const handleFilesSelected = (
+    files: File[],
+  ): void => {
+    void onFilesSelected?.(files);
+  };
+
   const handleDelete = async (
     targetIndex: number,
   ): Promise<void> => {
@@ -199,7 +204,7 @@ export default function TokenContentsCard({
           </CardTitle>
         </CardHeaderLeft>
 
-        {isEditMode ? (
+        {isEditMode && hasItems ? (
           <MediaUploader
             accept={IMAGE_STORAGE_ACCEPT}
             multiple
@@ -218,99 +223,113 @@ export default function TokenContentsCard({
                 ファイル追加
               </CardButton>
             )}
-            onFilesSelected={(files) => {
-              void onFilesSelected?.(files);
-            }}
+            onFilesSelected={handleFilesSelected}
           />
         ) : null}
       </CardHeader>
 
       <CardContent size="large">
-        <div className="token-contents-card__viewer">
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="token-contents-card__nav token-contents-card__nav--left"
-            onClick={prev}
-            aria-label="前のコンテンツ"
-            disabled={!hasItems}
-          >
-            <ChevronLeft className="token-contents-card__nav-icon" />
-          </Button>
-
-          <div className="token-contents-card__image-main-wrap">
-            <ContentMainMedia item={currentItem} />
-
-            {currentItem && isEditMode && (
+        {!hasItems && isEditMode ? (
+          <MediaUploader
+            accept={IMAGE_STORAGE_ACCEPT}
+            multiple
+            title={null}
+            showCount={false}
+            pickerLabel="メディアをアップロード"
+            pickerDescription="クリックまたはドラッグ＆ドロップでファイルを追加できます"
+            disabled={!onFilesSelected}
+            className="token-contents-card__empty-uploader"
+            onFilesSelected={handleFilesSelected}
+          />
+        ) : hasItems ? (
+          <>
+            <div className="token-contents-card__viewer">
               <Button
                 type="button"
-                variant="destructive-outline"
+                variant="outline"
                 size="icon"
-                className="token-contents-card__delete-btn"
-                onClick={() => {
-                  void handleDelete(safeIndex);
-                }}
-                aria-label="このコンテンツを削除"
-                title="削除"
+                className="token-contents-card__nav token-contents-card__nav--left"
+                onClick={prev}
+                aria-label="前のコンテンツ"
               >
-                <Trash2 className="token-contents-card__delete-icon" />
+                <ChevronLeft className="token-contents-card__nav-icon" />
               </Button>
-            )}
-          </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            size="icon"
-            className="token-contents-card__nav token-contents-card__nav--right"
-            onClick={next}
-            aria-label="次のコンテンツ"
-            disabled={!hasItems}
-          >
-            <ChevronRight className="token-contents-card__nav-icon" />
-          </Button>
-        </div>
+              <div className="token-contents-card__image-main-wrap">
+                <ContentMainMedia item={currentItem} />
 
-        {contents.length > 1 && (
-          <div className="token-contents-card__thumbs">
-            {contents.map((item, itemIndex) => {
-              const isActive = itemIndex === safeIndex;
-
-              return (
-                <div
-                  key={`${item.id}-${itemIndex}`}
-                  className={`token-contents-card__thumb-wrap${
-                    isActive ? " is-active" : ""
-                  }`}
-                >
-                  <ContentThumbnail
-                    item={item}
-                    index={itemIndex}
-                    onActivate={() => {
-                      setIndex(itemIndex);
+                {currentItem && isEditMode ? (
+                  <Button
+                    type="button"
+                    variant="destructive-outline"
+                    size="icon"
+                    className="token-contents-card__delete-btn"
+                    onClick={() => {
+                      void handleDelete(safeIndex);
                     }}
-                  />
+                    aria-label="このコンテンツを削除"
+                    title="削除"
+                  >
+                    <Trash2 className="token-contents-card__delete-icon" />
+                  </Button>
+                ) : null}
+              </div>
 
-                  {isEditMode && (
-                    <Button
-                      type="button"
-                      variant="destructive-outline"
-                      size="icon"
-                      className="token-contents-card__thumb-delete-btn"
-                      onClick={() => {
-                        void handleDelete(itemIndex);
-                      }}
-                      aria-label={`コンテンツ ${itemIndex + 1}を削除`}
-                      title="削除"
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="token-contents-card__nav token-contents-card__nav--right"
+                onClick={next}
+                aria-label="次のコンテンツ"
+              >
+                <ChevronRight className="token-contents-card__nav-icon" />
+              </Button>
+            </div>
+
+            {contents.length > 1 ? (
+              <div className="token-contents-card__thumbs">
+                {contents.map((item, itemIndex) => {
+                  const isActive = itemIndex === safeIndex;
+
+                  return (
+                    <div
+                      key={`${item.id}-${itemIndex}`}
+                      className={`token-contents-card__thumb-wrap${
+                        isActive ? " is-active" : ""
+                      }`}
                     >
-                      <Trash2 className="token-contents-card__thumb-delete-icon" />
-                    </Button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                      <ContentThumbnail
+                        item={item}
+                        index={itemIndex}
+                        onActivate={() => {
+                          setIndex(itemIndex);
+                        }}
+                      />
+
+                      {isEditMode ? (
+                        <Button
+                          type="button"
+                          variant="destructive-outline"
+                          size="icon"
+                          className="token-contents-card__thumb-delete-btn"
+                          onClick={() => {
+                            void handleDelete(itemIndex);
+                          }}
+                          aria-label={`コンテンツ ${itemIndex + 1}を削除`}
+                          title="削除"
+                        >
+                          <Trash2 className="token-contents-card__thumb-delete-icon" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <ContentMainMedia />
         )}
       </CardContent>
     </Card>
