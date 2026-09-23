@@ -1,7 +1,10 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/replyModal.tsx
 
+import { Image as ImageIcon } from "lucide-react";
+
 import { ErrorMessage } from "../../../../shared/ui/error";
 import { Label } from "../../../../shared/ui/label";
+import MediaGallery from "../../../../shared/ui/mediaGallery";
 import MediaUploader from "../../../../shared/ui/mediaUploader";
 import {
   Modal,
@@ -47,7 +50,13 @@ export default function ReplyModal({
   onRemoveImage,
   onSubmit,
 }: ReplyModalProps) {
-  const uploadItems = images.map((image) => ({
+  const hasImages = images.length > 0;
+  const remainingCount = Math.max(
+    MAX_REPLY_IMAGES - images.length,
+    0,
+  );
+
+  const galleryItems = images.map((image) => ({
     id: image.id,
     src: image.previewUrl,
     name: image.file.name,
@@ -67,16 +76,37 @@ export default function ReplyModal({
       ariaBusy={submitting}
       panelClassName="inq-reply-modal__panel"
       footer={
-        <ModalButton
-          variant="primary"
-          disabled={
-            submitting ||
-            (!content.trim() && images.length === 0)
-          }
-          onClick={onSubmit}
-        >
-          {submitting ? "送信中" : "送信"}
-        </ModalButton>
+        <>
+          {hasImages && remainingCount > 0 ? (
+            <MediaUploader
+              accept="image/*"
+              multiple
+              maxFiles={remainingCount}
+              variant="grid"
+              pickerVariant="button"
+              title={null}
+              showCount={false}
+              showFileNames={false}
+              showRemoveButton={false}
+              previewFramed={false}
+              pickerLabel="画像を追加"
+              disabled={submitting}
+              className="inq-reply-modal__footer-uploader"
+              onFilesSelected={onChangeImages}
+            />
+          ) : null}
+
+          <ModalButton
+            variant="primary"
+            disabled={
+              submitting ||
+              (!content.trim() && images.length === 0)
+            }
+            onClick={onSubmit}
+          >
+            {submitting ? "送信中" : "送信"}
+          </ModalButton>
+        </>
       }
     >
       {errorMessage ? (
@@ -111,24 +141,39 @@ export default function ReplyModal({
         </Text>
       </Stack>
 
-      <MediaUploader
-        items={uploadItems}
-        accept="image/*"
-        multiple
-        maxFiles={MAX_REPLY_IMAGES}
-        variant="grid"
-        mediaVariant="square"
-        mediaFit="cover"
-        title="添付画像"
-        pickerLabel="画像を選択"
-        pickerDescription={`JPG / PNG / WebP / GIF、1枚 ${MAX_REPLY_IMAGE_SIZE_MB}MBまで`}
-        disabled={submitting}
-        showCount
-        showFileNames={false}
-        showRemoveButton
-        onFilesSelected={onChangeImages}
-        onRemove={onRemoveImage}
-      />
+      <Stack gap="sm">
+        <Label>添付画像</Label>
+
+        {hasImages ? (
+          <MediaGallery
+            items={galleryItems}
+            editable
+            deleteDisabled={submitting}
+            showViewer={false}
+            showNavigation={false}
+            showThumbnails
+            thumbnailFit="cover"
+            onDelete={(item) => {
+              onRemoveImage(item.id);
+            }}
+          />
+        ) : (
+          <MediaUploader
+            accept="image/*"
+            multiple
+            maxFiles={MAX_REPLY_IMAGES}
+            variant="grid"
+            pickerVariant="dropzone"
+            title={null}
+            showCount={false}
+            pickerLabel="画像を選択"
+            pickerDescription={`JPG / PNG / WebP / GIF、1枚 ${MAX_REPLY_IMAGE_SIZE_MB}MBまで`}
+            emptyIcon={<ImageIcon />}
+            disabled={submitting}
+            onFilesSelected={onChangeImages}
+          />
+        )}
+      </Stack>
     </Modal>
   );
 }
