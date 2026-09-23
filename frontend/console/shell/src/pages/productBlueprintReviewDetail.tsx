@@ -8,6 +8,7 @@ import AdminCard from "../features/admin/presentation/components/AdminCard";
 import LogCard from "../features/log/presentation/LogCard";
 import ReportModal from "../features/report/presentation/components/ReportModal";
 
+import AvatarIcon from "../shared/ui/avatarIcon";
 import { Badge, type BadgeVariant } from "../shared/ui/badge";
 import { Button } from "../shared/ui/button";
 import Empty from "../shared/ui/empty";
@@ -231,7 +232,7 @@ export default function ProductBlueprintReviewDetail() {
                   const ReviewKey = ReviewID || `rv_${index}`;
                   const Body = String(review.Body ?? "");
                   const AvatarName = String(review.AvatarName ?? "");
-                  const AvatarIcon = String(review.AvatarIcon ?? "");
+                  const AvatarIconUrl = String(review.AvatarIcon ?? "");
                   const AuthorName = AvatarName || "-";
                   const RatingStars = ratingToStars(Number(review.Rating ?? 0));
                   const ReviewedAt = String(review.ReviewedAt ?? "");
@@ -246,13 +247,10 @@ export default function ProductBlueprintReviewDetail() {
                       className="pbrd-review-item-card"
                     >
                       <div className="pbrd-author-row">
-                        {AvatarIcon ? (
-                          <img
-                            src={AvatarIcon}
-                            alt={`${AuthorName}のアイコン`}
-                            className="pbrd-author-icon"
-                          />
-                        ) : null}
+                        <AvatarIcon
+                          src={AvatarIconUrl}
+                          alt={`${AuthorName}のアイコン`}
+                        />
 
                         <Text
                           size="xs"

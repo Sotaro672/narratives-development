@@ -1,6 +1,7 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/inquiryReplyListCard.tsx
 
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+import AvatarIcon from "../../../../shared/ui/avatarIcon";
 import { Button } from "../../../../shared/ui/button";
 import {
   Card,
@@ -14,8 +15,7 @@ import type {
   InquiryImageFile,
 } from "../../../../shared/types/inquiry";
 
-type InquiryReplyView =
-  InquiryDetail["replies"][number];
+type InquiryReplyView = InquiryDetail["replies"][number];
 
 type InquiryImageView = {
   id: string;
@@ -107,33 +107,25 @@ export default function InquiryReplyListCard({
         {replies.length > 0 ? (
           <div className="inq-reply-list">
             {replies.map((reply) => {
-              const replyImages =
-                normalizeImages(
-                  reply.images,
-                );
+              const replyImages = normalizeImages(reply.images);
 
-              const senderLabel =
-                replySenderLabel(
-                  reply,
-                  brandName,
-                  userName,
-                );
+              const senderLabel = replySenderLabel(
+                reply,
+                brandName,
+                userName,
+              );
 
-              const createdAtLabel =
-                safeDateTimeLabelJa(
-                  reply.createdAt,
-                  "-",
-                );
+              const createdAtLabel = safeDateTimeLabelJa(
+                reply.createdAt,
+                "-",
+              );
 
               const isSelf =
-                reply.senderType ===
-                  "member" &&
-                reply.senderId ===
-                  memberId;
+                reply.senderType === "member" &&
+                reply.senderId === memberId;
 
               const showBrandIcon =
-                reply.senderType ===
-                  "member" &&
+                reply.senderType === "member" &&
                 Boolean(brandIcon);
 
               return (
@@ -148,7 +140,7 @@ export default function InquiryReplyListCard({
                   <div className="inq-reply-item__header">
                     <div className="inq-reply-item__sender-profile">
                       {showBrandIcon ? (
-                        <img
+                        <AvatarIcon
                           src={brandIcon}
                           alt=""
                           className="inq-reply-item__sender-icon"
@@ -166,38 +158,28 @@ export default function InquiryReplyListCard({
                   </div>
 
                   <p className="inq-reply-item__content">
-                    {textOrDash(
-                      reply.content,
-                    )}
+                    {textOrDash(reply.content)}
                   </p>
 
                   {replyImages.length > 0 ? (
                     <div className="inq-detail__image-grid">
-                      {replyImages.map(
-                        (image) => (
-                          <a
-                            key={image.id}
-                            href={
-                              image.fileUrl
-                            }
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inq-detail__image-link"
-                            aria-label={`${image.fileName}を開く`}
-                          >
-                            <img
-                              src={
-                                image.fileUrl
-                              }
-                              alt={
-                                image.fileName
-                              }
-                              className="inq-detail__image"
-                              loading="lazy"
-                            />
-                          </a>
-                        ),
-                      )}
+                      {replyImages.map((image) => (
+                        <a
+                          key={image.id}
+                          href={image.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inq-detail__image-link"
+                          aria-label={`${image.fileName}を開く`}
+                        >
+                          <img
+                            src={image.fileUrl}
+                            alt={image.fileName}
+                            className="inq-detail__image"
+                            loading="lazy"
+                          />
+                        </a>
+                      ))}
                     </div>
                   ) : null}
                 </article>

@@ -3,6 +3,7 @@
 import * as React from "react";
 
 import { ErrorMessage } from "../../../../shared/ui/error";
+import { Label } from "../../../../shared/ui/label";
 import {
   Modal,
   ModalButton,
@@ -82,12 +83,12 @@ export default function ReplyModal({
         </ErrorMessage>
       ) : null}
 
-      <label
+      <Label
         className="inq-reply-modal__label"
         htmlFor="inquiry-reply-content"
       >
         返信内容
-      </label>
+      </Label>
 
       <Textarea
         id="inquiry-reply-content"

@@ -7,8 +7,10 @@ import type {
   ReactionType,
 } from "../../../../shared/types/tokenBlueprintReview";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
+import AvatarIcon from "../../../../shared/ui/avatarIcon";
 import { Badge } from "../../../../shared/ui/badge";
 import { Button } from "../../../../shared/ui/button";
+import { Card } from "../../../../shared/ui/card";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
@@ -226,15 +228,12 @@ export default function ReviewCard({
   }
 
   return (
-    <div className="token-blueprint-review-card">
+    <Card className="token-blueprint-review-card">
       <div className="token-blueprint-review-card__author-row">
-        {authorIcon ? (
-          <img
-            src={authorIcon}
-            alt="author icon"
-            className="token-blueprint-review-card__author-icon"
-          />
-        ) : null}
+        <AvatarIcon
+          src={authorIcon}
+          alt={`${authorPrimary}のアイコン`}
+        />
 
         <Text size="xs" tone="muted">
           {authorPrimary}
@@ -295,9 +294,7 @@ export default function ReviewCard({
           disabled={disabled}
           onClick={toggleReplyForm}
         >
-          {isReplyFormOpen
-            ? "返信を閉じる"
-            : "返信"}
+          {isReplyFormOpen ? "返信を閉じる" : "返信"}
         </Button>
 
         {visibleReplyCount > 0 ? (
@@ -317,9 +314,8 @@ export default function ReviewCard({
         {canReport ? (
           <Button
             type="button"
-            variant="outline"
+            variant="destructive-outline"
             size="sm"
-            className="token-blueprint-review-card__danger-button"
             disabled={disabled}
             onClick={handleReport}
           >
@@ -330,17 +326,14 @@ export default function ReviewCard({
         {canDelete ? (
           <Button
             type="button"
-            variant="outline"
+            variant="destructive-outline"
             size="sm"
-            className="token-blueprint-review-card__danger-button"
             disabled={disabled}
             onClick={() => {
               void handleDelete();
             }}
           >
-            {isSubmittingDelete
-              ? "削除中..."
-              : "削除"}
+            {isSubmittingDelete ? "削除中..." : "削除"}
           </Button>
         ) : null}
       </div>
@@ -387,9 +380,7 @@ export default function ReviewCard({
                 void handleReplySubmit();
               }}
             >
-              {isSubmittingReply
-                ? "送信中..."
-                : "送信"}
+              {isSubmittingReply ? "送信中..." : "送信"}
             </Button>
           </div>
         </div>
@@ -417,6 +408,6 @@ export default function ReviewCard({
           </div>
         </div>
       ) : null}
-    </div>
+    </Card>
   );
 }

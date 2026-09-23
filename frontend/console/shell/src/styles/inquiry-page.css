@@ -10,15 +10,6 @@
   gap: 20px;
 }
 
-.inq-detail__title {
-  margin: 0;
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font-size: 1.25rem;
-  font-weight: 800;
-  line-height: 1.5;
-  letter-spacing: 0.02em;
-}
-
 .inq-detail__meta {
   display: grid;
   grid-template-columns: 1fr;
@@ -280,14 +271,10 @@
 }
 
 .inq-reply-item__sender-icon {
-  display: block;
   width: 26px;
   height: 26px;
-  flex: 0 0 auto;
-  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  border-radius: 999px;
+  flex-basis: 26px;
   background: hsl(var(--muted, 210 40% 96.1%));
-  object-fit: cover;
   object-position: center;
 }
 
@@ -385,14 +372,6 @@
   align-self: flex-start;
 }
 
-.inq-reply-card__header {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
 /* =========================================================
    Reply modal
 ========================================================= */
@@ -404,7 +383,6 @@
 }
 
 .inq-reply-modal__label {
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
   font-size: 0.86rem;
   font-weight: 800;
   line-height: 1.5;
@@ -487,34 +465,4 @@
   height: 24px;
   min-height: 24px;
   border-radius: 999px;
-}
-
-@media (max-width: 640px) {
-  .inq-reply-list {
-    gap: 16px;
-  }
-
-  .inq-reply-item {
-    max-width: 86%;
-  }
-
-  .inq-reply-item__sender-icon {
-    width: 24px;
-    height: 24px;
-  }
-
-  .inq-reply-item__content {
-    padding: 9px 12px;
-    font-size: 0.88rem;
-    line-height: 1.6;
-  }
-
-  .inq-reply-item .inq-detail__image-grid {
-    width: min(280px, 100%);
-  }
-
-  .modal__panel.inq-reply-modal__panel {
-    width: 100%;
-    max-height: calc(100dvh - 24px);
-  }
 }
