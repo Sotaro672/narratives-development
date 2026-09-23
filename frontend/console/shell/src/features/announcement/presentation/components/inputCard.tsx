@@ -19,7 +19,6 @@ import {
   CardContent,
   CardHeader,
   CardHeaderActions,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -244,13 +243,7 @@ export default function InputCard({
     <Card>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <ImageIcon className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
-          <CardTitle strong>
-            {title}
-          </CardTitle>
+          <CardTitle strong>{title}</CardTitle>
         </CardHeaderLeft>
 
         {isEditMode && hasImages ? (

@@ -1,14 +1,12 @@
 // frontend/console/shell/src/features/production/presentation/components/productionQuantityCard.tsx
 
 import * as React from "react";
-import { Palette } from "lucide-react";
 
 import { Badge } from "../../../../shared/ui/badge";
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -161,10 +159,6 @@ const ProductionQuantityCard: React.FC<ProductionQuantityCardProps> = ({
     <Card className={className}>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Palette className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>{title}</CardTitle>
         </CardHeaderLeft>
       </CardHeader>

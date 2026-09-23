@@ -13,7 +13,6 @@ import {
   CardField,
   CardFields,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -56,9 +55,6 @@ function MemberCardHeader() {
   return (
     <CardHeader>
       <CardHeaderLeft>
-        <CardHeaderIcon>
-          <IconUser className="card__header-icon-svg" />
-        </CardHeaderIcon>
         <CardTitle strong>基本情報</CardTitle>
       </CardHeaderLeft>
     </CardHeader>
@@ -75,9 +71,7 @@ export default function MemberDetailCard({
       <Card>
         <MemberCardHeader />
         <CardContent>
-          <Text tone="muted">
-            読み込み中です…
-          </Text>
+          <Text tone="muted">読み込み中です…</Text>
         </CardContent>
       </Card>
     );

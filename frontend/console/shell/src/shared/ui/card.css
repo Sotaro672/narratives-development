@@ -64,31 +64,6 @@
   align-self: auto;
 }
 
-.card__header-icon {
-  display: inline-flex;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid hsl(var(--border));
-  border-radius: 10px;
-  background: hsl(var(--muted));
-  color: hsl(var(--foreground));
-}
-
-.card__header-icon--primary {
-  border-color: hsl(var(--primary) / 0.24);
-  background: hsl(var(--primary) / 0.08);
-  color: hsl(var(--primary));
-}
-
-.card__header-icon-svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 2;
-}
-
 .card__title {
   min-width: 0;
   margin: 0;

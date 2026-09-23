@@ -70,25 +70,6 @@ export const CardHeaderActions = React.forwardRef<HTMLDivElement, CardHeaderActi
 );
 CardHeaderActions.displayName = "CardHeaderActions";
 
-export type CardHeaderIconProps = React.HTMLAttributes<HTMLDivElement> & {
-  variant?: "default" | "primary";
-};
-
-export const CardHeaderIcon = React.forwardRef<HTMLDivElement, CardHeaderIconProps>(
-  ({ className, variant = "default", ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn(
-        "card__header-icon",
-        variant === "primary" && "card__header-icon--primary",
-        className,
-      )}
-      {...props}
-    />
-  ),
-);
-CardHeaderIcon.displayName = "CardHeaderIcon";
-
 export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement> & {
   strong?: boolean;
   truncate?: boolean;

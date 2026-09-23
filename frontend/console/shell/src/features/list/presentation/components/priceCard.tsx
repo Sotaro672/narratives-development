@@ -1,13 +1,11 @@
 // frontend/console/shell/src/features/list/presentation/components/priceCard.tsx
 
 import * as React from "react";
-import { Tag } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
   CardTitle,
@@ -90,10 +88,6 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
     <Card className={className}>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Tag className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong>
             {title}
             {showModeBadge && (

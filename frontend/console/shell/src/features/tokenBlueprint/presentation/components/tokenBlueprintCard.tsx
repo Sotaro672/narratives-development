@@ -1,7 +1,6 @@
 // frontend/console/shell/src/features/tokenBlueprint/presentation/components/tokenBlueprintCard.tsx
 
 import * as React from "react";
-import { Link2 } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import type { IconCropPosition } from "../../../../shared/types/iconCrop";
@@ -11,7 +10,6 @@ import {
   CardField,
   CardFields,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardInput,
   CardLabel,
@@ -101,10 +99,6 @@ export default function TokenBlueprintCard({
     <Card elevated largeRadius>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon variant="primary">
-            <Link2 className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
           <CardTitle strong truncate>
             {vm.id ? "トークン設計" : "トークン：新規トークン設計"}
           </CardTitle>

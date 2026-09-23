@@ -13,7 +13,6 @@ import {
   CardContent,
   CardHeader,
   CardHeaderActions,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -76,13 +75,7 @@ export default function TokenContentsCard({
     <Card>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <FileText className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
-          <CardTitle strong>
-            コンテンツ
-          </CardTitle>
+          <CardTitle strong>コンテンツ</CardTitle>
         </CardHeaderLeft>
 
         {isEditMode && hasItems ? (

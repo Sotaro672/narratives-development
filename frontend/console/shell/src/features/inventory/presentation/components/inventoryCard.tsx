@@ -1,13 +1,11 @@
 // frontend/console/shell/src/features/inventory/presentation/components/inventoryCard.tsx
 
 import * as React from "react";
-import { Palette } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -92,9 +90,6 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
     <Card className={className}>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Palette className="card__header-icon-svg" />
-          </CardHeaderIcon>
           <CardTitle strong>{title}</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
@@ -156,7 +151,9 @@ const InventoryCard: React.FC<InventoryCardProps> = ({
 
             {rows.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4}>表示できる在庫データがありません。</TableCell>
+                <TableCell colSpan={4}>
+                  表示できる在庫データがありません。
+                </TableCell>
               </TableRow>
             )}
 

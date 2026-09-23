@@ -1,14 +1,12 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/cards/categoryFields/CategoryFieldsCard.tsx
 
 import * as React from "react";
-import { SlidersHorizontal } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardField,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
   Label,
@@ -260,13 +258,7 @@ const CategoryFieldsCard: React.FC<CategoryFieldsCardProps> = ({
     <Card className={`pbc${isEdit ? "" : " view-mode"}`}>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <SlidersHorizontal className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
-          <CardTitle strong>
-            {cardTitle}
-          </CardTitle>
+          <CardTitle strong>{cardTitle}</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 

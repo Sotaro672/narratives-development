@@ -13,7 +13,6 @@ import {
   CardContent,
   CardHeader,
   CardHeaderActions,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -72,13 +71,7 @@ export default function ListImageCard(
     <Card>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <ImageIcon className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
-          <CardTitle strong>
-            商品画像
-          </CardTitle>
+          <CardTitle strong>商品画像</CardTitle>
         </CardHeaderLeft>
 
         {props.isEdit && vm.hasImages ? (

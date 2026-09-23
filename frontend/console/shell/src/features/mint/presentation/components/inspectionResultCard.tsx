@@ -1,13 +1,11 @@
 // frontend/console/shell/src/features/mint/presentation/components/inspectionResultCard.tsx
 
 import * as React from "react";
-import { Palette } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
@@ -47,9 +45,6 @@ const InspectionResultCard: React.FC<InspectionResultCardProps> = ({
     <Card className={className}>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Palette className="card__header-icon-svg" />
-          </CardHeaderIcon>
           <CardTitle strong>{title || "モデル別検査結果"}</CardTitle>
         </CardHeaderLeft>
       </CardHeader>

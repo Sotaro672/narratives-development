@@ -1,13 +1,11 @@
 // frontend/console/shell/src/features/productBlueprint/presentation/cards/productBlueprintForm/productBlueprintCard.tsx
 
 import * as React from "react";
-import { Package2 } from "lucide-react";
 
 import {
   Card,
   CardContent,
   CardHeader,
-  CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
 } from "../../../../../shared/ui";
@@ -139,13 +137,7 @@ const ProductBlueprintCard: React.FC<ProductBlueprintCardProps> = ({
     >
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon>
-            <Package2 className="card__header-icon-svg" />
-          </CardHeaderIcon>
-
-          <CardTitle strong>
-            {cardTitle}
-          </CardTitle>
+          <CardTitle strong>{cardTitle}</CardTitle>
         </CardHeaderLeft>
       </CardHeader>
 
