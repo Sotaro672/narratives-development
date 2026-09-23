@@ -98,12 +98,7 @@ export default function InputCard({
       text,
       attachments,
     });
-  }, [
-    inputTitle,
-    text,
-    attachments,
-    onChange,
-  ]);
+  }, [inputTitle, text, attachments, onChange]);
 
   const previewImages = useMemo<PreviewImage[]>(() => {
     return attachments.map((attachment, index) => {
@@ -147,10 +142,7 @@ export default function InputCard({
     if (mainImageIndex > attachments.length - 1) {
       setMainImageIndex(attachments.length - 1);
     }
-  }, [
-    attachments.length,
-    mainImageIndex,
-  ]);
+  }, [attachments.length, mainImageIndex]);
 
   const hasImages = previewImages.length > 0;
 
@@ -167,23 +159,14 @@ export default function InputCard({
   );
 
   const addImages = (nextFiles: File[]) => {
-    if (
-      !isEditMode ||
-      isBusy ||
-      nextFiles.length === 0
-    ) {
+    if (!isEditMode || isBusy || nextFiles.length === 0) {
       return;
     }
 
     setAttachments((previousAttachments) => {
       const existingFileIdentities = previousAttachments
-        .filter(
-          (attachment) =>
-            attachment.type === "new",
-        )
-        .map((attachment) =>
-          getFileIdentity(attachment.file),
-        );
+        .filter((attachment) => attachment.type === "new")
+        .map((attachment) => getFileIdentity(attachment.file));
 
       const seen = new Set(existingFileIdentities);
       const merged = [...previousAttachments];
@@ -220,17 +203,13 @@ export default function InputCard({
     });
   };
 
-  const handleRemoveImageAt = (
-    targetIndex: number,
-  ) => {
+  const handleRemoveImageAt = (targetIndex: number) => {
     if (!isEditMode || isBusy) {
       return;
     }
 
     setAttachments((previousAttachments) =>
-      previousAttachments.filter(
-        (_, index) => index !== targetIndex,
-      ),
+      previousAttachments.filter((_, index) => index !== targetIndex),
     );
 
     setMainImageIndex((previousIndex) => {
@@ -259,26 +238,38 @@ export default function InputCard({
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
+
+        {isEditMode && hasImages ? (
+          <div className="announcement-input-card__header-actions">
+            <MediaUploader
+              accept="image/*"
+              multiple
+              pickerVariant="button"
+              title={null}
+              showCount={false}
+              pickerLabel="画像を追加"
+              disabled={isDisabled}
+              className="announcement-input-card__header-uploader"
+              onFilesSelected={addImages}
+            />
+
+            <Button
+              type="button"
+              variant="destructive-outline"
+              size="sm"
+              disabled={isDisabled}
+              onClick={handleClearImages}
+            >
+              クリア
+            </Button>
+          </div>
+        ) : null}
       </CardHeader>
 
       <CardContent>
         <Stack gap="md">
           <div className="card__field">
-            <div className="announcement-input-card__section-header">
-              <Label>画像アップロード</Label>
-
-              {isEditMode && hasImages ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={isDisabled}
-                  onClick={handleClearImages}
-                >
-                  クリア
-                </Button>
-              ) : null}
-            </div>
+            <Label>画像アップロード</Label>
 
             {!hasImages && isEditMode ? (
               <MediaUploader
@@ -294,41 +285,25 @@ export default function InputCard({
                 onFilesSelected={addImages}
               />
             ) : (
-              <>
-                <MediaGallery
-                  items={galleryItems}
-                  activeIndex={mainImageIndex}
-                  onActiveIndexChange={setMainImageIndex}
-                  editable={isEditMode}
-                  deleteDisabled={isDisabled}
-                  mainVariant="viewer"
-                  mainFit="contain"
-                  thumbnailFit="cover"
-                  emptyIcon={<ImageIcon />}
-                  emptyText="画像はありません"
-                  onDelete={
-                    isEditMode
-                      ? (_item, index) => {
-                          handleRemoveImageAt(index);
-                        }
-                      : undefined
-                  }
-                />
-
-                {isEditMode && hasImages ? (
-                  <MediaUploader
-                    accept="image/*"
-                    multiple
-                    pickerVariant="button"
-                    title={null}
-                    showCount={false}
-                    pickerLabel="画像を追加"
-                    disabled={isDisabled}
-                    className="announcement-input-card__uploader"
-                    onFilesSelected={addImages}
-                  />
-                ) : null}
-              </>
+              <MediaGallery
+                items={galleryItems}
+                activeIndex={mainImageIndex}
+                onActiveIndexChange={setMainImageIndex}
+                editable={isEditMode}
+                deleteDisabled={isDisabled}
+                mainVariant="viewer"
+                mainFit="contain"
+                thumbnailFit="cover"
+                emptyIcon={<ImageIcon />}
+                emptyText="画像はありません"
+                onDelete={
+                  isEditMode
+                    ? (_item, index) => {
+                        handleRemoveImageAt(index);
+                      }
+                    : undefined
+                }
+              />
             )}
           </div>
 
@@ -343,9 +318,7 @@ export default function InputCard({
                 type="text"
                 value={inputTitle}
                 onChange={(event) =>
-                  setInputTitle(
-                    event.target.value,
-                  )
+                  setInputTitle(event.target.value)
                 }
                 placeholder="タイトルを入力してください"
                 disabled={isDisabled}
