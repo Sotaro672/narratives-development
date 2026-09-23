@@ -109,10 +109,6 @@ export default function TokenBlueprintCard({
           <CardTitle strong truncate>
             {vm.id ? "トークン設計" : "トークン：新規トークン設計"}
           </CardTitle>
-
-          <CardBadge variant="primary">
-            設計情報
-          </CardBadge>
         </CardHeaderLeft>
       </CardHeader>
 
