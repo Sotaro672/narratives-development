@@ -6,15 +6,17 @@ import type {
   TransportationOption,
 } from "../../../../shared/types/inventory";
 
+import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
+  CardSelect,
+  CardSelectWrap,
   CardTitle,
 } from "../../../../shared/ui/card";
 import Stack from "../../../../shared/ui/stack";
-
-import "../../../../styles/transportation.css";
+import Text from "../../../../shared/ui/text";
 
 export type TransportOptionCardOption = {
   transportationOption: TransportationOption;
@@ -126,57 +128,58 @@ export default function TransportOptionCard({
 
   return (
     <Card>
-      <CardHeader className="transport-option-card__header">
+      <CardHeader>
         <CardTitle>配送方法</CardTitle>
 
-        <button
+        <Button
           type="button"
-          className="transport-option-card__create-button"
+          variant="outline"
           onClick={onCreateTransportationFee}
           disabled={loading || disabled}
         >
-          <Plus size={16} aria-hidden />
+          <Plus aria-hidden />
           新規登録
-        </button>
+        </Button>
       </CardHeader>
 
       <CardContent>
         <Stack gap="sm">
           {loading ? (
-            <div className="transport-option-card__state">
+            <Text as="div" size="xs" tone="muted">
               配送方法を読み込み中です…
-            </div>
+            </Text>
           ) : selectableOptions.length > 0 ? (
-            <select
-              value={selectedValue}
-              disabled={disabled}
-              onChange={(event) => handleChange(event.target.value)}
-              className="transport-option-card__select"
-            >
-              <option value="">
-                配送方法を選択してください
-              </option>
+            <CardSelectWrap>
+              <CardSelect
+                value={selectedValue}
+                disabled={disabled}
+                onChange={(event) => handleChange(event.target.value)}
+              >
+                <option value="">
+                  配送方法を選択してください
+                </option>
 
-              {selectableOptions.map((option) => {
-                const value = buildOptionValue(option);
+                {selectableOptions.map((option) => {
+                  const value = buildOptionValue(option);
 
-                return (
-                  <option key={value} value={value}>
-                    {option.name}
-                  </option>
-                );
-              })}
-            </select>
+                  return (
+                    <option key={value} value={value}>
+                      {option.name}
+                    </option>
+                  );
+                })}
+              </CardSelect>
+            </CardSelectWrap>
           ) : (
-            <div className="transport-option-card__state">
+            <Text as="div" size="xs" tone="muted">
               選択可能な配送方法がありません。
-            </div>
+            </Text>
           )}
 
           {transportationOption === "custom" && transportationId && (
-            <div className="transport-option-card__note">
+            <Text as="div" size="xs" tone="muted">
               自社配送料金設定を使用します。
-            </div>
+            </Text>
           )}
         </Stack>
       </CardContent>

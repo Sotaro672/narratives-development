@@ -11,7 +11,10 @@ import PlanNameCard from "../features/transportation/presentation/component/plan
 import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
 import { useTransportationFeeDetail } from "../features/transportation/presentation/hook/useTransportationFeeDetail";
 import PageStyle from "../layout/PageStyle/PageStyle";
+import { Card } from "../shared/ui/card";
+import Empty from "../shared/ui/empty";
 import { Modal, ModalButton } from "../shared/ui/modal";
+import Stack from "../shared/ui/stack";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 import "../styles/transportation.css";
@@ -54,11 +57,14 @@ export default function TransportationFeeDetail() {
   const disabled = !isEditing || vm.saving || vm.deleting;
 
   const left = (
-    <div className="transportation-page__stack">
+    <Stack gap="lg">
       {vm.loading ? (
-        <div className="transportation-page__state">
-          配送料金設定を読み込んでいます...
-        </div>
+        <Card>
+          <Empty
+            compact
+            description="配送料金設定を読み込んでいます..."
+          />
+        </Card>
       ) : transportation ? (
         <>
           <PlanNameCard
@@ -97,25 +103,34 @@ export default function TransportationFeeDetail() {
           />
 
           {vm.regions.length === 0 && vm.islandRates.length === 0 && (
-            <div className="transportation-page__state">
-              配送料金データを取得できませんでした。
-            </div>
+            <Card>
+              <Empty
+                compact
+                description="配送料金データを取得できませんでした。"
+              />
+            </Card>
           )}
         </>
       ) : (
-        <div className="transportation-page__state">
-          配送料金設定を表示できませんでした。
-        </div>
+        <Card>
+          <Empty
+            compact
+            description="配送料金設定を表示できませんでした。"
+          />
+        </Card>
       )}
-    </div>
+    </Stack>
   );
 
   const right = (
     <div className="page-column">
       {vm.loading ? (
-        <div className="transportation-page__state">
-          管理情報を読み込んでいます...
-        </div>
+        <Card>
+          <Empty
+            compact
+            description="管理情報を読み込んでいます..."
+          />
+        </Card>
       ) : transportation ? (
         <AdminCard
           title="管理情報"

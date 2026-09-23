@@ -8,6 +8,9 @@ import PlanNameCard from "../features/transportation/presentation/component/plan
 import SinglePrefectureFeeCard from "../features/transportation/presentation/component/singlePrefectureFeeCard";
 import { useTransportationFeeCreate } from "../features/transportation/presentation/hook/useTransportationFeeCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
+import { Button } from "../shared/ui/button";
+import { Card } from "../shared/ui/card";
+import Empty from "../shared/ui/empty";
 import { Modal, ModalButton } from "../shared/ui/modal";
 
 import "../styles/transportation.css";
@@ -24,24 +27,25 @@ export default function TransportationFee() {
         onBack={handlers.onBack}
         actions={
           <>
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="sm"
               disabled={disabled || !vm.isDirty}
               onClick={handlers.onReset}
-              className="page-header__btn page-header__btn--ghost"
             >
               リセット
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="button"
+              size="sm"
               disabled={disabled || !vm.transportation}
               onClick={() => void handlers.onSave()}
-              className="page-header__btn"
               aria-busy={vm.saving}
             >
               {vm.saving ? "保存中" : "登録"}
-            </button>
+            </Button>
           </>
         }
       >
@@ -53,9 +57,12 @@ export default function TransportationFee() {
           )}
 
           {vm.loading ? (
-            <div className="transportation-page__state">
-              配送料金設定を読み込んでいます...
-            </div>
+            <Card>
+              <Empty
+                compact
+                description="配送料金設定を読み込んでいます..."
+              />
+            </Card>
           ) : vm.transportation ? (
             <div className="page-column">
               <PlanNameCard
@@ -94,15 +101,21 @@ export default function TransportationFee() {
               />
 
               {vm.regions.length === 0 && vm.islandRates.length === 0 && (
-                <div className="transportation-page__state">
-                  配送料金データを取得できませんでした。
-                </div>
+                <Card>
+                  <Empty
+                    compact
+                    description="配送料金データを取得できませんでした。"
+                  />
+                </Card>
               )}
             </div>
           ) : (
-            <div className="transportation-page__state">
-              配送料金設定を表示できませんでした。
-            </div>
+            <Card>
+              <Empty
+                compact
+                description="配送料金設定を表示できませんでした。"
+              />
+            </Card>
           )}
         </div>
       </PageStyle>
@@ -123,7 +136,10 @@ export default function TransportationFee() {
         onClose={handlers.onDismissError}
         closeLabel="閉じる"
         footer={
-          <ModalButton variant="primary" onClick={handlers.onDismissError}>
+          <ModalButton
+            variant="primary"
+            onClick={handlers.onDismissError}
+          >
             閉じる
           </ModalButton>
         }
