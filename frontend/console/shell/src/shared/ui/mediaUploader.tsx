@@ -4,7 +4,9 @@ import * as React from "react";
 import { Upload } from "lucide-react";
 
 import { Button } from "./button";
-import DeleteButton from "./delete";
+import DeleteButton, {
+  type DeleteButtonSize,
+} from "./delete";
 import Media, {
   type MediaFit,
   type MediaType,
@@ -63,6 +65,7 @@ export type MediaUploaderProps = {
   showFileNames?: boolean;
   showRemoveButton?: boolean;
   previewFramed?: boolean;
+  removeButtonSize?: DeleteButtonSize;
 
   className?: string;
   pickerClassName?: string;
@@ -101,6 +104,7 @@ export default function MediaUploader({
   showFileNames,
   showRemoveButton = true,
   previewFramed = true,
+  removeButtonSize,
   className,
   pickerClassName,
   previewClassName,
@@ -270,7 +274,11 @@ export default function MediaUploader({
 
         {showRemoveButton && onRemove ? (
           <DeleteButton
-            size={variant === "single" ? "md" : "sm"}
+            size={
+              removeButtonSize ??
+              (variant === "single" ? "md" : "sm")
+            }
+            className="ui-media-uploader__delete"
             disabled={disabled}
             ariaLabel={
               item.name

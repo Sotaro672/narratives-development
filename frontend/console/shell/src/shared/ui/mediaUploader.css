@@ -111,6 +111,13 @@
   border-radius: 0;
 }
 
+.ui-media-uploader__delete {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+}
+
 .ui-media-uploader__name {
   overflow: hidden;
   padding: 0.5rem;

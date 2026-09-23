@@ -54,6 +54,8 @@ export default function InquiryCreateForm({
     contentType: attachment.file.type,
   }));
 
+  const hasAttachments = attachments.length > 0;
+
   return (
     <Card>
       <CardHeader>
@@ -104,13 +106,20 @@ export default function InquiryCreateForm({
             multiple
             maxFiles={maxImages}
             variant="grid"
-            pickerVariant="dropzone"
+            pickerVariant={hasAttachments ? "button" : "dropzone"}
             mediaVariant="square"
             mediaFit="cover"
             title="添付ファイル"
-            pickerLabel="画像を選択"
-            pickerDescription={`JPG / PNG / WebP / GIF、1枚 ${maxImageSizeMB}MBまで`}
+            pickerLabel={hasAttachments ? "画像を追加" : "画像を選択"}
+            pickerDescription={
+              hasAttachments
+                ? undefined
+                : `JPG / PNG / WebP / GIF、1枚 ${maxImageSizeMB}MBまで`
+            }
+            showFileNames={false}
+            removeButtonSize="md"
             disabled={submitting}
+            className="inquiry-create-form__uploader"
             onFilesSelected={onChangeFiles}
             onRemove={onRemoveAttachment}
           />
