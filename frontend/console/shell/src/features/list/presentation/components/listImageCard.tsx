@@ -106,7 +106,7 @@ export default function ListImageCard(
 
             <Button
               type="button"
-              variant="ghost"
+              variant="destructive-outline"
               size="sm"
               onClick={vm.handleClear}
               disabled={Boolean(props.saving)}

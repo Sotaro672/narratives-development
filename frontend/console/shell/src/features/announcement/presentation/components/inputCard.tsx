@@ -278,7 +278,7 @@ export default function InputCard({
 
             <Button
               type="button"
-              variant="ghost"
+              variant="destructive-outline"
               size="sm"
               disabled={isDisabled}
               onClick={handleClearImages}
