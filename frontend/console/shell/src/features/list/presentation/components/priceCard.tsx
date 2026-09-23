@@ -30,6 +30,8 @@ import type {
   PriceRowVM,
 } from "../../../inventory/application/listCreateService";
 
+import "../../../../styles/list.css";
+
 type ProductBlueprintCategoryKind = "apparel" | "alcohol" | "unknown";
 
 function resolveProductBlueprintCategoryKind(args: {
@@ -61,10 +63,7 @@ function getVolumeUnitLabel(row: PriceRowVM): string {
 }
 
 const PriceCard: React.FC<PriceCardProps> = (props) => {
-  const {
-    className,
-    productBlueprintCategory,
-  } = props;
+  const { className, productBlueprintCategory } = props;
 
   const {
     title,
@@ -97,9 +96,8 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
 
           <CardTitle strong>
             {title}
-
             {showModeBadge && (
-              <Text size="xs" tone="muted" className="ml-2">
+              <Text size="xs" tone="muted" className="price-card__mode">
                 （{mode}）
               </Text>
             )}
@@ -108,102 +106,88 @@ const PriceCard: React.FC<PriceCardProps> = (props) => {
       </CardHeader>
 
       <CardContent>
-        <div className="prc__table-wrap">
-          <Table className="prc__table">
-            <TableHeader>
-              <TableRow>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {isAlcoholCategory ? (
+                <>
+                  <TableHead>容量</TableHead>
+                  <TableHead>単位</TableHead>
+                </>
+              ) : (
+                <>
+                  <TableHead>サイズ</TableHead>
+                  <TableHead>カラー</TableHead>
+                </>
+              )}
+
+              <TableHead align="right">在庫数</TableHead>
+              <TableHead align="right">価格</TableHead>
+            </TableRow>
+          </TableHeader>
+
+          <TableBody>
+            {rowsVM.map((row) => (
+              <TableRow key={row.modelId}>
                 {isAlcoholCategory ? (
                   <>
-                    <TableHead className="prc__th">容量</TableHead>
-                    <TableHead className="prc__th">単位</TableHead>
+                    <TableCell>{getVolumeValueLabel(row) || "-"}</TableCell>
+                    <TableCell>{getVolumeUnitLabel(row) || "-"}</TableCell>
                   </>
                 ) : (
                   <>
-                    <TableHead className="prc__th">サイズ</TableHead>
-                    <TableHead className="prc__th">カラー</TableHead>
+                    <TableCell>{row.size || "-"}</TableCell>
+                    <TableCell className="text--wrap-nowrap">
+                      <ColorValue
+                        color={row.bgColor}
+                        swatchTitle={row.rgbTitle || undefined}
+                      >
+                        {row.color || "-"}
+                      </ColorValue>
+                    </TableCell>
                   </>
                 )}
 
-                <TableHead className="prc__th prc__th--right">在庫数</TableHead>
-                <TableHead className="prc__th prc__th--right">価格</TableHead>
-              </TableRow>
-            </TableHeader>
+                <TableCell>{row.stock}</TableCell>
 
-            <TableBody>
-              {rowsVM.map((row) => (
-                <TableRow key={row.modelId} className="prc__tr">
-                  {isAlcoholCategory ? (
-                    <>
-                      <TableCell className="prc__size">
-                        {getVolumeValueLabel(row) || "-"}
-                      </TableCell>
+                <TableCell>
+                  {isEdit ? (
+                    <div className="price-card__price-editor">
+                      {currencySymbol ? (
+                        <Text size="xs" tone="muted">
+                          {currencySymbol}
+                        </Text>
+                      ) : null}
 
-                      <TableCell className="prc__size">
-                        {getVolumeUnitLabel(row) || "-"}
-                      </TableCell>
-                    </>
+                      <CardInput
+                        required
+                        inputMode="numeric"
+                        type="number"
+                        min={0}
+                        step={1}
+                        sizeVariant="sm"
+                        className="price-card__price-input"
+                        value={row.priceInputValue}
+                        placeholder="-"
+                        onChange={row.onChangePriceInput}
+                      />
+                    </div>
                   ) : (
-                    <>
-                      <TableCell className="prc__size">
-                        {row.size || "-"}
-                      </TableCell>
-
-                      <TableCell className="text--wrap-nowrap">
-                        <ColorValue
-                          color={row.bgColor}
-                          swatchTitle={row.rgbTitle || undefined}
-                        >
-                          {row.color || "-"}
-                        </ColorValue>
-                      </TableCell>
-                    </>
+                    row.priceDisplayText
                   )}
+                </TableCell>
+              </TableRow>
+            ))}
 
-                  <TableCell className="prc__stock text-left">
-                    <span className="prc__stock-number">{row.stock}</span>
-                  </TableCell>
-
-                  <TableCell className="prc__price text-left">
-                    {isEdit ? (
-                      <div className="flex items-center justify-end gap-2">
-                        {currencySymbol ? (
-                          <Text size="xs" tone="muted">
-                            {currencySymbol}
-                          </Text>
-                        ) : null}
-
-                        <CardInput
-                          required
-                          inputMode="numeric"
-                          type="number"
-                          min={0}
-                          step={1}
-                          sizeVariant="sm"
-                          className="w-32 text-right"
-                          value={row.priceInputValue}
-                          placeholder="-"
-                          onChange={row.onChangePriceInput}
-                        />
-                      </div>
-                    ) : (
-                      <span className="prc__price-value">
-                        {row.priceDisplayText}
-                      </span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-
-              {isEmpty && (
-                <TableRow>
-                  <TableCell colSpan={4} className="prc__empty">
-                    表示できるデータがありません。
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+            {isEmpty && (
+              <TableRow>
+                <TableCell colSpan={4}>
+                  表示できるデータがありません。
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   );

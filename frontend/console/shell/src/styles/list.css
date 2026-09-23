@@ -97,6 +97,26 @@
 }
 
 /* =========================================================
+ * Price Card
+ * ======================================================= */
+
+.price-card__mode {
+  margin-left: 0.5rem;
+}
+
+.price-card__price-editor {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.price-card__price-input {
+  width: 8rem;
+  text-align: right;
+}
+
+/* =========================================================
  * List Detail
  * ======================================================= */
 
