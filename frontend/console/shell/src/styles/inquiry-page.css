@@ -174,12 +174,3 @@
 .inq-reply-modal__counter {
   text-align: right;
 }
-
-.inq-reply-modal__footer-uploader {
-  width: auto;
-  margin-left: auto;
-}
-
-.inq-reply-modal__footer-uploader .ui-media-uploader__picker-button {
-  align-self: center;
-}
