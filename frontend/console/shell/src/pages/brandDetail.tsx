@@ -1,6 +1,6 @@
 // frontend/console/shell/src/pages/brandDetail.tsx
 
-import { Upload, X } from "lucide-react";
+import { Upload } from "lucide-react";
 
 import "../styles/brand.css";
 
@@ -12,6 +12,7 @@ import {
   CardLabel,
   CardTitle,
 } from "../shared/ui/card";
+import DeleteButton from "../shared/ui/delete";
 import { ErrorMessage } from "../shared/ui/error";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
@@ -148,15 +149,16 @@ export default function BrandDetail() {
                   </button>
 
                   {(brandBackgroundFile || draft.brandBackgroundImage) && (
-                    <button
-                      type="button"
-                      className="brand-hero__action-btn"
-                      onClick={handleClearBrandBackground}
+                    <DeleteButton
+                      size="lg"
+                      className="brand-hero__background-delete"
                       disabled={saving}
-                    >
-                      <X size={16} />
-                      取り消す
-                    </button>
+                      ariaLabel="ブランド背景画像を削除"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleClearBrandBackground();
+                      }}
+                    />
                   )}
                 </div>
 
@@ -225,15 +227,16 @@ export default function BrandDetail() {
                       </button>
 
                       {(brandIconFile || draft.brandIcon) && (
-                        <button
-                          type="button"
-                          className="brand-hero__action-btn brand-hero__action-btn--plain"
-                          onClick={handleClearBrandIcon}
+                        <DeleteButton
+                          size="md"
+                          className="brand-hero__icon-delete"
                           disabled={saving}
-                        >
-                          <X size={16} />
-                          取り消す
-                        </button>
+                          ariaLabel="ブランドアイコンを削除"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleClearBrandIcon();
+                          }}
+                        />
                       )}
                     </div>
 

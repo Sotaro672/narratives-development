@@ -5,10 +5,10 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
-  Trash2,
 } from "lucide-react";
 
 import { Button } from "./button";
+import DeleteButton from "./delete";
 import Media, {
   type MediaFit,
   type MediaProps,
@@ -312,23 +312,19 @@ export default function MediaGallery({
           />
 
           {editable && onDelete ? (
-            <Button
-              type="button"
-              variant="destructive-outline"
-              size="icon"
+            <DeleteButton
+              size="lg"
               className="ui-media-gallery__delete"
-              onClick={() => {
+              disabled={deleteDisabled}
+              ariaLabel="このメディアを削除"
+              onClick={(event) => {
+                event.stopPropagation();
                 handleDelete(
                   currentItem,
                   safeIndex,
                 );
               }}
-              aria-label="このメディアを削除"
-              title="削除"
-              disabled={deleteDisabled}
-            >
-              <Trash2 className="ui-media-gallery__delete-icon" />
-            </Button>
+            />
           ) : null}
         </div>
 
@@ -367,23 +363,19 @@ export default function MediaGallery({
                 )}
 
                 {editable && onDelete ? (
-                  <Button
-                    type="button"
-                    variant="destructive-outline"
-                    size="icon"
+                  <DeleteButton
+                    size="sm"
                     className="ui-media-gallery__thumb-delete"
-                    onClick={() => {
+                    disabled={deleteDisabled}
+                    ariaLabel={`メディア ${itemIndex + 1}を削除`}
+                    onClick={(event) => {
+                      event.stopPropagation();
                       handleDelete(
                         item,
                         itemIndex,
                       );
                     }}
-                    aria-label={`メディア ${itemIndex + 1}を削除`}
-                    title="削除"
-                    disabled={deleteDisabled}
-                  >
-                    <Trash2 className="ui-media-gallery__thumb-delete-icon" />
-                  </Button>
+                  />
                 ) : null}
               </div>
             );

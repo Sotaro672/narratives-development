@@ -1,32 +1,41 @@
 /* frontend/console/shell/src/shared/ui/delete.css */
 
-.ui-delete-btn--sm,
-.ui-delete-btn--md {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  z-index: 50;
-  border-radius: 9999px;
+.ui-delete-btn {
+  flex-shrink: 0;
 }
 
 .ui-delete-btn--sm {
-  width: 1.75rem;
-  height: 1.75rem;
-  min-height: 1.75rem;
+  width: 25px;
+  height: 25px;
+  min-height: 25px;
+  border-radius: 7px;
 }
 
 .ui-delete-btn--md {
-  width: 2rem;
-  height: 2rem;
-  min-height: 2rem;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  border-radius: 8px;
 }
 
-.ui-delete-btn--sm .ui-delete-btn__x {
-  width: 1rem;
-  height: 1rem;
+.ui-delete-btn--lg {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border-radius: 8px;
 }
 
-.ui-delete-btn--md .ui-delete-btn__x {
-  width: 1.125rem;
-  height: 1.125rem;
+.ui-delete-btn--sm .ui-delete-btn__icon {
+  width: 14px;
+  height: 14px;
+}
+
+.ui-delete-btn--md .ui-delete-btn__icon {
+  width: 16px;
+  height: 16px;
+}
+
+.ui-delete-btn--lg .ui-delete-btn__icon {
+  width: 18px;
+  height: 18px;
 }

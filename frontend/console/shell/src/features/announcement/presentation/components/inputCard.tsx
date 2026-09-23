@@ -1,7 +1,7 @@
 // frontend/console/shell/src/features/announcement/presentation/components/inputCard.tsx
 
 import { useEffect, useMemo, useState } from "react";
-import type * as React from "react";
+import { Image as ImageIcon } from "lucide-react";
 
 import type {
   AnnouncementInputAttachment,
@@ -9,7 +9,6 @@ import type {
 } from "../../application/announcement_input";
 
 import { Button } from "../../../../shared/ui/button";
-import DeleteButton from "../../../../shared/ui/delete";
 import {
   Card,
   CardContent,
@@ -18,7 +17,7 @@ import {
 } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
 import { Label } from "../../../../shared/ui/label";
-import Media from "../../../../shared/ui/media";
+import MediaGallery from "../../../../shared/ui/mediaGallery";
 import MediaUploader from "../../../../shared/ui/mediaUploader";
 import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
@@ -56,53 +55,6 @@ function getFileIdentity(file: File): string {
   return `${file.name}-${file.size}-${file.lastModified}`;
 }
 
-function ImageIcon() {
-  return (
-    <svg
-      width="28"
-      height="28"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M8.5 10.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M21 16l-5.5-5.5a2 2 0 0 0-2.8 0L5 18"
-        stroke="currentColor"
-        strokeWidth="1.6"
-      />
-    </svg>
-  );
-}
-
-function PlusIcon() {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <path
-        d="M12 5v14M5 12h14"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 function formatViewText(value: string): string {
   return value.trim() || "-";
 }
@@ -124,9 +76,8 @@ export default function InputCard({
   const [mainImageIndex, setMainImageIndex] = useState(0);
 
   const isEditMode = mode === "edit";
-  const isViewMode = mode === "view";
   const isBusy = saving || sending;
-  const isDisabled = isBusy || isViewMode;
+  const isDisabled = isBusy || !isEditMode;
 
   useEffect(() => {
     setInputTitle(initialTitle);
@@ -197,16 +148,23 @@ export default function InputCard({
       setMainImageIndex(attachments.length - 1);
     }
   }, [
-    attachments,
+    attachments.length,
     mainImageIndex,
   ]);
 
   const hasImages = previewImages.length > 0;
-  const mainImage = previewImages[mainImageIndex] ?? null;
 
-  const thumbIndices = previewImages
-    .map((_, index) => index)
-    .filter((index) => index !== mainImageIndex);
+  const galleryItems = useMemo(
+    () =>
+      previewImages.map((item) => ({
+        id: item.key,
+        src: item.url,
+        name: item.name,
+        alt: item.name,
+        type: "image" as const,
+      })),
+    [previewImages],
+  );
 
   const addImages = (nextFiles: File[]) => {
     if (
@@ -262,28 +220,6 @@ export default function InputCard({
     });
   };
 
-  const handleDropImages = (
-    event: React.DragEvent<HTMLDivElement>,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (!isEditMode || isBusy) {
-      return;
-    }
-
-    addImages(
-      Array.from(event.dataTransfer.files ?? []),
-    );
-  };
-
-  const handleDragOverImages = (
-    event: React.DragEvent<HTMLDivElement>,
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-  };
-
   const handleRemoveImageAt = (
     targetIndex: number,
   ) => {
@@ -319,16 +255,6 @@ export default function InputCard({
     setMainImageIndex(0);
   };
 
-  const handleSelectMainImage = (
-    index: number,
-  ) => {
-    if (!isEditMode) {
-      return;
-    }
-
-    setMainImageIndex(index);
-  };
-
   return (
     <Card>
       <CardHeader>
@@ -354,185 +280,56 @@ export default function InputCard({
               ) : null}
             </div>
 
-            <MediaUploader
-              items={[]}
-              accept="image/*"
-              multiple
-              title={null}
-              showCount={false}
-              showPicker={false}
-              showFileNames={false}
-              showRemoveButton={false}
-              previewFramed={false}
-              disabled={isDisabled}
-              className="announcement-input-card__uploader"
-              onFilesSelected={addImages}
-              renderEmpty={({ openPicker }) => (
-                <div className="announcement-input-card__image-panel">
-                  {!hasImages && isEditMode ? (
-                    <div
-                      onDrop={handleDropImages}
-                      onDragOver={handleDragOverImages}
-                      title="クリックで画像を追加"
-                    >
-                      <Media
-                        className="announcement-input-card__empty-media"
-                        emptyIcon={<ImageIcon />}
-                        emptyText="画像を追加"
-                        emptyDescription="クリックで選択（複数可） / ドロップでも追加できます"
-                        onActivate={openPicker}
-                        disabled={isBusy}
-                      />
-                    </div>
-                  ) : null}
-
-                  {!hasImages && isViewMode ? (
-                    <Media
-                      className="announcement-input-card__empty-media"
-                      emptyIcon={<ImageIcon />}
-                      emptyText="画像はありません"
-                    />
-                  ) : null}
-
-                  {hasImages ? (
-                    <div className="announcement-input-card__images">
-                      <div
-                        className="announcement-input-card__main-image-wrap"
-                        onDrop={
-                          isEditMode
-                            ? handleDropImages
-                            : undefined
+            {!hasImages && isEditMode ? (
+              <MediaUploader
+                accept="image/*"
+                multiple
+                title={null}
+                showCount={false}
+                pickerLabel="画像をアップロード"
+                pickerDescription="クリックまたはドラッグ＆ドロップで画像を追加できます"
+                emptyIcon={<ImageIcon />}
+                disabled={isDisabled}
+                className="announcement-input-card__uploader"
+                onFilesSelected={addImages}
+              />
+            ) : (
+              <>
+                <MediaGallery
+                  items={galleryItems}
+                  activeIndex={mainImageIndex}
+                  onActiveIndexChange={setMainImageIndex}
+                  editable={isEditMode}
+                  deleteDisabled={isDisabled}
+                  mainVariant="viewer"
+                  mainFit="contain"
+                  thumbnailFit="cover"
+                  emptyIcon={<ImageIcon />}
+                  emptyText="画像はありません"
+                  onDelete={
+                    isEditMode
+                      ? (_item, index) => {
+                          handleRemoveImageAt(index);
                         }
-                        onDragOver={
-                          isEditMode
-                            ? handleDragOverImages
-                            : undefined
-                        }
-                        title={
-                          isEditMode
-                            ? "クリックで画像追加"
-                            : undefined
-                        }
-                      >
-                        <Media
-                          src={mainImage?.url}
-                          alt={mainImage?.name}
-                          name={mainImage?.name}
-                          variant="viewer"
-                          fit="contain"
-                          className="announcement-input-card__main-media"
-                          onActivate={
-                            isEditMode
-                              ? openPicker
-                              : undefined
-                          }
-                          disabled={isBusy}
-                        />
+                      : undefined
+                  }
+                />
 
-                        {isEditMode ? (
-                          <DeleteButton
-                            size="md"
-                            disabled={isDisabled}
-                            ariaLabel="remove main image"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              handleRemoveImageAt(
-                                mainImageIndex,
-                              );
-                            }}
-                          />
-                        ) : null}
-
-                        <Text
-                          as="div"
-                          size="xs"
-                          tone="muted"
-                          className="announcement-input-card__image-meta"
-                        >
-                          {isEditMode
-                            ? `${previewImages.length} 枚（×で削除 / クリックで追加）`
-                            : `${previewImages.length} 枚`}
-                        </Text>
-                      </div>
-
-                      <div className="announcement-input-card__thumbnail-grid">
-                        {thumbIndices.map((index) => {
-                          const item =
-                            previewImages[index];
-
-                          if (!item) {
-                            return null;
-                          }
-
-                          return (
-                            <div
-                              key={item.key}
-                              className="announcement-input-card__thumbnail"
-                              title={
-                                isEditMode
-                                  ? "クリックでメインに設定"
-                                  : undefined
-                              }
-                            >
-                              <Media
-                                src={item.url}
-                                alt={item.name}
-                                name={item.name}
-                                variant="square"
-                                fit="cover"
-                                className="announcement-input-card__thumbnail-media"
-                                onActivate={
-                                  isEditMode
-                                    ? () =>
-                                        handleSelectMainImage(
-                                          index,
-                                        )
-                                    : undefined
-                                }
-                                disabled={isBusy}
-                              />
-
-                              {isEditMode ? (
-                                <DeleteButton
-                                  size="sm"
-                                  disabled={isDisabled}
-                                  ariaLabel="remove image"
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    handleRemoveImageAt(
-                                      index,
-                                    );
-                                  }}
-                                />
-                              ) : null}
-                            </div>
-                          );
-                        })}
-
-                        {isEditMode ? (
-                          <div
-                            onDrop={handleDropImages}
-                            onDragOver={
-                              handleDragOverImages
-                            }
-                            title="クリックで画像を追加"
-                          >
-                            <Media
-                              variant="square"
-                              className="announcement-input-card__add-media"
-                              emptyIcon={<PlusIcon />}
-                              emptyText="画像を追加"
-                              onActivate={openPicker}
-                              disabled={isBusy}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              )}
-            />
+                {isEditMode && hasImages ? (
+                  <MediaUploader
+                    accept="image/*"
+                    multiple
+                    pickerVariant="button"
+                    title={null}
+                    showCount={false}
+                    pickerLabel="画像を追加"
+                    disabled={isDisabled}
+                    className="announcement-input-card__uploader"
+                    onFilesSelected={addImages}
+                  />
+                ) : null}
+              </>
+            )}
           </div>
 
           <div className="card__field">
