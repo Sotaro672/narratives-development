@@ -1,15 +1,14 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/replyModal.tsx
 
-import * as React from "react";
-
-import DeleteButton from "../../../../shared/ui/delete";
 import { ErrorMessage } from "../../../../shared/ui/error";
 import { Label } from "../../../../shared/ui/label";
+import MediaUploader from "../../../../shared/ui/mediaUploader";
 import {
   Modal,
   ModalButton,
   ModalCloseButton,
 } from "../../../../shared/ui/modal";
+import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
 
@@ -32,7 +31,7 @@ type ReplyModalProps = {
   errorMessage: string | null;
   onClose: () => void;
   onChangeContent: (value: string) => void;
-  onChangeImages: React.ChangeEventHandler<HTMLInputElement>;
+  onChangeImages: (files: File[]) => void;
   onRemoveImage: (id: string) => void;
   onSubmit: () => void;
 };
@@ -49,6 +48,15 @@ export default function ReplyModal({
   onRemoveImage,
   onSubmit,
 }: ReplyModalProps) {
+  const uploadItems = images.map((image) => ({
+    id: image.id,
+    src: image.previewUrl,
+    name: image.file.name,
+    alt: image.file.name,
+    type: "image" as const,
+    contentType: image.file.type,
+  }));
+
   return (
     <Modal
       open={open}
@@ -70,7 +78,10 @@ export default function ReplyModal({
 
           <ModalButton
             variant="primary"
-            disabled={submitting || !content.trim()}
+            disabled={
+              submitting ||
+              (!content.trim() && images.length === 0)
+            }
             onClick={onSubmit}
           >
             {submitting ? "送信中" : "送信"}
@@ -84,90 +95,52 @@ export default function ReplyModal({
         </ErrorMessage>
       ) : null}
 
-      <Label
-        className="inq-reply-modal__label"
-        htmlFor="inquiry-reply-content"
-      >
-        返信内容
-      </Label>
+      <Stack gap="xs">
+        <Label htmlFor="inquiry-reply-content">
+          返信内容
+        </Label>
 
-      <Textarea
-        id="inquiry-reply-content"
-        size="medium"
-        value={content}
-        placeholder="返信内容を入力してください"
-        rows={8}
-        maxLength={2000}
+        <Textarea
+          id="inquiry-reply-content"
+          size="medium"
+          value={content}
+          placeholder="返信内容を入力してください"
+          rows={8}
+          maxLength={2000}
+          disabled={submitting}
+          onChange={(event) => onChangeContent(event.target.value)}
+        />
+
+        <Text
+          as="div"
+          size="xs"
+          tone="muted"
+          className="inq-reply-modal__counter"
+        >
+          {content.length.toLocaleString()} / 2,000
+        </Text>
+      </Stack>
+
+      <MediaUploader
+        items={uploadItems}
+        accept="image/*"
+        multiple
+        maxFiles={MAX_REPLY_IMAGES}
+        variant="grid"
+        mediaVariant="square"
+        mediaFit="cover"
+        title="添付画像"
+        pickerLabel="画像を選択"
+        pickerDescription={
+          `JPG / PNG / WebP / GIF、1枚 ${MAX_REPLY_IMAGE_SIZE_MB}MBまで`
+        }
         disabled={submitting}
-        onChange={(event) => onChangeContent(event.target.value)}
+        showCount
+        showFileNames={false}
+        showRemoveButton
+        onFilesSelected={onChangeImages}
+        onRemove={onRemoveImage}
       />
-
-      <Text
-        as="div"
-        size="xs"
-        tone="muted"
-        className="inq-reply-modal__counter"
-      >
-        {content.length.toLocaleString()} / 2,000
-      </Text>
-
-      <div className="inq-reply-modal__upload">
-        <div className="inq-reply-modal__upload-header">
-          <Text size="sm" weight="bold">
-            添付画像
-          </Text>
-
-          <Text size="xs" tone="muted" weight="bold">
-            {images.length} / {MAX_REPLY_IMAGES}
-          </Text>
-        </div>
-
-        <label className="inq-reply-modal__upload-box">
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            className="inq-reply-modal__upload-input"
-            disabled={
-              submitting ||
-              images.length >= MAX_REPLY_IMAGES
-            }
-            onChange={onChangeImages}
-          />
-
-          <Text size="sm" weight="bold">
-            画像を選択
-          </Text>
-
-          <Text size="xs" tone="muted">
-            JPG / PNG / WebP / GIF、1枚 {MAX_REPLY_IMAGE_SIZE_MB}MBまで
-          </Text>
-        </label>
-
-        {images.length > 0 ? (
-          <div className="inq-reply-modal__preview-grid">
-            {images.map((image) => (
-              <div
-                key={image.id}
-                className="inq-reply-modal__preview-item"
-              >
-                <img
-                  src={image.previewUrl}
-                  alt={image.file.name}
-                  className="inq-reply-modal__preview-image"
-                />
-
-                <DeleteButton
-                  size="sm"
-                  disabled={submitting}
-                  ariaLabel={`${image.file.name}を削除`}
-                  onClick={() => onRemoveImage(image.id)}
-                />
-              </div>
-            ))}
-          </div>
-        ) : null}
-      </div>
     </Modal>
   );
 }

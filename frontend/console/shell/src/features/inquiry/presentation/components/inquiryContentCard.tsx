@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   CardHeader,
+  CardSuffix,
   CardTitle,
 } from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
@@ -23,7 +24,6 @@ export type InquiryContentCardProps = {
   content?: string | null;
   images?: InquiryImageFile[];
   errorMessage?: string | null;
-
   showReturnRefund?: boolean;
   merchandiseRefundAmount?: number | "";
   merchandiseRefundMaxAmount?: number;
@@ -82,40 +82,50 @@ export default function InquiryContentCard({
       </CardHeader>
 
       <CardContent>
-        <div className="inq-detail">
+        <Stack gap="lg">
           {errorMessage ? (
             <ErrorMessage>
               {errorMessage}
             </ErrorMessage>
           ) : null}
 
-          <Stack gap="sm">
-            <Text
-              as="p"
-              size="md"
-              wrap="pre-wrap-anywhere"
-            >
-              {body}
-            </Text>
-          </Stack>
+          <Text
+            as="p"
+            size="md"
+            wrap="pre-wrap-anywhere"
+          >
+            {body}
+          </Text>
 
           {images && images.length > 0 ? (
             <Stack gap="sm">
-              <div className="inq-detail__label">添付画像</div>
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                weight="bold"
+              >
+                添付画像
+              </Text>
+
               <InquiryImageGrid images={images} />
             </Stack>
           ) : null}
 
           {showReturnRefund ? (
             <Stack gap="sm">
-              <div className="inq-detail__label">返品の返金内容</div>
+              <Text
+                as="div"
+                size="xs"
+                tone="muted"
+                weight="bold"
+              >
+                返品の返金内容
+              </Text>
 
               <Stack gap="md">
                 <Stack gap="sm">
-                  <Label
-                    htmlFor="merchandise-refund-amount"
-                    className="inq-return-refund__label"
-                  >
+                  <Label htmlFor="merchandise-refund-amount">
                     返金額（税込）
                   </Label>
 
@@ -141,9 +151,9 @@ export default function InquiryContentCard({
                       aria-label="商品返金額"
                     />
 
-                    <span className="inq-return-refund__currency">
+                    <CardSuffix>
                       円
-                    </span>
+                    </CardSuffix>
                   </div>
 
                   <Text
@@ -177,10 +187,13 @@ export default function InquiryContentCard({
                     className="inq-return-refund__checkbox"
                   />
 
-                  <span className="inq-return-refund__option-content">
-                    <span className="inq-return-refund__option-title">
+                  <Stack gap="xs">
+                    <Text
+                      size="sm"
+                      weight="medium"
+                    >
                       購入時の配送料も返金する
-                    </span>
+                    </Text>
 
                     <Text
                       size="sm"
@@ -188,7 +201,7 @@ export default function InquiryContentCard({
                     >
                       購入者が支払った往路の配送料とその消費税を、Stripe返金額に含めます。
                     </Text>
-                  </span>
+                  </Stack>
                 </label>
 
                 <label className="inq-return-refund__option">
@@ -204,10 +217,13 @@ export default function InquiryContentCard({
                     className="inq-return-refund__checkbox"
                   />
 
-                  <span className="inq-return-refund__option-content">
-                    <span className="inq-return-refund__option-title">
+                  <Stack gap="xs">
+                    <Text
+                      size="sm"
+                      weight="medium"
+                    >
                       返品時の配送料をブランド側が負担する
-                    </span>
+                    </Text>
 
                     <Text
                       size="sm"
@@ -215,7 +231,7 @@ export default function InquiryContentCard({
                     >
                       復路の配送料をブランド側の負担として計上します。購入者のStripe返金額には加算されません。
                     </Text>
-                  </span>
+                  </Stack>
                 </label>
 
                 {returnRefundErrorMessage ? (
@@ -253,7 +269,7 @@ export default function InquiryContentCard({
               </Stack>
             </Stack>
           ) : null}
-        </div>
+        </Stack>
       </CardContent>
     </Card>
   );

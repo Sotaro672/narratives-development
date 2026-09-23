@@ -9,6 +9,8 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import Empty from "../../../../shared/ui/empty";
+import Stack from "../../../../shared/ui/stack";
+import Text from "../../../../shared/ui/text";
 import type { InquiryDetail } from "../../../../shared/types/inquiry";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
@@ -40,13 +42,10 @@ function replySenderLabel(
   switch (reply.senderType) {
     case "member":
       return textOrDash(brandName);
-
     case "system":
       return "AMOL";
-
     case "avatar":
       return textOrDash(userName);
-
     default:
       return "-";
   }
@@ -62,7 +61,7 @@ export default function InquiryReplyListCard({
 }: InquiryReplyListCardProps) {
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardHeader>
         <CardTitle>返信一覧</CardTitle>
 
         <Button
@@ -75,7 +74,7 @@ export default function InquiryReplyListCard({
 
       <CardContent>
         {replies.length > 0 ? (
-          <div className="inq-reply-list">
+          <Stack gap="lg">
             {replies.map((reply) => {
               const senderLabel = replySenderLabel(
                 reply,
@@ -111,23 +110,38 @@ export default function InquiryReplyListCard({
                         <AvatarIcon
                           src={brandIcon}
                           alt=""
-                          className="inq-reply-item__sender-icon"
                         />
                       ) : null}
 
-                      <span className="inq-reply-item__sender">
+                      <Text
+                        size="xs"
+                        weight="bold"
+                        wrap="nowrap"
+                        className="inq-reply-item__sender"
+                      >
                         {senderLabel}
-                      </span>
+                      </Text>
                     </div>
 
-                    <span className="inq-reply-item__date">
+                    <Text
+                      size="xs"
+                      tone="muted"
+                      weight="medium"
+                      wrap="nowrap"
+                    >
                       {createdAtLabel}
-                    </span>
+                    </Text>
                   </div>
 
-                  <p className="inq-reply-item__content">
+                  <Text
+                    as="p"
+                    size="sm"
+                    weight="medium"
+                    wrap="pre-wrap-anywhere"
+                    className="inq-reply-item__content"
+                  >
                     {textOrDash(reply.content)}
-                  </p>
+                  </Text>
 
                   {reply.images && reply.images.length > 0 ? (
                     <InquiryImageGrid images={reply.images} />
@@ -135,7 +149,7 @@ export default function InquiryReplyListCard({
                 </article>
               );
             })}
-          </div>
+          </Stack>
         ) : (
           <Empty
             compact

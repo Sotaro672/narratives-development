@@ -25,9 +25,7 @@ function normalizeImages(
       image: InquiryImageFile,
       index: number,
     ): InquiryImageView => ({
-      id:
-        image.objectPath ||
-        `${image.fileUrl}-${index}`,
+      id: image.objectPath || `${image.fileUrl}-${index}`,
       fileName: image.fileName,
       fileUrl: image.fileUrl,
     }),
@@ -58,10 +56,9 @@ export default function InquiryImageGrid({
             src={image.fileUrl}
             type="image"
             alt={image.fileName}
+            variant="landscape"
             fit="cover"
-            bordered={false}
             loading="lazy"
-            className="inq-detail__image"
           />
         </a>
       ))}

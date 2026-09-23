@@ -1,62 +1,13 @@
 /* frontend/console/shell/src/styles/inquiry-page.css */
 
 /* =========================================================
-   Inquiry detail common
-========================================================= */
-
-.inq-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.inq-detail__meta {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 10px;
-}
-
-.inq-detail__meta > div {
-  display: grid;
-  grid-template-columns: minmax(72px, max-content) minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 12px;
-}
-
-.inq-detail__label {
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1.5;
-  white-space: nowrap;
-}
-
-.inq-detail__value {
-  min-width: 0;
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font-size: 0.88rem;
-  line-height: 1.5;
-  word-break: break-word;
-}
-
-/* =========================================================
-   Return refund
-========================================================= */
-
-.inq-return-refund__label {
-  line-height: 1.25rem;
-}
+ * Return refund
+ * ======================================================= */
 
 .inq-return-refund__amount-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.inq-return-refund__currency {
-  flex-shrink: 0;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
 }
 
 .inq-return-refund__option {
@@ -69,21 +20,9 @@
   margin-top: 0.25rem;
 }
 
-.inq-return-refund__option-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.inq-return-refund__option-title {
-  font-size: 0.875rem;
-  font-weight: 500;
-  line-height: 1.25rem;
-}
-
 /* =========================================================
-   Inquiry images
-========================================================= */
+ * Inquiry images
+ * ======================================================= */
 
 .inq-detail__image-grid {
   display: grid;
@@ -94,38 +33,13 @@
 
 .inq-detail__image-link {
   display: block;
-  overflow: hidden;
-  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  border-radius: 14px;
-  background: hsl(var(--muted, 210 40% 96.1%));
+  min-width: 0;
   text-decoration: none;
-  transition:
-    transform 140ms ease,
-    box-shadow 140ms ease,
-    border-color 140ms ease;
-}
-
-.inq-detail__image-link:hover {
-  transform: translateY(-1px);
-  border-color: hsl(var(--ring, 215 20.2% 65.1%));
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
-}
-
-.inq-detail__image {
-  aspect-ratio: 4 / 3;
 }
 
 /* =========================================================
-   Reply list
-========================================================= */
-
-.inq-reply-list {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: 18px;
-  padding: 4px 0;
-}
+ * Reply list
+ * ======================================================= */
 
 .inq-reply-item {
   display: flex;
@@ -163,31 +77,10 @@
   gap: 7px;
 }
 
-.inq-reply-item__sender-icon {
-  width: 26px;
-  height: 26px;
-  flex-basis: 26px;
-  background: hsl(var(--muted, 210 40% 96.1%));
-  object-position: center;
-}
-
 .inq-reply-item__sender {
   min-width: 0;
   overflow: hidden;
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1.4;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inq-reply-item__date {
-  color: hsl(var(--muted-foreground, 215.4 16.3% 46.9%));
-  font-size: 0.68rem;
-  font-weight: 500;
-  line-height: 1.4;
-  white-space: nowrap;
 }
 
 .inq-reply-item__content {
@@ -197,11 +90,6 @@
   margin: 0;
   padding: 10px 14px;
   border-radius: 18px;
-  font-size: 0.92rem;
-  font-weight: 500;
-  line-height: 1.65;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .inq-reply-item--other .inq-reply-item__content {
@@ -249,14 +137,6 @@
   margin-top: 2px;
 }
 
-.inq-reply-item .inq-detail__image-link {
-  border-radius: 14px;
-}
-
-.inq-reply-item .inq-detail__image {
-  aspect-ratio: 1 / 1;
-}
-
 .inq-reply-item--self .inq-detail__image-grid {
   align-self: flex-end;
 }
@@ -266,8 +146,8 @@
 }
 
 /* =========================================================
-   Reply modal
-========================================================= */
+ * Reply modal
+ * ======================================================= */
 
 .modal__panel.inq-reply-modal__panel {
   width: min(640px, 100%);
@@ -275,77 +155,6 @@
   overflow-y: auto;
 }
 
-.inq-reply-modal__label {
-  font-size: 0.86rem;
-  font-weight: 800;
-  line-height: 1.5;
-}
-
 .inq-reply-modal__counter {
   text-align: right;
-}
-
-/* =========================================================
-   Reply modal upload
-========================================================= */
-
-.inq-reply-modal__upload {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.inq-reply-modal__upload-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.inq-reply-modal__upload-box {
-  display: flex;
-  min-height: 92px;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 16px;
-  border: 1px dashed hsl(var(--border, 214.3 31.8% 91.4%));
-  border-radius: 14px;
-  background: hsl(var(--muted, 210 40% 96.1%));
-  text-align: center;
-  cursor: pointer;
-  transition:
-    background 140ms ease,
-    border-color 140ms ease;
-}
-
-.inq-reply-modal__upload-box:hover {
-  border-color: hsl(var(--ring, 215 20.2% 65.1%));
-  background: hsl(var(--background, 0 0% 100%));
-}
-
-.inq-reply-modal__upload-input {
-  display: none;
-}
-
-.inq-reply-modal__preview-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
-  gap: 10px;
-}
-
-.inq-reply-modal__preview-item {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid hsl(var(--border, 214.3 31.8% 91.4%));
-  border-radius: 12px;
-  background: hsl(var(--muted, 210 40% 96.1%));
-}
-
-.inq-reply-modal__preview-image {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: cover;
 }

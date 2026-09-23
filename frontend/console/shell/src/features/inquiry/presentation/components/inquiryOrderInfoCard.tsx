@@ -5,11 +5,14 @@ import { Link as RouterLink } from "react-router-dom";
 import {
   Card,
   CardContent,
+  CardField,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
 import Empty from "../../../../shared/ui/empty";
 import Link from "../../../../shared/ui/link";
+import Stack from "../../../../shared/ui/stack";
+import Text from "../../../../shared/ui/text";
 import type { InquiryOrderSummary } from "../../../../shared/types/inquiry";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
@@ -68,78 +71,164 @@ export default function InquiryOrderInfoCard({
       </CardHeader>
 
       <CardContent>
-        <div className="inq-detail">
-          <div className="inq-detail__meta">
-            <div>
-              <span className="inq-detail__label">商品名</span>
-              <span className="inq-detail__value">{productDisplayName}</span>
-            </div>
+        <Stack gap="md">
+          <CardField>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="bold"
+            >
+              商品名
+            </Text>
 
-            <div>
-              <span className="inq-detail__label">トークン名</span>
-              <span className="inq-detail__value">{tokenDisplayName}</span>
-            </div>
+            <Text
+              as="div"
+              size="sm"
+              wrap="anywhere"
+            >
+              {productDisplayName}
+            </Text>
+          </CardField>
 
-            <div>
-              <span className="inq-detail__label">数量</span>
-              <span className="inq-detail__value">{quantity}</span>
-            </div>
+          <CardField>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="bold"
+            >
+              トークン名
+            </Text>
 
-            {isUnopenedReturn ? (
-              <>
-                <div>
-                  <span className="inq-detail__label">返品ステータス</span>
-                  <span className="inq-detail__value">{returnStatus}</span>
-                </div>
+            <Text
+              as="div"
+              size="sm"
+              wrap="anywhere"
+            >
+              {tokenDisplayName}
+            </Text>
+          </CardField>
 
-                <div>
-                  <span className="inq-detail__label">返品申請日</span>
-                  <span className="inq-detail__value">{returnRequestedAt}</span>
-                </div>
+          <CardField>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="bold"
+            >
+              数量
+            </Text>
 
-                <div>
-                  <span className="inq-detail__label">返品完了日</span>
-                  <span className="inq-detail__value">{returnCompletedAt}</span>
-                </div>
-              </>
-            ) : null}
+            <Text as="div" size="sm">
+              {quantity}
+            </Text>
+          </CardField>
 
-            {orders.length > 0 ? (
-              orders.flatMap(
-                (
-                  order: InquiryOrderSummary,
-                  index: number,
-                ) => [
-                  <div key={`${order.id}-id-${index}`}>
-                    <span className="inq-detail__label">注文ID</span>
+          {isUnopenedReturn ? (
+            <>
+              <CardField>
+                <Text
+                  as="div"
+                  size="xs"
+                  tone="muted"
+                  weight="bold"
+                >
+                  返品ステータス
+                </Text>
 
-                    <span className="inq-detail__value">
-                      <Link asChild>
-                        <RouterLink
-                          to={`/order/${encodeURIComponent(order.id)}`}
-                        >
-                          {textOrDash(order.id)}
-                        </RouterLink>
-                      </Link>
-                    </span>
-                  </div>,
+                <Text as="div" size="sm">
+                  {returnStatus}
+                </Text>
+              </CardField>
 
-                  <div key={`${order.id}-created-at-${index}`}>
-                    <span className="inq-detail__label">発注日時</span>
-                    <span className="inq-detail__value">
-                      {safeDateTimeLabelJa(order.createdAt, "-")}
-                    </span>
-                  </div>,
-                ],
-              )
-            ) : (
-              <Empty
-                compact
-                description="注文情報はありません。"
-              />
-            )}
-          </div>
-        </div>
+              <CardField>
+                <Text
+                  as="div"
+                  size="xs"
+                  tone="muted"
+                  weight="bold"
+                >
+                  返品申請日
+                </Text>
+
+                <Text as="div" size="sm">
+                  {returnRequestedAt}
+                </Text>
+              </CardField>
+
+              <CardField>
+                <Text
+                  as="div"
+                  size="xs"
+                  tone="muted"
+                  weight="bold"
+                >
+                  返品完了日
+                </Text>
+
+                <Text as="div" size="sm">
+                  {returnCompletedAt}
+                </Text>
+              </CardField>
+            </>
+          ) : null}
+
+          {orders.length > 0 ? (
+            orders.map((order: InquiryOrderSummary, index: number) => (
+              <Stack key={`${order.id}-${index}`} gap="md">
+                <CardField>
+                  <Text
+                    as="div"
+                    size="xs"
+                    tone="muted"
+                    weight="bold"
+                  >
+                    注文ID
+                  </Text>
+
+                  <Text
+                    as="div"
+                    size="sm"
+                    wrap="anywhere"
+                  >
+                    <Link asChild>
+                      <RouterLink
+                        to={`/order/${encodeURIComponent(order.id)}`}
+                      >
+                        {textOrDash(order.id)}
+                      </RouterLink>
+                    </Link>
+                  </Text>
+                </CardField>
+
+                <CardField>
+                  <Text
+                    as="div"
+                    size="xs"
+                    tone="muted"
+                    weight="bold"
+                  >
+                    発注日時
+                  </Text>
+
+                  <Text
+                    as="div"
+                    size="sm"
+                    wrap="anywhere"
+                  >
+                    {safeDateTimeLabelJa(order.createdAt, "-")}
+                  </Text>
+                </CardField>
+              </Stack>
+            ))
+          ) : (
+            <Empty
+              compact
+              description="注文情報はありません。"
+            />
+          )}
+        </Stack>
       </CardContent>
     </Card>
   );

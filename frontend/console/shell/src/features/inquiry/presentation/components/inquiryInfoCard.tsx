@@ -1,12 +1,15 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/inquiryInfoCard.tsx
 
-import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import {
   Card,
   CardContent,
+  CardField,
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Stack from "../../../../shared/ui/stack";
+import Text from "../../../../shared/ui/text";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 export type InquiryInfoCardProps = {
   userName?: string | null;
@@ -26,63 +29,75 @@ export default function InquiryInfoCard({
   createdAt,
   updatedAt,
 }: InquiryInfoCardProps) {
-  const userNameLabel =
-    textOrDash(userName);
-
-  const createdAtLabel =
-    safeDateTimeLabelJa(
-      createdAt,
-      "-",
-    );
-
-  const updatedAtLabel =
-    safeDateTimeLabelJa(
-      updatedAt,
-      "-",
-    );
+  const userNameLabel = textOrDash(userName);
+  const createdAtLabel = safeDateTimeLabelJa(createdAt, "-");
+  const updatedAtLabel = safeDateTimeLabelJa(updatedAt, "-");
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>
-          問い合わせ情報
-        </CardTitle>
+        <CardTitle>問い合わせ情報</CardTitle>
       </CardHeader>
 
       <CardContent>
-        <div className="inq-detail">
-          <div className="inq-detail__meta">
-            <div>
-              <span className="inq-detail__label">
-                ユーザー名
-              </span>
+        <Stack gap="md">
+          <CardField>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="bold"
+            >
+              ユーザー名
+            </Text>
 
-              <span className="inq-detail__value">
-                {userNameLabel}
-              </span>
-            </div>
+            <Text
+              as="div"
+              size="sm"
+              wrap="anywhere"
+            >
+              {userNameLabel}
+            </Text>
+          </CardField>
 
-            <div>
-              <span className="inq-detail__label">
-                問い合わせ日
-              </span>
+          <CardField>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="bold"
+            >
+              問い合わせ日
+            </Text>
 
-              <span className="inq-detail__value">
-                {createdAtLabel}
-              </span>
-            </div>
+            <Text
+              as="div"
+              size="sm"
+              wrap="anywhere"
+            >
+              {createdAtLabel}
+            </Text>
+          </CardField>
 
-            <div>
-              <span className="inq-detail__label">
-                最終更新日
-              </span>
+          <CardField>
+            <Text
+              as="div"
+              size="xs"
+              tone="muted"
+              weight="bold"
+            >
+              最終更新日
+            </Text>
 
-              <span className="inq-detail__value">
-                {updatedAtLabel}
-              </span>
-            </div>
-          </div>
-        </div>
+            <Text
+              as="div"
+              size="sm"
+              wrap="anywhere"
+            >
+              {updatedAtLabel}
+            </Text>
+          </CardField>
+        </Stack>
       </CardContent>
     </Card>
   );
