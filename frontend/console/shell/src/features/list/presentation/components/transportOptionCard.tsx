@@ -13,6 +13,8 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 
+import "../../../../styles/transportation.css";
+
 export type TransportOptionCardOption = {
   transportationOption: TransportationOption;
   transportationId?: string;
@@ -132,12 +134,12 @@ export default function TransportOptionCard({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="transport-option-card__header">
         <CardTitle>配送方法</CardTitle>
 
         <button
           type="button"
-          className="inline-flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          className="transport-option-card__create-button"
           onClick={onCreateTransportationFee}
           disabled={loading || disabled}
         >
@@ -146,9 +148,9 @@ export default function TransportOptionCard({
         </button>
       </CardHeader>
 
-      <CardContent className="space-y-2">
+      <CardContent className="transport-option-card__content">
         {loading ? (
-          <div className="text-xs text-slate-400">
+          <div className="transport-option-card__state">
             配送方法を読み込み中です…
           </div>
         ) : selectableOptions.length > 0 ? (
@@ -156,7 +158,7 @@ export default function TransportOptionCard({
             value={selectedValue}
             disabled={disabled}
             onChange={(event) => handleChange(event.target.value)}
-            className="w-full h-10 px-3 rounded-md border border-slate-200 bg-white text-sm text-slate-800 outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500"
+            className="transport-option-card__select"
           >
             <option value="">
               配送方法を選択してください
@@ -176,13 +178,13 @@ export default function TransportOptionCard({
             })}
           </select>
         ) : (
-          <div className="text-xs text-slate-400">
+          <div className="transport-option-card__state">
             選択可能な配送方法がありません。
           </div>
         )}
 
         {transportationOption === "custom" && transportationId && (
-          <div className="text-xs text-slate-500">
+          <div className="transport-option-card__note">
             自社配送料金設定を使用します。
           </div>
         )}
