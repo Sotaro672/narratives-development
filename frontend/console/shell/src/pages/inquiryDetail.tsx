@@ -1,6 +1,7 @@
 // frontend/console/shell/src/pages/inquiryDetail.tsx
 
 import PageStyle from "../../../shell/src/layout/PageStyle/PageStyle";
+import { Badge, type BadgeVariant } from "../../../shell/src/shared/ui/badge";
 import {
   Card,
   CardContent,
@@ -23,9 +24,27 @@ import {
   getInquiryStatusLabel,
   isClosedStatus,
 } from "../features/inquiry/presentation/utils/inquiryStatus";
+import type { InquiryStatus } from "../shared/types/inquiry";
 import { getInquiryTypeLabel } from "../shared/types/inquiry";
 
 import "../styles/inquiry-page.css";
+
+function getInquiryStatusBadgeVariant(
+  status: InquiryStatus | null | undefined,
+): BadgeVariant {
+  switch (status) {
+    case "open":
+      return "danger";
+    case "in_progress":
+      return "warning";
+    case "resolved":
+      return "success";
+    case "closed":
+      return "default";
+    default:
+      return "secondary";
+  }
+}
 
 export default function InquiryDetail() {
   const {
@@ -141,7 +160,9 @@ export default function InquiryDetail() {
 
   const pageTitle = (
     <div className="inq-detail__page-title">
-      <span className="inq__chip">{inquiryType}</span>
+      <Badge variant="secondary">
+        {inquiryType}
+      </Badge>
 
       {title ? (
         <span className="inq-detail__page-title-text">
@@ -151,19 +172,12 @@ export default function InquiryDetail() {
     </div>
   );
 
-  const statusTab = (
-    <span
-      className={[
-        "inq-status-tab",
-        inquiry?.status
-          ? `inq-status-tab--${inquiry.status}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+  const statusBadge = (
+    <Badge
+      variant={getInquiryStatusBadgeVariant(inquiry?.status)}
     >
       {status}
-    </span>
+    </Badge>
   );
 
   const statusButtonVariant =
@@ -288,7 +302,7 @@ export default function InquiryDetail() {
       <PageStyle
         layout="grid-2"
         title={pageTitle}
-        badge={statusTab}
+        badge={statusBadge}
         onBack={onBack}
         onSave={undefined}
         statusButtonLabel={statusButtonLabel}

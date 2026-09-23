@@ -1,8 +1,14 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/inquiryContentCard.tsx
 
 import { Button } from "../../../../shared/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import { Input } from "../../../../shared/ui/input";
 import { Label } from "../../../../shared/ui/label";
 
 import type { InquiryImageFile } from "../../../../shared/types/inquiry";
@@ -106,7 +112,7 @@ export default function InquiryContentCard({
                   </Label>
 
                   <div className="inq-return-refund__amount-row">
-                    <input
+                    <Input
                       id="merchandise-refund-amount"
                       type="number"
                       inputMode="numeric"
@@ -125,7 +131,6 @@ export default function InquiryContentCard({
                       }
                       disabled={inputDisabled}
                       aria-label="商品返金額"
-                      className="inq-return-refund__amount-input"
                     />
 
                     <span className="inq-return-refund__currency">

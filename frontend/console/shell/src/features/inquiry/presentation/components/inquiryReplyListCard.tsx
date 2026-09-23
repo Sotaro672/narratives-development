@@ -9,19 +9,12 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import Empty from "../../../../shared/ui/empty";
-import type {
-  InquiryDetail,
-  InquiryImageFile,
-} from "../../../../shared/types/inquiry";
+import type { InquiryDetail } from "../../../../shared/types/inquiry";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
-type InquiryReplyView = InquiryDetail["replies"][number];
+import InquiryImageGrid from "./inquiryImageGrid";
 
-type InquiryImageView = {
-  id: string;
-  fileName: string;
-  fileUrl: string;
-};
+type InquiryReplyView = InquiryDetail["replies"][number];
 
 export type InquiryReplyListCardProps = {
   replies: InquiryReplyView[];
@@ -37,27 +30,6 @@ function textOrDash(
 ): string {
   const normalized = String(value ?? "").trim();
   return normalized || "-";
-}
-
-function normalizeImages(
-  images: InquiryImageFile[] | undefined,
-): InquiryImageView[] {
-  if (!images) {
-    return [];
-  }
-
-  return images.map(
-    (
-      image: InquiryImageFile,
-      index: number,
-    ): InquiryImageView => ({
-      id:
-        image.objectPath ||
-        `${image.fileUrl}-${index}`,
-      fileName: image.fileName,
-      fileUrl: image.fileUrl,
-    }),
-  );
 }
 
 function replySenderLabel(
@@ -105,8 +77,6 @@ export default function InquiryReplyListCard({
         {replies.length > 0 ? (
           <div className="inq-reply-list">
             {replies.map((reply) => {
-              const replyImages = normalizeImages(reply.images);
-
               const senderLabel = replySenderLabel(
                 reply,
                 brandName,
@@ -159,26 +129,8 @@ export default function InquiryReplyListCard({
                     {textOrDash(reply.content)}
                   </p>
 
-                  {replyImages.length > 0 ? (
-                    <div className="inq-detail__image-grid">
-                      {replyImages.map((image) => (
-                        <a
-                          key={image.id}
-                          href={image.fileUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="inq-detail__image-link"
-                          aria-label={`${image.fileName}を開く`}
-                        >
-                          <img
-                            src={image.fileUrl}
-                            alt={image.fileName}
-                            className="inq-detail__image"
-                            loading="lazy"
-                          />
-                        </a>
-                      ))}
-                    </div>
+                  {reply.images && reply.images.length > 0 ? (
+                    <InquiryImageGrid images={reply.images} />
                   ) : null}
                 </article>
               );
