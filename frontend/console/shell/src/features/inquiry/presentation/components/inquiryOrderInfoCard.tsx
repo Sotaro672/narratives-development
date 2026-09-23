@@ -8,6 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Empty from "../../../../shared/ui/empty";
 import Link from "../../../../shared/ui/link";
 import type { InquiryOrderSummary } from "../../../../shared/types/inquiry";
 import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
@@ -132,7 +133,10 @@ export default function InquiryOrderInfoCard({
                 ],
               )
             ) : (
-              <div className="inq__empty">注文情報はありません。</div>
+              <Empty
+                compact
+                description="注文情報はありません。"
+              />
             )}
           </div>
         </div>

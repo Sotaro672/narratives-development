@@ -1,5 +1,6 @@
 // frontend/console/shell/src/features/order/presentation/components/orderItemList.tsx
 
+import Empty from "../../../../shared/ui/empty";
 import Text from "../../../../shared/ui/text";
 import type { OrderDetailItemDTO } from "../hooks/useOrderDetail";
 import OrderItemCard from "./orderItemCard";
@@ -22,13 +23,10 @@ export default function OrderItemList({
       </Text>
 
       {items.length === 0 ? (
-        <Text
-          as="div"
-          tone="muted"
-          className="order-detail__message"
-        >
-          アイテムがありません。
-        </Text>
+        <Empty
+          compact
+          description="アイテムがありません。"
+        />
       ) : (
         <div className="order-detail__items">
           {items.map((item, index) => (

@@ -17,6 +17,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Empty from "../../../../shared/ui/empty";
 import { ErrorMessage } from "../../../../shared/ui/error";
 import Text from "../../../../shared/ui/text";
 
@@ -99,9 +100,10 @@ export default function MemberDetailCard({
       <Card>
         <MemberCardHeader />
         <CardContent>
-          <Text tone="muted">
-            該当するメンバーが見つかりません。
-          </Text>
+          <Empty
+            compact
+            description="該当するメンバーが見つかりません。"
+          />
         </CardContent>
       </Card>
     );

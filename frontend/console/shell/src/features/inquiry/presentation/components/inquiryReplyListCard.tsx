@@ -1,6 +1,5 @@
 // frontend/console/shell/src/features/inquiry/presentation/components/inquiryReplyListCard.tsx
 
-import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 import AvatarIcon from "../../../../shared/ui/avatarIcon";
 import { Button } from "../../../../shared/ui/button";
 import {
@@ -9,11 +8,12 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
-
+import Empty from "../../../../shared/ui/empty";
 import type {
   InquiryDetail,
   InquiryImageFile,
 } from "../../../../shared/types/inquiry";
+import { safeDateTimeLabelJa } from "../../../../shared/util/dateJa";
 
 type InquiryReplyView = InquiryDetail["replies"][number];
 
@@ -91,9 +91,7 @@ export default function InquiryReplyListCard({
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle>
-          返信一覧
-        </CardTitle>
+        <CardTitle>返信一覧</CardTitle>
 
         <Button
           type="button"
@@ -187,9 +185,10 @@ export default function InquiryReplyListCard({
             })}
           </div>
         ) : (
-          <div className="inq__empty">
-            返信はありません。
-          </div>
+          <Empty
+            compact
+            description="返信はありません。"
+          />
         )}
       </CardContent>
     </Card>

@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Empty from "../../../../shared/ui/empty";
 import { ErrorMessage } from "../../../../shared/ui/error";
 import Text from "../../../../shared/ui/text";
 
@@ -60,9 +61,10 @@ const InventoryListCard: React.FC<InventoryListCardProps> = ({
             出品情報の取得に失敗しました: {error}
           </ErrorMessage>
         ) : items.length === 0 ? (
-          <Text as="div" tone="muted">
-            この在庫の出品はまだありません。
-          </Text>
+          <Empty
+            compact
+            description="この在庫の出品はまだありません。"
+          />
         ) : (
           <div className="inventory-list-card__list">
             {items.map((item) => (

@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Empty from "../../../../shared/ui/empty";
 import type { PermissionCategory } from "../../../../shared/types/permission";
 
 import "../../../../shell/src/styles/permission.css";
@@ -45,9 +46,10 @@ export function PermissionCard({
 
       <CardContent>
         {permissions.length === 0 ? (
-          <p className="permission-card__message">
-            権限は未設定です。
-          </p>
+          <Empty
+            compact
+            description="権限は未設定です。"
+          />
         ) : loading && !hasGrouped ? (
           <p className="permission-card__message">
             権限情報を読み込み中です…
