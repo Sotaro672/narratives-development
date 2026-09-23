@@ -1,28 +1,6 @@
 /* frontend/console/shell/src/styles/location.css */
 
 /* =========================================================
- * Location Detail
- * ======================================================= */
-
-.location-detail__state {
-  padding: 3rem 1.25rem;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  background-color: #ffffff;
-  color: #64748b;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  text-align: center;
-}
-
-.location-detail__status {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
-/* =========================================================
  * Location Create
  * ======================================================= */
 
@@ -33,47 +11,10 @@
   margin-left: auto;
 }
 
-.location-create__error {
-  margin-top: 1.25rem;
-}
-
-.location-create__status {
-  margin: 1.25rem 0 0;
-  color: #64748b;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-}
-
 /* =========================================================
  * Location Form Fields
  * ======================================================= */
 
-.location-form-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.location-form-fields__error {
+.location-form-fields__feedback {
   margin-top: 0.25rem;
-}
-
-.location-form-fields__status {
-  margin: 0.25rem 0 0;
-  color: #64748b;
-  font-size: 0.75rem;
-  line-height: 1rem;
-}
-
-/* =========================================================
- * Location Management
- * ======================================================= */
-
-.location-management__row {
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-
-.location-management__row:hover {
-  background-color: rgba(0, 0, 0, 0.03);
 }

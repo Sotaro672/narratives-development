@@ -5,6 +5,8 @@ import {
   CardLabel,
 } from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import Stack from "../../../../shared/ui/stack";
+import Text from "../../../../shared/ui/text";
 
 import "../../../../styles/location.css";
 
@@ -51,7 +53,7 @@ export default function LocationFormFields({
   onChangeStreet2,
 }: LocationFormFieldsProps) {
   return (
-    <div className="location-form-fields">
+    <Stack gap="lg">
       <div>
         <CardLabel htmlFor="location-name">
           保管場所名（必須）
@@ -68,7 +70,11 @@ export default function LocationFormFields({
         />
 
         {errors.name && (
-          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
+          <ErrorMessage
+            as="p"
+            size="xs"
+            className="location-form-fields__feedback"
+          >
             {errors.name}
           </ErrorMessage>
         )}
@@ -92,17 +98,24 @@ export default function LocationFormFields({
         />
 
         {addressSearching && (
-          <p
-            className="location-form-fields__status"
+          <Text
+            as="p"
+            size="xs"
+            tone="muted"
+            className="location-form-fields__feedback"
             role="status"
             aria-live="polite"
           >
             住所を検索しています...
-          </p>
+          </Text>
         )}
 
         {!addressSearching && errors.zipCode && (
-          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
+          <ErrorMessage
+            as="p"
+            size="xs"
+            className="location-form-fields__feedback"
+          >
             {errors.zipCode}
           </ErrorMessage>
         )}
@@ -125,7 +138,11 @@ export default function LocationFormFields({
         />
 
         {errors.state && (
-          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
+          <ErrorMessage
+            as="p"
+            size="xs"
+            className="location-form-fields__feedback"
+          >
             {errors.state}
           </ErrorMessage>
         )}
@@ -148,7 +165,11 @@ export default function LocationFormFields({
         />
 
         {errors.city && (
-          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
+          <ErrorMessage
+            as="p"
+            size="xs"
+            className="location-form-fields__feedback"
+          >
             {errors.city}
           </ErrorMessage>
         )}
@@ -171,7 +192,11 @@ export default function LocationFormFields({
         />
 
         {errors.street && (
-          <ErrorMessage as="p" size="xs" className="location-form-fields__error">
+          <ErrorMessage
+            as="p"
+            size="xs"
+            className="location-form-fields__feedback"
+          >
             {errors.street}
           </ErrorMessage>
         )}
@@ -193,6 +218,6 @@ export default function LocationFormFields({
           disabled={disabled}
         />
       </div>
-    </div>
+    </Stack>
   );
 }

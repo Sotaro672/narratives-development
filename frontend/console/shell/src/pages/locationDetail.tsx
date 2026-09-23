@@ -8,14 +8,18 @@ import LocationFormFields from "../features/company/presentation/components/Loca
 import { useLocationDetail } from "../features/company/presentation/hook/useLocationDetail";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
+import Empty from "../shared/ui/empty";
 import { ErrorMessage } from "../shared/ui/error";
 import Stack from "../shared/ui/stack";
+import Text from "../shared/ui/text";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 import "../styles/location.css";
 
 export default function LocationDetail() {
-  const { locationId } = useParams<{ locationId: string }>();
+  const { locationId } = useParams<{
+    locationId: string;
+  }>();
 
   const { vm, handlers } = useLocationDetail(locationId);
   const [isEditing, setIsEditing] = useState(false);
@@ -55,9 +59,12 @@ export default function LocationDetail() {
   const left = (
     <Stack gap="lg">
       {vm.loading ? (
-        <div className="location-detail__state">
-          在庫保管場所を読み込んでいます...
-        </div>
+        <Card>
+          <Empty
+            compact
+            description="在庫保管場所を読み込んでいます..."
+          />
+        </Card>
       ) : location ? (
         <>
           <Card>
@@ -89,15 +96,18 @@ export default function LocationDetail() {
           )}
 
           {vm.deleting && (
-            <p className="location-detail__status">
+            <Text as="p" size="sm" tone="muted">
               在庫保管場所を削除しています...
-            </p>
+            </Text>
           )}
         </>
       ) : (
-        <div className="location-detail__state">
-          在庫保管場所を表示できませんでした。
-        </div>
+        <Card>
+          <Empty
+            compact
+            description="在庫保管場所を表示できませんでした。"
+          />
+        </Card>
       )}
     </Stack>
   );
@@ -105,9 +115,12 @@ export default function LocationDetail() {
   const right = (
     <div className="page-column">
       {vm.loading ? (
-        <div className="location-detail__state">
-          管理情報を読み込んでいます...
-        </div>
+        <Card>
+          <Empty
+            compact
+            description="管理情報を読み込んでいます..."
+          />
+        </Card>
       ) : location ? (
         <AdminCard
           title="管理情報"

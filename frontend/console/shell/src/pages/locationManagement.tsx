@@ -6,8 +6,6 @@ import { useLocationManagement } from "../features/company/presentation/hook/use
 import List from "../layout/List/List";
 import { TableCell, TableRow } from "../shared/ui/table";
 
-import "../styles/location.css";
-
 export default function LocationManagement() {
   const {
     rows,
@@ -42,7 +40,7 @@ export default function LocationManagement() {
       {rows.map((row) => (
         <TableRow
           key={row.id}
-          className="location-management__row"
+          interactive
           role="button"
           tabIndex={0}
           onClick={() => handleRowClick(row)}
