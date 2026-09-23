@@ -1,12 +1,10 @@
 // frontend/console/shell/src/pages/brandDetail.tsx
 
 import * as React from "react";
-import { Upload } from "lucide-react";
 
 import "../styles/brand.css";
 
 import PageStyle from "../layout/PageStyle/PageStyle";
-import { Button } from "../shared/ui/button";
 import {
   Card,
   CardContent,
@@ -14,14 +12,15 @@ import {
   CardLabel,
   CardTitle,
 } from "../shared/ui/card";
-import DeleteButton from "../shared/ui/delete";
 import { ErrorMessage } from "../shared/ui/error";
 import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Input } from "../shared/ui/input";
 import Loading from "../shared/ui/loading";
 import { Media } from "../shared/ui/media";
+import MediaUploader from "../shared/ui/mediaUploader";
 import Preview from "../shared/ui/preview";
+import Stack from "../shared/ui/stack";
 import { Text } from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
@@ -57,8 +56,6 @@ export default function BrandDetail() {
     loadingAccounts,
     accountError,
     brandImageAccept,
-    brandIconInputRef,
-    brandBackgroundInputRef,
     brandIconFile,
     brandBackgroundFile,
     brandIconPreviewUrl,
@@ -70,10 +67,8 @@ export default function BrandDetail() {
     handleBrandIconCropViewportSizeChange,
     brandIconError,
     brandBackgroundImageError,
-    handlePickBrandIcon,
-    handlePickBrandBackground,
-    handleBrandIconChange,
-    handleBrandBackgroundChange,
+    handleBrandIconFilesSelected,
+    handleBrandBackgroundFilesSelected,
     handleClearBrandIcon,
     handleClearBrandBackground,
   } = useBrandDetail();
@@ -83,16 +78,8 @@ export default function BrandDetail() {
   const [iconPreviewOpen, setIconPreviewOpen] =
     React.useState(false);
 
-  const canEditImage = isEditing && !saving;
-  const hasBackgroundImage = Boolean(
-    String(brandBackgroundPreviewUrl ?? "").trim(),
-  );
-  const hasBrandIcon = Boolean(
-    String(brandIconPreviewUrl ?? "").trim(),
-  );
-
   const isCroppingBrandIcon = Boolean(
-    isEditing && brandIconFile && brandIconPreviewUrl,
+    brandIconFile && brandIconPreviewUrl,
   );
 
   const accountLabel =
@@ -103,35 +90,29 @@ export default function BrandDetail() {
     ? draft.name || "ブランド名未入力"
     : brand.name || "ブランド名未設定";
 
-  const handleBackgroundActivate = React.useCallback(() => {
-    if (canEditImage) {
-      handlePickBrandBackground();
-      return;
-    }
+  const brandBackgroundItems = brandBackgroundPreviewUrl
+    ? [
+        {
+          id: "brand-background",
+          src: brandBackgroundPreviewUrl,
+          name: brandBackgroundFile?.name ?? "ブランド背景画像",
+          alt: "ブランド背景画像",
+          contentType: brandBackgroundFile?.type,
+        },
+      ]
+    : [];
 
-    if (hasBackgroundImage) {
-      setBackgroundPreviewOpen(true);
-    }
-  }, [
-    canEditImage,
-    handlePickBrandBackground,
-    hasBackgroundImage,
-  ]);
-
-  const handleIconActivate = React.useCallback(() => {
-    if (canEditImage) {
-      handlePickBrandIcon();
-      return;
-    }
-
-    if (hasBrandIcon) {
-      setIconPreviewOpen(true);
-    }
-  }, [
-    canEditImage,
-    handlePickBrandIcon,
-    hasBrandIcon,
-  ]);
+  const brandIconItems = brandIconPreviewUrl
+    ? [
+        {
+          id: "brand-icon",
+          src: brandIconPreviewUrl,
+          name: brandIconFile?.name ?? "ブランドアイコン",
+          alt: "ブランドアイコン",
+          contentType: brandIconFile?.type,
+        },
+      ]
+    : [];
 
   const hero = (
     <Card>
@@ -145,158 +126,127 @@ export default function BrandDetail() {
           <ErrorMessage className="brand-detail__state--padded">
             {error.message}
           </ErrorMessage>
-        ) : (
-          <div className="brand-hero">
-            <Media
-              src={brandBackgroundPreviewUrl}
-              type="image"
-              alt="ブランド背景画像"
-              variant="cover"
-              fit="cover"
-              bordered={false}
-              emptyText={isEditing ? "背景画像を選択" : "背景画像未設定"}
-              emptyDescription={
-                canEditImage
-                  ? "クリックして背景画像を選択できます"
-                  : undefined
-              }
-              onActivate={
-                canEditImage || hasBackgroundImage
-                  ? handleBackgroundActivate
-                  : undefined
-              }
+        ) : isEditing ? (
+          <Stack gap="md">
+            <MediaUploader
+              items={brandBackgroundItems}
+              accept={brandImageAccept}
+              variant="single"
+              title={null}
+              showCount={false}
+              showPicker={false}
+              showFileNames={false}
+              previewFramed={false}
               disabled={saving}
+              className="brand-hero__background-uploader"
+              renderPreview={(item, { openPicker }) => (
+                <Media
+                  src={item.src}
+                  type="image"
+                  alt="ブランド背景画像"
+                  variant="cover"
+                  fit="cover"
+                  bordered={false}
+                  onActivate={saving ? undefined : openPicker}
+                  disabled={saving}
+                />
+              )}
+              renderEmpty={({ openPicker }) => (
+                <Media
+                  type="image"
+                  alt="ブランド背景画像"
+                  variant="cover"
+                  fit="cover"
+                  bordered={false}
+                  emptyText="背景画像を選択"
+                  emptyDescription={
+                    saving
+                      ? undefined
+                      : "クリックして背景画像を選択できます"
+                  }
+                  onActivate={saving ? undefined : openPicker}
+                  disabled={saving}
+                />
+              )}
+              onFilesSelected={handleBrandBackgroundFilesSelected}
+              onRemove={() => handleClearBrandBackground()}
             />
 
-            {isEditing && (
-              <input
-                ref={brandBackgroundInputRef}
-                type="file"
-                accept={brandImageAccept}
-                hidden
-                onChange={handleBrandBackgroundChange}
-                disabled={saving}
-              />
+            {brandBackgroundImageError && (
+              <ErrorMessage
+                as="p"
+                size="xs"
+                className="brand-detail__media-error"
+              >
+                {brandBackgroundImageError}
+              </ErrorMessage>
             )}
 
-            {isEditing && (
-              <>
-                <div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handlePickBrandBackground}
-                    disabled={saving}
-                  >
-                    <Upload size={16} />
-                    背景画像をアップロード
-                  </Button>
-
-                  {(brandBackgroundFile || draft.brandBackgroundImage) && (
-                    <DeleteButton
-                      size="lg"
+            <div className="brand-hero__header">
+              <div className="brand-hero__avatar-wrap">
+                <MediaUploader
+                  items={brandIconItems}
+                  accept={brandImageAccept}
+                  variant="single"
+                  title={null}
+                  showCount={false}
+                  showPicker={false}
+                  showFileNames={false}
+                  previewFramed={false}
+                  disabled={saving}
+                  className="brand-hero__avatar-uploader"
+                  renderPreview={(_item, { openPicker }) =>
+                    isCroppingBrandIcon ? (
+                      <IconCropper
+                        src={brandIconPreviewUrl}
+                        position={brandIconCropPosition}
+                        scale={brandIconCropScale}
+                        onPositionChange={handleBrandIconCropPositionChange}
+                        onScaleChange={handleBrandIconCropScaleChange}
+                        onViewportSizeChange={handleBrandIconCropViewportSizeChange}
+                        alt="ブランドアイコンの切り抜きプレビュー"
+                        disabled={saving}
+                      />
+                    ) : (
+                      <EntityIcon
+                        src={brandIconPreviewUrl}
+                        name={displayBrandName}
+                        alt="ブランドアイコン"
+                        size="fluid"
+                        className="brand-hero__avatar"
+                        imageClassName="brand-hero__avatar-image"
+                        fallbackClassName="brand-hero__avatar-empty"
+                        fallback="アイコンを選択"
+                        onClick={saving ? undefined : openPicker}
+                        disabled={saving}
+                      />
+                    )
+                  }
+                  renderEmpty={({ openPicker }) => (
+                    <EntityIcon
+                      name={displayBrandName}
+                      alt="ブランドアイコン"
+                      size="fluid"
+                      className="brand-hero__avatar"
+                      imageClassName="brand-hero__avatar-image"
+                      fallbackClassName="brand-hero__avatar-empty"
+                      fallback="アイコンを選択"
+                      onClick={saving ? undefined : openPicker}
                       disabled={saving}
-                      ariaLabel="ブランド背景画像を削除"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleClearBrandBackground();
-                      }}
                     />
                   )}
-                </div>
+                  onFilesSelected={handleBrandIconFilesSelected}
+                  onRemove={() => handleClearBrandIcon()}
+                />
 
-                {brandBackgroundImageError && (
+                {brandIconError && (
                   <ErrorMessage
                     as="p"
                     size="xs"
                     className="brand-detail__media-error"
                   >
-                    {brandBackgroundImageError}
+                    {brandIconError}
                   </ErrorMessage>
-                )}
-              </>
-            )}
-
-            <div className="brand-hero__header">
-              <div className="brand-hero__avatar-wrap">
-                {isCroppingBrandIcon ? (
-                  <IconCropper
-                    src={brandIconPreviewUrl}
-                    position={brandIconCropPosition}
-                    scale={brandIconCropScale}
-                    onPositionChange={handleBrandIconCropPositionChange}
-                    onScaleChange={handleBrandIconCropScaleChange}
-                    onViewportSizeChange={handleBrandIconCropViewportSizeChange}
-                    alt="ブランドアイコンの切り抜きプレビュー"
-                    disabled={saving}
-                  />
-                ) : (
-                  <EntityIcon
-                    src={brandIconPreviewUrl}
-                    name={displayBrandName}
-                    alt="ブランドアイコン"
-                    size="fluid"
-                    className="brand-hero__avatar"
-                    fallbackClassName="brand-hero__avatar-empty"
-                    fallback={isEditing ? "アイコンを選択" : "アイコン未設定"}
-                    onClick={
-                      canEditImage || hasBrandIcon
-                        ? handleIconActivate
-                        : undefined
-                    }
-                    disabled={saving}
-                  />
-                )}
-
-                {isEditing && (
-                  <input
-                    ref={brandIconInputRef}
-                    type="file"
-                    accept={brandImageAccept}
-                    hidden
-                    onChange={handleBrandIconChange}
-                    disabled={saving}
-                  />
-                )}
-
-                {isEditing && (
-                  <>
-                    <div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handlePickBrandIcon}
-                        disabled={saving}
-                      >
-                        <Upload size={16} />
-                        アイコンをアップロード
-                      </Button>
-
-                      {(brandIconFile || draft.brandIcon) && (
-                        <DeleteButton
-                          size="md"
-                          disabled={saving}
-                          ariaLabel="ブランドアイコンを削除"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleClearBrandIcon();
-                          }}
-                        />
-                      )}
-                    </div>
-
-                    {brandIconError && (
-                      <ErrorMessage
-                        as="p"
-                        size="xs"
-                        className="brand-detail__media-error"
-                      >
-                        {brandIconError}
-                      </ErrorMessage>
-                    )}
-                  </>
                 )}
               </div>
 
@@ -306,15 +256,62 @@ export default function BrandDetail() {
                 </div>
 
                 <div className="brand-hero__sub">
-                  {isEditing
-                    ? editingManagerName
-                    : brand.memberName || "責任者未設定"}
+                  {editingManagerName || "責任者未設定"}
                 </div>
 
                 <div className="brand-hero__sub">
-                  {isEditing
-                    ? draft.websiteUrl || "Webサイト未設定"
-                    : brand.websiteUrl || "Webサイト未設定"}
+                  {draft.websiteUrl || "Webサイト未設定"}
+                </div>
+              </div>
+            </div>
+          </Stack>
+        ) : (
+          <div className="brand-hero">
+            <Media
+              src={brandBackgroundPreviewUrl}
+              type="image"
+              alt="ブランド背景画像"
+              variant="cover"
+              fit="cover"
+              bordered={false}
+              emptyText="背景画像未設定"
+              onActivate={
+                brandBackgroundPreviewUrl
+                  ? () => setBackgroundPreviewOpen(true)
+                  : undefined
+              }
+            />
+
+            <div className="brand-hero__header">
+              <div className="brand-hero__avatar-wrap">
+                <EntityIcon
+                  src={brandIconPreviewUrl}
+                  name={displayBrandName}
+                  alt="ブランドアイコン"
+                  size="fluid"
+                  className="brand-hero__avatar"
+                  imageClassName="brand-hero__avatar-image"
+                  fallbackClassName="brand-hero__avatar-empty"
+                  fallback="アイコン未設定"
+                  onClick={
+                    brandIconPreviewUrl
+                      ? () => setIconPreviewOpen(true)
+                      : undefined
+                  }
+                />
+              </div>
+
+              <div className="brand-hero__meta">
+                <div className="brand-hero__title">
+                  {displayBrandName}
+                </div>
+
+                <div className="brand-hero__sub">
+                  {brand.memberName || "責任者未設定"}
+                </div>
+
+                <div className="brand-hero__sub">
+                  {brand.websiteUrl || "Webサイト未設定"}
                 </div>
               </div>
             </div>

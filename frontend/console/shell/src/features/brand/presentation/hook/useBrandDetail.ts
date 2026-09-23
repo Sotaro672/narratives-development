@@ -4,9 +4,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
-  type ChangeEvent,
 } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -167,9 +165,6 @@ export function useBrandDetail() {
   const [brandBackgroundImageError, setBrandBackgroundImageError] =
     useState<string | null>(null);
 
-  const brandIconInputRef = useRef<HTMLInputElement | null>(null);
-  const brandBackgroundInputRef = useRef<HTMLInputElement | null>(null);
-
   const [brandIconFile, setBrandIconFile] = useState<File | null>(null);
   const [brandBackgroundFile, setBrandBackgroundFile] =
     useState<File | null>(null);
@@ -177,7 +172,8 @@ export function useBrandDetail() {
     useState<IconCropPosition>(INITIAL_BRAND_ICON_CROP_POSITION);
   const [brandIconCropScale, setBrandIconCropScale] =
     useState(INITIAL_BRAND_ICON_CROP_SCALE);
-  const [brandIconCropViewportSize, setBrandIconCropViewportSize] = useState(0);
+  const [brandIconCropViewportSize, setBrandIconCropViewportSize] =
+    useState(0);
 
   const [brandIconPreviewUrl, setBrandIconPreviewUrl] = useState("");
   const [brandBackgroundPreviewUrl, setBrandBackgroundPreviewUrl] =
@@ -371,15 +367,6 @@ export function useBrandDetail() {
     setError(null);
     resetBrandIconCrop();
     setProgress(createInitialBrandProgress("update"));
-
-    if (brandIconInputRef.current) {
-      brandIconInputRef.current.value = "";
-    }
-
-    if (brandBackgroundInputRef.current) {
-      brandBackgroundInputRef.current.value = "";
-    }
-
     setIsEditing(true);
   }, [brand, resetBrandIconCrop]);
 
@@ -397,15 +384,6 @@ export function useBrandDetail() {
     setError(null);
     resetBrandIconCrop();
     setProgress(createInitialBrandProgress("update"));
-
-    if (brandIconInputRef.current) {
-      brandIconInputRef.current.value = "";
-    }
-
-    if (brandBackgroundInputRef.current) {
-      brandBackgroundInputRef.current.value = "";
-    }
-
     setIsEditing(false);
   }, [
     brand,
@@ -413,16 +391,6 @@ export function useBrandDetail() {
     saving,
     resetBrandIconCrop,
   ]);
-
-  const handlePickBrandIcon = useCallback(() => {
-    if (!isEditing || saving) return;
-    brandIconInputRef.current?.click();
-  }, [isEditing, saving]);
-
-  const handlePickBrandBackground = useCallback(() => {
-    if (!isEditing || saving) return;
-    brandBackgroundInputRef.current?.click();
-  }, [isEditing, saving]);
 
   const validateSelectedImage = useCallback(
     (
@@ -435,14 +403,22 @@ export function useBrandDetail() {
     [],
   );
 
-  const handleBrandIconChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.currentTarget.files?.[0] ?? null;
-      event.currentTarget.value = "";
+  const handleBrandIconFilesSelected = useCallback(
+    (files: File[]) => {
+      if (!isEditing || saving) {
+        return;
+      }
 
-      if (!file) return;
+      const file = files[0] ?? null;
 
-      const validationError = validateSelectedImage(file, "brandIcon");
+      if (!file) {
+        return;
+      }
+
+      const validationError = validateSelectedImage(
+        file,
+        "brandIcon",
+      );
 
       if (validationError) {
         setBrandIconFile(null);
@@ -457,16 +433,24 @@ export function useBrandDetail() {
       resetBrandIconCrop();
     },
     [
+      isEditing,
+      saving,
       validateSelectedImage,
       resetBrandIconCrop,
     ],
   );
 
-  const handleBrandBackgroundChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.currentTarget.files?.[0] ?? null;
+  const handleBrandBackgroundFilesSelected = useCallback(
+    (files: File[]) => {
+      if (!isEditing || saving) {
+        return;
+      }
 
-      if (!file) return;
+      const file = files[0] ?? null;
+
+      if (!file) {
+        return;
+      }
 
       const validationError = validateSelectedImage(
         file,
@@ -476,7 +460,6 @@ export function useBrandDetail() {
       if (validationError) {
         setBrandBackgroundFile(null);
         setBrandBackgroundImageError(validationError);
-        event.currentTarget.value = "";
         alert(validationError);
         return;
       }
@@ -484,7 +467,11 @@ export function useBrandDetail() {
       setBrandBackgroundFile(file);
       setBrandBackgroundImageError(null);
     },
-    [validateSelectedImage],
+    [
+      isEditing,
+      saving,
+      validateSelectedImage,
+    ],
   );
 
   const handleClearBrandIcon = useCallback(() => {
@@ -496,10 +483,6 @@ export function useBrandDetail() {
       ...currentDraft,
       brandIcon: "",
     }));
-
-    if (brandIconInputRef.current) {
-      brandIconInputRef.current.value = "";
-    }
   }, [resetBrandIconCrop]);
 
   const handleClearBrandBackground = useCallback(() => {
@@ -510,10 +493,6 @@ export function useBrandDetail() {
       ...currentDraft,
       brandBackgroundImage: "",
     }));
-
-    if (brandBackgroundInputRef.current) {
-      brandBackgroundInputRef.current.value = "";
-    }
   }, []);
 
   const validateSelectedImagesBeforeSave = useCallback((): boolean => {
@@ -796,15 +775,6 @@ export function useBrandDetail() {
       setBrandBackgroundImageError(null);
       setAccountError(null);
       resetBrandIconCrop();
-
-      if (brandIconInputRef.current) {
-        brandIconInputRef.current.value = "";
-      }
-
-      if (brandBackgroundInputRef.current) {
-        brandBackgroundInputRef.current.value = "";
-      }
-
       setIsEditing(false);
 
       setProgress(
@@ -907,8 +877,6 @@ export function useBrandDetail() {
     handleOpenAccountConnect,
 
     brandImageAccept: IMAGE_STORAGE_ACCEPT,
-    brandIconInputRef,
-    brandBackgroundInputRef,
     brandIconFile,
     brandBackgroundFile,
     brandIconPreviewUrl,
@@ -925,10 +893,8 @@ export function useBrandDetail() {
 
     brandIconError,
     brandBackgroundImageError,
-    handlePickBrandIcon,
-    handlePickBrandBackground,
-    handleBrandIconChange,
-    handleBrandBackgroundChange,
+    handleBrandIconFilesSelected,
+    handleBrandBackgroundFilesSelected,
     handleClearBrandIcon,
     handleClearBrandBackground,
   };
