@@ -8,7 +8,6 @@ import type {
 } from "../../../../shared/types/permission";
 
 import { Badge } from "../../../../shared/ui/badge";
-import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardContent,
@@ -16,12 +15,7 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Checkbox } from "../../../../shared/ui/checkbox";
-import { Label } from "../../../../shared/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../../shared/ui/popover";
+import { Select } from "../../../../shared/ui/select";
 
 import "../../../../styles/permission.css";
 
@@ -42,13 +36,6 @@ export type PermissionSelectProps = {
 
 const categoryLabel = (c?: string) => c ?? "";
 
-const closePopover = () =>
-  document.dispatchEvent(
-    new KeyboardEvent("keydown", {
-      key: "Escape",
-    }),
-  );
-
 export function PermissionSelect({
   category,
   setCategory,
@@ -63,6 +50,15 @@ export function PermissionSelect({
   );
 
   const currentPerms = selectedCategory?.permissions ?? [];
+
+  const categoryOptions = React.useMemo(
+    () =>
+      permissionCategoryList.map((item) => ({
+        value: item,
+        label: categoryLabel(item),
+      })),
+    [permissionCategoryList],
+  );
 
   const togglePerm = (permId: string, checked: boolean) => {
     setSelectedPermIds((prev) => {
@@ -121,60 +117,17 @@ export function PermissionSelect({
 
   return (
     <div className="permission-select">
-      {/* 役割選択 */}
-      <div>
-        <Label className="permission-select__label">
-          役割（必須）
-        </Label>
+      <Select
+        label="役割（必須）"
+        options={categoryOptions}
+        value={category}
+        placeholder="役割を選択"
+        emptyText="選択可能な役割がありません。"
+        onChange={(value) => {
+          setCategory(value as PermissionCategory);
+        }}
+      />
 
-        <Popover>
-          <PopoverTrigger>
-            <Button
-              type="button"
-              variant="outline"
-              className="permission-select__trigger"
-            >
-              {category ? (
-                categoryLabel(category)
-              ) : (
-                <span className="permission-select__placeholder">
-                  役割を選択
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
-
-          <PopoverContent className="popover__content--compact">
-            {permissionCategoryList.length === 0 ? (
-              <div className="popover__empty">
-                選択可能な役割がありません。
-              </div>
-            ) : (
-              <div className="popover__list">
-                {permissionCategoryList.map((item) => {
-                  const isSelected = category === item;
-
-                  return (
-                    <button
-                      key={item}
-                      type="button"
-                      className={`popover__item${isSelected ? " is-active" : ""}`}
-                      onClick={() => {
-                        setCategory(item);
-                        closePopover();
-                      }}
-                    >
-                      {categoryLabel(item)}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
-      </div>
-
-      {/* 権限一覧 + 選択済みバッジ */}
       <div>
         <Card>
           <CardHeader>
@@ -234,7 +187,6 @@ export function PermissionSelect({
           </CardContent>
         </Card>
 
-        {/* 選択済み権限バッジ */}
         <div className="permission-select__badges">
           {selectedPerms.length === 0 ? (
             <span className="permission-select__hint">

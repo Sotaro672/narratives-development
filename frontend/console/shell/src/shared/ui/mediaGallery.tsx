@@ -32,9 +32,13 @@ function clampIndex(index: number, itemCount: number): number {
     return 0;
   }
 
-  return Math.min(
-    Math.max(Math.trunc(index), 0),
-    itemCount - 1,
+  return Math.min(Math.max(Math.trunc(index), 0), itemCount - 1);
+}
+
+function isPreviewableImage(item: MediaGalleryItem): boolean {
+  return (
+    (item.type ?? "image") === "image" &&
+    Boolean(String(item.src ?? "").trim())
   );
 }
 
@@ -101,9 +105,7 @@ export default function MediaGallery({
   videoProps,
   onDelete,
 }: MediaGalleryProps) {
-  const [internalIndex, setInternalIndex] = React.useState(
-    defaultActiveIndex,
-  );
+  const [internalIndex, setInternalIndex] = React.useState(defaultActiveIndex);
   const [previewItem, setPreviewItem] =
     React.useState<MediaGalleryItem | null>(null);
 
@@ -114,10 +116,7 @@ export default function MediaGallery({
 
   const hasItems = items.length > 0;
   const hasMultipleItems = items.length > 1;
-  const safeIndex = clampIndex(
-    requestedIndex,
-    items.length,
-  );
+  const safeIndex = clampIndex(requestedIndex, items.length);
 
   const currentItem = hasItems
     ? items[safeIndex]
@@ -126,6 +125,16 @@ export default function MediaGallery({
   const shouldShowThumbnails =
     showThumbnails &&
     (hasMultipleItems || !showViewer);
+
+  const previewEntries = React.useMemo(
+    () =>
+      items.flatMap((item, itemIndex) =>
+        isPreviewableImage(item)
+          ? [{ item, itemIndex }]
+          : [],
+      ),
+    [items],
+  );
 
   React.useEffect(() => {
     if (isControlled) {
@@ -138,6 +147,23 @@ export default function MediaGallery({
   }, [
     isControlled,
     items.length,
+  ]);
+
+  React.useEffect(() => {
+    if (!previewItem) {
+      return;
+    }
+
+    const stillExists = previewEntries.some(
+      ({ item }) => item.id === previewItem.id,
+    );
+
+    if (!stillExists) {
+      setPreviewItem(null);
+    }
+  }, [
+    previewEntries,
+    previewItem,
   ]);
 
   const setActiveIndex = React.useCallback(
@@ -171,8 +197,7 @@ export default function MediaGallery({
     }
 
     setActiveIndex(
-      (safeIndex - 1 + items.length) %
-        items.length,
+      (safeIndex - 1 + items.length) % items.length,
     );
   }, [
     hasMultipleItems,
@@ -220,10 +245,7 @@ export default function MediaGallery({
 
   const handlePreviewOpen = React.useCallback(
     (item: MediaGalleryItem) => {
-      const type = item.type ?? "image";
-      const source = String(item.src ?? "").trim();
-
-      if (type !== "image" || !source) {
+      if (!isPreviewableImage(item)) {
         return;
       }
 
@@ -235,6 +257,63 @@ export default function MediaGallery({
   const handlePreviewClose = React.useCallback(() => {
     setPreviewItem(null);
   }, []);
+
+  const handlePreviewPrev = React.useCallback(() => {
+    if (!previewItem || previewEntries.length <= 1) {
+      return;
+    }
+
+    const currentPreviewIndex = previewEntries.findIndex(
+      ({ item }) => item.id === previewItem.id,
+    );
+
+    const nextPreviewIndex =
+      currentPreviewIndex <= 0
+        ? previewEntries.length - 1
+        : currentPreviewIndex - 1;
+
+    const nextEntry = previewEntries[nextPreviewIndex];
+
+    if (!nextEntry) {
+      return;
+    }
+
+    setPreviewItem(nextEntry.item);
+    setActiveIndex(nextEntry.itemIndex);
+  }, [
+    previewEntries,
+    previewItem,
+    setActiveIndex,
+  ]);
+
+  const handlePreviewNext = React.useCallback(() => {
+    if (!previewItem || previewEntries.length <= 1) {
+      return;
+    }
+
+    const currentPreviewIndex = previewEntries.findIndex(
+      ({ item }) => item.id === previewItem.id,
+    );
+
+    const nextPreviewIndex =
+      currentPreviewIndex === -1 ||
+      currentPreviewIndex >= previewEntries.length - 1
+        ? 0
+        : currentPreviewIndex + 1;
+
+    const nextEntry = previewEntries[nextPreviewIndex];
+
+    if (!nextEntry) {
+      return;
+    }
+
+    setPreviewItem(nextEntry.item);
+    setActiveIndex(nextEntry.itemIndex);
+  }, [
+    previewEntries,
+    previewItem,
+    setActiveIndex,
+  ]);
 
   const renderThumbnail = (
     item: MediaGalleryItem,
@@ -296,8 +375,10 @@ export default function MediaGallery({
   }
 
   const isCurrentItemPreviewable =
-    (currentItem.type ?? "image") === "image" &&
-    Boolean(String(currentItem.src ?? "").trim());
+    isPreviewableImage(currentItem);
+
+  const canSwitchPreview =
+    previewEntries.length > 1;
 
   return (
     <>
@@ -437,6 +518,16 @@ export default function MediaGallery({
           "画像プレビュー"
         }
         onClose={handlePreviewClose}
+        onPrev={
+          canSwitchPreview
+            ? handlePreviewPrev
+            : undefined
+        }
+        onNext={
+          canSwitchPreview
+            ? handlePreviewNext
+            : undefined
+        }
       />
     </>
   );

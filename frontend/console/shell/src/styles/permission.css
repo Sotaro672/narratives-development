@@ -11,21 +11,6 @@
   gap: 1rem;
 }
 
-.permission-select__label {
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
-.permission-select__trigger {
-  width: 100%;
-  justify-content: flex-start;
-  text-align: left;
-}
-
-.permission-select__placeholder {
-  color: #94a3b8;
-}
-
 .permission-select__card-title {
   margin-left: 8px;
 }

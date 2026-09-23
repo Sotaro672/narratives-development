@@ -7,14 +7,7 @@ import {
   Badge,
   BadgeGroup,
 } from "../../../../shared/ui/badge";
-import { Button } from "../../../../shared/ui/button";
-import { Checkbox } from "../../../../shared/ui/checkbox";
-import { Label } from "../../../../shared/ui/label";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../../shared/ui/popover";
+import { Select } from "../../../../shared/ui/select";
 import Stack from "../../../../shared/ui/stack";
 import { Text } from "../../../../shared/ui/text";
 
@@ -36,65 +29,33 @@ export function BrandSelect({
     [selectedBrandIds],
   );
 
+  const brandOptions = React.useMemo(
+    () =>
+      brandRows.map((brand) => ({
+        value: brand.id,
+        label: brand.name,
+      })),
+    [brandRows],
+  );
+
   return (
     <Stack gap="sm">
-      <Label>
-        ブランド（任意・複数選択可）
-      </Label>
-
-      <Popover>
-        <PopoverTrigger>
-          <Button
-            type="button"
-            variant="outline"
-            className="brand-select__trigger"
-          >
-            {selectedCount > 0
-              ? `選択中のブランド: ${selectedCount}件`
-              : "ブランドを選択"}
-          </Button>
-        </PopoverTrigger>
-
-        <PopoverContent className="popover__content--compact popover__content--medium">
-          {brandRows.length === 0 ? (
-            <div className="popover__empty">
-              現在、選択可能なブランドがありません。
-            </div>
-          ) : (
-            <div className="popover__list">
-              {brandRows.map((brand) => {
-                const checked = selectedBrandIds.has(brand.id);
-                const inputId = `brand_${brand.id}`;
-
-                return (
-                  <label
-                    key={brand.id}
-                    htmlFor={inputId}
-                    className="popover__item popover__item--control"
-                  >
-                    <Checkbox
-                      id={inputId}
-                      checked={checked}
-                      onCheckedChange={(value) =>
-                        onToggleBrand(brand.id, !!value)
-                      }
-                    />
-                    <span>{brand.name}</span>
-                  </label>
-                );
-              })}
-            </div>
-          )}
-        </PopoverContent>
-      </Popover>
+      <Select
+        multiple
+        label="ブランド（任意・複数選択可）"
+        options={brandOptions}
+        value={selectedBrandIds}
+        placeholder="ブランドを選択"
+        emptyText="現在、選択可能なブランドがありません。"
+        renderValue={() => `選択中のブランド: ${selectedCount}件`}
+        onChange={(id, selected) => {
+          onToggleBrand(id, selected);
+        }}
+      />
 
       <BadgeGroup>
         {selectedCount === 0 ? (
-          <Text
-            as="span"
-            size="xs"
-            tone="muted"
-          >
+          <Text as="span" size="xs" tone="muted">
             選択したブランドがここに表示されます。
           </Text>
         ) : (
