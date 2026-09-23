@@ -3,6 +3,7 @@
 import { Button } from "../../../../shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../shared/ui/card";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import { Label } from "../../../../shared/ui/label";
 
 import type { InquiryImageFile } from "../../../../shared/types/inquiry";
 
@@ -97,12 +98,12 @@ export default function InquiryContentCard({
 
               <div className="inq-return-refund">
                 <div className="inq-return-refund__field">
-                  <label
+                  <Label
                     htmlFor="merchandise-refund-amount"
                     className="inq-return-refund__label"
                   >
                     返金額（税込）
-                  </label>
+                  </Label>
 
                   <div className="inq-return-refund__amount-row">
                     <input
@@ -126,6 +127,7 @@ export default function InquiryContentCard({
                       aria-label="商品返金額"
                       className="inq-return-refund__amount-input"
                     />
+
                     <span className="inq-return-refund__currency">
                       円
                     </span>
@@ -158,6 +160,7 @@ export default function InquiryContentCard({
                     <span className="inq-return-refund__option-title">
                       購入時の配送料も返金する
                     </span>
+
                     <span className="inq-detail__text">
                       購入者が支払った往路の配送料とその消費税を、Stripe返金額に含めます。
                     </span>
@@ -181,6 +184,7 @@ export default function InquiryContentCard({
                     <span className="inq-return-refund__option-title">
                       返品時の配送料をブランド側が負担する
                     </span>
+
                     <span className="inq-detail__text">
                       復路の配送料をブランド側の負担として計上します。購入者のStripe返金額には加算されません。
                     </span>

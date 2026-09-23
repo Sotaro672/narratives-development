@@ -1,9 +1,10 @@
-// frontend/console/shell/src/pages/accountConnect.tsx
+// frontend/console/shell/src/pages/accountCreate.tsx
 
 import { useAccountConnect } from "../features/account/presentation/hook/useAccountCreate";
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
+import { Label } from "../shared/ui/label";
 
 import "../styles/account.css";
 
@@ -59,12 +60,12 @@ export default function AccountConnectPage() {
                 )}
 
                 <div className="account-connect-field">
-                  <label
+                  <Label
                     htmlFor="account-connect-bank-name"
                     className="account-connect-label"
                   >
                     銀行名
-                  </label>
+                  </Label>
 
                   <input
                     id="account-connect-bank-name"
@@ -80,12 +81,12 @@ export default function AccountConnectPage() {
                 </div>
 
                 <div className="account-connect-field">
-                  <label
+                  <Label
                     htmlFor="account-connect-branch-name"
                     className="account-connect-label"
                   >
                     支店名
-                  </label>
+                  </Label>
 
                   <input
                     id="account-connect-branch-name"
@@ -101,12 +102,12 @@ export default function AccountConnectPage() {
                 </div>
 
                 <div className="account-connect-field">
-                  <label
+                  <Label
                     htmlFor="account-connect-account-number"
                     className="account-connect-label"
                   >
                     口座番号
-                  </label>
+                  </Label>
 
                   <input
                     id="account-connect-account-number"

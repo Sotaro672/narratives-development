@@ -141,18 +141,3 @@
   font-weight: 700;
   line-height: 1.5;
 }
-
-@media (max-width: 640px) {
-  .report-modal__panel {
-    max-height: calc(100dvh - 24px);
-  }
-
-  .report-modal__panel .modal__footer {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .report-modal__panel .modal__footer > .button {
-    width: 100%;
-  }
-}

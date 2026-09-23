@@ -2,6 +2,7 @@
 
 import { Button } from "../../../../shared/ui/button";
 import { ErrorMessage } from "../../../../shared/ui/error";
+import { Label } from "../../../../shared/ui/label";
 import Modal from "../../../../shared/ui/modal";
 import Textarea from "../../../../shared/ui/textarea";
 import type {
@@ -181,7 +182,7 @@ export default function ReportModal({
 
           {requiresDetail ? (
             <div className="report-modal__detail-field">
-              <label
+              <Label
                 className="report-modal__label"
                 htmlFor="report-modal-detail"
               >
@@ -189,7 +190,7 @@ export default function ReportModal({
                 <span className="report-modal__required">
                   必須
                 </span>
-              </label>
+              </Label>
 
               <Textarea
                 id="report-modal-detail"
