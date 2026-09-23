@@ -79,6 +79,11 @@
   overflow-wrap: anywhere;
 }
 
+.text--wrap-pre-wrap-anywhere {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .text--wrap-nowrap {
   white-space: nowrap;
 }

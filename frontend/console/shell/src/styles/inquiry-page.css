@@ -45,15 +45,6 @@
   gap: 8px;
 }
 
-.inq-detail__text {
-  margin: 0;
-  color: hsl(var(--foreground, 222.2 84% 4.9%));
-  font-size: 0.95rem;
-  line-height: 1.9;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 /* =========================================================
    Return refund
 ========================================================= */

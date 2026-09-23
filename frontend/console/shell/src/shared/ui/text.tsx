@@ -28,6 +28,7 @@ export type TextWrap =
   | "normal"
   | "pre-wrap"
   | "anywhere"
+  | "pre-wrap-anywhere"
   | "nowrap";
 
 export type TextElement =
@@ -66,6 +67,7 @@ const wrapClassNames: Record<TextWrap, string> = {
   normal: "text--wrap-normal",
   "pre-wrap": "text--wrap-pre-wrap",
   anywhere: "text--wrap-anywhere",
+  "pre-wrap-anywhere": "text--wrap-pre-wrap-anywhere",
   nowrap: "text--wrap-nowrap",
 };
 
@@ -83,7 +85,9 @@ export const Text = React.forwardRef<HTMLElement, TextProps>(
     ref,
   ) => (
     <Component
-      ref={ref as React.Ref<HTMLSpanElement & HTMLParagraphElement & HTMLDivElement>}
+      ref={ref as React.Ref<
+        HTMLSpanElement & HTMLParagraphElement & HTMLDivElement
+      >}
       className={cn(
         "text",
         sizeClassNames[size],
