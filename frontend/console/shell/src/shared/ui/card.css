@@ -47,6 +47,23 @@
   gap: 10px;
 }
 
+.card__header-actions {
+  display: flex;
+  min-width: 0;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.card__header-uploader {
+  width: auto;
+}
+
+.card__header-uploader .ui-media-uploader__picker-button {
+  align-self: auto;
+}
+
 .card__header-icon {
   display: inline-flex;
   width: 36px;
@@ -401,71 +418,6 @@
 
 .card__field--full {
   grid-column: 1 / -1;
-}
-
-/* =========================================================
- * Responsive
- * ======================================================= */
-
-@media (max-width: 900px) {
-  .card__fields {
-    grid-template-columns: 1fr;
-  }
-
-  .card__field--full {
-    grid-column: auto;
-  }
-}
-
-@media (max-width: 640px) {
-  .card {
-    border-radius: 12px;
-  }
-
-  .card__header {
-    min-height: 60px;
-    gap: 12px;
-    padding: 13px 14px;
-  }
-
-  .card__header-left {
-    gap: 8px;
-  }
-
-  .card__header-icon {
-    width: 32px;
-    height: 32px;
-    flex-basis: 32px;
-  }
-
-  .card__title--strong {
-    font-size: 14px;
-  }
-
-  .card__content,
-  .card__content--large {
-    padding: 14px;
-  }
-
-  .card__footer {
-    padding: 12px 14px;
-  }
-
-  .card__fields {
-    gap: 14px;
-  }
-}
-
-/* =========================================================
- * Dark mode
- * ======================================================= */
-
-@media (prefers-color-scheme: dark) {
-  .card {
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.24),
-      0 8px 24px rgba(0, 0, 0, 0.18);
-  }
 }
 
 /* =========================================================

@@ -12,6 +12,7 @@ import {
   CardButton,
   CardContent,
   CardHeader,
+  CardHeaderActions,
   CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
@@ -50,14 +51,12 @@ export default function ListImageCard(
     Boolean(props.onAddImages);
 
   const galleryItems =
-    vm.effectiveImageUrls.map(
-      (url, index) => ({
-        id: `${index}-${url}`,
-        src: url,
-        type: "image" as const,
-        alt: `商品画像 ${index + 1}`,
-      }),
-    );
+    vm.effectiveImageUrls.map((url, index) => ({
+      id: `${index}-${url}`,
+      src: url,
+      type: "image" as const,
+      alt: `商品画像 ${index + 1}`,
+    }));
 
   const handleFilesSelected = (
     files: File[],
@@ -83,7 +82,7 @@ export default function ListImageCard(
         </CardHeaderLeft>
 
         {props.isEdit && vm.hasImages ? (
-          <div className="list-image-card__actions">
+          <CardHeaderActions>
             <MediaUploader
               accept={IMAGE_STORAGE_ACCEPT}
               multiple
@@ -91,7 +90,7 @@ export default function ListImageCard(
               showCount={false}
               showPicker={false}
               disabled={!canAddImages}
-              className="list-image-card__uploader"
+              className="card__header-uploader"
               renderEmpty={({ openPicker, disabled }) => (
                 <CardButton
                   variant="primary"
@@ -114,7 +113,7 @@ export default function ListImageCard(
             >
               クリア
             </Button>
-          </div>
+          </CardHeaderActions>
         ) : null}
       </CardHeader>
 
@@ -129,7 +128,6 @@ export default function ListImageCard(
             pickerDescription="クリックまたはドラッグ＆ドロップで画像を追加できます"
             emptyIcon={<ImageIcon />}
             disabled={!canAddImages}
-            className="list-image-card__empty-uploader"
             onFilesSelected={handleFilesSelected}
           />
         ) : (
@@ -139,8 +137,8 @@ export default function ListImageCard(
             onActiveIndexChange={vm.handleSetMainIndex}
             editable={props.isEdit}
             deleteDisabled={Boolean(props.saving)}
-            mainVariant="landscape"
-            mainFit="cover"
+            mainVariant="viewer"
+            mainFit="contain"
             thumbnailFit="cover"
             emptyIcon={<ImageIcon />}
             emptyText="商品画像がまだ登録されていません"

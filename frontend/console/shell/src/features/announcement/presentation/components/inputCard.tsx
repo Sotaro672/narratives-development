@@ -1,18 +1,26 @@
 // frontend/console/shell/src/features/announcement/presentation/components/inputCard.tsx
 
 import { useEffect, useMemo, useState } from "react";
-import { Image as ImageIcon } from "lucide-react";
+import {
+  Image as ImageIcon,
+  Upload,
+} from "lucide-react";
 
 import type {
   AnnouncementInputAttachment,
   AnnouncementInputPayload,
 } from "../../application/announcement_input";
 
+import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import { Button } from "../../../../shared/ui/button";
 import {
   Card,
+  CardButton,
   CardContent,
   CardHeader,
+  CardHeaderActions,
+  CardHeaderIcon,
+  CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Input } from "../../../../shared/ui/input";
@@ -22,8 +30,6 @@ import MediaUploader from "../../../../shared/ui/mediaUploader";
 import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
 import Textarea from "../../../../shared/ui/textarea";
-
-import "./inputCard.css";
 
 export type InputCardMode = "view" | "edit";
 
@@ -237,75 +243,87 @@ export default function InputCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardHeaderLeft>
+          <CardHeaderIcon>
+            <ImageIcon className="card__header-icon-svg" />
+          </CardHeaderIcon>
+
+          <CardTitle strong>
+            {title}
+          </CardTitle>
+        </CardHeaderLeft>
 
         {isEditMode && hasImages ? (
-          <div className="announcement-input-card__header-actions">
+          <CardHeaderActions>
             <MediaUploader
-              accept="image/*"
+              accept={IMAGE_STORAGE_ACCEPT}
               multiple
-              pickerVariant="button"
               title={null}
               showCount={false}
-              pickerLabel="画像を追加"
+              showPicker={false}
               disabled={isDisabled}
-              className="announcement-input-card__header-uploader"
+              className="card__header-uploader"
+              renderEmpty={({ openPicker, disabled }) => (
+                <CardButton
+                  variant="primary"
+                  disabled={disabled}
+                  onClick={openPicker}
+                >
+                  <Upload className="card__button-icon" />
+                  画像追加
+                </CardButton>
+              )}
               onFilesSelected={addImages}
             />
 
             <Button
               type="button"
-              variant="destructive-outline"
+              variant="ghost"
               size="sm"
               disabled={isDisabled}
               onClick={handleClearImages}
             >
               クリア
             </Button>
-          </div>
+          </CardHeaderActions>
         ) : null}
       </CardHeader>
 
       <CardContent>
         <Stack gap="md">
-          <div className="card__field">
-            <Label>画像アップロード</Label>
-
-            {!hasImages && isEditMode ? (
-              <MediaUploader
-                accept="image/*"
-                multiple
-                title={null}
-                showCount={false}
-                pickerLabel="画像をアップロード"
-                pickerDescription="クリックまたはドラッグ＆ドロップで画像を追加できます"
-                emptyIcon={<ImageIcon />}
-                disabled={isDisabled}
-                className="announcement-input-card__uploader"
-                onFilesSelected={addImages}
-              />
-            ) : (
-              <MediaGallery
-                items={galleryItems}
-                activeIndex={mainImageIndex}
-                onActiveIndexChange={setMainImageIndex}
-                editable={isEditMode}
-                deleteDisabled={isDisabled}
-                mainVariant="viewer"
-                mainFit="contain"
-                thumbnailFit="cover"
-                emptyIcon={<ImageIcon />}
-                emptyText="画像はありません"
-                onDelete={
-                  isEditMode
-                    ? (_item, index) => {
-                        handleRemoveImageAt(index);
-                      }
-                    : undefined
-                }
-              />
-            )}
-          </div>
+          {!hasImages && isEditMode ? (
+            <MediaUploader
+              accept={IMAGE_STORAGE_ACCEPT}
+              multiple
+              title={null}
+              showCount={false}
+              pickerLabel="画像をアップロード"
+              pickerDescription="クリックまたはドラッグ＆ドロップで画像を追加できます"
+              emptyIcon={<ImageIcon />}
+              disabled={isDisabled}
+              onFilesSelected={addImages}
+            />
+          ) : (
+            <MediaGallery
+              items={galleryItems}
+              activeIndex={mainImageIndex}
+              onActiveIndexChange={setMainImageIndex}
+              editable={isEditMode}
+              deleteDisabled={isDisabled}
+              mainVariant="viewer"
+              mainFit="contain"
+              thumbnailFit="cover"
+              emptyIcon={<ImageIcon />}
+              emptyText="画像はありません"
+              onDelete={
+                isEditMode
+                  ? (_item, index) => {
+                      handleRemoveImageAt(index);
+                    }
+                  : undefined
+              }
+            />
+          )}
 
           <div className="card__field">
             <Label htmlFor="sales-input-title">

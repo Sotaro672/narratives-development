@@ -57,6 +57,19 @@ export const CardHeaderLeft = React.forwardRef<HTMLDivElement, CardHeaderLeftPro
 );
 CardHeaderLeft.displayName = "CardHeaderLeft";
 
+export type CardHeaderActionsProps = React.HTMLAttributes<HTMLDivElement>;
+
+export const CardHeaderActions = React.forwardRef<HTMLDivElement, CardHeaderActionsProps>(
+  ({ className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn("card__header-actions", className)}
+      {...props}
+    />
+  ),
+);
+CardHeaderActions.displayName = "CardHeaderActions";
+
 export type CardHeaderIconProps = React.HTMLAttributes<HTMLDivElement> & {
   variant?: "default" | "primary";
 };

@@ -12,6 +12,7 @@ import {
   CardButton,
   CardContent,
   CardHeader,
+  CardHeaderActions,
   CardHeaderIcon,
   CardHeaderLeft,
   CardTitle,
@@ -72,10 +73,10 @@ export default function TokenContentsCard({
   };
 
   return (
-    <Card elevated largeRadius>
+    <Card>
       <CardHeader>
         <CardHeaderLeft>
-          <CardHeaderIcon variant="primary">
+          <CardHeaderIcon>
             <FileText className="card__header-icon-svg" />
           </CardHeaderIcon>
 
@@ -85,30 +86,32 @@ export default function TokenContentsCard({
         </CardHeaderLeft>
 
         {isEditMode && hasItems ? (
-          <MediaUploader
-            accept={IMAGE_STORAGE_ACCEPT}
-            multiple
-            title={null}
-            showCount={false}
-            showPicker={false}
-            disabled={!onFilesSelected}
-            className="token-contents-card__uploader"
-            renderEmpty={({ openPicker, disabled }) => (
-              <CardButton
-                variant="primary"
-                disabled={disabled}
-                onClick={openPicker}
-              >
-                <Upload className="card__button-icon" />
-                ファイル追加
-              </CardButton>
-            )}
-            onFilesSelected={handleFilesSelected}
-          />
+          <CardHeaderActions>
+            <MediaUploader
+              accept={IMAGE_STORAGE_ACCEPT}
+              multiple
+              title={null}
+              showCount={false}
+              showPicker={false}
+              disabled={!onFilesSelected}
+              className="card__header-uploader"
+              renderEmpty={({ openPicker, disabled }) => (
+                <CardButton
+                  variant="primary"
+                  disabled={disabled}
+                  onClick={openPicker}
+                >
+                  <Upload className="card__button-icon" />
+                  ファイル追加
+                </CardButton>
+              )}
+              onFilesSelected={handleFilesSelected}
+            />
+          </CardHeaderActions>
         ) : null}
       </CardHeader>
 
-      <CardContent size="large">
+      <CardContent>
         {!hasItems && isEditMode ? (
           <MediaUploader
             accept={IMAGE_STORAGE_ACCEPT}
@@ -118,7 +121,6 @@ export default function TokenContentsCard({
             pickerLabel="メディアをアップロード"
             pickerDescription="クリックまたはドラッグ＆ドロップでファイルを追加できます"
             disabled={!onFilesSelected}
-            className="token-contents-card__empty-uploader"
             onFilesSelected={handleFilesSelected}
           />
         ) : (
