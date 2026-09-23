@@ -1,10 +1,15 @@
-// frontend/shell/src/shared/ui/refresh.tsx
+// frontend/console/shell/src/shared/ui/refresh.tsx
+
 import { RotateCw } from "lucide-react";
+
+import { Button } from "./button";
+
+import "./refresh.css";
 
 type RefreshButtonProps = {
   /** クリック時ハンドラ */
   onClick?: () => void;
-  /** ローディング中はスピン（.lp-rotate を想定）＆ボタン無効化 */
+  /** ローディング中は回転表示し、ボタンを無効化 */
   loading?: boolean;
   /** 強制的に無効化したい場合 */
   disabled?: boolean;
@@ -12,7 +17,7 @@ type RefreshButtonProps = {
   title?: string;
   /** アクセシビリティ用ラベル */
   ariaLabel?: string;
-  /** 既存の .lp-icon-btn を前提に任意クラスを追加可能 */
+  /** 任意クラス */
   className?: string;
   /** アイコンサイズ（既定 18） */
   size?: number;
@@ -28,19 +33,22 @@ export default function RefreshButton({
   size = 18,
 }: RefreshButtonProps) {
   return (
-    <button
+    <Button
       type="button"
-      className={`lp-icon-btn ${className}`}
+      variant="outline"
+      size="icon"
+      className={className}
       aria-label={ariaLabel}
       title={title}
       onClick={onClick}
       disabled={disabled || loading}
+      aria-busy={loading}
     >
       <RotateCw
         size={size}
-        className={loading ? "lp-rotate" : ""}
-        aria-hidden
+        className={loading ? "refresh-button__icon--loading" : ""}
+        aria-hidden="true"
       />
-    </button>
+    </Button>
   );
 }

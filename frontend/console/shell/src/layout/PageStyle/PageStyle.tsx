@@ -595,9 +595,11 @@ export default function PageStyle({
     return (
       <div className={rootClass}>
         {header}
+
         <div className="page-container">
           <div className="content-grid">
             <div>{left}</div>
+
             <div className={stickyAside ? "sticky-aside" : undefined}>
               {right}
             </div>
