@@ -1,5 +1,6 @@
 // frontend/console/shell/src/features/list/presentation/components/ListStatusHeaderActions.tsx
 
+import { Button } from "../../../../shared/ui/button";
 import type { ListStatus } from "../../../../shared/types/list";
 
 type ListStatusHeaderActionsProps = {
@@ -20,31 +21,25 @@ export default function ListStatusHeaderActions({
 
   return (
     <>
-      <button
-        type="button"
-        className={[
-          "page-header__btn",
-          status === "listing" ? "page-header__btn--active" : "",
-        ].filter(Boolean).join(" ")}
+      <Button
+        variant={status === "listing" ? "default" : "outline"}
+        size="sm"
         onClick={() => handleChange("listing")}
         disabled={disabled}
         aria-pressed={status === "listing"}
       >
         出品
-      </button>
+      </Button>
 
-      <button
-        type="button"
-        className={[
-          "page-header__btn",
-          status === "suspended" ? "page-header__btn--active" : "",
-        ].filter(Boolean).join(" ")}
+      <Button
+        variant={status === "suspended" ? "default" : "outline"}
+        size="sm"
         onClick={() => handleChange("suspended")}
         disabled={disabled}
         aria-pressed={status === "suspended"}
       >
         保留
-      </button>
+      </Button>
     </>
   );
 }

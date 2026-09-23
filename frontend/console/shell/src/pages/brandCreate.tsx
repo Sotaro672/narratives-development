@@ -107,13 +107,11 @@ export default function BrandCreate() {
               items={brandBackgroundItems}
               accept={brandImageAccept}
               variant="single"
-              pickerVariant="button"
               title={null}
               showCount={false}
+              showPicker={false}
               showFileNames={false}
               previewFramed={false}
-              pickerLabel="背景画像をアップロード"
-              replaceLabel="背景画像を変更"
               disabled={saving}
               className="brand-hero__background-uploader"
               renderPreview={(item, { openPicker }) => (
@@ -137,9 +135,7 @@ export default function BrandCreate() {
                   bordered={false}
                   emptyText="背景画像を選択"
                   emptyDescription={
-                    saving
-                      ? undefined
-                      : "クリックして背景画像を選択できます"
+                    saving ? undefined : "クリックして背景画像を選択できます"
                   }
                   onActivate={saving ? undefined : openPicker}
                   disabled={saving}
@@ -165,13 +161,11 @@ export default function BrandCreate() {
                   items={brandIconItems}
                   accept={brandImageAccept}
                   variant="single"
-                  pickerVariant="button"
                   title={null}
                   showCount={false}
+                  showPicker={false}
                   showFileNames={false}
                   previewFramed={false}
-                  pickerLabel="アイコンをアップロード"
-                  replaceLabel="アイコンを変更"
                   disabled={saving}
                   className="brand-hero__avatar-uploader"
                   renderPreview={(_item, { openPicker }) =>
@@ -248,7 +242,6 @@ export default function BrandCreate() {
 
         <CardContent>
           <CardLabel htmlFor="name">ブランド名（必須）</CardLabel>
-
           <CardInput
             id="name"
             placeholder="ブランド名"
@@ -268,7 +261,6 @@ export default function BrandCreate() {
           )}
 
           <CardLabel htmlFor="description">説明</CardLabel>
-
           <Textarea
             id="description"
             value={description}
@@ -279,7 +271,6 @@ export default function BrandCreate() {
           />
 
           <CardLabel htmlFor="websiteUrl">WebサイトURL</CardLabel>
-
           <CardInput
             id="websiteUrl"
             placeholder="https://example.com"
