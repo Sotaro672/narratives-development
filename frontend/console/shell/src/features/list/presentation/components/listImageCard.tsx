@@ -1,7 +1,7 @@
 // frontend/console/list/src/presentation/components/listImageCard.tsx
 // 商品画像カード（表示はshared/ui/media、ロジックはhookに委譲）
 
-import { Image as ImageIcon, Plus, X } from "lucide-react";
+import { Image as ImageIcon, Plus } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import { Button } from "../../../../shared/ui/button";
@@ -13,6 +13,7 @@ import {
   CardHeaderLeft,
   CardTitle,
 } from "../../../../shared/ui/card";
+import DeleteButton from "../../../../shared/ui/delete";
 import { Media } from "../../../../shared/ui/media";
 
 import { useListImageCard } from "../hook/useListImageCard";
@@ -47,9 +48,7 @@ export default function ListImageCard(props: ListImageCardProps) {
             <ImageIcon className="card__header-icon-svg" />
           </CardHeaderIcon>
 
-          <CardTitle strong>
-            商品画像
-          </CardTitle>
+          <CardTitle strong>商品画像</CardTitle>
         </CardHeaderLeft>
 
         {props.isEdit && vm.effectiveImageUrls.length > 0 && (
@@ -88,11 +87,7 @@ export default function ListImageCard(props: ListImageCardProps) {
                 ? "クリックで選択（複数可）"
                 : "編集モードで追加できます"
             }
-            onActivate={
-              props.isEdit
-                ? vm.openPicker
-                : undefined
-            }
+            onActivate={props.isEdit ? vm.openPicker : undefined}
           />
         )}
 
@@ -106,29 +101,20 @@ export default function ListImageCard(props: ListImageCardProps) {
                 variant="landscape"
                 fit="cover"
                 bordered={false}
-                onActivate={
-                  props.isEdit
-                    ? vm.openPicker
-                    : undefined
-                }
+                onActivate={props.isEdit ? vm.openPicker : undefined}
               />
 
               {props.isEdit && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
+                <DeleteButton
+                  size="md"
                   className="lic__remove-btn"
+                  ariaLabel="メイン画像を削除"
+                  disabled={Boolean(props.saving)}
                   onClick={(event) => {
                     event.stopPropagation();
                     vm.handleRemoveAt(props.mainImageIndex);
                   }}
-                  aria-label="メイン画像を削除"
-                  title="削除"
-                  disabled={Boolean(props.saving)}
-                >
-                  <X aria-hidden="true" />
-                </Button>
+                />
               )}
 
               <div className="lic__footer">
@@ -167,21 +153,16 @@ export default function ListImageCard(props: ListImageCardProps) {
                     />
 
                     {props.isEdit && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="icon"
+                      <DeleteButton
+                        size="sm"
                         className="lic__thumb-remove"
+                        ariaLabel={`商品画像 ${idx + 1} を削除`}
+                        disabled={Boolean(props.saving)}
                         onClick={(event) => {
                           event.stopPropagation();
                           vm.handleRemoveAt(idx);
                         }}
-                        aria-label={`商品画像 ${idx + 1} を削除`}
-                        title="削除"
-                        disabled={Boolean(props.saving)}
-                      >
-                        <X aria-hidden="true" />
-                      </Button>
+                      />
                     )}
                   </div>
                 );

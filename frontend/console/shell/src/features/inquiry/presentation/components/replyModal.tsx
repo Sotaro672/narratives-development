@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import DeleteButton from "../../../../shared/ui/delete";
 import { ErrorMessage } from "../../../../shared/ui/error";
 import { Label } from "../../../../shared/ui/label";
 import {
@@ -156,15 +157,12 @@ export default function ReplyModal({
                   className="inq-reply-modal__preview-image"
                 />
 
-                <button
-                  type="button"
-                  className="inq-reply-modal__preview-remove"
+                <DeleteButton
+                  size="sm"
                   disabled={submitting}
+                  ariaLabel={`${image.file.name}を削除`}
                   onClick={() => onRemoveImage(image.id)}
-                  aria-label={`${image.file.name}を削除`}
-                >
-                  ×
-                </button>
+                />
               </div>
             ))}
           </div>
