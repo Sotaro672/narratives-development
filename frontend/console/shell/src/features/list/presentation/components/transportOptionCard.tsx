@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../../../../shared/ui/card";
+import Stack from "../../../../shared/ui/stack";
 
 import "../../../../styles/transportation.css";
 
@@ -23,20 +24,11 @@ export type TransportOptionCardOption = {
 
 type TransportOptionCardProps = {
   options: TransportOptionCardOption[];
-
   transportationOption: TransportationOption | "";
   transportationId: string;
-
-  onSelectTransportationOption: (
-    value: string,
-  ) => void;
-
-  setTransportationId: (
-    value: string,
-  ) => void;
-
+  onSelectTransportationOption: (value: string) => void;
+  setTransportationId: (value: string) => void;
   onCreateTransportationFee: () => void;
-
   loading?: boolean;
   disabled?: boolean;
 };
@@ -148,46 +140,45 @@ export default function TransportOptionCard({
         </button>
       </CardHeader>
 
-      <CardContent className="transport-option-card__content">
-        {loading ? (
-          <div className="transport-option-card__state">
-            配送方法を読み込み中です…
-          </div>
-        ) : selectableOptions.length > 0 ? (
-          <select
-            value={selectedValue}
-            disabled={disabled}
-            onChange={(event) => handleChange(event.target.value)}
-            className="transport-option-card__select"
-          >
-            <option value="">
-              配送方法を選択してください
-            </option>
+      <CardContent>
+        <Stack gap="sm">
+          {loading ? (
+            <div className="transport-option-card__state">
+              配送方法を読み込み中です…
+            </div>
+          ) : selectableOptions.length > 0 ? (
+            <select
+              value={selectedValue}
+              disabled={disabled}
+              onChange={(event) => handleChange(event.target.value)}
+              className="transport-option-card__select"
+            >
+              <option value="">
+                配送方法を選択してください
+              </option>
 
-            {selectableOptions.map((option) => {
-              const value = buildOptionValue(option);
+              {selectableOptions.map((option) => {
+                const value = buildOptionValue(option);
 
-              return (
-                <option
-                  key={value}
-                  value={value}
-                >
-                  {option.name}
-                </option>
-              );
-            })}
-          </select>
-        ) : (
-          <div className="transport-option-card__state">
-            選択可能な配送方法がありません。
-          </div>
-        )}
+                return (
+                  <option key={value} value={value}>
+                    {option.name}
+                  </option>
+                );
+              })}
+            </select>
+          ) : (
+            <div className="transport-option-card__state">
+              選択可能な配送方法がありません。
+            </div>
+          )}
 
-        {transportationOption === "custom" && transportationId && (
-          <div className="transport-option-card__note">
-            自社配送料金設定を使用します。
-          </div>
-        )}
+          {transportationOption === "custom" && transportationId && (
+            <div className="transport-option-card__note">
+              自社配送料金設定を使用します。
+            </div>
+          )}
+        </Stack>
       </CardContent>
     </Card>
   );

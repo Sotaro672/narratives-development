@@ -4,12 +4,6 @@
  * Product Blueprint Field
  * ======================================================= */
 
-.product-blueprint-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
 .product-blueprint-field__trigger {
   width: 100%;
   justify-content: space-between;

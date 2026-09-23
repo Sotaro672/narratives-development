@@ -14,6 +14,7 @@ import IconCropper from "../shared/ui/icon-cropper";
 import EntityIcon from "../shared/ui/icon";
 import { Media } from "../shared/ui/media";
 import MediaUploader from "../shared/ui/mediaUploader";
+import Stack from "../shared/ui/stack";
 import Textarea from "../shared/ui/textarea";
 
 import { AdminCard } from "../features/admin/presentation/components/AdminCard";
@@ -102,7 +103,7 @@ export default function BrandCreate() {
     <div className="page-column">
       <Card>
         <CardContent>
-          <div className="brand-hero">
+          <Stack gap="md">
             <MediaUploader
               items={brandBackgroundItems}
               accept={brandImageAccept}
@@ -231,7 +232,7 @@ export default function BrandCreate() {
                 <div className="brand-hero__sub">{displayWebsiteUrl}</div>
               </div>
             </div>
-          </div>
+          </Stack>
         </CardContent>
       </Card>
 

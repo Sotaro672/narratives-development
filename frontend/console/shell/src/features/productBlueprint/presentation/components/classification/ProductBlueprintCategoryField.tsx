@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
+import Stack from "../../../../../shared/ui/stack";
 import { Text } from "../../../../../shared/ui/text";
 
 import { APPAREL_CATEGORY_OPTIONS } from "../../../../../shared/types/apparel";
@@ -84,9 +85,7 @@ function findCategoryByPath(
     return null;
   }
 
-  return (
-    options.find((option) => isSameCategoryPath(option, path)) ?? null
-  );
+  return options.find((option) => isSameCategoryPath(option, path)) ?? null;
 }
 
 function buildParentCategoryOptions(
@@ -305,7 +304,7 @@ const ProductBlueprintCategoryField: React.FC<
   );
 
   return (
-    <div className="product-blueprint-field">
+    <Stack gap="xs">
       <div className="product-blueprint-category-field__grid">
         <CardField>
           <Label htmlFor="product-blueprint-category">
@@ -472,7 +471,7 @@ const ProductBlueprintCategoryField: React.FC<
           商品カテゴリ一覧の取得に失敗しました。
         </ErrorMessage>
       )}
-    </div>
+    </Stack>
   );
 };
 

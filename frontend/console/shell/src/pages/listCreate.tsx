@@ -6,6 +6,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
 import { Select } from "../shared/ui/select";
+import Stack from "../shared/ui/stack";
 import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
@@ -116,7 +117,6 @@ export default function InventoryListCreate() {
         onCreate={onCreate}
         isSaving={saving}
       >
-        {/* 左カラム */}
         <div className="page-column">
           <ListImageCard
             isEdit={true}
@@ -130,34 +130,38 @@ export default function InventoryListCreate() {
           />
 
           <Card>
-            <CardContent className="list-create__card-content list-create__card-content--stack">
-              <Text as="div" size="sm" weight="medium">
-                タイトル
-              </Text>
+            <CardContent className="list-create__card-content">
+              <Stack gap="sm">
+                <Text as="div" size="sm" weight="medium">
+                  タイトル
+                </Text>
 
-              <input
-                value={listingTitle}
-                onChange={(event) => setListingTitle(event.target.value)}
-                placeholder="例: Narratives シャツ1（赤 / S・M）"
-                className="list-create__title-input"
-                disabled={saving}
-              />
+                <input
+                  value={listingTitle}
+                  onChange={(event) => setListingTitle(event.target.value)}
+                  placeholder="例: Narratives シャツ1（赤 / S・M）"
+                  className="list-create__title-input"
+                  disabled={saving}
+                />
+              </Stack>
             </CardContent>
           </Card>
 
           <Card>
-            <CardContent className="list-create__card-content list-create__card-content--stack">
-              <Text as="div" size="sm" weight="medium">
-                説明
-              </Text>
+            <CardContent className="list-create__card-content">
+              <Stack gap="sm">
+                <Text as="div" size="sm" weight="medium">
+                  説明
+                </Text>
 
-              <Textarea
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder="商品の状態、サイズ感、注意事項などを入力してください。"
-                rows={5}
-                disabled={saving}
-              />
+                <Textarea
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="商品の状態、サイズ感、注意事項などを入力してください。"
+                  rows={5}
+                  disabled={saving}
+                />
+              </Stack>
             </CardContent>
           </Card>
 
@@ -182,7 +186,6 @@ export default function InventoryListCreate() {
           )}
         </div>
 
-        {/* 右カラム */}
         <div className="page-column">
           {loadingDTO && (
             <Text as="div" size="sm" tone="muted">

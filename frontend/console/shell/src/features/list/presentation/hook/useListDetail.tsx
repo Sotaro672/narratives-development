@@ -76,7 +76,7 @@ export type UseListDetailResult = {
   totalSalesAmount: number;
 
   imageUrls: string[];
-  onAddImages: (files: FileList | null) => void;
+  onAddImages: (files: File[]) => void;
   onRemoveImageAt: (index: number) => void;
   onClearImages: () => void;
   mainImageIndex: number;

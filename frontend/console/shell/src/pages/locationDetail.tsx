@@ -9,6 +9,7 @@ import { useLocationDetail } from "../features/company/presentation/hook/useLoca
 import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
+import Stack from "../shared/ui/stack";
 import { safeDateTimeLabelJa } from "../shared/util/dateJa";
 
 import "../styles/location.css";
@@ -52,7 +53,7 @@ export default function LocationDetail() {
     : "";
 
   const left = (
-    <div className="location-detail__main">
+    <Stack gap="lg">
       {vm.loading ? (
         <div className="location-detail__state">
           在庫保管場所を読み込んでいます...
@@ -98,7 +99,7 @@ export default function LocationDetail() {
           在庫保管場所を表示できませんでした。
         </div>
       )}
-    </div>
+    </Stack>
   );
 
   const right = (

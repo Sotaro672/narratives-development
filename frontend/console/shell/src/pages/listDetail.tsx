@@ -5,6 +5,7 @@ import PageStyle from "../layout/PageStyle/PageStyle";
 import { Card, CardContent } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
 import { Input } from "../shared/ui/input";
+import Stack from "../shared/ui/stack";
 import Text from "../shared/ui/text";
 import Textarea from "../shared/ui/textarea";
 
@@ -133,48 +134,57 @@ export default function ListDetail() {
 
           <Card>
             <CardContent className="list-detail__card-content">
-              <Text as="div" size="sm" weight="medium">
-                タイトル
-              </Text>
-
-              {!isEdit && (
-                <Text as="div" size="sm" wrap="anywhere">
-                  {vm.listingTitle || "未設定"}
+              <Stack gap="sm">
+                <Text as="div" size="sm" weight="medium">
+                  タイトル
                 </Text>
-              )}
 
-              {isEdit && (
-                <Input
-                  value={vm.draftListingTitle}
-                  placeholder="タイトルを入力"
-                  onChange={(e) => vm.setDraftListingTitle(e.target.value)}
-                  disabled={vm.saving || vm.deleting}
-                />
-              )}
+                {!isEdit && (
+                  <Text as="div" size="sm" wrap="anywhere">
+                    {vm.listingTitle || "未設定"}
+                  </Text>
+                )}
+
+                {isEdit && (
+                  <Input
+                    value={vm.draftListingTitle}
+                    placeholder="タイトルを入力"
+                    onChange={(e) => vm.setDraftListingTitle(e.target.value)}
+                    disabled={vm.saving || vm.deleting}
+                  />
+                )}
+              </Stack>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="list-detail__card-content">
-              <Text as="div" size="sm" weight="medium">
-                説明
-              </Text>
-
-              {!isEdit && (
-                <Text as="div" size="sm" wrap="pre-wrap" className="text--wrap-anywhere">
-                  {vm.description || "未設定"}
+              <Stack gap="sm">
+                <Text as="div" size="sm" weight="medium">
+                  説明
                 </Text>
-              )}
 
-              {isEdit && (
-                <Textarea
-                  value={vm.draftDescription}
-                  placeholder="説明を入力"
-                  onChange={(e) => vm.setDraftDescription(e.target.value)}
-                  className="list-detail__description-input"
-                  disabled={vm.saving || vm.deleting}
-                />
-              )}
+                {!isEdit && (
+                  <Text
+                    as="div"
+                    size="sm"
+                    wrap="pre-wrap"
+                    className="text--wrap-anywhere"
+                  >
+                    {vm.description || "未設定"}
+                  </Text>
+                )}
+
+                {isEdit && (
+                  <Textarea
+                    value={vm.draftDescription}
+                    placeholder="説明を入力"
+                    onChange={(e) => vm.setDraftDescription(e.target.value)}
+                    className="list-detail__description-input"
+                    disabled={vm.saving || vm.deleting}
+                  />
+                )}
+              </Stack>
             </CardContent>
           </Card>
 

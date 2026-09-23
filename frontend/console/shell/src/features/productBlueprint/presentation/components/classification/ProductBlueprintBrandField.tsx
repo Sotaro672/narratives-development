@@ -12,6 +12,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../../../shared/ui/popover";
+import Stack from "../../../../../shared/ui/stack";
 import { Text } from "../../../../../shared/ui/text";
 
 import "../../../../../styles/productBlueprint.css";
@@ -55,7 +56,7 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
       <Label>ブランド</Label>
 
       {isEdit && brandOptions && onChangeBrandId ? (
-        <div className="product-blueprint-field">
+        <Stack gap="xs">
           <Popover>
             <PopoverTrigger>
               <Button
@@ -106,7 +107,7 @@ const ProductBlueprintBrandField: React.FC<ProductBlueprintBrandFieldProps> = ({
               ブランド一覧の取得に失敗しました。
             </ErrorMessage>
           )}
-        </div>
+        </Stack>
       ) : (
         <Input
           value={displayBrandName}

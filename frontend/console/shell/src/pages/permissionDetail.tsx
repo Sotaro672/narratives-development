@@ -10,6 +10,7 @@ import {
   CardReadonly,
 } from "../shared/ui/card";
 import { ErrorMessage } from "../shared/ui/error";
+import Stack from "../shared/ui/stack";
 
 import { usePermissionDetail } from "../features/permission/presentation/hook/usePermissionDetail";
 
@@ -56,7 +57,7 @@ export default function PermissionDetail() {
 
   return (
     <PageStyle layout="single" title={title} onBack={handleBack}>
-      <div className="permission-detail">
+      <Stack gap="md" className="permission-detail">
         <Card>
           <CardHeader>
             <CardTitle>基本情報</CardTitle>
@@ -78,7 +79,7 @@ export default function PermissionDetail() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </Stack>
     </PageStyle>
   );
 }

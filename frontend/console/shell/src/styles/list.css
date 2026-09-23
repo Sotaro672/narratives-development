@@ -8,12 +8,6 @@
   padding: 1rem;
 }
 
-.list-create__card-content--stack {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
 .list-create__label--spaced {
   margin-bottom: 0.5rem;
 }
@@ -121,9 +115,6 @@
  * ======================================================= */
 
 .list-detail__card-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
   padding: 1rem;
 }
 
