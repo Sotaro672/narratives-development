@@ -6,7 +6,6 @@ import MediaUploader from "../../../../shared/ui/mediaUploader";
 import {
   Modal,
   ModalButton,
-  ModalCloseButton,
 } from "../../../../shared/ui/modal";
 import Stack from "../../../../shared/ui/stack";
 import Text from "../../../../shared/ui/text";
@@ -68,25 +67,16 @@ export default function ReplyModal({
       ariaBusy={submitting}
       panelClassName="inq-reply-modal__panel"
       footer={
-        <>
-          <ModalCloseButton
-            onClick={onClose}
-            disabled={submitting}
-          >
-            キャンセル
-          </ModalCloseButton>
-
-          <ModalButton
-            variant="primary"
-            disabled={
-              submitting ||
-              (!content.trim() && images.length === 0)
-            }
-            onClick={onSubmit}
-          >
-            {submitting ? "送信中" : "送信"}
-          </ModalButton>
-        </>
+        <ModalButton
+          variant="primary"
+          disabled={
+            submitting ||
+            (!content.trim() && images.length === 0)
+          }
+          onClick={onSubmit}
+        >
+          {submitting ? "送信中" : "送信"}
+        </ModalButton>
       }
     >
       {errorMessage ? (
@@ -131,9 +121,7 @@ export default function ReplyModal({
         mediaFit="cover"
         title="添付画像"
         pickerLabel="画像を選択"
-        pickerDescription={
-          `JPG / PNG / WebP / GIF、1枚 ${MAX_REPLY_IMAGE_SIZE_MB}MBまで`
-        }
+        pickerDescription={`JPG / PNG / WebP / GIF、1枚 ${MAX_REPLY_IMAGE_SIZE_MB}MBまで`}
         disabled={submitting}
         showCount
         showFileNames={false}
