@@ -7,8 +7,8 @@
   gap: 0.75rem;
 }
 
-.announcement-input-card__file-input {
-  display: none;
+.announcement-input-card__uploader {
+  margin-top: 0.5rem;
 }
 
 .announcement-input-card__image-panel {
