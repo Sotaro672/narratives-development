@@ -1,15 +1,13 @@
 // frontend/console/shell/src/features/tokenBlueprint/presentation/components/tokenBlueprintCard.tsx
 
 import * as React from "react";
-import { Link2, Upload, X } from "lucide-react";
+import { Link2 } from "lucide-react";
 
 import { IMAGE_STORAGE_ACCEPT } from "../../../../shared/storage/imageStoragePolicy";
 import type { IconCropPosition } from "../../../../shared/types/iconCrop";
-import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardBadge,
-  CardButton,
   CardContent,
   CardField,
   CardFields,
@@ -26,6 +24,7 @@ import {
 } from "../../../../shared/ui/card";
 import IconCropper from "../../../../shared/ui/icon-cropper";
 import EntityIcon from "../../../../shared/ui/icon";
+import MediaUploader from "../../../../shared/ui/mediaUploader";
 import {
   Popover,
   PopoverContent,
@@ -41,18 +40,10 @@ export type TokenBlueprintCardViewModel = {
   brandName: string;
   description: string;
   iconUrl?: string;
-
-  // mint済みの場合に、トークン名・シンボル・ブランドを編集不可にするための判定値。
   minted: boolean;
-
-  // UIで選択されたアイコンファイル。
   iconFile?: File | null;
-
-  // アイコン画像の切り抜き状態。
   iconCropPosition: IconCropPosition;
   iconCropScale: number;
-
-  // UI state
   isEditMode: boolean;
   brandOptions: {
     id: string;
@@ -65,16 +56,11 @@ export type TokenBlueprintCardHandlers = {
   onChangeSymbol?: (value: string) => void;
   onChangeBrand?: (id: string, name: string) => void;
   onChangeDescription?: (value: string) => void;
-
   descriptionRef?: React.RefObject<HTMLTextAreaElement>;
-  iconInputRef?: React.RefObject<HTMLInputElement>;
-  onRequestPickIconFile?: () => void;
-  onIconInputChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
-
+  onIconFilesSelected?: (files: File[]) => void;
   onIconCropPositionChange?: (position: IconCropPosition) => void;
   onIconCropScaleChange?: (scale: number) => void;
   onIconCropViewportSizeChange?: (size: number) => void;
-
   onClearLocalIconFile?: () => void;
   onToggleEditMode?: () => void;
   setEditMode?: (edit: boolean) => void;
@@ -88,19 +74,29 @@ export default function TokenBlueprintCard({
   vm: TokenBlueprintCardViewModel;
   handlers?: TokenBlueprintCardHandlers;
 }) {
-  /**
-   * tokenIconの選択・アップロード操作は、
-   * mintedの状態にかかわらずeditモードでのみ許可する。
-   */
   const canEditIcon = vm.isEditMode;
-
-  /**
-   * mint済みトークンでは、editモードへ移行しても
-   * トークン名・シンボル・ブランドを変更不可にする。
-   */
   const isIdentityLocked = Boolean(vm.isEditMode && vm.minted);
   const selectedIconFile = vm.iconFile ?? null;
-  const isCroppingIcon = Boolean(canEditIcon && selectedIconFile && vm.iconUrl);
+  const isCroppingIcon = Boolean(
+    canEditIcon && selectedIconFile && vm.iconUrl,
+  );
+
+  const iconItems = vm.iconUrl
+    ? [
+        {
+          id: "token-blueprint-icon",
+          src: vm.iconUrl,
+          name: selectedIconFile
+            ? `選択中：${selectedIconFile.name}（${Math.round(
+                selectedIconFile.size / 1024,
+              )}KB）`
+            : undefined,
+          alt: "トークンアイコン",
+          type: "image" as const,
+          contentType: selectedIconFile?.type,
+        },
+      ]
+    : [];
 
   return (
     <Card elevated largeRadius>
@@ -122,26 +118,52 @@ export default function TokenBlueprintCard({
 
       <CardContent size="large">
         <div className="token-blueprint-card__top">
-          <div className="token-blueprint-card__icon-area">
-            {isCroppingIcon ? (
-              <IconCropper
-                src={vm.iconUrl ?? ""}
-                position={vm.iconCropPosition}
-                scale={vm.iconCropScale}
-                onPositionChange={(position) => {
-                  handlers.onIconCropPositionChange?.(position);
-                }}
-                onScaleChange={(scale) => {
-                  handlers.onIconCropScaleChange?.(scale);
-                }}
-                onViewportSizeChange={(size) => {
-                  handlers.onIconCropViewportSizeChange?.(size);
-                }}
-                alt="トークンアイコンの切り抜きプレビュー"
-              />
-            ) : (
+          <MediaUploader
+            items={iconItems}
+            accept={IMAGE_STORAGE_ACCEPT}
+            variant="single"
+            pickerVariant="button"
+            title={null}
+            showCount={false}
+            showFileNames={Boolean(selectedIconFile)}
+            showPicker={canEditIcon}
+            showRemoveButton={Boolean(selectedIconFile)}
+            previewFramed={false}
+            pickerLabel="アップロード"
+            replaceLabel="アイコンを変更"
+            className="token-blueprint-card__icon-area"
+            disabled={!canEditIcon}
+            renderPreview={(_item, { openPicker }) =>
+              isCroppingIcon ? (
+                <IconCropper
+                  src={vm.iconUrl ?? ""}
+                  position={vm.iconCropPosition}
+                  scale={vm.iconCropScale}
+                  onPositionChange={(position) => {
+                    handlers.onIconCropPositionChange?.(position);
+                  }}
+                  onScaleChange={(scale) => {
+                    handlers.onIconCropScaleChange?.(scale);
+                  }}
+                  onViewportSizeChange={(size) => {
+                    handlers.onIconCropViewportSizeChange?.(size);
+                  }}
+                  alt="トークンアイコンの切り抜きプレビュー"
+                />
+              ) : (
+                <EntityIcon
+                  src={vm.iconUrl}
+                  name={vm.name}
+                  alt="トークンアイコン"
+                  size="fluid"
+                  variant="upload"
+                  fallback="アイコン未設定"
+                  onClick={canEditIcon ? openPicker : undefined}
+                />
+              )
+            }
+            renderEmpty={({ openPicker }) => (
               <EntityIcon
-                src={vm.iconUrl}
                 name={vm.name}
                 alt="トークンアイコン"
                 size="fluid"
@@ -157,64 +179,16 @@ export default function TokenBlueprintCard({
                     "アイコン未設定"
                   )
                 }
-                onClick={
-                  canEditIcon
-                    ? () => {
-                        handlers.onRequestPickIconFile?.();
-                      }
-                    : undefined
-                }
+                onClick={canEditIcon ? openPicker : undefined}
               />
             )}
-
-            {canEditIcon ? (
-              <>
-                <input
-                  ref={handlers.iconInputRef ?? undefined}
-                  type="file"
-                  accept={IMAGE_STORAGE_ACCEPT}
-                  hidden
-                  onChange={handlers.onIconInputChange}
-                />
-
-                <CardButton
-                  variant="primary"
-                  className="token-blueprint-card__upload-btn"
-                  onClick={() => {
-                    handlers.onRequestPickIconFile?.();
-                  }}
-                >
-                  <Upload className="card__button-icon" />
-                  アップロード
-                </CardButton>
-              </>
-            ) : null}
-
-            {canEditIcon && selectedIconFile ? (
-              <div className="token-blueprint-card__icon-selected">
-                <span>
-                  選択中：{selectedIconFile.name}（
-                  {Math.round(selectedIconFile.size / 1024)}
-                  KB）
-                </span>
-
-                {handlers.onClearLocalIconFile ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      handlers.onClearLocalIconFile?.();
-                    }}
-                    aria-label="選択したアイコンを取り消す"
-                    title="選択を取り消す"
-                  >
-                    <X aria-hidden="true" />
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
+            onFilesSelected={(files) => {
+              handlers.onIconFilesSelected?.(files);
+            }}
+            onRemove={() => {
+              handlers.onClearLocalIconFile?.();
+            }}
+          />
 
           <CardFields>
             <CardField>
@@ -288,7 +262,11 @@ export default function TokenBlueprintCard({
                       <CardInput
                         sizeVariant="large"
                         readOnly
-                        value={vm.brandName || vm.brandId || "ブランド未設定"}
+                        value={
+                          vm.brandName ||
+                          vm.brandId ||
+                          "ブランド未設定"
+                        }
                       />
                     </CardSelectWrap>
                   </PopoverTrigger>
@@ -309,10 +287,15 @@ export default function TokenBlueprintCard({
                             type="button"
                             className={
                               "popover__item" +
-                              (brand.id === vm.brandId ? " is-active" : "")
+                              (brand.id === vm.brandId
+                                ? " is-active"
+                                : "")
                             }
                             onClick={() => {
-                              handlers.onChangeBrand?.(brand.id, brand.name);
+                              handlers.onChangeBrand?.(
+                                brand.id,
+                                brand.name,
+                              );
                             }}
                           >
                             {brand.name}

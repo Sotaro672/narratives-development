@@ -55,16 +55,27 @@ export function useTokenBlueprintCard(params: {
   const [id, setId] = React.useState(pickString(tokenBlueprint.id));
   const [name, setName] = React.useState(pickString(tokenBlueprint.name));
   const [symbol, setSymbol] = React.useState(pickString(tokenBlueprint.symbol));
-  const [description, setDescription] = React.useState(pickString(tokenBlueprint.description));
+  const [description, setDescription] = React.useState(
+    pickString(tokenBlueprint.description),
+  );
   const [burnAt, setBurnAt] = React.useState(params.initialBurnAt ?? "");
-  const [minted, setMinted] = React.useState<boolean>(tokenBlueprint.minted ?? false);
-  const [remoteIconUrl, setRemoteIconUrl] = React.useState(params.initialIconUrl ?? "");
+  const [minted, setMinted] = React.useState<boolean>(
+    tokenBlueprint.minted ?? false,
+  );
+  const [remoteIconUrl, setRemoteIconUrl] = React.useState(
+    params.initialIconUrl ?? "",
+  );
   const [localPreviewUrl, setLocalPreviewUrl] = React.useState("");
-  const [selectedIconFile, setSelectedIconFile] = React.useState<File | null>(null);
-  const [iconCropPosition, setIconCropPosition] = React.useState<IconCropPosition>(INITIAL_ICON_CROP_POSITION);
-  const [iconCropScale, setIconCropScale] = React.useState(INITIAL_ICON_CROP_SCALE);
+  const [selectedIconFile, setSelectedIconFile] =
+    React.useState<File | null>(null);
+  const [iconCropPosition, setIconCropPosition] =
+    React.useState<IconCropPosition>(INITIAL_ICON_CROP_POSITION);
+  const [iconCropScale, setIconCropScale] =
+    React.useState(INITIAL_ICON_CROP_SCALE);
   const [iconCropViewportSize, setIconCropViewportSize] = React.useState(0);
-  const [isEditMode, setIsEditMode] = React.useState(params.initialEditMode ?? false);
+  const [isEditMode, setIsEditMode] = React.useState(
+    params.initialEditMode ?? false,
+  );
 
   const {
     brandId,
@@ -76,9 +87,10 @@ export function useTokenBlueprintCard(params: {
     initialBrandName: pickBrandName(tokenBlueprint),
   });
 
-  const initialRef = React.useRef<Partial<TokenBlueprint> | null>(tokenBlueprint);
+  const initialRef = React.useRef<Partial<TokenBlueprint> | null>(
+    tokenBlueprint,
+  );
   const descriptionRef = React.useRef<HTMLTextAreaElement | null>(null);
-  const iconInputRef = React.useRef<HTMLInputElement | null>(null);
   const localPreviewUrlRef = React.useRef("");
 
   const canEditIcon = Boolean(isEditMode || minted);
@@ -163,29 +175,22 @@ export function useTokenBlueprintCard(params: {
     };
   }, []);
 
-  const requestPickIconFile = React.useCallback(() => {
-    if (!canEditIcon) {
-      return;
-    }
-
-    iconInputRef.current?.click();
-  }, [canEditIcon]);
-
-  const onIconInputChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleIconFilesSelected = React.useCallback(
+    (files: File[]) => {
       if (!canEditIcon) {
-        event.target.value = "";
         return;
       }
 
-      const file = event.target.files?.[0] ?? null;
-      event.target.value = "";
+      const file = files[0] ?? null;
 
       if (!file) {
         return;
       }
 
-      const validation = validateImageForStorage(file, "tokenBlueprintIcon");
+      const validation = validateImageForStorage(
+        file,
+        "tokenBlueprintIcon",
+      );
 
       if (!validation.valid) {
         setSelectedIconFile(null);
@@ -206,35 +211,41 @@ export function useTokenBlueprintCard(params: {
     [canEditIcon, clearLocalPreview, resetIconCrop],
   );
 
-  const buildIconFileForUpload = React.useCallback(async (): Promise<File | null> => {
-    if (!selectedIconFile) {
-      return null;
-    }
+  const buildIconFileForUpload =
+    React.useCallback(async (): Promise<File | null> => {
+      if (!selectedIconFile) {
+        return null;
+      }
 
-    if (iconCropViewportSize <= 0) {
-      throw new Error("アイコン画像の切り抜き領域を取得できませんでした。画像を選択し直してください。");
-    }
+      if (iconCropViewportSize <= 0) {
+        throw new Error(
+          "アイコン画像の切り抜き領域を取得できませんでした。画像を選択し直してください。",
+        );
+      }
 
-    const croppedFile = await cropIconImage({
-      file: selectedIconFile,
-      position: iconCropPosition,
-      scale: iconCropScale,
-      viewportSize: iconCropViewportSize,
-    });
+      const croppedFile = await cropIconImage({
+        file: selectedIconFile,
+        position: iconCropPosition,
+        scale: iconCropScale,
+        viewportSize: iconCropViewportSize,
+      });
 
-    const validation = validateImageForStorage(croppedFile, "tokenBlueprintIcon");
+      const validation = validateImageForStorage(
+        croppedFile,
+        "tokenBlueprintIcon",
+      );
 
-    if (!validation.valid) {
-      throw new Error(validation.reason);
-    }
+      if (!validation.valid) {
+        throw new Error(validation.reason);
+      }
 
-    return croppedFile;
-  }, [
-    selectedIconFile,
-    iconCropPosition,
-    iconCropScale,
-    iconCropViewportSize,
-  ]);
+      return croppedFile;
+    }, [
+      selectedIconFile,
+      iconCropPosition,
+      iconCropScale,
+      iconCropViewportSize,
+    ]);
 
   const shownIconUrl = localPreviewUrl || remoteIconUrl;
 
@@ -283,10 +294,8 @@ export function useTokenBlueprintCard(params: {
       setDescription(value);
     },
 
-    iconInputRef,
     descriptionRef,
-    onRequestPickIconFile: requestPickIconFile,
-    onIconInputChange,
+    onIconFilesSelected: handleIconFilesSelected,
 
     onIconCropPositionChange: (position: IconCropPosition) => {
       setIconCropPosition(position);

@@ -12,11 +12,11 @@
 }
 
 .token-blueprint-card__icon-area {
-  display: flex;
   min-width: 0;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
+}
+
+.token-blueprint-card__icon-area .ui-media-uploader__picker-button {
+  width: 100%;
 }
 
 .token-blueprint-card__icon-area .icon-cropper {
@@ -26,27 +26,6 @@
 .token-blueprint-card__icon-area .icon-cropper__viewport {
   width: 100%;
   aspect-ratio: 1 / 1;
-}
-
-.token-blueprint-card__upload-btn {
-  width: 100%;
-}
-
-.token-blueprint-card__icon-selected {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  line-height: 1.5;
-  opacity: 0.85;
-}
-
-.token-blueprint-card__icon-selected > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .token-blueprint-card__identity-lock-message {
@@ -61,8 +40,12 @@
 /* =========================================================
  * TokenContentsCard
  * メディア本体は shared/ui/media を利用
- * ボタン本体は shared/ui/button を利用
+ * ファイル選択は shared/ui/mediaUploader を利用
  * ======================================================= */
+
+.token-contents-card__uploader {
+  width: auto;
+}
 
 .token-contents-card__viewer {
   display: grid;

@@ -22,37 +22,18 @@ import {
   CardTitle,
 } from "../../../../shared/ui/card";
 import { Media } from "../../../../shared/ui/media";
+import MediaUploader from "../../../../shared/ui/mediaUploader";
 
 type Mode = "edit" | "view";
 
 type TokenContentsCardProps = {
-  /**
-   * 表示するコンテンツ一覧。
-   * コンテンツの状態管理は親コンポーネントで行う。
-   */
   contents?: ContentFile[];
-
-  /**
-   * edit:
-   * - ファイル追加可能
-   * - コンテンツ削除可能
-   *
-   * view:
-   * - 閲覧専用
-   */
   mode?: Mode;
-
-  /**
-   * file pickerでファイルが選択されたときに呼ばれる。
-   * プレビュー生成、Firebase Storage upload、contentFiles保存は呼び出し側で行う。
-   */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
-
-  /**
-   * editモードでコンテンツを削除するときに呼ばれる。
-   * Firebase Storageやbackendへの反映は呼び出し側で行う。
-   */
-  onDelete?: (item: ContentFile, index: number) => void | Promise<void>;
+  onDelete?: (
+    item: ContentFile,
+    index: number,
+  ) => void | Promise<void>;
 };
 
 function ContentMainMedia({
@@ -138,7 +119,6 @@ export default function TokenContentsCard({
 }: TokenContentsCardProps) {
   const isEditMode = mode === "edit";
   const [index, setIndex] = React.useState(0);
-  const inputRef = React.useRef<HTMLInputElement | null>(null);
 
   const hasItems = contents.length > 0;
 
@@ -186,38 +166,8 @@ export default function TokenContentsCard({
 
     setIndex(
       (currentIndex) =>
-        (currentIndex + 1) %
-        contents.length,
+        (currentIndex + 1) % contents.length,
     );
-  };
-
-  const handleUploadClick = () => {
-    if (!isEditMode) {
-      return;
-    }
-
-    inputRef.current?.click();
-  };
-
-  const handleFilesChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ): Promise<void> => {
-    if (!isEditMode) {
-      event.target.value = "";
-      return;
-    }
-
-    const files = event.target.files
-      ? Array.from(event.target.files)
-      : [];
-
-    event.target.value = "";
-
-    if (files.length === 0 || !onFilesSelected) {
-      return;
-    }
-
-    await onFilesSelected(files);
   };
 
   const handleDelete = async (
@@ -249,26 +199,30 @@ export default function TokenContentsCard({
           </CardTitle>
         </CardHeaderLeft>
 
-        <input
-          ref={inputRef}
-          type="file"
-          accept={IMAGE_STORAGE_ACCEPT}
-          multiple
-          hidden
-          onChange={(event) => {
-            void handleFilesChange(event);
-          }}
-        />
-
-        {isEditMode && (
-          <CardButton
-            variant="primary"
-            onClick={handleUploadClick}
-          >
-            <Upload className="card__button-icon" />
-            ファイル追加
-          </CardButton>
-        )}
+        {isEditMode ? (
+          <MediaUploader
+            accept={IMAGE_STORAGE_ACCEPT}
+            multiple
+            title={null}
+            showCount={false}
+            showPicker={false}
+            disabled={!onFilesSelected}
+            className="token-contents-card__uploader"
+            renderEmpty={({ openPicker, disabled }) => (
+              <CardButton
+                variant="primary"
+                disabled={disabled}
+                onClick={openPicker}
+              >
+                <Upload className="card__button-icon" />
+                ファイル追加
+              </CardButton>
+            )}
+            onFilesSelected={(files) => {
+              void onFilesSelected?.(files);
+            }}
+          />
+        ) : null}
       </CardHeader>
 
       <CardContent size="large">
