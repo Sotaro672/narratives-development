@@ -34,8 +34,6 @@ import {
   type ResolvedListCreateParams,
 } from "../../application/listCreateService";
 
-type ImageInputRef = React.RefObject<HTMLInputElement | null>;
-
 export type ListCreateInventoryListItem = {
   id: string;
   readableId: string;
@@ -70,8 +68,7 @@ export type UseListCreateResult = {
   imagePreviewUrls: string[];
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
-  imageInputRef: ImageInputRef;
-  onAddImages: (files: FileList | null) => void;
+  onAddImages: (files: File[]) => void;
   onRemoveImageAt: (index: number) => void;
   onClearImages: () => void;
   assigneeName: string;
@@ -116,9 +113,9 @@ function dedupeFiles(previousFiles: File[], addedFiles: File[]): File[] {
 }
 
 function validateListImageFiles(
-  files: FileList | File[] | null | undefined,
+  files: File[] | null | undefined,
 ): File[] {
-  const nextFiles = Array.from(files ?? []).filter(Boolean) as File[];
+  const nextFiles = (files ?? []).filter(Boolean);
 
   for (const file of nextFiles) {
     const validation = validateImageForStorage(file, "listImage");
@@ -181,18 +178,16 @@ function useListingImages(): {
   imagePreviewUrls: string[];
   mainImageIndex: number;
   setMainImageIndex: React.Dispatch<React.SetStateAction<number>>;
-  imageInputRef: ImageInputRef;
-  onSelectImages: (files: FileList | null) => void;
+  onSelectImages: (files: File[]) => void;
   removeImageAt: (index: number) => void;
   clearImages: () => void;
 } {
   const [images, setImages] = React.useState<File[]>([]);
   const [mainImageIndex, setMainImageIndex] = React.useState(0);
   const [imagePreviewUrls, setImagePreviewUrls] = React.useState<string[]>([]);
-  const imageInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const appendImages = React.useCallback(
-    (filesLike: FileList | File[] | null) => {
+    (filesLike: File[] | null) => {
       try {
         const files = validateListImageFiles(filesLike);
 
@@ -215,7 +210,7 @@ function useListingImages(): {
   );
 
   const onSelectImages = React.useCallback(
-    (files: FileList | null) => {
+    (files: File[]) => {
       appendImages(files);
     },
     [appendImages],
@@ -223,7 +218,9 @@ function useListingImages(): {
 
   const removeImageAt = React.useCallback((index: number) => {
     setImages((previousFiles) =>
-      previousFiles.filter((_, previousIndex) => previousIndex !== index),
+      previousFiles.filter(
+        (_, previousIndex) => previousIndex !== index,
+      ),
     );
 
     setMainImageIndex((previousMainIndex) => {
@@ -279,7 +276,6 @@ function useListingImages(): {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
-    imageInputRef,
     onSelectImages,
     removeImageAt,
     clearImages,
@@ -748,7 +744,6 @@ export function useListCreate(): UseListCreateResult {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
-    imageInputRef,
     onSelectImages,
     removeImageAt,
     clearImages,
@@ -917,7 +912,6 @@ export function useListCreate(): UseListCreateResult {
     imagePreviewUrls,
     mainImageIndex,
     setMainImageIndex,
-    imageInputRef,
     onAddImages: onSelectImages,
     onRemoveImageAt: removeImageAt,
     onClearImages: clearImages,

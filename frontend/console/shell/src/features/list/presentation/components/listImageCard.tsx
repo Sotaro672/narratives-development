@@ -1,5 +1,5 @@
-// frontend/console/list/src/presentation/components/listImageCard.tsx
-// 商品画像カード（表示はshared/ui/media、ロジックはhookに委譲）
+// frontend/console/shell/src/features/list/presentation/components/listImageCard.tsx
+// 商品画像カード（表示はshared/ui/media、ファイル選択はshared/ui/mediaUploader、ロジックはhookに委譲）
 
 import { Image as ImageIcon, Plus } from "lucide-react";
 
@@ -15,6 +15,7 @@ import {
 } from "../../../../shared/ui/card";
 import DeleteButton from "../../../../shared/ui/delete";
 import { Media } from "../../../../shared/ui/media";
+import MediaUploader from "../../../../shared/ui/mediaUploader";
 
 import { useListImageCard } from "../hook/useListImageCard";
 
@@ -24,7 +25,7 @@ export type ListImageCardProps = {
   imageUrls: string[];
   mainImageIndex: number;
   setMainImageIndex: (idx: number) => void;
-  onAddImages?: (files: FileList | null) => void;
+  onAddImages?: (files: File[]) => void;
   onRemoveImageAt?: (idx: number) => void;
   onClearImages?: () => void;
 };
@@ -35,10 +36,14 @@ export default function ListImageCard(props: ListImageCardProps) {
     imageUrls: props.imageUrls,
     mainImageIndex: props.mainImageIndex,
     setMainImageIndex: props.setMainImageIndex,
-    onAddImages: props.onAddImages,
     onRemoveImageAt: props.onRemoveImageAt,
     onClearImages: props.onClearImages,
   });
+
+  const canAddImages =
+    props.isEdit &&
+    !props.saving &&
+    Boolean(props.onAddImages);
 
   return (
     <Card>
@@ -67,118 +72,147 @@ export default function ListImageCard(props: ListImageCardProps) {
       </CardHeader>
 
       <CardContent>
-        <input
-          ref={vm.imageInputRef as any}
-          type="file"
+        <MediaUploader
           accept={IMAGE_STORAGE_ACCEPT}
           multiple
-          hidden
-          onChange={vm.handleInputChange}
-        />
-
-        {!vm.hasImages && (
-          <Media
-            variant="landscape"
-            fit="cover"
-            emptyIcon={<ImageIcon />}
-            emptyText="画像を追加"
-            emptyDescription={
-              props.isEdit
-                ? "クリックで選択（複数可）"
-                : "編集モードで追加できます"
-            }
-            onActivate={props.isEdit ? vm.openPicker : undefined}
-          />
-        )}
-
-        {vm.hasImages && (
-          <>
-            <div className="lic__main">
-              <Media
-                src={vm.mainUrl}
-                type="image"
-                alt="商品メイン画像"
-                variant="landscape"
-                fit="cover"
-                bordered={false}
-                onActivate={props.isEdit ? vm.openPicker : undefined}
-              />
-
-              {props.isEdit && (
-                <DeleteButton
-                  size="md"
-                  className="lic__remove-btn"
-                  ariaLabel="メイン画像を削除"
-                  disabled={Boolean(props.saving)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    vm.handleRemoveAt(props.mainImageIndex);
-                  }}
+          variant="grid"
+          title={null}
+          showCount={false}
+          showPicker={false}
+          showFileNames={false}
+          showRemoveButton={false}
+          previewFramed={false}
+          renderEmpty={({ openPicker }) => (
+            <>
+              {!vm.hasImages && (
+                <Media
+                  variant="landscape"
+                  fit="cover"
+                  emptyIcon={<ImageIcon />}
+                  emptyText="画像を追加"
+                  emptyDescription={
+                    props.isEdit
+                      ? "クリックで選択（複数可）"
+                      : "編集モードで追加できます"
+                  }
+                  onActivate={
+                    canAddImages
+                      ? openPicker
+                      : undefined
+                  }
                 />
               )}
 
-              <div className="lic__footer">
-                <div className="lic__footer-left">
-                  {vm.effectiveImageUrls.length} 枚
-                  {props.isEdit
-                    ? "（×で削除 / クリックで追加）"
-                    : "（サムネでメイン切替）"}
-                </div>
-
-                {!props.isEdit && (
-                  <div className="lic__footer-note">
-                    ※ 画像変更は編集モードで行えます
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="lic__grid">
-              {vm.thumbIndices.map((idx: number) => {
-                const url = vm.effectiveImageUrls[idx] ?? "";
-
-                return (
-                  <div
-                    key={`${url}-${idx}`}
-                    className="lic__thumb"
-                  >
+              {vm.hasImages && (
+                <>
+                  <div className="lic__main">
                     <Media
-                      src={url}
+                      src={vm.mainUrl}
                       type="image"
-                      alt={`商品画像 ${idx + 1}`}
-                      variant="square"
+                      alt="商品メイン画像"
+                      variant="landscape"
                       fit="cover"
                       bordered={false}
-                      onActivate={() => vm.handleSetMainIndex(idx)}
+                      onActivate={
+                        canAddImages
+                          ? openPicker
+                          : undefined
+                      }
                     />
 
                     {props.isEdit && (
                       <DeleteButton
-                        size="sm"
-                        className="lic__thumb-remove"
-                        ariaLabel={`商品画像 ${idx + 1} を削除`}
+                        size="md"
+                        className="lic__remove-btn"
+                        ariaLabel="メイン画像を削除"
                         disabled={Boolean(props.saving)}
                         onClick={(event) => {
                           event.stopPropagation();
-                          vm.handleRemoveAt(idx);
+                          vm.handleRemoveAt(props.mainImageIndex);
                         }}
                       />
                     )}
-                  </div>
-                );
-              })}
 
-              {props.isEdit && (
-                <Media
-                  variant="square"
-                  emptyIcon={<Plus />}
-                  emptyText="画像を追加"
-                  onActivate={vm.openPicker}
-                />
+                    <div className="lic__footer">
+                      <div className="lic__footer-left">
+                        {vm.effectiveImageUrls.length} 枚
+                        {props.isEdit
+                          ? "（×で削除 / クリックで追加）"
+                          : "（サムネでメイン切替）"}
+                      </div>
+
+                      {!props.isEdit && (
+                        <div className="lic__footer-note">
+                          ※ 画像変更は編集モードで行えます
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="lic__grid">
+                    {vm.thumbIndices.map((idx: number) => {
+                      const url =
+                        vm.effectiveImageUrls[idx] ?? "";
+
+                      return (
+                        <div
+                          key={`${url}-${idx}`}
+                          className="lic__thumb"
+                        >
+                          <Media
+                            src={url}
+                            type="image"
+                            alt={`商品画像 ${idx + 1}`}
+                            variant="square"
+                            fit="cover"
+                            bordered={false}
+                            onActivate={() =>
+                              vm.handleSetMainIndex(idx)
+                            }
+                          />
+
+                          {props.isEdit && (
+                            <DeleteButton
+                              size="sm"
+                              className="lic__thumb-remove"
+                              ariaLabel={`商品画像 ${idx + 1} を削除`}
+                              disabled={Boolean(props.saving)}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                vm.handleRemoveAt(idx);
+                              }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {props.isEdit && (
+                      <Media
+                        variant="square"
+                        emptyIcon={<Plus />}
+                        emptyText="画像を追加"
+                        onActivate={
+                          canAddImages
+                            ? openPicker
+                            : undefined
+                        }
+                        disabled={!canAddImages}
+                      />
+                    )}
+                  </div>
+                </>
               )}
-            </div>
-          </>
-        )}
+            </>
+          )}
+          onFilesSelected={(files) => {
+            if (!canAddImages) {
+              return;
+            }
+
+            props.onAddImages?.(files);
+          }}
+        />
       </CardContent>
     </Card>
   );

@@ -26,7 +26,7 @@ export type UseListImagesArgs = {
 export type UseListImagesResult = {
   draftImages: DraftImage[];
   imageUrls: string[];
-  onAddImages: (files: FileList | null) => void;
+  onAddImages: (files: File[]) => void;
   onRemoveImageAt: (index: number) => void;
   onClearImages: () => void;
   releaseDraftBlobUrls: () => void;
@@ -69,11 +69,16 @@ function fileKey(file: File): string {
 export function useListImages(
   args: UseListImagesArgs,
 ): UseListImagesResult {
-  const { isEdit, saving, initialImages } = args;
+  const {
+    isEdit,
+    saving,
+    initialImages,
+  } = args;
 
-  const [draftImages, setDraftImages] = React.useState<DraftImage[]>(
-    () => cloneDraftImagesFromImages(initialImages),
-  );
+  const [draftImages, setDraftImages] =
+    React.useState<DraftImage[]>(
+      () => cloneDraftImagesFromImages(initialImages),
+    );
 
   React.useEffect(() => {
     if (isEdit) {
@@ -83,11 +88,18 @@ export function useListImages(
     setDraftImages(
       cloneDraftImagesFromImages(initialImages),
     );
-  }, [isEdit, initialImages]);
+  }, [
+    isEdit,
+    initialImages,
+  ]);
 
-  const addFiles = React.useCallback(
+  const onAddImages = React.useCallback(
     (files: File[]) => {
-      if (!isEdit || saving || files.length === 0) {
+      if (
+        !isEdit ||
+        saving ||
+        files.length === 0
+      ) {
         return;
       }
 
@@ -107,8 +119,11 @@ export function useListImages(
         const existingFileKeys = new Set(
           previousImages
             .filter(
-              (image): image is DraftImage & { file: File } =>
-                image.isNew && image.file !== undefined,
+              (
+                image,
+              ): image is DraftImage & { file: File } =>
+                image.isNew &&
+                image.file !== undefined,
             )
             .map((image) => fileKey(image.file)),
         );
@@ -137,18 +152,10 @@ export function useListImages(
         ];
       });
     },
-    [isEdit, saving],
-  );
-
-  const onAddImages = React.useCallback(
-    (files: FileList | null) => {
-      if (!files || files.length === 0) {
-        return;
-      }
-
-      addFiles(Array.from(files));
-    },
-    [addFiles],
+    [
+      isEdit,
+      saving,
+    ],
   );
 
   const onRemoveImageAt = React.useCallback(
@@ -158,13 +165,19 @@ export function useListImages(
       }
 
       setDraftImages((previousImages) => {
-        if (index < 0 || index >= previousImages.length) {
+        if (
+          index < 0 ||
+          index >= previousImages.length
+        ) {
           return previousImages;
         }
 
         const target = previousImages[index];
 
-        if (target.isNew && target.url.startsWith("blob:")) {
+        if (
+          target.isNew &&
+          target.url.startsWith("blob:")
+        ) {
           try {
             URL.revokeObjectURL(target.url);
           } catch {
@@ -178,7 +191,10 @@ export function useListImages(
         ];
       });
     },
-    [isEdit, saving],
+    [
+      isEdit,
+      saving,
+    ],
   );
 
   const onClearImages = React.useCallback(() => {
@@ -190,7 +206,10 @@ export function useListImages(
       revokeDraftBlobUrls(previousImages);
       return [];
     });
-  }, [isEdit, saving]);
+  }, [
+    isEdit,
+    saving,
+  ]);
 
   const releaseDraftBlobUrls = React.useCallback(() => {
     revokeDraftBlobUrls(draftImages);
