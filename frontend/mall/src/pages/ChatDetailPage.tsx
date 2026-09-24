@@ -14,6 +14,7 @@ import InquiryReplyList from "../features/inquiry/presentation/components/Inquir
 import InquiryReplyModal from "../features/inquiry/presentation/components/InquiryReplyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import ResaleChatDetail from "../features/resale/presentation/components/ResaleChatDetail";
+import ChatMessageBubble from "../features/shared/presentation/components/ChatMessageBubble";
 import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
 
 import "../styles/page-layout.css";
@@ -66,6 +67,10 @@ function InquiryChatDetail() {
     handleCloseInquiry,
   } = useInquiryDetailPage();
 
+  const hasInitialReturnMessage =
+    inquiry?.inquiryType !== "product" &&
+    !!inquiry?.content.trim();
+
   return (
     <>
       <Layout
@@ -114,7 +119,9 @@ function InquiryChatDetail() {
 
               <div className="chat-detail-page__right">
                 <div className="chat-detail-page__reply-section">
-                  {sortedReplies.length === 0 && !shouldShowClosePrompt ? (
+                  {!hasInitialReturnMessage &&
+                  sortedReplies.length === 0 &&
+                  !shouldShowClosePrompt ? (
                     <TextState
                       variant="empty"
                       className="chat-detail-page__no-replies"
@@ -123,6 +130,16 @@ function InquiryChatDetail() {
                     </TextState>
                   ) : (
                     <div className="chat-detail-page__replies">
+                      {hasInitialReturnMessage ? (
+                        <ChatMessageBubble
+                          senderName={inquiry.avatarName}
+                          senderIcon={inquiry.avatarIcon}
+                          createdAt={inquiry.createdAt}
+                          content={inquiry.content}
+                          isMine
+                        />
+                      ) : null}
+
                       <InquiryReplyList
                         replies={sortedReplies}
                         brandName={inquiry.brandName}

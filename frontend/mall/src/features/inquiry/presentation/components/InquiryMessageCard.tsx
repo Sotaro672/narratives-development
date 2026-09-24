@@ -1,10 +1,9 @@
-// frontend/amol/src/features/inquiry/presentation/components/InquiryMessageCard.tsx
+// frontend/mall/src/features/inquiry/presentation/components/InquiryMessageCard.tsx
 
 import Badge from "../../../../components/ui/Badge";
+import SectionHeader from "../../../../components/ui/SectionHeader";
 
 import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
-import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
-import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
 import type { InquiryDetail } from "../../../shared/types/inquiryTypes";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
 
@@ -14,7 +13,11 @@ type InquiryMessageCardProps = {
   inquiry: InquiryDetail;
 };
 
-type InquiryStatusBadgeVariant = "neutral" | "info" | "success" | "warning";
+type InquiryStatusBadgeVariant =
+  | "neutral"
+  | "info"
+  | "success"
+  | "warning";
 
 export default function InquiryMessageCard({
   inquiry,
@@ -22,6 +25,7 @@ export default function InquiryMessageCard({
   const statusLabel = getInquiryStatusLabel(inquiry.status);
   const statusVariant = getInquiryStatusBadgeVariant(inquiry.status);
   const title = getInquiryTitle(inquiry);
+  const isProductInquiry = inquiry.inquiryType === "product";
 
   const images = inquiry.images?.map((image) => ({
     key: image.fileUrl,
@@ -30,32 +34,39 @@ export default function InquiryMessageCard({
   }));
 
   return (
-    <ChatThreadCard variant="inquiry">
-      <ChatMessageHeader
-        name={inquiry.avatarName}
-        icon={inquiry.avatarIcon}
-        createdAt={inquiry.createdAt}
-        action={
-          <Badge variant={statusVariant}>
-            {statusLabel}
-          </Badge>
-        }
-      />
+    <article className="chat-detail-page__inquiry-detail">
+      <div className="chat-detail-page__message-head">
+        <h2 className="chat-detail-page__subject">
+          {title}
+        </h2>
 
-      <h2 className="chat-detail-page__subject">
-        {title}
-      </h2>
+        <Badge variant={statusVariant}>
+          {statusLabel}
+        </Badge>
+      </div>
 
-      {inquiry.inquiryType !== "product" && inquiry.modelMeta ? (
+      {!isProductInquiry && inquiry.modelMeta ? (
         <InquiryModelMeta modelMeta={inquiry.modelMeta} />
       ) : null}
 
-      <p className="chat-detail-page__content">
-        {inquiry.content}
-      </p>
+      {isProductInquiry ? (
+        <section className="chat-detail-page__inquiry-section">
+          <SectionHeader
+            title="問い合わせ内容"
+            titleAs="h3"
+            className="ui-section-header--title-sm"
+          />
 
-      <ChatImageGrid images={images} />
-    </ChatThreadCard>
+          <p className="chat-detail-page__content">
+            {inquiry.content}
+          </p>
+
+          <ChatImageGrid images={images} />
+        </section>
+      ) : (
+        <ChatImageGrid images={images} />
+      )}
+    </article>
   );
 }
 

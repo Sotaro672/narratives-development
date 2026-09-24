@@ -1,6 +1,9 @@
-// frontend/amol/src/features/inquiry/presentation/components/InquiryModelMeta.tsx
+// frontend/mall/src/features/inquiry/presentation/components/InquiryModelMeta.tsx
 
-import ChatMetaSection, { type ChatMetaItem } from "../../../shared/presentation/components/ChatMetaSection";
+import InfoList, {
+  type InfoListRow,
+} from "../../../../components/ui/InfoList";
+import SectionHeader from "../../../../components/ui/SectionHeader";
 import type { InquiryDetailModelMeta } from "../../../shared/types/inquiryTypes";
 
 type InquiryModelMetaProps = {
@@ -12,18 +15,27 @@ export default function InquiryModelMeta({
 }: InquiryModelMetaProps) {
   const metaItems = getModelMetaItems(modelMeta);
 
+  if (metaItems.length === 0) {
+    return null;
+  }
+
   return (
-    <ChatMetaSection
-      title="対象商品"
-      items={metaItems}
-    />
+    <section>
+      <SectionHeader
+        title="対象商品"
+        titleAs="h3"
+        className="ui-section-header--title-sm"
+      />
+
+      <InfoList rows={metaItems} />
+    </section>
   );
 }
 
 function getModelMetaItems(
   modelMeta: InquiryDetailModelMeta,
-): ChatMetaItem[] {
-  const items: ChatMetaItem[] = [];
+): InfoListRow[] {
+  const items: InfoListRow[] = [];
 
   if (modelMeta.modelNumber) {
     items.push({

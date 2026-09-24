@@ -25,16 +25,21 @@
   min-height: 0;
   align-items: stretch;
   overflow: hidden;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .chat-detail-page-layout--inquiry .chat-detail-page__left {
   flex: 0 0 auto;
   min-height: 0;
+  padding: 16px 0 32px 24px;
+  box-sizing: border-box;
 }
 
 .chat-detail-page-layout--inquiry .chat-detail-page__right {
   flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -51,7 +56,8 @@
   overflow-y: auto;
   overscroll-behavior-y: contain;
   scrollbar-gutter: stable;
-  padding-right: 4px;
+  padding: 16px;
+  box-sizing: border-box;
 }
 
 .chat-detail-page {
@@ -276,15 +282,35 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    padding: 0;
   }
 
   .chat-detail-page-layout--inquiry .chat-detail-page__left {
     flex: 0 0 auto;
+    padding: 12px 0 0;
   }
 
   .chat-detail-page-layout--inquiry .chat-detail-page__right {
     flex: 1 1 auto;
     min-height: 0;
+    height: auto;
+  }
+}
+
+@media (max-width: 959px) and (orientation: portrait) {
+  .chat-detail-page-layout--inquiry.layout-main--with-footer {
+    height: calc(100dvh - var(--footer-nav-height));
+    min-height: calc(100dvh - var(--footer-nav-height));
+    max-height: calc(100dvh - var(--footer-nav-height));
+    padding-bottom: 0;
+  }
+
+  .chat-detail-page-layout--inquiry .chat-detail-page {
+    padding-bottom: 0;
+  }
+
+  .chat-detail-page-layout--inquiry .chat-detail-page__split {
+    padding-bottom: 0;
   }
 }
 
