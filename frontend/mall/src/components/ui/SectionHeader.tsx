@@ -1,7 +1,7 @@
 // frontend/amol/src/components/ui/SectionHeader.tsx
 import type { ReactNode } from "react";
 
-import "./section-header.css";
+import "./sectionHeader.css";
 
 type SectionHeaderTitleTag = "h1" | "h2" | "h3";
 

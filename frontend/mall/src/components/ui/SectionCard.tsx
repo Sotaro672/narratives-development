@@ -1,7 +1,7 @@
 // frontend/amol/src/components/ui/SectionCard.tsx
 import type { ReactNode } from "react";
 
-import "./section-card.css";
+import "./sectionCard.css";
 
 type SectionCardProps = {
   children: ReactNode;

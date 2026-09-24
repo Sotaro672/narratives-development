@@ -1,7 +1,8 @@
 // frontend/src/components/ui/MediaUploader.tsx
+
 import { ChangeEvent, RefObject } from "react";
 import Button from "./Button";
-import "./media-uploader.css";
+import "./mediaUploader.css";
 
 export type MediaUploaderItem = {
   id: string;

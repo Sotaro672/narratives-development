@@ -1,7 +1,7 @@
 // frontend/amol/src/components/ui/TextState.tsx
 import type { ReactNode } from "react";
 
-import "./text-state.css";
+import "./textState.css";
 
 type TextStateVariant = "muted" | "error" | "success" | "empty" | "loading";
 

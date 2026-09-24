@@ -1,7 +1,7 @@
 // frontend/amol/src/components/ui/TextButton.tsx
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-import "./text-button.css";
+import "./textButton.css";
 
 type TextButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;

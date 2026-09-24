@@ -1,7 +1,7 @@
 // frontend/amol/src/components/ui/InfoList.tsx
 import type { ReactNode } from "react";
 
-import "./info-list.css";
+import "./infoList.css";
 
 export type InfoListRow = {
   label: ReactNode;

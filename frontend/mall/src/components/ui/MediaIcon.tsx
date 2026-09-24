@@ -1,7 +1,7 @@
 // frontend/amol/src/components/ui/MediaIcon.tsx
 import type { ReactNode } from "react";
 
-import "./media-icon.css";
+import "./mediaIcon.css";
 
 type MediaIconSize = "xs" | "sm" | "md" | "lg";
 

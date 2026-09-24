@@ -4,7 +4,7 @@ import {
   type TouchEvent,
 } from "react";
 
-import "./media-gallery.css";
+import "./mediaGallery.css";
 
 export type MediaGalleryItem = {
   id: string;

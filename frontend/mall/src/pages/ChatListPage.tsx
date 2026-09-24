@@ -1,6 +1,7 @@
 // frontend/amol/src/pages/ChatListPage.tsx
 
 import Layout from "../components/layout/Layout";
+import Badge from "../components/ui/Badge";
 import List, { ListRow } from "../components/ui/List";
 
 import InquiryListItem from "../features/inquiry/presentation/components/InquiryListItem";
@@ -143,26 +144,35 @@ function ResaleListItem({
       meta={
         <>
           {countLabel ? (
-            <span className="chat-list-page__reply-count">
+            <Badge
+              variant="neutral"
+              size="sm"
+              className="chat-list-page__reply-count"
+            >
               {countLabel}
-            </span>
+            </Badge>
           ) : null}
 
           {statusLabel ? (
-            <span className="chat-list-page__status">
+            <Badge
+              variant="info"
+              size="sm"
+              className="chat-list-page__status"
+            >
               {statusLabel}
-            </span>
+            </Badge>
           ) : null}
 
           {hasAttention ? (
-            <span
-              className="chat-list-page__badge-count"
+            <Badge
+              variant="info"
+              size="sm"
               aria-label={`未読 ${item.unreadCommentCount} 件`}
             >
               {item.unreadCommentCount > 99
                 ? "99+"
                 : item.unreadCommentCount}
-            </span>
+            </Badge>
           ) : null}
         </>
       }
@@ -197,10 +207,7 @@ function TradeListItem({
       onClick={onOpen}
       leading={
         item.counterpartAvatarIcon ? (
-          <img
-            src={item.counterpartAvatarIcon}
-            alt=""
-          />
+          <img src={item.counterpartAvatarIcon} alt="" />
         ) : (
           <span>{initial}</span>
         )
@@ -212,20 +219,25 @@ function TradeListItem({
       meta={
         <>
           {statusLabel ? (
-            <span className="chat-list-page__status">
+            <Badge
+              variant="info"
+              size="sm"
+              className="chat-list-page__status"
+            >
               {statusLabel}
-            </span>
+            </Badge>
           ) : null}
 
           {hasAttention ? (
-            <span
-              className="chat-list-page__badge-count"
+            <Badge
+              variant="info"
+              size="sm"
               aria-label={`未読 ${item.unreadMessageCount} 件`}
             >
               {item.unreadMessageCount > 99
                 ? "99+"
                 : item.unreadMessageCount}
-            </span>
+            </Badge>
           ) : null}
         </>
       }
@@ -269,13 +281,10 @@ function getResaleStatusLabel(
   switch (status) {
     case "listing":
       return "出品中";
-
     case "suspended":
       return "出品停止";
-
     case "sold":
       return "売却済";
-
     default:
       return "";
   }

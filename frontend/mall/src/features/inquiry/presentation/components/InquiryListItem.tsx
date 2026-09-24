@@ -1,8 +1,9 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryListItem.tsx
 
+import Badge from "../../../../components/ui/Badge";
 import { ListRow } from "../../../../components/ui/List";
-import type { InquiryChatListItem } from "../hooks/useInquiryListPage";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
+import type { InquiryChatListItem } from "../hooks/useInquiryListPage";
 
 type InquiryListItemProps = {
   item: InquiryChatListItem;
@@ -44,22 +45,32 @@ export default function InquiryListItem({
       meta={
         <>
           {countLabel ? (
-            <span className="chat-list-page__reply-count">
+            <Badge
+              variant="neutral"
+              size="sm"
+              className="chat-list-page__reply-count"
+            >
               {countLabel}
-            </span>
+            </Badge>
           ) : null}
 
-          <span className="chat-list-page__status">
+          <Badge
+            variant="info"
+            size="sm"
+            className="chat-list-page__status"
+          >
             {statusLabel}
-          </span>
+          </Badge>
 
           {hasAttention ? (
-            <span
+            <Badge
+              variant="info"
+              size="sm"
               className="chat-list-page__badge-count"
               aria-label={`要確認 ${badgeCount} 件`}
             >
               {badgeCount > 99 ? "99+" : badgeCount}
-            </span>
+            </Badge>
           ) : null}
         </>
       }

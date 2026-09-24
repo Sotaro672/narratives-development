@@ -1,5 +1,5 @@
 // frontend/amol/src/components/ui/RatingSelect.tsx
-import "./rating-select.css";
+import "./ratingSelect.css";
 
 type RatingSelectProps = {
   value: number;
