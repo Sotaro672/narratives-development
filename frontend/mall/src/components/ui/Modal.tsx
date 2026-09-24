@@ -1,3 +1,4 @@
+//frontend\mall\src\components\ui\Modal.tsx
 import {
   useEffect,
   type HTMLAttributes,
