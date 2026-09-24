@@ -297,7 +297,6 @@ export default function AnnouncementPage() {
             icon={<TriangleAlert size={28} strokeWidth={1.8} />}
             title="通知を取得できませんでした"
             description={error}
-            className="announcement-page__list-error"
           />
         ) : null}
 
@@ -306,7 +305,6 @@ export default function AnnouncementPage() {
             variant="loading"
             title="通知を読み込んでいます"
             description="最新のお知らせを確認しています。"
-            className="announcement-page__list-state"
           />
         ) : null}
 
@@ -316,7 +314,6 @@ export default function AnnouncementPage() {
             icon={<Bell size={28} strokeWidth={1.8} />}
             title="現在、通知はありません"
             description="新しいお知らせが届くと、ここに表示されます。"
-            className="announcement-page__list-empty"
           />
         ) : null}
 
