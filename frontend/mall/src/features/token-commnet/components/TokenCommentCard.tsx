@@ -9,6 +9,7 @@ import { getMyAvatar } from "../../avatar/api/avatarApi";
 import ReportModal from "../../report/components/ReportModal";
 import { useReport } from "../../report/hooks/useReport";
 import { useAuthState } from "../../shared/hooks/useAuthState";
+import ChatComposerModal from "../../shared/presentation/components/ChatComposerModal";
 import type { TokenCommentTreeNode } from "../../shared/types/tokenCommentTypes";
 
 import TokenCommentForm from "./TokenCommentForm";
@@ -81,6 +82,11 @@ export default function TokenCommentCard({
   } = useReport();
 
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const canSubmitReply = Boolean(
+    replyingCommentId &&
+      replyBody.trim() &&
+      !replyPosting,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -131,6 +137,14 @@ export default function TokenCommentCard({
     });
   };
 
+  const handleSubmitReply = () => {
+    if (!replyingCommentId || !canSubmitReply) {
+      return;
+    }
+
+    void onSubmitReply(replyingCommentId);
+  };
+
   return (
     <>
       <Card
@@ -165,9 +179,7 @@ export default function TokenCommentCard({
             ) : null}
 
             {commentsError ? (
-              <Alert variant="error">
-                {commentsError}
-              </Alert>
+              <Alert variant="error">{commentsError}</Alert>
             ) : null}
 
             <TokenCommentList
@@ -176,21 +188,29 @@ export default function TokenCommentCard({
               commentTree={commentTree}
               commentsLoading={commentsLoading}
               expandedIds={expandedIds}
-              replyingCommentId={replyingCommentId}
-              replyBody={replyBody}
-              replyPosting={replyPosting}
               onToggleExpanded={onToggleExpanded}
               onLike={onLikeComment}
               onDislike={onDislikeComment}
               onStartReply={onStartReply}
-              onCancelReply={onCancelReply}
-              onReplyBodyChange={onReplyBodyChange}
-              onSubmitReply={onSubmitReply}
               onReport={handleReportComment}
             />
           </>
         )}
       </Card>
+
+      <ChatComposerModal
+        open={Boolean(replyingCommentId)}
+        title="返信する"
+        content={replyBody}
+        placeholder="返信を書く…"
+        submitting={replyPosting}
+        canSubmit={canSubmitReply}
+        submitLabel="返信を投稿"
+        submittingLabel="投稿中..."
+        onContentChange={onReplyBodyChange}
+        onCancel={onCancelReply}
+        onSubmit={handleSubmitReply}
+      />
 
       <ReportModal
         open={isOpen}

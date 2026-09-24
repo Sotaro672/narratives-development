@@ -9,16 +9,10 @@ type TokenCommentListProps = {
   commentTree: TokenCommentTreeNode[];
   commentsLoading: boolean;
   expandedIds: Set<string>;
-  replyingCommentId: string | null;
-  replyBody: string;
-  replyPosting: boolean;
   onToggleExpanded: (commentId: string) => void;
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
-  onCancelReply: () => void;
-  onReplyBodyChange: (value: string) => void;
-  onSubmitReply: (parentCommentId: string) => void | Promise<void>;
   onReport: (commentId: string) => void;
 };
 
@@ -28,16 +22,10 @@ export default function TokenCommentList({
   commentTree,
   commentsLoading,
   expandedIds,
-  replyingCommentId,
-  replyBody,
-  replyPosting,
   onToggleExpanded,
   onLike,
   onDislike,
   onStartReply,
-  onCancelReply,
-  onReplyBodyChange,
-  onSubmitReply,
   onReport,
 }: TokenCommentListProps) {
   if (commentsLoading && commentTree.length === 0) {
@@ -69,16 +57,10 @@ export default function TokenCommentList({
           currentAvatarId={currentAvatarId}
           node={node}
           expandedIds={expandedIds}
-          replyingCommentId={replyingCommentId}
-          replyBody={replyBody}
-          replyPosting={replyPosting}
           onToggleExpanded={onToggleExpanded}
           onLike={onLike}
           onDislike={onDislike}
           onStartReply={onStartReply}
-          onCancelReply={onCancelReply}
-          onReplyBodyChange={onReplyBodyChange}
-          onSubmitReply={onSubmitReply}
           onReport={onReport}
         />
       ))}

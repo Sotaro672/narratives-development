@@ -173,6 +173,12 @@
   margin-top: 10px;
 }
 
+.token-comment-item__actions .report-flag-button {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+
 .token-comment-item__reply-count {
   color: #6b7280;
   font-size: 12px;
@@ -180,35 +186,8 @@
   line-height: 1.4;
 }
 
-.token-comment-reply-form {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.token-comment-reply-form .textbox-field {
-  width: 100%;
-  min-width: 0;
-}
-
-.token-comment-reply-form__actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.token-comment-reply-form__actions .ui-button {
-  flex: 1 1 0;
-}
-
 .token-comment-item__children {
   display: grid;
   gap: 10px;
   margin-top: 10px;
-}
-
-.token-comment-item__actions .report-flag-button {
-  width: 28px;
-  height: 28px;
-  font-size: 14px;
 }

@@ -16,23 +16,16 @@ import {
   getTokenCommentDisplayName,
 } from "../../shared/types/tokenCommentTypes";
 import { hasTokenCommentChildren } from "../utils/commentTree";
-import TokenCommentReplyForm from "./TokenCommentReplyForm";
 
 type TokenCommentItemProps = {
   tokenBlueprintId: string;
   currentAvatarId: string;
   node: TokenCommentTreeNode;
   expandedIds: Set<string>;
-  replyingCommentId: string | null;
-  replyBody: string;
-  replyPosting: boolean;
   onToggleExpanded: (commentId: string) => void;
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
-  onCancelReply: () => void;
-  onReplyBodyChange: (value: string) => void;
-  onSubmitReply: (parentCommentId: string) => void | Promise<void>;
   onReport: (commentId: string) => void;
 };
 
@@ -93,16 +86,10 @@ export default function TokenCommentItem({
   currentAvatarId,
   node,
   expandedIds,
-  replyingCommentId,
-  replyBody,
-  replyPosting,
   onToggleExpanded,
   onLike,
   onDislike,
   onStartReply,
-  onCancelReply,
-  onReplyBodyChange,
-  onSubmitReply,
   onReport,
 }: TokenCommentItemProps) {
   const comment = node.comment;
@@ -117,7 +104,6 @@ export default function TokenCommentItem({
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const normalizedCurrentAvatarId = currentAvatarId.trim();
   const isExpanded = expandedIds.has(commentId);
-  const isReplying = replyingCommentId === commentId;
   const hasChildren = hasTokenCommentChildren(node);
   const isOwnComment = Boolean(
     normalizedCurrentAvatarId &&
@@ -170,14 +156,6 @@ export default function TokenCommentItem({
     }
 
     onToggleExpanded(commentId);
-  };
-
-  const handleSubmitReply = () => {
-    if (!commentId) {
-      return;
-    }
-
-    void onSubmitReply(commentId);
   };
 
   return (
@@ -239,16 +217,6 @@ export default function TokenCommentItem({
           )}
         </div>
 
-        {isReplying ? (
-          <TokenCommentReplyForm
-            value={replyBody}
-            replyPosting={replyPosting}
-            onChange={onReplyBodyChange}
-            onCancel={onCancelReply}
-            onSubmit={handleSubmitReply}
-          />
-        ) : null}
-
         {isExpanded && node.children.length > 0 ? (
           <div className="token-comment-item__children">
             {node.children.map((child) => (
@@ -258,16 +226,10 @@ export default function TokenCommentItem({
                 currentAvatarId={normalizedCurrentAvatarId}
                 node={child}
                 expandedIds={expandedIds}
-                replyingCommentId={replyingCommentId}
-                replyBody={replyBody}
-                replyPosting={replyPosting}
                 onToggleExpanded={onToggleExpanded}
                 onLike={onLike}
                 onDislike={onDislike}
                 onStartReply={onStartReply}
-                onCancelReply={onCancelReply}
-                onReplyBodyChange={onReplyBodyChange}
-                onSubmitReply={onSubmitReply}
                 onReport={onReport}
               />
             ))}
