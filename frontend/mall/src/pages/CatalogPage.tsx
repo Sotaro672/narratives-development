@@ -1,10 +1,9 @@
 // frontend/mall/src/pages/CatalogPage.tsx
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 
-import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 import { formatPrice } from "../components/utils/price";
 
 import { getMyAvatar } from "../features/avatar/api/avatarApi";
@@ -29,7 +28,6 @@ import "../features/shared/styles/product-detail.css";
 import "../styles/catalog-page.css";
 
 export default function CatalogPage() {
-  const navigate = useNavigate();
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
 
@@ -64,7 +62,6 @@ export default function CatalogPage() {
     selectedModelPrice,
     selectedModelStock,
     canAddToCart,
-    isMobilePortrait,
     handlePrevImage,
     handleNextImage,
     handleSelectImage,
@@ -104,16 +101,10 @@ export default function CatalogPage() {
 
       try {
         const avatar = await getMyAvatar();
-
-        if (cancelled) {
-          return;
-        }
-
+        if (cancelled) return;
         setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
       } catch {
-        if (!cancelled) {
-          setCurrentAvatarId("");
-        }
+        if (!cancelled) setCurrentAvatarId("");
       }
     }
 
@@ -133,9 +124,7 @@ export default function CatalogPage() {
     !reportSubmitting;
 
   const handleOpenListReport = () => {
-    if (!canReportList) {
-      return;
-    }
+    if (!canReportList) return;
 
     openListReport({
       listId: normalizedListId,
@@ -150,31 +139,12 @@ export default function CatalogPage() {
       }
       titleClickable={false}
       mode={isLoggedIn ? "mypage" : "landing"}
-      showFooter={false}
-      showHeader
-      hideSettingsButton
-      showCartButton={isLoggedIn}
-      cartButtonLabel="カート"
-      onCartButtonClick={isLoggedIn ? () => navigate("/cart") : undefined}
-      actionButtonLabel={
-        !isLoggedIn || isMobilePortrait
-          ? undefined
-          : isAddingToCart
-            ? "追加中"
-            : "カートに入れる"
-      }
-      onActionButtonClick={
-        !isLoggedIn || isMobilePortrait
-          ? undefined
-          : handleAddToCart
-      }
-      actionButtonDisabled={!isLoggedIn || !canAddToCart}
+      showHeader={false}
+      showFooter={isLoggedIn}
     >
       <section className="catalog-page-section">
         {isLoadingCatalog ? (
-          <p className="catalog-page-state">
-            カタログ詳細を読み込んでいます。
-          </p>
+          <p className="catalog-page-state">カタログ詳細を読み込んでいます。</p>
         ) : null}
 
         {!isLoadingCatalog && errorMessage ? (
@@ -272,6 +242,20 @@ export default function CatalogPage() {
               onSelectModel={handleSelectModel}
             />
 
+            {isLoggedIn ? (
+              <div className="catalog-page-purchase-action">
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={!canAddToCart}
+                  onClick={handleAddToCart}
+                >
+                  {isAddingToCart ? "処理中..." : "カートに入れる"}
+                </Button>
+              </div>
+            ) : null}
+
             <ProductReviewSection
               items={reviewItems}
               productBlueprintId={catalog.productBlueprint.id}
@@ -300,15 +284,6 @@ export default function CatalogPage() {
         onSubmit={submitReport}
         onClose={closeReport}
       />
-
-      {isLoggedIn && isMobilePortrait ? (
-        <FooterNav
-          variant="action"
-          buttonLabel={isAddingToCart ? "追加中" : "カートに入れる"}
-          disabled={!canAddToCart}
-          onButtonClick={handleAddToCart}
-        />
-      ) : null}
     </Layout>
   );
 }

@@ -1,4 +1,4 @@
-// frontend/amol/src/components/layout/FooterNav.tsx
+// frontend/mall/src/components/layout/FooterNav.tsx
 
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
@@ -66,18 +66,10 @@ type FooterNavProps =
       onSubmit: () => void | Promise<void>;
     };
 
-export default function FooterNav(
-  props: FooterNavProps,
-) {
+export default function FooterNav(props: FooterNavProps) {
   const location = useLocation();
-
-  const [avatarIcon, setAvatarIcon] =
-    useState("");
-
-  const [
-    reviewRatingOpen,
-    setReviewRatingOpen,
-  ] = useState(false);
+  const [avatarIcon, setAvatarIcon] = useState("");
+  const [reviewRatingOpen, setReviewRatingOpen] = useState(false);
 
   useEffect(() => {
     if (
@@ -91,39 +83,19 @@ export default function FooterNav(
 
     const auth = getAuth();
 
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      async (user) => {
-        if (!user) {
-          setAvatarIcon("");
-          return;
-        }
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        setAvatarIcon("");
+        return;
+      }
 
-        try {
-          const backendUrl =
-            import.meta.env.VITE_API_BASE_URL;
-
-          if (!backendUrl) {
-            setAvatarIcon("");
-            return;
-          }
-
-          const idToken =
-            await user.getIdToken(true);
-
-          const avatar = await getMyAvatar({
-            backendUrl: String(backendUrl),
-            idToken,
-          });
-
-          setAvatarIcon(
-            avatar?.avatarIcon ?? "",
-          );
-        } catch {
-          setAvatarIcon("");
-        }
-      },
-    );
+      try {
+        const avatar = await getMyAvatar();
+        setAvatarIcon(avatar?.avatarIcon ?? "");
+      } catch {
+        setAvatarIcon("");
+      }
+    });
 
     return unsubscribe;
   }, [props.variant]);
@@ -139,14 +111,10 @@ export default function FooterNav(
       onButtonClick,
     } = props;
 
-    const isResalePageAction =
-      location.pathname === "/resale";
-
+    const isResalePageAction = location.pathname === "/resale";
     const footerClassName = [
       "footer-nav--action",
-      isResalePageAction
-        ? "footer-nav--resale-action"
-        : "",
+      isResalePageAction ? "footer-nav--resale-action" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -234,9 +202,7 @@ export default function FooterNav(
       onSubmit,
     } = props;
 
-    const canSubmit =
-      !disabled &&
-      value.trim().length > 0;
+    const canSubmit = !disabled && value.trim().length > 0;
 
     return (
       <footer className="footer-nav--comment-action">
@@ -247,9 +213,7 @@ export default function FooterNav(
           placeholder={placeholder}
           disabled={posting}
           aria-label={placeholder}
-          onChange={(event) =>
-            onChange(event.target.value)
-          }
+          onChange={(event) => onChange(event.target.value)}
         />
 
         <button
@@ -259,9 +223,7 @@ export default function FooterNav(
           aria-label={buttonLabel}
           onClick={() => void onSubmit()}
         >
-          {posting
-            ? "投稿中"
-            : buttonLabel}
+          {posting ? "投稿中" : buttonLabel}
         </button>
       </footer>
     );
@@ -280,22 +242,10 @@ export default function FooterNav(
       onSubmit,
     } = props;
 
-    const canSubmit =
-      !disabled &&
-      !posting &&
-      value.trim().length > 0;
+    const canSubmit = !disabled && !posting && value.trim().length > 0;
+    const ratingOptions = [5, 4, 3, 2, 1];
 
-    const ratingOptions = [
-      5,
-      4,
-      3,
-      2,
-      1,
-    ];
-
-    const handleRatingChange = (
-      nextRating: number,
-    ) => {
+    const handleRatingChange = (nextRating: number) => {
       onRatingChange(nextRating);
       setReviewRatingOpen(false);
     };
@@ -309,19 +259,12 @@ export default function FooterNav(
             disabled={posting}
             aria-label="評価"
             aria-haspopup="listbox"
-            aria-expanded={
-              reviewRatingOpen
-            }
-            onClick={() =>
-              setReviewRatingOpen(
-                (open) => !open,
-              )
-            }
+            aria-expanded={reviewRatingOpen}
+            onClick={() => setReviewRatingOpen((open) => !open)}
           >
             <span className="footer-nav__review-rating-stars">
               ★{rating}
             </span>
-
             <span
               className="footer-nav__review-rating-caret"
               aria-hidden="true"
@@ -335,35 +278,25 @@ export default function FooterNav(
               className="footer-nav__review-rating-popover"
               role="listbox"
             >
-              {ratingOptions.map(
-                (nextRating) => (
-                  <button
-                    key={nextRating}
-                    type="button"
-                    className={[
-                      "footer-nav__review-rating-option",
-                      rating ===
-                      nextRating
-                        ? "footer-nav__review-rating-option--selected"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    role="option"
-                    aria-selected={
-                      rating ===
-                      nextRating
-                    }
-                    onClick={() =>
-                      handleRatingChange(
-                        nextRating,
-                      )
-                    }
-                  >
-                    ★{nextRating}
-                  </button>
-                ),
-              )}
+              {ratingOptions.map((nextRating) => (
+                <button
+                  key={nextRating}
+                  type="button"
+                  className={[
+                    "footer-nav__review-rating-option",
+                    rating === nextRating
+                      ? "footer-nav__review-rating-option--selected"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  role="option"
+                  aria-selected={rating === nextRating}
+                  onClick={() => handleRatingChange(nextRating)}
+                >
+                  ★{nextRating}
+                </button>
+              ))}
             </div>
           ) : null}
         </div>
@@ -378,9 +311,7 @@ export default function FooterNav(
           placeholder={placeholder}
           disabled={posting}
           aria-label={placeholder}
-          onChange={(event) =>
-            onChange(event.target.value)
-          }
+          onChange={(event) => onChange(event.target.value)}
         />
 
         <button
@@ -390,28 +321,18 @@ export default function FooterNav(
           aria-label={buttonLabel}
           onClick={() => void onSubmit()}
         >
-          {posting
-            ? "投稿中"
-            : buttonLabel}
+          {posting ? "投稿中" : buttonLabel}
         </button>
       </footer>
     );
   }
 
-  const renderMode =
-    props.renderMode ?? "bottom";
-
-  const onNavigate =
-    props.onNavigate;
-
-  const centerActionLabel =
-    props.centerActionLabel?.trim() ??
-    "";
-
+  const renderMode = props.renderMode ?? "bottom";
+  const onNavigate = props.onNavigate;
+  const centerActionLabel = props.centerActionLabel?.trim() ?? "";
   const hasCenterAction =
     centerActionLabel !== "" &&
-    typeof props.onCenterActionClick ===
-      "function";
+    typeof props.onCenterActionClick === "function";
 
   const footerClassName =
     renderMode === "sidebar"
@@ -425,22 +346,16 @@ export default function FooterNav(
         onClick={onNavigate}
         className={({ isActive }) =>
           `footer-nav__item${
-            isActive
-              ? " footer-nav__item--active"
-              : ""
+            isActive ? " footer-nav__item--active" : ""
           }`
         }
       >
-        <span
-          className="footer-nav__icon"
-          aria-hidden="true"
-        >
+        <span className="footer-nav__icon" aria-hidden="true">
           <ShoppingBag
             className="footer-nav__svg-icon"
             strokeWidth={2.2}
           />
         </span>
-
         <span className="footer-nav__label">
           モール
         </span>
@@ -451,22 +366,16 @@ export default function FooterNav(
         onClick={onNavigate}
         className={({ isActive }) =>
           `footer-nav__item${
-            isActive
-              ? " footer-nav__item--active"
-              : ""
+            isActive ? " footer-nav__item--active" : ""
           }`
         }
       >
-        <span
-          className="footer-nav__icon"
-          aria-hidden="true"
-        >
+        <span className="footer-nav__icon" aria-hidden="true">
           <Store
             className="footer-nav__svg-icon"
             strokeWidth={2.2}
           />
         </span>
-
         <span className="footer-nav__label">
           マーケット
         </span>
@@ -475,30 +384,20 @@ export default function FooterNav(
       {hasCenterAction ? (
         <button
           type="button"
-          onClick={() =>
-            void props.onCenterActionClick?.()
-          }
-          disabled={
-            props.centerActionDisabled
-          }
+          onClick={() => void props.onCenterActionClick?.()}
+          disabled={props.centerActionDisabled}
           className={[
             "footer-nav__item",
             "footer-nav__item--button",
           ].join(" ")}
-          aria-label={
-            centerActionLabel
-          }
+          aria-label={centerActionLabel}
         >
-          <span
-            className="footer-nav__icon"
-            aria-hidden="true"
-          >
+          <span className="footer-nav__icon" aria-hidden="true">
             <MessageCircle
               className="footer-nav__svg-icon"
               strokeWidth={2.2}
             />
           </span>
-
           <span className="footer-nav__label">
             {centerActionLabel}
           </span>
@@ -509,22 +408,16 @@ export default function FooterNav(
           onClick={onNavigate}
           className={({ isActive }) =>
             `footer-nav__item${
-              isActive
-                ? " footer-nav__item--active"
-                : ""
+              isActive ? " footer-nav__item--active" : ""
             }`
           }
         >
-          <span
-            className="footer-nav__icon"
-            aria-hidden="true"
-          >
+          <span className="footer-nav__icon" aria-hidden="true">
             <ScanLine
               className="footer-nav__svg-icon"
               strokeWidth={2.2}
             />
           </span>
-
           <span className="footer-nav__label">
             スキャン
           </span>
@@ -536,22 +429,16 @@ export default function FooterNav(
         onClick={onNavigate}
         className={({ isActive }) =>
           `footer-nav__item${
-            isActive
-              ? " footer-nav__item--active"
-              : ""
+            isActive ? " footer-nav__item--active" : ""
           }`
         }
       >
-        <span
-          className="footer-nav__icon"
-          aria-hidden="true"
-        >
+        <span className="footer-nav__icon" aria-hidden="true">
           <Heart
             className="footer-nav__svg-icon"
             strokeWidth={2.2}
           />
         </span>
-
         <span className="footer-nav__label">
           お気に入り
         </span>
@@ -562,16 +449,11 @@ export default function FooterNav(
         onClick={onNavigate}
         className={({ isActive }) =>
           `footer-nav__item${
-            isActive
-              ? " footer-nav__item--active"
-              : ""
+            isActive ? " footer-nav__item--active" : ""
           }`
         }
       >
-        <span
-          className="footer-nav__icon"
-          aria-hidden="true"
-        >
+        <span className="footer-nav__icon" aria-hidden="true">
           {avatarIcon ? (
             <img
               src={avatarIcon}
@@ -585,7 +467,6 @@ export default function FooterNav(
             />
           )}
         </span>
-
         <span className="footer-nav__label">
           ウォレット
         </span>

@@ -1,10 +1,27 @@
-/* frontend/amol/src/styles/wallet-page/layout.css */
+/* frontend/mall/src/components/layout/layout.css */
 
-.wallet-page-layout {
-  width: 100%;
+.layout-shell {
+  min-height: 100vh;
+  background: #fff;
 }
 
-.wallet-page-layout__profile,
-.wallet-page-layout__main {
-  min-width: 0;
+.layout-main {
+  padding-top: var(--amol-header-height);
+  min-height: 100vh;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+.layout-main--without-header {
+  padding-top: 0;
+}
+
+.layout-main--with-footer {
+  padding-bottom: 80px;
+}
+
+@media (max-width: 640px) {
+  .layout-main--with-footer {
+    padding-bottom: 76px;
+  }
 }

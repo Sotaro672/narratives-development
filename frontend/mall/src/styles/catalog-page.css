@@ -434,6 +434,11 @@
   line-height: 1.7;
 }
 
+.catalog-page-purchase-action {
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
 /* ==============================
    Tablet / Mobile
    ============================== */
@@ -442,7 +447,6 @@
   .catalog-page-section {
     height: auto;
     min-height: auto;
-    padding-bottom: calc(var(--footer-action-height) + 24px);
     overflow: visible;
   }
 
@@ -500,10 +504,6 @@
 }
 
 @media (max-width: 560px) {
-  .catalog-page-section {
-    padding-bottom: calc(var(--footer-action-height) + 20px);
-  }
-
   .catalog-page-detail {
     padding: 20px 14px;
   }
