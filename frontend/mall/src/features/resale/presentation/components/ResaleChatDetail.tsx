@@ -1,7 +1,7 @@
 // frontend/mall/src/features/resale/presentation/components/ResaleChatDetail.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 import Layout from "../../../../components/layout/Layout";
@@ -21,15 +21,9 @@ import {
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
-import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
-import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
-import ChatMetaSection, { type ChatMetaItem } from "../../../shared/presentation/components/ChatMetaSection";
-import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
-import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type {
-  ResaleConditionImage,
   ResaleListing,
   ResaleStatus,
 } from "../../../shared/types/resale";
@@ -37,13 +31,13 @@ import type {
   ResaleReviewComment,
   ResaleReviewCommentPage,
 } from "../../../shared/types/resaleReview";
+import "../../../shared/styles/resale-chat-detail.css";
 
 import {
   createMyResaleComment,
   deleteMyResaleComment,
   fetchMyResaleComments,
   getMyResaleListing,
-  listMyResaleConditionImages,
 } from "../../api/resaleApi";
 import { markMyResaleCommentsAsRead } from "../../api/resaleReviewApi";
 import { updateResaleChatBadgeCount } from "../resaleChatBadgeEvents";
@@ -61,7 +55,6 @@ type ResaleChatItem = MarketResaleListing | ResaleListing;
 type ResaleChatData = {
   source: ResaleChatSource;
   item: ResaleChatItem;
-  images: ResaleConditionImage[];
   comments: ResaleReviewComment[];
 };
 
@@ -69,7 +62,10 @@ type ResaleChatDetailProps = {
   resaleId: string;
 };
 
-function getErrorMessage(error: unknown, fallbackMessage: string): string {
+function getErrorMessage(
+  error: unknown,
+  fallbackMessage: string,
+): string {
   if (error instanceof Error && error.message !== "") {
     return error.message;
   }
@@ -77,7 +73,9 @@ function getErrorMessage(error: unknown, fallbackMessage: string): string {
   return fallbackMessage;
 }
 
-function getResaleStatusLabel(status: ResaleStatus): string {
+function getResaleStatusLabel(
+  status: ResaleStatus,
+): string {
   switch (status) {
     case "listing":
       return "出品中";
@@ -88,65 +86,9 @@ function getResaleStatusLabel(status: ResaleStatus): string {
   }
 }
 
-function getProductMetaItems(item: ResaleChatItem): ChatMetaItem[] {
-  const model = createProductModelDisplay(item);
-  const items: ChatMetaItem[] = [
-    {
-      label: "販売価格",
-      value: `${item.price.toLocaleString("ja-JP")}円`,
-    },
-    {
-      label: "商品の状態",
-      value: item.condition,
-    },
-  ];
-
-  if (model.modelNumber) {
-    items.push({
-      label: "モデル番号",
-      value: model.modelNumber,
-    });
-  }
-
-  if (model.kindLabel && model.kindLabel !== "アパレル") {
-    items.push({
-      label: "種別",
-      value: model.kindLabel,
-    });
-  }
-
-  if (model.size) {
-    items.push({
-      label: "サイズ",
-      value: model.size,
-    });
-  }
-
-  if (model.colorLabel || model.colorCssValue) {
-    items.push({
-      label: "カラー",
-      value: model.colorLabel || model.colorCssValue,
-    });
-  }
-
-  if (model.measurementsLabel !== "-") {
-    items.push({
-      label: "採寸",
-      value: model.measurementsLabel,
-    });
-  }
-
-  if (model.volumeLabel !== "-") {
-    items.push({
-      label: "容量",
-      value: model.volumeLabel,
-    });
-  }
-
-  return items;
-}
-
-function sortComments(comments: ResaleReviewComment[]): ResaleReviewComment[] {
+function sortComments(
+  comments: ResaleReviewComment[],
+): ResaleReviewComment[] {
   return [...comments].sort(
     (firstComment, secondComment) =>
       new Date(firstComment.createdAt).getTime() -
@@ -187,22 +129,24 @@ async function fetchAllComments(
   return sortComments(comments);
 }
 
-async function loadOwnerChat(resaleId: string): Promise<ResaleChatData> {
-  const [item, images, comments] = await Promise.all([
+async function loadOwnerChat(
+  resaleId: string,
+): Promise<ResaleChatData> {
+  const [item, comments] = await Promise.all([
     getMyResaleListing(resaleId),
-    listMyResaleConditionImages(resaleId),
     fetchAllComments("owner", resaleId),
   ]);
 
   return {
     source: "owner",
     item,
-    images,
     comments,
   };
 }
 
-async function loadMarketChat(resaleId: string): Promise<ResaleChatData> {
+async function loadMarketChat(
+  resaleId: string,
+): Promise<ResaleChatData> {
   const [context, comments] = await Promise.all([
     fetchMarketResaleReviewContext(resaleId),
     fetchAllComments("market", resaleId),
@@ -211,7 +155,6 @@ async function loadMarketChat(resaleId: string): Promise<ResaleChatData> {
   return {
     source: "market",
     item: context.data,
-    images: context.images,
     comments,
   };
 }
@@ -239,96 +182,114 @@ export default function ResaleChatDetail({
   resaleId,
 }: ResaleChatDetailProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
-  const routeState = location.state as ResaleChatRouteState | null;
+  const routeState =
+    location.state as ResaleChatRouteState | null;
   const preferredSource = routeState?.source;
   const normalizedResaleId = resaleId.trim();
 
-  const [source, setSource] = useState<ResaleChatSource | null>(null);
-  const [item, setItem] = useState<ResaleChatItem | null>(null);
-  const [images, setImages] = useState<ResaleConditionImage[]>([]);
-  const [comments, setComments] = useState<ResaleReviewComment[]>([]);
-  const [viewerAvatarId, setViewerAvatarId] = useState("");
+  const [source, setSource] =
+    useState<ResaleChatSource | null>(null);
+  const [item, setItem] =
+    useState<ResaleChatItem | null>(null);
+  const [comments, setComments] =
+    useState<ResaleReviewComment[]>([]);
+  const [viewerAvatarId, setViewerAvatarId] =
+    useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
-  const [replyError, setReplyError] = useState("");
-  const [postingReply, setPostingReply] = useState(false);
-  const [deletingCommentId, setDeletingCommentId] = useState("");
+  const [isReplyModalOpen, setIsReplyModalOpen] =
+    useState(false);
+  const [replyContent, setReplyContent] =
+    useState("");
+  const [replyError, setReplyError] =
+    useState("");
+  const [postingReply, setPostingReply] =
+    useState(false);
+  const [deletingCommentId, setDeletingCommentId] =
+    useState("");
 
-  const loadThread = useCallback(async (): Promise<void> => {
-    if (!normalizedResaleId) {
-      setSource(null);
-      setItem(null);
-      setImages([]);
-      setComments([]);
-      setViewerAvatarId("");
-      setError("出品IDが見つかりません。");
-      setLoading(false);
-      return;
-    }
+  const loadThread =
+    useCallback(async (): Promise<void> => {
+      if (!normalizedResaleId) {
+        setSource(null);
+        setItem(null);
+        setComments([]);
+        setViewerAvatarId("");
+        setError("出品IDが見つかりません。");
+        setLoading(false);
+        return;
+      }
 
-    setLoading(true);
-    setError("");
-    setReplyError("");
+      setLoading(true);
+      setError("");
+      setReplyError("");
 
-    try {
-      const [chatData, myAvatar] = await Promise.all([
-        loadResaleChat(normalizedResaleId, preferredSource),
-        getMyAvatar().catch(() => null),
-      ]);
+      try {
+        const [chatData, myAvatar] =
+          await Promise.all([
+            loadResaleChat(
+              normalizedResaleId,
+              preferredSource,
+            ),
+            getMyAvatar().catch(() => null),
+          ]);
 
-      let readError = "";
+        let readError = "";
 
-      if (chatData.source === "owner") {
-        try {
-          const result = await markMyResaleCommentsAsRead({
-            resaleId: normalizedResaleId,
-          });
+        if (chatData.source === "owner") {
+          try {
+            const result =
+              await markMyResaleCommentsAsRead({
+                resaleId: normalizedResaleId,
+              });
 
-          if (result.markedCount > 0) {
-            updateResaleChatBadgeCount(-result.markedCount);
+            if (result.markedCount > 0) {
+              updateResaleChatBadgeCount(
+                -result.markedCount,
+              );
+            }
+          } catch (caught) {
+            readError = getErrorMessage(
+              caught,
+              "コメントの既読状態の更新に失敗しました。",
+            );
           }
-        } catch (caught) {
-          readError = getErrorMessage(
-            caught,
-            "コメントの既読状態の更新に失敗しました。",
-          );
         }
-      }
 
-      setSource(chatData.source);
-      setItem(chatData.item);
-      setImages(chatData.images);
-      setComments(chatData.comments);
-      setViewerAvatarId(
-        myAvatar?.avatarId ||
-          (chatData.source === "owner" ? chatData.item.avatarId : ""),
-      );
+        setSource(chatData.source);
+        setItem(chatData.item);
+        setComments(chatData.comments);
+        setViewerAvatarId(
+          myAvatar?.avatarId ||
+            (chatData.source === "owner"
+              ? chatData.item.avatarId
+              : ""),
+        );
 
-      if (readError) {
-        setError(readError);
+        if (readError) {
+          setError(readError);
+        }
+      } catch (caught) {
+        setSource(null);
+        setItem(null);
+        setComments([]);
+        setViewerAvatarId("");
+        setError(
+          getErrorMessage(
+            caught,
+            "コメント内容の取得に失敗しました。",
+          ),
+        );
+      } finally {
+        setLoading(false);
       }
-    } catch (caught) {
-      setSource(null);
-      setItem(null);
-      setImages([]);
-      setComments([]);
-      setViewerAvatarId("");
-      setError(
-        getErrorMessage(
-          caught,
-          "コメント内容の取得に失敗しました。",
-        ),
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [normalizedResaleId, preferredSource]);
+    }, [
+      normalizedResaleId,
+      preferredSource,
+    ]);
 
   useEffect(() => {
     void loadThread();
@@ -339,19 +300,9 @@ export default function ResaleChatDetail({
     [comments],
   );
 
-  const productMetaItems = useMemo(
-    () => (item ? getProductMetaItems(item) : []),
-    [item],
-  );
+  const canSubmitReply =
+    /\S/u.test(replyContent);
 
-  const handleOpenMarketDetail = useCallback(() => {
-    if (!normalizedResaleId) return;
-
-    navigate(`/market/${encodeURIComponent(normalizedResaleId)}`);
-  }, [navigate, normalizedResaleId]);
-
-  const title = item?.productName || item?.tokenName || "コメント";
-  const canSubmitReply = /\S/u.test(replyContent);
   const replyActionDisabled =
     loading ||
     !item ||
@@ -377,76 +328,95 @@ export default function ResaleChatDetail({
     setReplyError("");
   }, [postingReply]);
 
-  const submitReply = useCallback(async (): Promise<void> => {
-    if (postingReply || !source || !normalizedResaleId) {
-      return;
-    }
+  const submitReply =
+    useCallback(async (): Promise<void> => {
+      if (
+        postingReply ||
+        !source ||
+        !normalizedResaleId
+      ) {
+        return;
+      }
 
-    if (!/\S/u.test(replyContent)) {
-      setReplyError("コメントを入力してください。");
-      return;
-    }
+      if (!/\S/u.test(replyContent)) {
+        setReplyError(
+          "コメントを入力してください。",
+        );
+        return;
+      }
 
-    if (!item || item.status !== "listing") {
-      setReplyError("現在の出品状態ではコメントできません。");
-      return;
-    }
+      if (
+        !item ||
+        item.status !== "listing"
+      ) {
+        setReplyError(
+          "現在の出品状態ではコメントできません。",
+        );
+        return;
+      }
 
-    setPostingReply(true);
-    setReplyError("");
-
-    try {
-      const result =
-        source === "owner"
-          ? await createMyResaleComment({
-              resaleId: normalizedResaleId,
-              body: replyContent,
-            })
-          : await createMarketResaleComment({
-              resaleId: normalizedResaleId,
-              body: replyContent,
-            });
-
-      setComments((currentComments) =>
-        sortComments([
-          ...currentComments.filter(
-            (comment) =>
-              comment.commentId !== result.comment.commentId,
-          ),
-          result.comment,
-        ]),
-      );
-
-      setIsReplyModalOpen(false);
-      setReplyContent("");
+      setPostingReply(true);
       setReplyError("");
-    } catch (caught) {
-      setReplyError(
-        getErrorMessage(
-          caught,
-          "コメントの送信に失敗しました。",
-        ),
-      );
-    } finally {
-      setPostingReply(false);
-    }
-  }, [
-    item,
-    normalizedResaleId,
-    postingReply,
-    replyContent,
-    source,
-  ]);
+
+      try {
+        const result =
+          source === "owner"
+            ? await createMyResaleComment({
+                resaleId:
+                  normalizedResaleId,
+                body: replyContent,
+              })
+            : await createMarketResaleComment({
+                resaleId:
+                  normalizedResaleId,
+                body: replyContent,
+              });
+
+        setComments(
+          (currentComments) =>
+            sortComments([
+              ...currentComments.filter(
+                (comment) =>
+                  comment.commentId !==
+                  result.comment.commentId,
+              ),
+              result.comment,
+            ]),
+        );
+
+        setIsReplyModalOpen(false);
+        setReplyContent("");
+        setReplyError("");
+      } catch (caught) {
+        setReplyError(
+          getErrorMessage(
+            caught,
+            "コメントの送信に失敗しました。",
+          ),
+        );
+      } finally {
+        setPostingReply(false);
+      }
+    }, [
+      item,
+      normalizedResaleId,
+      postingReply,
+      replyContent,
+      source,
+    ]);
 
   const handleDeleteComment = useCallback(
-    async (comment: ResaleReviewComment): Promise<void> => {
+    async (
+      comment: ResaleReviewComment,
+    ): Promise<void> => {
       if (
         !source ||
         !item ||
         item.status !== "listing" ||
         !normalizedResaleId ||
         !viewerAvatarId ||
-        comment.avatarId !== viewerAvatarId ||
+        comment.avatarId !==
+          viewerAvatarId ||
         comment.isRead ||
         !comment.commentId ||
         deletingCommentId !== ""
@@ -462,27 +432,35 @@ export default function ResaleChatDetail({
         return;
       }
 
-      setDeletingCommentId(comment.commentId);
+      setDeletingCommentId(
+        comment.commentId,
+      );
       setError("");
 
       try {
         if (source === "owner") {
           await deleteMyResaleComment({
-            resaleId: normalizedResaleId,
-            commentId: comment.commentId,
+            resaleId:
+              normalizedResaleId,
+            commentId:
+              comment.commentId,
           });
         } else {
           await deleteMarketResaleComment({
-            resaleId: normalizedResaleId,
-            commentId: comment.commentId,
+            resaleId:
+              normalizedResaleId,
+            commentId:
+              comment.commentId,
           });
         }
 
-        setComments((currentComments) =>
-          currentComments.filter(
-            (currentComment) =>
-              currentComment.commentId !== comment.commentId,
-          ),
+        setComments(
+          (currentComments) =>
+            currentComments.filter(
+              (currentComment) =>
+                currentComment.commentId !==
+                comment.commentId,
+            ),
         );
       } catch (caught) {
         setError(
@@ -507,24 +485,32 @@ export default function ResaleChatDetail({
   return (
     <>
       <Layout
-        title={title}
+        title="AMOL"
         showHeader={!isMobilePortrait}
         showFooter={!isReplyModalOpen}
         mode="mypage"
-        mainClassName="chat-detail-page-layout"
+        mainClassName="chat-detail-page-layout chat-detail-page-layout--inquiry"
+        disableFooterPaddingOnDesktop
         actionButtonLabel="コメント"
         onActionButtonClick={openReplyModal}
-        actionButtonDisabled={replyActionDisabled}
+        actionButtonDisabled={
+          replyActionDisabled
+        }
         footerProps={{
           variant: "default",
           centerActionLabel: "コメント",
-          centerActionDisabled: replyActionDisabled,
-          onCenterActionClick: openReplyModal,
+          centerActionDisabled:
+            replyActionDisabled,
+          onCenterActionClick:
+            openReplyModal,
         }}
       >
         <section className="product-detail-page-layout chat-detail-page">
           {error ? (
-            <Alert variant="error" className="chat-detail-page__error">
+            <Alert
+              variant="error"
+              className="chat-detail-page__error"
+            >
               {error}
             </Alert>
           ) : null}
@@ -548,23 +534,22 @@ export default function ResaleChatDetail({
               <div className="chat-detail-page__left">
                 <ResaleThreadHeader
                   item={item}
-                  images={images}
-                  productMetaItems={productMetaItems}
-                  onOpenMarketDetail={
-                    source === "market" && item.status === "listing"
-                      ? handleOpenMarketDetail
-                      : undefined
+                  detailPath={
+                    source === "market"
+                      ? `/market/${encodeURIComponent(
+                          normalizedResaleId,
+                        )}`
+                      : `/resales/${encodeURIComponent(
+                          normalizedResaleId,
+                        )}`
                   }
                 />
               </div>
 
               <div className="chat-detail-page__right">
                 <div className="chat-detail-page__reply-section">
-                  <h3 className="chat-detail-page__section-title">
-                    コメント一覧
-                  </h3>
-
-                  {sortedComments.length === 0 ? (
+                  {sortedComments.length ===
+                  0 ? (
                     <TextState
                       variant="empty"
                       className="chat-detail-page__no-replies"
@@ -573,29 +558,48 @@ export default function ResaleChatDetail({
                     </TextState>
                   ) : (
                     <div className="chat-detail-page__replies">
-                      {sortedComments.map((comment) => {
-                        const isMine =
-                          Boolean(viewerAvatarId) &&
-                          comment.avatarId === viewerAvatarId;
+                      {sortedComments.map(
+                        (comment) => {
+                          const isMine =
+                            Boolean(
+                              viewerAvatarId,
+                            ) &&
+                            comment.avatarId ===
+                              viewerAvatarId;
 
-                        const canDelete =
-                          item.status === "listing" &&
-                          isMine &&
-                          !comment.isRead;
+                          const canDelete =
+                            item.status ===
+                              "listing" &&
+                            isMine &&
+                            !comment.isRead;
 
-                        return (
-                          <ResaleCommentMessage
-                            key={comment.commentId}
-                            comment={comment}
-                            isMine={isMine}
-                            canDelete={canDelete}
-                            deleting={deletingCommentId === comment.commentId}
-                            onDelete={() => {
-                              void handleDeleteComment(comment);
-                            }}
-                          />
-                        );
-                      })}
+                          return (
+                            <ResaleCommentMessage
+                              key={
+                                comment.commentId
+                              }
+                              comment={
+                                comment
+                              }
+                              isMine={
+                                isMine
+                              }
+                              canDelete={
+                                canDelete
+                              }
+                              deleting={
+                                deletingCommentId ===
+                                comment.commentId
+                              }
+                              onDelete={() => {
+                                void handleDeleteComment(
+                                  comment,
+                                );
+                              }}
+                            />
+                          );
+                        },
+                      )}
                     </div>
                   )}
                 </div>
@@ -627,77 +631,40 @@ export default function ResaleChatDetail({
 
 function ResaleThreadHeader({
   item,
-  images,
-  productMetaItems,
-  onOpenMarketDetail,
+  detailPath,
 }: {
   item: ResaleChatItem;
-  images: ResaleConditionImage[];
-  productMetaItems: ChatMetaItem[];
-  onOpenMarketDetail?: () => void;
+  detailPath: string;
 }) {
-  const sellerName = item.avatarName || "出品者";
   const productTitle =
     item.productName ||
     item.tokenName ||
     "出品商品";
 
   return (
-    <ChatThreadCard variant="resale">
-      <ChatMessageHeader
-        name={sellerName}
-        icon={item.avatarIcon}
-        createdAt={item.createdAt}
-        action={
-          <Badge variant="info" size="md">
-            {getResaleStatusLabel(item.status)}
-          </Badge>
-        }
-      />
+    <>
+      <div className="resale-chat-detail__heading">
+        <h2 className="chat-detail-page__subject">
+          {productTitle}/出品
+        </h2>
 
-      <h2 className="chat-detail-page__subject">
-        {productTitle}/出品
-      </h2>
+        <Badge
+          variant="info"
+          size="md"
+        >
+          {getResaleStatusLabel(
+            item.status,
+          )}
+        </Badge>
+      </div>
 
-      <ChatMetaSection
-        title="対象商品"
-        items={productMetaItems}
-      />
-
-      {item.description ? (
-        <details className="chat-detail-page__description-accordion">
-          <summary className="chat-detail-page__description-summary">
-            商品説明
-          </summary>
-
-          <div className="chat-detail-page__description-body">
-            <p className="chat-detail-page__content">
-              {item.description}
-            </p>
-          </div>
-        </details>
-      ) : null}
-
-      <ChatImageGrid
-        images={images.map((image) => ({
-          key: image.id,
-          url: image.url,
-          alt: "商品状態",
-        }))}
-      />
-
-      {onOpenMarketDetail ? (
-        <div className="chat-detail-page__close-prompt-actions">
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={onOpenMarketDetail}
-          >
-            商品ページを見る
-          </Button>
-        </div>
-      ) : null}
-    </ChatThreadCard>
+      <Link
+        to={detailPath}
+        className="resale-chat-detail__detail-link"
+      >
+        出品詳細を見る
+      </Link>
+    </>
   );
 }
 
@@ -714,7 +681,8 @@ function ResaleCommentMessage({
   deleting: boolean;
   onDelete: () => void;
 }) {
-  const avatarName = comment.avatarName || "ユーザー";
+  const avatarName =
+    comment.avatarName || "ユーザー";
 
   return (
     <ChatMessageBubble
@@ -729,10 +697,14 @@ function ResaleCommentMessage({
             variant="ghost"
             size="sm"
             disabled={deleting}
-            aria-busy={deleting || undefined}
+            aria-busy={
+              deleting || undefined
+            }
             onClick={onDelete}
           >
-            {deleting ? "削除中" : "削除"}
+            {deleting
+              ? "削除中"
+              : "削除"}
           </Button>
         ) : undefined
       }

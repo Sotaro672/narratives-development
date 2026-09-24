@@ -1,0 +1,29 @@
+/* frontend/mall/src/features/shared/styles/resale-chat-detail.css */
+
+.resale-chat-detail__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.resale-chat-detail__heading .chat-detail-page__subject {
+  min-width: 0;
+  margin: 0;
+}
+
+.resale-chat-detail__detail-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 16px;
+  color: var(--color-primary, #2563eb);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.resale-chat-detail__detail-link:hover {
+  text-decoration: underline;
+}
