@@ -21,7 +21,7 @@
   padding: 16px 0 32px;
 }
 
-.chat-detail-page__resale-split {
+.chat-detail-page__split {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
   gap: 32px;
@@ -32,16 +32,12 @@
   box-sizing: border-box;
 }
 
-.chat-detail-page__resale-left,
-.chat-detail-page__resale-right {
-  min-width: 0;
-}
-
-.chat-detail-page__resale-left,
-.chat-detail-page__resale-right {
+.chat-detail-page__left,
+.chat-detail-page__right {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 .chat-detail-page__message-head {
@@ -222,15 +218,15 @@
     padding: 0 16px 24px;
   }
 
-  .chat-detail-page__resale-split {
+  .chat-detail-page__split {
     display: flex;
     flex-direction: column;
     gap: 18px;
     padding: 12px 0 32px;
   }
 
-  .chat-detail-page__resale-left,
-  .chat-detail-page__resale-right {
+  .chat-detail-page__left,
+  .chat-detail-page__right {
     width: 100%;
   }
 }
@@ -245,7 +241,7 @@
     padding-top: 12px;
   }
 
-  .chat-detail-page__resale-split {
+  .chat-detail-page__split {
     gap: 14px;
   }
 
