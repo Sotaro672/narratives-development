@@ -15,6 +15,8 @@ import "../styles/signIn-page.css";
 import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import TextButton from "../components/ui/TextButton";
+import TextState from "../components/ui/TextState";
 import { auth } from "../lib/firebase";
 
 function resolveRedirectPath(
@@ -135,26 +137,24 @@ export default function SignInPage() {
             />
 
             {error ? (
-              <p className="form-error-text">
+              <TextState variant="error">
                 {error}
-              </p>
+              </TextState>
             ) : null}
 
-            <button
+            <TextButton
               type="button"
               onClick={() => navigate("/password-reset")}
-              className="form-link-button"
             >
               パスワードを忘れた方はこちら
-            </button>
+            </TextButton>
 
-            <button
+            <TextButton
               type="button"
               onClick={() => navigate("/signup")}
-              className="form-link-button"
             >
               新規登録はこちら
-            </button>
+            </TextButton>
           </div>
 
           <div className="signin-page-actions">

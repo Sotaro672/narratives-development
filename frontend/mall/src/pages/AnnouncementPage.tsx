@@ -1,12 +1,13 @@
 // frontend/mall/src/pages/AnnouncementPage.tsx
 
 import { useCallback, useMemo } from "react";
-import { Bell, Newspaper, ShieldCheck } from "lucide-react";
+import { Bell, Newspaper, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Badge from "../components/ui/Badge";
 import List, { ListRow } from "../components/ui/List";
+import StatePanel from "../components/ui/StatePanel";
 
 import { useAnnouncementsQuery } from "../features/announcement/hooks/useAnnouncementsQuery";
 import { useNewsQuery } from "../features/news/hooks/useNewsQuery";
@@ -291,24 +292,35 @@ export default function AnnouncementPage() {
     >
       <section className="page-section content-page-section announcement-page announcement-page--list">
         {error ? (
-          <div className="announcement-page__list-error" role="alert">
-            {error}
-          </div>
+          <StatePanel
+            variant="error"
+            icon={<TriangleAlert size={28} strokeWidth={1.8} />}
+            title="通知を取得できませんでした"
+            description={error}
+            className="announcement-page__list-error"
+          />
         ) : null}
 
-        {loading ? (
-          <div className="announcement-page__list-state">
-            読み込み中...
-          </div>
+        {!error && loading ? (
+          <StatePanel
+            variant="loading"
+            title="通知を読み込んでいます"
+            description="最新のお知らせを確認しています。"
+            className="announcement-page__list-state"
+          />
         ) : null}
 
-        {!loading && items.length === 0 ? (
-          <div className="announcement-page__list-empty">
-            現在、通知はありません。
-          </div>
+        {!error && !loading && items.length === 0 ? (
+          <StatePanel
+            variant="empty"
+            icon={<Bell size={28} strokeWidth={1.8} />}
+            title="現在、通知はありません"
+            description="新しいお知らせが届くと、ここに表示されます。"
+            className="announcement-page__list-empty"
+          />
         ) : null}
 
-        {!loading && items.length > 0 ? (
+        {!error && !loading && items.length > 0 ? (
           <List
             className="announcement-page__list"
             aria-label="通知一覧"

@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import Badge from "../../../components/ui/Badge";
+import Chip from "../../../components/ui/Chip";
 import { getMyAvatar } from "../../avatar/api/avatarApi";
 import ReportModal from "../../report/components/ReportModal";
 import { useReport } from "../../report/hooks/useReport";
@@ -123,66 +125,57 @@ export default function TokenReviewAggregateCard({
   return (
     <>
       <div className="token-review-aggregate" aria-label="トークンレビュー集計">
-        <button
-          type="button"
-          className="token-review-aggregate__pill token-review-aggregate__pill--button"
+        <Chip
+          variant="neutral"
+          size="md"
           disabled={!canTap}
           onClick={() => void handleLike()}
         >
-          <span className="token-review-aggregate__icon" aria-hidden="true">
-            👍
-          </span>
-          <span className="token-review-aggregate__label">{likeCount}</span>
-        </button>
+          <span aria-hidden="true">👍</span>
+          <span>{likeCount}</span>
+        </Chip>
 
-        <button
-          type="button"
-          className="token-review-aggregate__pill token-review-aggregate__pill--button"
+        <Chip
+          variant="neutral"
+          size="md"
           disabled={!canTap}
           onClick={() => void handleDislike()}
         >
-          <span className="token-review-aggregate__icon" aria-hidden="true">
-            👎
-          </span>
-          <span className="token-review-aggregate__label">{dislikeCount}</span>
-        </button>
+          <span aria-hidden="true">👎</span>
+          <span>{dislikeCount}</span>
+        </Chip>
 
-        <button
-          type="button"
-          className="token-review-aggregate__pill token-review-aggregate__pill--button"
+        <Chip
+          variant="neutral"
+          size="md"
           disabled={!canOpenResalePage}
           onClick={handleOpenResalePage}
         >
-          <span className="token-review-aggregate__icon" aria-hidden="true">
-            ↗
-          </span>
-          <span className="token-review-aggregate__label">{resaleLabel}</span>
-        </button>
+          <span aria-hidden="true">↗</span>
+          <span>{resaleLabel}</span>
+        </Chip>
 
-        <button
-          type="button"
-          className="token-review-aggregate__pill token-review-aggregate__pill--button"
+        <Chip
+          variant="neutral"
+          size="md"
           aria-label="トークンを通報"
           disabled={!canReport}
           onClick={handleOpenReport}
         >
-          <span className="token-review-aggregate__icon" aria-hidden="true">
-            ⚑
-          </span>
-          <span className="token-review-aggregate__label">通報</span>
-        </button>
+          <span aria-hidden="true">⚑</span>
+          <span>通報</span>
+        </Chip>
 
         <span className="token-review-aggregate__spacer" />
 
-        <div
-          className="token-review-aggregate__pill"
+        <Badge
+          variant="neutral"
+          size="md"
           aria-label={`コメント ${commentCount} 件`}
         >
-          <span className="token-review-aggregate__icon" aria-hidden="true">
-            💬
-          </span>
-          <span className="token-review-aggregate__label">{commentCount}</span>
-        </div>
+          <span aria-hidden="true">💬</span>
+          <span>{commentCount}</span>
+        </Badge>
       </div>
 
       <ReportModal

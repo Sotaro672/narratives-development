@@ -110,33 +110,29 @@
 }
 
 .payment-page__payment-method {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   min-height: 48px;
   padding: 12px 14px;
   border: 1px solid #e5e7eb;
   border-radius: 14px;
   background: #ffffff;
-  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
-.payment-page__payment-method:has(input:checked) {
+.payment-page__payment-method:has(.ui-radio__input:checked) {
   border-color: #111827;
   background: #f9fafb;
 }
 
-.payment-page__payment-method input {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  accent-color: #111827;
+.payment-page__payment-method .ui-radio__label {
+  align-items: center;
 }
 
 .payment-page__payment-method-body {
   display: flex;
-  flex: 1;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
   gap: 8px;
 }

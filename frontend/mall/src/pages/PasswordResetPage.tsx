@@ -10,6 +10,7 @@ import "../styles/signIn-page.css";
 import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import TextState from "../components/ui/TextState";
 import { auth } from "../lib/firebase";
 
 export default function PasswordResetPage() {
@@ -62,12 +63,16 @@ export default function PasswordResetPage() {
             fullWidth
           />
 
-          {error ? <p className="form-error-text">{error}</p> : null}
+          {error ? (
+            <TextState variant="error">
+              {error}
+            </TextState>
+          ) : null}
 
           {notice ? (
-            <p className="signin-page-notice">
+            <TextState variant="success">
               {notice}
-            </p>
+            </TextState>
           ) : null}
         </div>
 

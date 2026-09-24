@@ -2,6 +2,7 @@
 
 import Button from "../../../components/ui/Button";
 import Card from "../../../components/ui/Card";
+import Radio from "../../../components/ui/Radio";
 import SectionHeader from "../../../components/ui/SectionHeader";
 import TextButton from "../../../components/ui/TextButton";
 import TextState from "../../../components/ui/TextState";
@@ -42,53 +43,53 @@ export function PaymentMethodsCard({
       {paymentMethods.length > 0 ? (
         <div className="payment-page__payment-methods">
           {paymentMethods.map((method) => (
-            <label className="payment-page__payment-method" key={method.id}>
-              <input
-                type="radio"
-                name="paymentMethod"
-                value={method.id}
-                checked={selectedPaymentMethodId === method.id}
-                onChange={() => onSelectPaymentMethod(method.id)}
-              />
-
-              <span className="payment-page__payment-method-body">
-                <span className="payment-page__payment-method-row">
-                  <span className="payment-page__payment-method-label">
-                    ブランド
+            <Radio
+              key={method.id}
+              className="payment-page__payment-method"
+              name="paymentMethod"
+              value={method.id}
+              checked={selectedPaymentMethodId === method.id}
+              onChange={() => onSelectPaymentMethod(method.id)}
+              label={
+                <span className="payment-page__payment-method-body">
+                  <span className="payment-page__payment-method-row">
+                    <span className="payment-page__payment-method-label">
+                      ブランド
+                    </span>
+                    <span className="payment-page__payment-method-value">
+                      {formatCardBrand(method.brand)}
+                    </span>
                   </span>
-                  <span className="payment-page__payment-method-value">
-                    {formatCardBrand(method.brand)}
+
+                  <span className="payment-page__payment-method-row">
+                    <span className="payment-page__payment-method-label">
+                      口座名義
+                    </span>
+                    <span className="payment-page__payment-method-value">
+                      {formatCardholderName(method)}
+                    </span>
+                  </span>
+
+                  <span className="payment-page__payment-method-row">
+                    <span className="payment-page__payment-method-label">
+                      番号下4桁
+                    </span>
+                    <span className="payment-page__payment-method-value">
+                      {formatCardLast4(method)}
+                    </span>
+                  </span>
+
+                  <span className="payment-page__payment-method-row">
+                    <span className="payment-page__payment-method-label">
+                      有効期限
+                    </span>
+                    <span className="payment-page__payment-method-value">
+                      {formatCardExpiry(method)}
+                    </span>
                   </span>
                 </span>
-
-                <span className="payment-page__payment-method-row">
-                  <span className="payment-page__payment-method-label">
-                    口座名義
-                  </span>
-                  <span className="payment-page__payment-method-value">
-                    {formatCardholderName(method)}
-                  </span>
-                </span>
-
-                <span className="payment-page__payment-method-row">
-                  <span className="payment-page__payment-method-label">
-                    番号下4桁
-                  </span>
-                  <span className="payment-page__payment-method-value">
-                    {formatCardLast4(method)}
-                  </span>
-                </span>
-
-                <span className="payment-page__payment-method-row">
-                  <span className="payment-page__payment-method-label">
-                    有効期限
-                  </span>
-                  <span className="payment-page__payment-method-value">
-                    {formatCardExpiry(method)}
-                  </span>
-                </span>
-              </span>
-            </label>
+              }
+            />
           ))}
         </div>
       ) : (

@@ -8,6 +8,7 @@ import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
 import Card from "../components/ui/Card";
 import Input from "../components/ui/Input";
+import List, { ListRow } from "../components/ui/List";
 import TextState from "../components/ui/TextState";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
@@ -191,61 +192,53 @@ export default function PayoutBranchSelectPage() {
           />
         </div>
 
-        <div className="payout-select__list" role="list">
-          {filteredBranches.map((branch) => {
-            const selected = branch.branchCode === selectedBranchCode;
+        {filteredBranches.length > 0 ? (
+          <List className="payout-select__list">
+            {filteredBranches.map((branch) => {
+              const selected = branch.branchCode === selectedBranchCode;
 
-            return (
-              <button
-                key={branch.branchCode}
-                type="button"
-                className={[
-                  "payout-select__option",
-                  selected ? "payout-select__option--selected" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={() => handleSelectBranch(branch)}
-                aria-pressed={selected}
-                role="listitem"
-              >
-                <span className="payout-select__option-content">
-                  <strong className="payout-select__option-name">
-                    {branch.branchName}
-                  </strong>
+              return (
+                <ListRow
+                  key={branch.branchCode}
+                  title={branch.branchName}
+                  subLabel={`支店コード ${branch.branchCode}`}
+                  meta={
+                    <span
+                      className={[
+                        "payout-select__check",
+                        selected ? "payout-select__check--selected" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      aria-hidden="true"
+                    >
+                      {selected ? (
+                        <Check size={18} strokeWidth={2.5} />
+                      ) : null}
+                    </span>
+                  }
+                  className={
+                    selected ? "payout-select__list-row--selected" : undefined
+                  }
+                  ariaLabel={`${branch.branchName} 支店コード ${branch.branchCode}${
+                    selected ? " 選択中" : ""
+                  }`}
+                  onClick={() => handleSelectBranch(branch)}
+                />
+              );
+            })}
+          </List>
+        ) : (
+          <div className="payout-select__empty">
+            <TextState variant="empty">
+              該当する支店が見つかりません
+            </TextState>
 
-                  <span className="payout-select__option-code">
-                    支店コード {branch.branchCode}
-                  </span>
-                </span>
-
-                <span
-                  className={[
-                    "payout-select__check",
-                    selected ? "payout-select__check--selected" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  aria-hidden="true"
-                >
-                  {selected ? <Check size={18} strokeWidth={2.5} /> : null}
-                </span>
-              </button>
-            );
-          })}
-
-          {filteredBranches.length === 0 ? (
-            <div className="payout-select__empty">
-              <TextState variant="empty">
-                該当する支店が見つかりません
-              </TextState>
-
-              <TextState variant="muted">
-                支店名または支店コードを確認して、もう一度検索してください。
-              </TextState>
-            </div>
-          ) : null}
-        </div>
+            <TextState variant="muted">
+              支店名または支店コードを確認して、もう一度検索してください。
+            </TextState>
+          </div>
+        )}
 
         <TextState variant="muted" className="payout-select__note">
           支店一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。

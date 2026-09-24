@@ -1,4 +1,6 @@
 // frontend/amol/src/features/wallet/components/WalletTabs.tsx
+
+import Tab from "../../../components/ui/Tab";
 import type { WalletTabKey } from "../types";
 
 type WalletTabsProps = {
@@ -13,50 +15,35 @@ export default function WalletTabs({ activeTab, onChange }: WalletTabsProps) {
       role="tablist"
       aria-label="ウォレット表示切替"
     >
-      <button
-        type="button"
+      <Tab
         role="tab"
-        aria-selected={activeTab === "history"}
-        className={[
-          "wallet-page-tabs__button",
-          activeTab === "history" ? "wallet-page-tabs__button--active" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        variant="underline"
+        selected={activeTab === "history"}
+        fullWidth
         onClick={() => onChange("history")}
       >
         取引履歴
-      </button>
+      </Tab>
 
-      <button
-        type="button"
+      <Tab
         role="tab"
-        aria-selected={activeTab === "tokens"}
-        className={[
-          "wallet-page-tabs__button",
-          activeTab === "tokens" ? "wallet-page-tabs__button--active" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        variant="underline"
+        selected={activeTab === "tokens"}
+        fullWidth
         onClick={() => onChange("tokens")}
       >
         トークン
-      </button>
+      </Tab>
 
-      <button
-        type="button"
+      <Tab
         role="tab"
-        aria-selected={activeTab === "resales"}
-        className={[
-          "wallet-page-tabs__button",
-          activeTab === "resales" ? "wallet-page-tabs__button--active" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        variant="underline"
+        selected={activeTab === "resales"}
+        fullWidth
         onClick={() => onChange("resales")}
       >
         出品
-      </button>
+      </Tab>
     </div>
   );
 }

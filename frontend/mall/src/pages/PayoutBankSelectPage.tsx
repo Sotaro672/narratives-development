@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
 import Input from "../components/ui/Input";
+import List, { ListRow } from "../components/ui/List";
 import TextState from "../components/ui/TextState";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
@@ -173,61 +174,53 @@ export default function PayoutBankSelectPage() {
           />
         </div>
 
-        <div className="payout-select__list" role="list">
-          {filteredBanks.map((bank) => {
-            const selected = bank.bankCode === selectedBankCode;
+        {filteredBanks.length > 0 ? (
+          <List className="payout-select__list">
+            {filteredBanks.map((bank) => {
+              const selected = bank.bankCode === selectedBankCode;
 
-            return (
-              <button
-                key={bank.bankCode}
-                type="button"
-                className={[
-                  "payout-select__option",
-                  selected ? "payout-select__option--selected" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={() => handleSelectBank(bank)}
-                aria-pressed={selected}
-                role="listitem"
-              >
-                <span className="payout-select__option-content">
-                  <strong className="payout-select__option-name">
-                    {bank.bankName}
-                  </strong>
+              return (
+                <ListRow
+                  key={bank.bankCode}
+                  title={bank.bankName}
+                  subLabel={`金融機関コード ${bank.bankCode}`}
+                  meta={
+                    <span
+                      className={[
+                        "payout-select__check",
+                        selected ? "payout-select__check--selected" : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      aria-hidden="true"
+                    >
+                      {selected ? (
+                        <Check size={18} strokeWidth={2.5} />
+                      ) : null}
+                    </span>
+                  }
+                  className={
+                    selected ? "payout-select__list-row--selected" : undefined
+                  }
+                  ariaLabel={`${bank.bankName} 金融機関コード ${bank.bankCode}${
+                    selected ? " 選択中" : ""
+                  }`}
+                  onClick={() => handleSelectBank(bank)}
+                />
+              );
+            })}
+          </List>
+        ) : (
+          <div className="payout-select__empty">
+            <TextState variant="empty">
+              該当する金融機関が見つかりません
+            </TextState>
 
-                  <span className="payout-select__option-code">
-                    金融機関コード {bank.bankCode}
-                  </span>
-                </span>
-
-                <span
-                  className={[
-                    "payout-select__check",
-                    selected ? "payout-select__check--selected" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  aria-hidden="true"
-                >
-                  {selected ? <Check size={18} strokeWidth={2.5} /> : null}
-                </span>
-              </button>
-            );
-          })}
-
-          {filteredBanks.length === 0 ? (
-            <div className="payout-select__empty">
-              <TextState variant="empty">
-                該当する金融機関が見つかりません
-              </TextState>
-
-              <TextState variant="muted">
-                金融機関名または金融機関コードを確認して、もう一度検索してください。
-              </TextState>
-            </div>
-          ) : null}
-        </div>
+            <TextState variant="muted">
+              金融機関名または金融機関コードを確認して、もう一度検索してください。
+            </TextState>
+          </div>
+        )}
 
         <TextState variant="muted" className="payout-select__note">
           金融機関一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。

@@ -6,6 +6,7 @@ import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
+import Checkbox from "../components/ui/Checkbox";
 import Input from "../components/ui/Input";
 import TextState from "../components/ui/TextState";
 import { useSignUpPage } from "../features/auth/hooks/useSignUpPage";
@@ -138,25 +139,19 @@ export default function SignUpPage() {
             </Card>
           </div>
 
-          <label className="form-checkbox-row">
-            <input
-              type="checkbox"
-              checked={vm.agree}
-              disabled={
-                vm.loading ||
-                termsLoading ||
-                Boolean(termsError)
-              }
-              onChange={(event) => {
-                vm.setAgree(event.target.checked);
-                vm.clearError();
-              }}
-            />
-
-            <span>
-              利用規約に同意します
-            </span>
-          </label>
+          <Checkbox
+            label="利用規約に同意します"
+            checked={vm.agree}
+            disabled={
+              vm.loading ||
+              termsLoading ||
+              Boolean(termsError)
+            }
+            onChange={(event) => {
+              vm.setAgree(event.target.checked);
+              vm.clearError();
+            }}
+          />
 
           {vm.error ? (
             <Alert

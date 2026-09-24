@@ -165,27 +165,20 @@
   background: #ffffff;
 }
 
-.announcement-page__list-error {
+.announcement-page__list-error.ui-state-panel,
+.announcement-page__list-state.ui-state-panel,
+.announcement-page__list-empty.ui-state-panel {
+  width: auto;
   margin: 16px;
-  padding: 12px 14px;
-  border: 1px solid rgba(239, 68, 68, 0.24);
-  border-radius: 12px;
-  background: rgba(254, 242, 242, 0.96);
-  color: #b91c1c;
-  font-size: 0.9rem;
-  line-height: 1.6;
 }
 
-.announcement-page__list-state,
-.announcement-page__list-empty {
-  margin: 16px;
-  padding: 28px 18px;
-  border-radius: 16px;
+.announcement-page__list-state.ui-state-panel {
   background: #ffffff;
-  color: rgba(15, 23, 42, 0.62);
-  font-size: 0.95rem;
-  line-height: 1.7;
-  text-align: center;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.announcement-page__list-empty.ui-state-panel {
+  background: #ffffff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 

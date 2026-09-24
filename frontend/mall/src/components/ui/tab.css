@@ -5,34 +5,70 @@
   -webkit-appearance: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   width: fit-content;
   max-width: 100%;
   margin: 0;
   padding: 4px 8px;
   border: 1px solid transparent;
-  border-radius: 9999px;
-  background: #f3f4f6;
+  background: transparent;
   color: #374151;
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   line-height: 1.2;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.tab:hover:not(:disabled) {
+.tab--pill {
+  border-radius: 9999px;
+  background: #f3f4f6;
+}
+
+.tab--pill:hover:not(:disabled) {
   border-color: #d1d5db;
   background: #e5e7eb;
   color: #111827;
 }
 
+.tab--pill.tab--selected {
+  border-color: #d1d5db;
+  background: #e5e7eb;
+  color: #111827;
+}
+
+.tab--underline {
+  min-height: 48px;
+  padding: 0 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #6b7280;
+}
+
+.tab--underline:hover:not(:disabled) {
+  color: #111827;
+}
+
+.tab--underline.tab--selected {
+  border-bottom-color: #111827;
+  color: #111827;
+}
+
+.tab--full-width {
+  width: 100%;
+}
+
 .tab:focus-visible {
+  position: relative;
+  z-index: 1;
   outline: 2px solid #2563eb;
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 .tab:active:not(:disabled) {

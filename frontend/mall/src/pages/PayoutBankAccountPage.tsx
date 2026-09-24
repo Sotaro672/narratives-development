@@ -6,7 +6,9 @@ import { useNavigate } from "react-router-dom";
 import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
 import Card from "../components/ui/Card";
+import InfoList, { InfoRow } from "../components/ui/InfoList";
 import Input from "../components/ui/Input";
+import Radio from "../components/ui/Radio";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
 import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
@@ -94,18 +96,21 @@ export default function PayoutBankAccountPage() {
     }
 
     const currentBankCodeError = validateBankCode(draft.bankCode);
+
     if (currentBankCodeError || !hasNonWhitespace(draft.bankName)) {
       navigate("/settings/payout-account/bank", { replace: true });
       return;
     }
 
     const currentBranchCodeError = validateBranchCode(draft.branchCode);
+
     if (currentBranchCodeError || !hasNonWhitespace(draft.branchName)) {
       navigate("/settings/payout-account/branch", { replace: true });
       return;
     }
 
     const currentAccountNumberError = validateAccountNumber(accountNumber);
+
     if (currentAccountNumberError || !hasNonWhitespace(accountHolderName)) {
       return;
     }
@@ -135,33 +140,29 @@ export default function PayoutBankAccountPage() {
           売上を受け取る銀行口座の情報を入力してください。
         </p>
 
-        <div className="payout-bank-account-page__destination">
-          <div className="payout-bank-account-page__destination-row">
-            <span className="payout-summary__label">金融機関</span>
-
-            <div className="payout-summary__value">
-              <strong className="payout-summary__name">
+        <InfoList className="payout-bank-account-page__destination">
+          <InfoRow label="金融機関">
+            <span className="payout-summary__value">
+              <span className="payout-summary__name">
                 {draft.bankName}
-              </strong>
+              </span>
               <span className="payout-summary__code">
                 金融機関コード {draft.bankCode}
               </span>
-            </div>
-          </div>
+            </span>
+          </InfoRow>
 
-          <div className="payout-bank-account-page__destination-row">
-            <span className="payout-summary__label">支店</span>
-
-            <div className="payout-summary__value">
-              <strong className="payout-summary__name">
+          <InfoRow label="支店">
+            <span className="payout-summary__value">
+              <span className="payout-summary__name">
                 {draft.branchName}
-              </strong>
+              </span>
               <span className="payout-summary__code">
                 支店コード {draft.branchCode}
               </span>
-            </div>
-          </div>
-        </div>
+            </span>
+          </InfoRow>
+        </InfoList>
 
         <div className="payout-bank-account-page__form">
           <fieldset className="payout-bank-account-page__field payout-bank-account-page__fieldset">
@@ -170,7 +171,11 @@ export default function PayoutBankAccountPage() {
             </legend>
 
             <div className="payout-bank-account-page__account-type">
-              <label
+              <Radio
+                name="accountType"
+                value="ordinary"
+                label="普通"
+                checked={accountType === "ordinary"}
                 className={[
                   "payout-bank-account-page__account-type-option",
                   accountType === "ordinary"
@@ -179,18 +184,14 @@ export default function PayoutBankAccountPage() {
                 ]
                   .filter(Boolean)
                   .join(" ")}
-              >
-                <input
-                  type="radio"
-                  name="accountType"
-                  value="ordinary"
-                  checked={accountType === "ordinary"}
-                  onChange={() => setAccountType("ordinary")}
-                />
-                <span>普通</span>
-              </label>
+                onChange={() => setAccountType("ordinary")}
+              />
 
-              <label
+              <Radio
+                name="accountType"
+                value="current"
+                label="当座"
+                checked={accountType === "current"}
                 className={[
                   "payout-bank-account-page__account-type-option",
                   accountType === "current"
@@ -199,16 +200,8 @@ export default function PayoutBankAccountPage() {
                 ]
                   .filter(Boolean)
                   .join(" ")}
-              >
-                <input
-                  type="radio"
-                  name="accountType"
-                  value="current"
-                  checked={accountType === "current"}
-                  onChange={() => setAccountType("current")}
-                />
-                <span>当座</span>
-              </label>
+                onChange={() => setAccountType("current")}
+              />
             </div>
           </fieldset>
 

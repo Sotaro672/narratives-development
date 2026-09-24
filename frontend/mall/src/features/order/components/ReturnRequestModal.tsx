@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import Alert from "../../../components/ui/Alert";
 import Button from "../../../components/ui/Button";
+import Checkbox from "../../../components/ui/Checkbox";
 import Chip from "../../../components/ui/Chip";
 import Modal, {
   ModalBody,
@@ -159,17 +160,14 @@ export default function ReturnRequestModal({
               </ol>
             </Alert>
 
-            <label className="order-detail-page__return-agreement">
-              <input
-                type="checkbox"
-                checked={agreedToReturnConditions}
-                disabled={submitting}
-                onChange={(event) => {
-                  setAgreedToReturnConditions(event.target.checked);
-                }}
-              />
-              <span>返品条件に合意する</span>
-            </label>
+            <Checkbox
+              label="返品条件に合意する"
+              checked={agreedToReturnConditions}
+              disabled={submitting}
+              onChange={(event) => {
+                setAgreedToReturnConditions(event.target.checked);
+              }}
+            />
           </>
         ) : null}
 

@@ -2,27 +2,11 @@
 
 .payout-bank-account-page__destination {
   width: 100%;
-  box-sizing: border-box;
   margin-bottom: 24px;
-  overflow: hidden;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #f9fafb;
 }
 
-.payout-bank-account-page__destination-row {
-  display: flex;
-  width: 100%;
-  box-sizing: border-box;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.payout-bank-account-page__destination-row:last-child {
-  border-bottom: none;
+.payout-bank-account-page__destination .ui-info-row__value {
+  min-width: 0;
 }
 
 .payout-bank-account-page__form {
@@ -72,20 +56,15 @@
 }
 
 .payout-bank-account-page__account-type-option {
-  display: flex;
   min-height: 48px;
   box-sizing: border-box;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
   padding: 11px 16px;
   border: 1px solid #d1d5db;
   border-radius: 10px;
   background: #fff;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .payout-bank-account-page__account-type-option:hover {
@@ -97,11 +76,17 @@
   background: #f3f4f6;
 }
 
-.payout-bank-account-page__account-type-option input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: #111827;
+.payout-bank-account-page__account-type-option .ui-radio__label {
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 100%;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.payout-bank-account-page__account-type-option .ui-radio__content {
+  flex: 0 1 auto;
 }
 
 .payout-bank-account-page__notice {
@@ -109,10 +94,6 @@
 }
 
 @media (max-width: 480px) {
-  .payout-bank-account-page__destination-row {
-    gap: 12px;
-  }
-
   .payout-bank-account-page__account-type {
     gap: 10px;
   }
