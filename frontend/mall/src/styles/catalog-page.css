@@ -5,8 +5,6 @@
    ============================== */
 
 .catalog-page-section {
-  --split-page-header-height: var(--amol-header-height);
-  --split-page-left-width: 50vw;
   --catalog-thumbnail-size: 58px;
   --catalog-thumbnail-gap: 10px;
   --catalog-media-bg: #f6f2e8;
@@ -125,10 +123,6 @@
 /* ==============================
    Detail area
    ============================== */
-
-.catalog-page-detail {
-  padding: 32px 32px 96px;
-}
 
 .catalog-page-summary {
   padding-bottom: 24px;
@@ -450,13 +444,6 @@
     overflow: visible;
   }
 
-  .catalog-page-content {
-    display: block;
-    height: auto;
-    min-height: auto;
-    overflow: visible;
-  }
-
   .catalog-page-media {
     position: relative;
     width: 100%;
@@ -482,13 +469,6 @@
     bottom: 12px;
   }
 
-  .catalog-page-detail {
-    height: auto;
-    min-height: auto;
-    padding: 24px 16px;
-    overflow: visible;
-  }
-
   .catalog-page-title {
     font-size: 24px;
   }
@@ -504,10 +484,6 @@
 }
 
 @media (max-width: 560px) {
-  .catalog-page-detail {
-    padding: 20px 14px;
-  }
-
   .catalog-page-card {
     margin-top: 18px;
     padding: 16px;

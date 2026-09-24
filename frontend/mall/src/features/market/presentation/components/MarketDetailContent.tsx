@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import Alert from "../../../../components/ui/Alert";
+import Button from "../../../../components/ui/Button";
 import Card from "../../../../components/ui/Card";
 import TextState from "../../../../components/ui/TextState";
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
@@ -32,6 +33,7 @@ type MarketDetailContentState = Pick<
   | "loading"
   | "loadingLike"
   | "loadingReviews"
+  | "addingToCart"
   | "updatingLike"
   | "error"
   | "reviewsError"
@@ -48,6 +50,7 @@ type MarketDetailContentState = Pick<
   | "avatarIcon"
   | "galleryItems"
   | "safeActiveMediaIndex"
+  | "canAddToCart"
   | "handlePrevMedia"
   | "handleNextMedia"
   | "handleSelectMedia"
@@ -59,6 +62,7 @@ type MarketDetailContentProps = {
   onOpenSeller: () => void;
   onOpenResaleChat: () => void;
   onOpenResaleReport: () => void;
+  onAddToCart: () => void | Promise<void>;
   reportSubmitting: boolean;
 };
 
@@ -67,6 +71,7 @@ export default function MarketDetailContent({
   onOpenSeller,
   onOpenResaleChat,
   onOpenResaleReport,
+  onAddToCart,
   reportSubmitting,
 }: MarketDetailContentProps) {
   const { authResolved, isLoggedIn } = useAuthState();
@@ -80,6 +85,7 @@ export default function MarketDetailContent({
     loading,
     loadingLike,
     loadingReviews,
+    addingToCart,
     updatingLike,
     error,
     reviewsError,
@@ -96,6 +102,7 @@ export default function MarketDetailContent({
     avatarIcon,
     galleryItems,
     safeActiveMediaIndex,
+    canAddToCart,
     handlePrevMedia,
     handleNextMedia,
     handleSelectMedia,
@@ -213,13 +220,25 @@ export default function MarketDetailContent({
             </>
           }
           contentFooter={
-            <ProductReviewSection
-              items={reviews?.items ?? []}
-              productBlueprintId={item.productBlueprintId}
-              currentAvatarId={isLoggedIn ? currentAvatarId : ""}
-              loading={loadingReviews}
-              errorMessage={reviewsError}
-            />
+            <>
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={!canAddToCart}
+                onClick={onAddToCart}
+              >
+                {addingToCart ? "追加中" : "カートに入れる"}
+              </Button>
+
+              <ProductReviewSection
+                items={reviews?.items ?? []}
+                productBlueprintId={item.productBlueprintId}
+                currentAvatarId={isLoggedIn ? currentAvatarId : ""}
+                loading={loadingReviews}
+                errorMessage={reviewsError}
+              />
+            </>
           }
         >
           <ProductIdentity

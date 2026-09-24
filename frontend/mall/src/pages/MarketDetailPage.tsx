@@ -2,6 +2,7 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 
 import { addResaleCartItem } from "../features/cart/api/cartApi";
@@ -16,6 +17,7 @@ import "../styles/market-detail-page.css";
 export default function MarketDetailPage() {
   const navigate = useNavigate();
   const { resaleId } = useParams<{ resaleId: string }>();
+  const isMobilePortrait = useMobilePortrait();
 
   const detail = useMarketDetailPage({
     resaleId,
@@ -24,8 +26,6 @@ export default function MarketDetailPage() {
 
   const {
     title,
-    addingToCart,
-    canAddToCart,
     sellerAvatarId,
     handleAddToCart,
   } = detail;
@@ -47,9 +47,6 @@ export default function MarketDetailPage() {
   } = useReport();
 
   const normalizedResaleId = resaleId?.trim() ?? "";
-  const addToCartButtonLabel = addingToCart
-    ? "追加中"
-    : "カートに入れる";
 
   async function handleAddToCartAndOpenCart(): Promise<void> {
     const added = await handleAddToCart();
@@ -84,28 +81,21 @@ export default function MarketDetailPage() {
     <Layout
       title={title}
       titleClickable={false}
+      mode="mypage"
+      showHeader={!isMobilePortrait}
       hideAnnouncementButton
       hideSettingsButton
       hideHamburgerMenu
       showCartButton
       cartButtonLabel="カート"
       onCartButtonClick={() => navigate("/cart")}
-      actionButtonLabel={addToCartButtonLabel}
-      onActionButtonClick={handleAddToCartAndOpenCart}
-      actionButtonDisabled={!canAddToCart}
-      showFooter
-      footerProps={{
-        variant: "action",
-        buttonLabel: addToCartButtonLabel,
-        disabled: !canAddToCart,
-        onButtonClick: handleAddToCartAndOpenCart,
-      }}
     >
       <MarketDetailContent
         detail={detail}
         onOpenSeller={handleOpenSellerAvatar}
         onOpenResaleChat={handleOpenResaleChat}
         onOpenResaleReport={handleOpenResaleReport}
+        onAddToCart={handleAddToCartAndOpenCart}
         reportSubmitting={reportSubmitting}
       />
 

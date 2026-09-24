@@ -1,4 +1,4 @@
-/* frontend/src/styles/page-layout.css */
+/* frontend/mall/src/styles/page-layout.css */
 
 .page-section {
   width: 100%;
@@ -44,8 +44,24 @@
   color: #6b7280;
 }
 
-/* PC split-page layout can manage footer height by itself. */
+/* Product detail pages shared layout */
+
+.product-detail-page-layout {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+/* PC split-page layout */
+
 @media (min-width: 960px) {
+  .product-detail-page-layout {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+  }
+
   .layout-main--with-footer.layout-main--disable-footer-padding-desktop {
     padding-bottom: 0;
   }

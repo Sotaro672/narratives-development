@@ -25,6 +25,7 @@ import ReportFlagButton from "../features/shared/presentation/components/ReportF
 import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 
 import "../features/shared/styles/product-detail.css";
+import "../styles/page-layout.css";
 import "../styles/catalog-page.css";
 
 export default function CatalogPage() {
@@ -143,7 +144,7 @@ export default function CatalogPage() {
       showHeader={!isMobilePortrait}
       showFooter={isLoggedIn}
     >
-      <section className="catalog-page-section">
+      <section className="product-detail-page-layout catalog-page-section">
         {isLoadingCatalog ? (
           <p className="catalog-page-state">カタログ詳細を読み込んでいます。</p>
         ) : null}
