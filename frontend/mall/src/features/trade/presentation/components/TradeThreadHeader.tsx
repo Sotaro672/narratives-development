@@ -41,6 +41,13 @@ export default function TradeThreadHeader({
   const title = getTradeTitle(trade.productName);
   const resaleId = trade.resale?.id?.trim() ?? "";
 
+  const resaleDetailPath =
+    resaleId === ""
+      ? ""
+      : trade.viewerSide === "seller"
+        ? `/resales/${encodeURIComponent(resaleId)}`
+        : `/market/${encodeURIComponent(resaleId)}`;
+
   const handleCopyOrderId = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(trade.orderId);
@@ -89,9 +96,14 @@ export default function TradeThreadHeader({
         <InfoList rows={transactionMetaItems} />
       </section>
 
-      {resaleId ? (
+      {resaleDetailPath ? (
         <Link
-          to={`/resales/${encodeURIComponent(resaleId)}`}
+          to={resaleDetailPath}
+          state={
+            trade.viewerSide === "buyer"
+              ? { reviewContext: true }
+              : undefined
+          }
           className="trade-chat-detail__resale-link"
         >
           出品詳細を見る

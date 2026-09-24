@@ -1,6 +1,6 @@
 // frontend/mall/src/pages/MarketDetailPage.tsx
 
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
@@ -14,14 +14,23 @@ import { useReport } from "../features/report/hooks/useReport";
 import "../styles/page-layout.css";
 import "../styles/market-detail-page.css";
 
+type MarketDetailRouteState = {
+  reviewContext?: boolean;
+};
+
 export default function MarketDetailPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { resaleId } = useParams<{ resaleId: string }>();
   const isMobilePortrait = useMobilePortrait();
+
+  const routeState = location.state as MarketDetailRouteState | null;
+  const reviewContext = routeState?.reviewContext === true;
 
   const detail = useMarketDetailPage({
     resaleId,
     addResaleProductToCart: addResaleCartItem,
+    reviewContext,
   });
 
   const {

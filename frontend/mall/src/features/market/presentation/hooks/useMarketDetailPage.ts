@@ -22,6 +22,7 @@ import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
 import { fetchMarketProductBlueprintReviews } from "../../infrastructure/marketReviewApi";
 import { fetchMarketResaleById } from "../../infrastructure/marketResaleApi";
 import { fetchMarketResaleConditionImages } from "../../infrastructure/marketResaleImageApi";
+import { fetchMarketResaleReviewContext } from "../../infrastructure/marketResaleReviewContextApi";
 import { fetchMarketResaleComments } from "../../infrastructure/marketResaleReviewApi";
 
 const DEFAULT_REVIEW_PAGE = 1;
@@ -37,6 +38,7 @@ export type AddResaleProductToCart = (args: {
 export type UseMarketDetailPageParams = {
   resaleId?: string;
   addResaleProductToCart: AddResaleProductToCart;
+  reviewContext?: boolean;
 };
 
 export type UseMarketDetailPageResult = {
@@ -87,6 +89,7 @@ function getErrorMessage(
 export function useMarketDetailPage({
   resaleId,
   addResaleProductToCart,
+  reviewContext = false,
 }: UseMarketDetailPageParams): UseMarketDetailPageResult {
   const normalizedResaleId = resaleId?.trim() ?? "";
 
@@ -136,13 +139,25 @@ export function useMarketDetailPage({
       }).catch(() => null);
 
       try {
-        const [nextItem, nextImages, commentPage] = await Promise.all([
-          fetchMarketResaleById(normalizedResaleId),
-          fetchMarketResaleConditionImages(normalizedResaleId),
+        const detailPromise = reviewContext
+          ? fetchMarketResaleReviewContext(normalizedResaleId)
+          : Promise.all([
+              fetchMarketResaleById(normalizedResaleId),
+              fetchMarketResaleConditionImages(normalizedResaleId),
+            ]).then(([data, nextImages]) => ({
+              data,
+              images: nextImages,
+            }));
+
+        const [context, commentPage] = await Promise.all([
+          detailPromise,
           commentPagePromise,
         ]);
 
         if (cancelled) return;
+
+        const nextItem = context.data;
+        const nextImages = context.images;
 
         setItem(nextItem);
         setImages(nextImages);
@@ -204,7 +219,7 @@ export function useMarketDetailPage({
     return () => {
       cancelled = true;
     };
-  }, [normalizedResaleId]);
+  }, [normalizedResaleId, reviewContext]);
 
   useEffect(() => {
     let cancelled = false;
@@ -290,6 +305,7 @@ export function useMarketDetailPage({
   const canAddToCart = Boolean(
     item?.id &&
       item.productId &&
+      item.status === "listing" &&
       !loading &&
       !error &&
       !addingToCart,
@@ -314,18 +330,13 @@ export function useMarketDetailPage({
   const handleSelectMedia = useCallback(
     (index: number) => {
       if (index < 0 || index >= galleryItems.length) return;
-
       setActiveMediaIndex(index);
     },
     [galleryItems.length],
   );
 
   const handleToggleLike = useCallback(async (): Promise<void> => {
-    if (
-      !normalizedResaleId ||
-      loadingLike ||
-      updatingLike
-    ) {
+    if (!normalizedResaleId || loadingLike || updatingLike) {
       return;
     }
 
@@ -361,9 +372,17 @@ export function useMarketDetailPage({
     const targetResaleId = item?.id?.trim() ?? "";
     const targetProductId = item?.productId?.trim() ?? "";
 
-    if (!targetResaleId || !targetProductId) {
+    if (
+      !targetResaleId ||
+      !targetProductId ||
+      item?.status !== "listing"
+    ) {
       setCartMessage("");
-      setCartErrorMessage("出品情報が不足しています。");
+      setCartErrorMessage(
+        item?.status === "sold"
+          ? "売却済みの商品はカートに追加できません。"
+          : "出品情報が不足しています。",
+      );
       return false;
     }
 
@@ -394,6 +413,7 @@ export function useMarketDetailPage({
     addResaleProductToCart,
     item?.id,
     item?.productId,
+    item?.status,
   ]);
 
   return {

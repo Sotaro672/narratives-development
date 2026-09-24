@@ -22,16 +22,13 @@ import {
 
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
+import "../../../shared/styles/trade-chat-detail.css";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
-import type {
-  ResaleListing,
-  ResaleStatus,
-} from "../../../shared/types/resale";
+import type { ResaleListing, ResaleStatus } from "../../../shared/types/resale";
 import type {
   ResaleReviewComment,
   ResaleReviewCommentPage,
 } from "../../../shared/types/resaleReview";
-import "../../../shared/styles/resale-chat-detail.css";
 
 import {
   createMyResaleComment,
@@ -62,10 +59,7 @@ type ResaleChatDetailProps = {
   resaleId: string;
 };
 
-function getErrorMessage(
-  error: unknown,
-  fallbackMessage: string,
-): string {
+function getErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message !== "") {
     return error.message;
   }
@@ -73,9 +67,7 @@ function getErrorMessage(
   return fallbackMessage;
 }
 
-function getResaleStatusLabel(
-  status: ResaleStatus,
-): string {
+function getResaleStatusLabel(status: ResaleStatus): string {
   switch (status) {
     case "listing":
       return "出品中";
@@ -86,9 +78,7 @@ function getResaleStatusLabel(
   }
 }
 
-function sortComments(
-  comments: ResaleReviewComment[],
-): ResaleReviewComment[] {
+function sortComments(comments: ResaleReviewComment[]): ResaleReviewComment[] {
   return [...comments].sort(
     (firstComment, secondComment) =>
       new Date(firstComment.createdAt).getTime() -
@@ -129,9 +119,7 @@ async function fetchAllComments(
   return sortComments(comments);
 }
 
-async function loadOwnerChat(
-  resaleId: string,
-): Promise<ResaleChatData> {
+async function loadOwnerChat(resaleId: string): Promise<ResaleChatData> {
   const [item, comments] = await Promise.all([
     getMyResaleListing(resaleId),
     fetchAllComments("owner", resaleId),
@@ -144,9 +132,7 @@ async function loadOwnerChat(
   };
 }
 
-async function loadMarketChat(
-  resaleId: string,
-): Promise<ResaleChatData> {
+async function loadMarketChat(resaleId: string): Promise<ResaleChatData> {
   const [context, comments] = await Promise.all([
     fetchMarketResaleReviewContext(resaleId),
     fetchAllComments("market", resaleId),
@@ -183,113 +169,87 @@ export default function ResaleChatDetail({
 }: ResaleChatDetailProps) {
   const location = useLocation();
   const isMobilePortrait = useMobilePortrait();
-  const routeState =
-    location.state as ResaleChatRouteState | null;
+  const routeState = location.state as ResaleChatRouteState | null;
   const preferredSource = routeState?.source;
   const normalizedResaleId = resaleId.trim();
 
-  const [source, setSource] =
-    useState<ResaleChatSource | null>(null);
-  const [item, setItem] =
-    useState<ResaleChatItem | null>(null);
-  const [comments, setComments] =
-    useState<ResaleReviewComment[]>([]);
-  const [viewerAvatarId, setViewerAvatarId] =
-    useState("");
+  const [source, setSource] = useState<ResaleChatSource | null>(null);
+  const [item, setItem] = useState<ResaleChatItem | null>(null);
+  const [comments, setComments] = useState<ResaleReviewComment[]>([]);
+  const [viewerAvatarId, setViewerAvatarId] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [isReplyModalOpen, setIsReplyModalOpen] =
-    useState(false);
-  const [replyContent, setReplyContent] =
-    useState("");
-  const [replyError, setReplyError] =
-    useState("");
-  const [postingReply, setPostingReply] =
-    useState(false);
-  const [deletingCommentId, setDeletingCommentId] =
-    useState("");
+  const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
+  const [replyContent, setReplyContent] = useState("");
+  const [replyError, setReplyError] = useState("");
+  const [postingReply, setPostingReply] = useState(false);
+  const [deletingCommentId, setDeletingCommentId] = useState("");
 
-  const loadThread =
-    useCallback(async (): Promise<void> => {
-      if (!normalizedResaleId) {
-        setSource(null);
-        setItem(null);
-        setComments([]);
-        setViewerAvatarId("");
-        setError("出品IDが見つかりません。");
-        setLoading(false);
-        return;
-      }
+  const loadThread = useCallback(async (): Promise<void> => {
+    if (!normalizedResaleId) {
+      setSource(null);
+      setItem(null);
+      setComments([]);
+      setViewerAvatarId("");
+      setError("出品IDが見つかりません。");
+      setLoading(false);
+      return;
+    }
 
-      setLoading(true);
-      setError("");
-      setReplyError("");
+    setLoading(true);
+    setError("");
+    setReplyError("");
 
-      try {
-        const [chatData, myAvatar] =
-          await Promise.all([
-            loadResaleChat(
-              normalizedResaleId,
-              preferredSource,
-            ),
-            getMyAvatar().catch(() => null),
-          ]);
+    try {
+      const [chatData, myAvatar] = await Promise.all([
+        loadResaleChat(normalizedResaleId, preferredSource),
+        getMyAvatar().catch(() => null),
+      ]);
 
-        let readError = "";
+      let readError = "";
 
-        if (chatData.source === "owner") {
-          try {
-            const result =
-              await markMyResaleCommentsAsRead({
-                resaleId: normalizedResaleId,
-              });
+      if (chatData.source === "owner") {
+        try {
+          const result = await markMyResaleCommentsAsRead({
+            resaleId: normalizedResaleId,
+          });
 
-            if (result.markedCount > 0) {
-              updateResaleChatBadgeCount(
-                -result.markedCount,
-              );
-            }
-          } catch (caught) {
-            readError = getErrorMessage(
-              caught,
-              "コメントの既読状態の更新に失敗しました。",
-            );
+          if (result.markedCount > 0) {
+            updateResaleChatBadgeCount(-result.markedCount);
           }
-        }
-
-        setSource(chatData.source);
-        setItem(chatData.item);
-        setComments(chatData.comments);
-        setViewerAvatarId(
-          myAvatar?.avatarId ||
-            (chatData.source === "owner"
-              ? chatData.item.avatarId
-              : ""),
-        );
-
-        if (readError) {
-          setError(readError);
-        }
-      } catch (caught) {
-        setSource(null);
-        setItem(null);
-        setComments([]);
-        setViewerAvatarId("");
-        setError(
-          getErrorMessage(
+        } catch (caught) {
+          readError = getErrorMessage(
             caught,
-            "コメント内容の取得に失敗しました。",
-          ),
-        );
-      } finally {
-        setLoading(false);
+            "コメントの既読状態の更新に失敗しました。",
+          );
+        }
       }
-    }, [
-      normalizedResaleId,
-      preferredSource,
-    ]);
+
+      setSource(chatData.source);
+      setItem(chatData.item);
+      setComments(chatData.comments);
+      setViewerAvatarId(myAvatar?.avatarId ?? "");
+
+      if (readError) {
+        setError(readError);
+      }
+    } catch (caught) {
+      setSource(null);
+      setItem(null);
+      setComments([]);
+      setViewerAvatarId("");
+      setError(
+        getErrorMessage(
+          caught,
+          "コメント内容の取得に失敗しました。",
+        ),
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [normalizedResaleId, preferredSource]);
 
   useEffect(() => {
     void loadThread();
@@ -300,8 +260,7 @@ export default function ResaleChatDetail({
     [comments],
   );
 
-  const canSubmitReply =
-    /\S/u.test(replyContent);
+  const canSubmitReply = /\S/u.test(replyContent);
 
   const replyActionDisabled =
     loading ||
@@ -328,95 +287,76 @@ export default function ResaleChatDetail({
     setReplyError("");
   }, [postingReply]);
 
-  const submitReply =
-    useCallback(async (): Promise<void> => {
-      if (
-        postingReply ||
-        !source ||
-        !normalizedResaleId
-      ) {
-        return;
-      }
+  const submitReply = useCallback(async (): Promise<void> => {
+    if (postingReply || !source || !normalizedResaleId) {
+      return;
+    }
 
-      if (!/\S/u.test(replyContent)) {
-        setReplyError(
-          "コメントを入力してください。",
-        );
-        return;
-      }
+    if (!/\S/u.test(replyContent)) {
+      setReplyError("コメントを入力してください。");
+      return;
+    }
 
-      if (
-        !item ||
-        item.status !== "listing"
-      ) {
-        setReplyError(
-          "現在の出品状態ではコメントできません。",
-        );
-        return;
-      }
+    if (!item || item.status !== "listing") {
+      setReplyError("現在の出品状態ではコメントできません。");
+      return;
+    }
 
-      setPostingReply(true);
-      setReplyError("");
+    setPostingReply(true);
+    setReplyError("");
 
-      try {
-        const result =
-          source === "owner"
-            ? await createMyResaleComment({
-                resaleId:
-                  normalizedResaleId,
-                body: replyContent,
-              })
-            : await createMarketResaleComment({
-                resaleId:
-                  normalizedResaleId,
-                body: replyContent,
-              });
+    try {
+      const result =
+        source === "owner"
+          ? await createMyResaleComment({
+              resaleId: normalizedResaleId,
+              body: replyContent,
+            })
+          : await createMarketResaleComment({
+              resaleId: normalizedResaleId,
+              body: replyContent,
+            });
 
-        setComments(
-          (currentComments) =>
-            sortComments([
-              ...currentComments.filter(
-                (comment) =>
-                  comment.commentId !==
-                  result.comment.commentId,
-              ),
-              result.comment,
-            ]),
-        );
-
-        setIsReplyModalOpen(false);
-        setReplyContent("");
-        setReplyError("");
-      } catch (caught) {
-        setReplyError(
-          getErrorMessage(
-            caught,
-            "コメントの送信に失敗しました。",
+      setComments((currentComments) =>
+        sortComments([
+          ...currentComments.filter(
+            (comment) =>
+              comment.commentId !== result.comment.commentId,
           ),
-        );
-      } finally {
-        setPostingReply(false);
-      }
-    }, [
-      item,
-      normalizedResaleId,
-      postingReply,
-      replyContent,
-      source,
-    ]);
+          result.comment,
+        ]),
+      );
+
+      setIsReplyModalOpen(false);
+      setReplyContent("");
+      setReplyError("");
+    } catch (caught) {
+      setReplyError(
+        getErrorMessage(
+          caught,
+          "コメントの送信に失敗しました。",
+        ),
+      );
+    } finally {
+      setPostingReply(false);
+    }
+  }, [
+    item,
+    normalizedResaleId,
+    postingReply,
+    replyContent,
+    source,
+  ]);
 
   const handleDeleteComment = useCallback(
-    async (
-      comment: ResaleReviewComment,
-    ): Promise<void> => {
+    async (comment: ResaleReviewComment): Promise<void> => {
       if (
         !source ||
         !item ||
         item.status !== "listing" ||
         !normalizedResaleId ||
         !viewerAvatarId ||
-        comment.avatarId !==
-          viewerAvatarId ||
+        comment.avatarId !== viewerAvatarId ||
         comment.isRead ||
         !comment.commentId ||
         deletingCommentId !== ""
@@ -432,35 +372,27 @@ export default function ResaleChatDetail({
         return;
       }
 
-      setDeletingCommentId(
-        comment.commentId,
-      );
+      setDeletingCommentId(comment.commentId);
       setError("");
 
       try {
         if (source === "owner") {
           await deleteMyResaleComment({
-            resaleId:
-              normalizedResaleId,
-            commentId:
-              comment.commentId,
+            resaleId: normalizedResaleId,
+            commentId: comment.commentId,
           });
         } else {
           await deleteMarketResaleComment({
-            resaleId:
-              normalizedResaleId,
-            commentId:
-              comment.commentId,
+            resaleId: normalizedResaleId,
+            commentId: comment.commentId,
           });
         }
 
-        setComments(
-          (currentComments) =>
-            currentComments.filter(
-              (currentComment) =>
-                currentComment.commentId !==
-                comment.commentId,
-            ),
+        setComments((currentComments) =>
+          currentComments.filter(
+            (currentComment) =>
+              currentComment.commentId !== comment.commentId,
+          ),
         );
       } catch (caught) {
         setError(
@@ -482,6 +414,13 @@ export default function ResaleChatDetail({
     ],
   );
 
+  const detailPath =
+    source === "owner"
+      ? `/resales/${encodeURIComponent(normalizedResaleId)}`
+      : source === "market"
+        ? `/market/${encodeURIComponent(normalizedResaleId)}`
+        : undefined;
+
   return (
     <>
       <Layout
@@ -493,33 +432,23 @@ export default function ResaleChatDetail({
         disableFooterPaddingOnDesktop
         actionButtonLabel="コメント"
         onActionButtonClick={openReplyModal}
-        actionButtonDisabled={
-          replyActionDisabled
-        }
+        actionButtonDisabled={replyActionDisabled}
         footerProps={{
           variant: "default",
           centerActionLabel: "コメント",
-          centerActionDisabled:
-            replyActionDisabled,
-          onCenterActionClick:
-            openReplyModal,
+          centerActionDisabled: replyActionDisabled,
+          onCenterActionClick: openReplyModal,
         }}
       >
         <section className="product-detail-page-layout chat-detail-page">
           {error ? (
-            <Alert
-              variant="error"
-              className="chat-detail-page__error"
-            >
+            <Alert variant="error" className="chat-detail-page__error">
               {error}
             </Alert>
           ) : null}
 
           {loading ? (
-            <StatePanel
-              variant="loading"
-              title="読み込み中..."
-            />
+            <StatePanel variant="loading" title="読み込み中..." />
           ) : null}
 
           {!loading && !item ? (
@@ -534,22 +463,13 @@ export default function ResaleChatDetail({
               <div className="chat-detail-page__left">
                 <ResaleThreadHeader
                   item={item}
-                  detailPath={
-                    source === "market"
-                      ? `/market/${encodeURIComponent(
-                          normalizedResaleId,
-                        )}`
-                      : `/resales/${encodeURIComponent(
-                          normalizedResaleId,
-                        )}`
-                  }
+                  detailPath={detailPath}
                 />
               </div>
 
               <div className="chat-detail-page__right">
                 <div className="chat-detail-page__reply-section">
-                  {sortedComments.length ===
-                  0 ? (
+                  {sortedComments.length === 0 ? (
                     <TextState
                       variant="empty"
                       className="chat-detail-page__no-replies"
@@ -558,48 +478,31 @@ export default function ResaleChatDetail({
                     </TextState>
                   ) : (
                     <div className="chat-detail-page__replies">
-                      {sortedComments.map(
-                        (comment) => {
-                          const isMine =
-                            Boolean(
-                              viewerAvatarId,
-                            ) &&
-                            comment.avatarId ===
-                              viewerAvatarId;
+                      {sortedComments.map((comment) => {
+                        const isMine =
+                          Boolean(viewerAvatarId) &&
+                          comment.avatarId === viewerAvatarId;
 
-                          const canDelete =
-                            item.status ===
-                              "listing" &&
-                            isMine &&
-                            !comment.isRead;
+                        const canDelete =
+                          item.status === "listing" &&
+                          isMine &&
+                          !comment.isRead;
 
-                          return (
-                            <ResaleCommentMessage
-                              key={
-                                comment.commentId
-                              }
-                              comment={
-                                comment
-                              }
-                              isMine={
-                                isMine
-                              }
-                              canDelete={
-                                canDelete
-                              }
-                              deleting={
-                                deletingCommentId ===
-                                comment.commentId
-                              }
-                              onDelete={() => {
-                                void handleDeleteComment(
-                                  comment,
-                                );
-                              }}
-                            />
-                          );
-                        },
-                      )}
+                        return (
+                          <ResaleCommentMessage
+                            key={comment.commentId}
+                            comment={comment}
+                            isMine={isMine}
+                            canDelete={canDelete}
+                            deleting={
+                              deletingCommentId === comment.commentId
+                            }
+                            onDelete={() => {
+                              void handleDeleteComment(comment);
+                            }}
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -634,36 +537,37 @@ function ResaleThreadHeader({
   detailPath,
 }: {
   item: ResaleChatItem;
-  detailPath: string;
+  detailPath?: string;
 }) {
   const productTitle =
     item.productName ||
     item.tokenName ||
     "出品商品";
 
+  const showDetailLink =
+    item.status !== "sold" &&
+    Boolean(detailPath);
+
   return (
     <>
-      <div className="resale-chat-detail__heading">
+      <div className="trade-chat-detail__heading">
         <h2 className="chat-detail-page__subject">
           {productTitle}/出品
         </h2>
 
-        <Badge
-          variant="info"
-          size="md"
-        >
-          {getResaleStatusLabel(
-            item.status,
-          )}
+        <Badge variant="info" size="md">
+          {getResaleStatusLabel(item.status)}
         </Badge>
       </div>
 
-      <Link
-        to={detailPath}
-        className="resale-chat-detail__detail-link"
-      >
-        出品詳細を見る
-      </Link>
+      {showDetailLink && detailPath ? (
+        <Link
+          to={detailPath}
+          className="trade-chat-detail__resale-link"
+        >
+          出品詳細を見る
+        </Link>
+      ) : null}
     </>
   );
 }
@@ -697,14 +601,10 @@ function ResaleCommentMessage({
             variant="ghost"
             size="sm"
             disabled={deleting}
-            aria-busy={
-              deleting || undefined
-            }
+            aria-busy={deleting || undefined}
             onClick={onDelete}
           >
-            {deleting
-              ? "削除中"
-              : "削除"}
+            {deleting ? "削除中" : "削除"}
           </Button>
         ) : undefined
       }
