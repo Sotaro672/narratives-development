@@ -1,39 +1,23 @@
 // frontend/mall/src/features/trade/presentation/components/TradeThreadHeader.tsx
 
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
 import Badge from "../../../../components/ui/Badge";
 import Copy from "../../../../components/ui/Copy";
+import InfoList, { type InfoListRow } from "../../../../components/ui/InfoList";
 import { formatDateTime } from "../../../../components/utils/date";
-import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
-import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
-import ChatMetaSection, { type ChatMetaItem } from "../../../shared/presentation/components/ChatMetaSection";
-import ChatThreadCard from "../../../shared/presentation/components/ChatThreadCard";
-import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import type { TradeDetail } from "../../../shared/types/trade";
 import { getTradeTitle } from "../util/tradeChatDetail";
 import { getTradeStatusLabel } from "../util/tradeStatus";
 
 type TradeThreadHeaderProps = {
-  trade: TradeDetail;
+  trade?: TradeDetail | null;
 };
 
 export default function TradeThreadHeader({
   trade,
 }: TradeThreadHeaderProps) {
-  const counterpartLabel = trade.viewerSide === "buyer" ? "出品者" : "購入者";
-  const counterpartAvatarName =
-    trade.viewerSide === "buyer"
-      ? trade.sellerAvatarName
-      : trade.buyerAvatarName;
-  const counterpartAvatarIcon =
-    trade.viewerSide === "buyer"
-      ? trade.sellerAvatarIcon
-      : trade.buyerAvatarIcon;
-
-  const displayName = counterpartAvatarName || counterpartLabel;
-  const title = getTradeTitle(trade.productName);
-  const model = createProductModelDisplay(trade.resale);
   const [orderIdCopied, setOrderIdCopied] = useState(false);
 
   useEffect(() => {
@@ -50,6 +34,13 @@ export default function TradeThreadHeader({
     };
   }, [orderIdCopied]);
 
+  if (!trade) {
+    return null;
+  }
+
+  const title = getTradeTitle(trade.productName);
+  const resaleId = trade.resale?.id?.trim() ?? "";
+
   const handleCopyOrderId = async (): Promise<void> => {
     try {
       await navigator.clipboard.writeText(trade.orderId);
@@ -59,7 +50,7 @@ export default function TradeThreadHeader({
     }
   };
 
-  const transactionMetaItems: ChatMetaItem[] = [
+  const transactionMetaItems: InfoListRow[] = [
     {
       label: "注文ID",
       value: (
@@ -75,20 +66,6 @@ export default function TradeThreadHeader({
     },
   ];
 
-  if (trade.returnConsultation?.createdAt) {
-    transactionMetaItems.push({
-      label: "返品相談日時",
-      value: formatDateTime(trade.returnConsultation.createdAt),
-    });
-  }
-
-  if (trade.returnProposal?.createdAt) {
-    transactionMetaItems.push({
-      label: "返品条件提示日時",
-      value: formatDateTime(trade.returnProposal.createdAt),
-    });
-  }
-
   if (trade.transferredAt) {
     transactionMetaItems.push({
       label: "受取日時",
@@ -96,101 +73,30 @@ export default function TradeThreadHeader({
     });
   }
 
-  const productMetaItems: ChatMetaItem[] = [
-    {
-      label: "商品の状態",
-      value: trade.resale.condition,
-    },
-  ];
-
-  if (model.modelNumber) {
-    productMetaItems.push({
-      label: "モデル番号",
-      value: model.modelNumber,
-    });
-  }
-
-  if (model.kindLabel && model.kindLabel !== "アパレル") {
-    productMetaItems.push({
-      label: "種別",
-      value: model.kindLabel,
-    });
-  }
-
-  if (model.size) {
-    productMetaItems.push({
-      label: "サイズ",
-      value: model.size,
-    });
-  }
-
-  if (model.colorLabel || model.colorCssValue) {
-    productMetaItems.push({
-      label: "カラー",
-      value: model.colorLabel || model.colorCssValue,
-    });
-  }
-
-  if (model.measurementsLabel !== "-") {
-    productMetaItems.push({
-      label: "採寸",
-      value: model.measurementsLabel,
-    });
-  }
-
-  if (model.volumeLabel !== "-") {
-    productMetaItems.push({
-      label: "容量",
-      value: model.volumeLabel,
-    });
-  }
-
   return (
-    <ChatThreadCard variant="trade">
-      <ChatMessageHeader
-        name={displayName}
-        icon={counterpartAvatarIcon}
-        createdAt={trade.createdAt}
-        action={
-          <Badge variant="info">
-            {getTradeStatusLabel(trade)}
-          </Badge>
-        }
-      />
+    <>
+      <div className="trade-chat-detail__heading">
+        <h2 className="chat-detail-page__subject">
+          {title}
+        </h2>
 
-      <h2 className="chat-detail-page__subject">{title}</h2>
+        <Badge variant="info">
+          {getTradeStatusLabel(trade)}
+        </Badge>
+      </div>
 
-      <ChatMetaSection
-        title="取引情報"
-        items={transactionMetaItems}
-      />
+      <section className="trade-chat-detail__transaction">
+        <InfoList rows={transactionMetaItems} />
+      </section>
 
-      <ChatMetaSection
-        title="商品情報"
-        items={productMetaItems}
-      />
-
-      {trade.resale.description ? (
-        <details className="chat-detail-page__description-accordion">
-          <summary className="chat-detail-page__description-summary">
-            商品説明
-          </summary>
-
-          <div className="chat-detail-page__description-body">
-            <p className="chat-detail-page__content">
-              {trade.resale.description}
-            </p>
-          </div>
-        </details>
+      {resaleId ? (
+        <Link
+          to={`/resales/${encodeURIComponent(resaleId)}`}
+          className="trade-chat-detail__resale-link"
+        >
+          出品詳細を見る
+        </Link>
       ) : null}
-
-      <ChatImageGrid
-        images={trade.resale.images.map((image) => ({
-          key: image.id,
-          url: image.url,
-          alt: "商品状態",
-        }))}
-      />
-    </ChatThreadCard>
+    </>
   );
 }

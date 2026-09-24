@@ -1,5 +1,18 @@
 /* frontend/mall/src/features/shared/styles/trade-chat-detail.css */
 
+.trade-chat-detail__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.trade-chat-detail__heading .chat-detail-page__subject {
+  min-width: 0;
+  margin: 0;
+}
+
 .trade-chat-detail__order-id {
   display: flex;
   align-items: center;
@@ -10,4 +23,19 @@
 .trade-chat-detail__order-id > span {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.trade-chat-detail__resale-link {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 16px;
+  color: var(--color-primary, #2563eb);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.trade-chat-detail__resale-link:hover {
+  text-decoration: underline;
 }
