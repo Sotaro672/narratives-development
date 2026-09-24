@@ -12,6 +12,7 @@ import type {
   CatalogModelVariation,
   ModelColorOption,
 } from "../../../shared/types/catalog";
+import { createProductModelDisplay } from "../../../shared/presentation/utils/productModelDisplay";
 import { formatAlcoholVolumeLabel } from "../../application/catalogModelMapper";
 import type { CatalogAlcoholOption } from "../../application/catalogSelectionFactory";
 
@@ -51,6 +52,11 @@ export default function ModelSelector({
   const hasAlcoholOptions = alcoholOptions.length > 0;
   const hasColorOptions = colorOptions.length > 0;
   const hasSizeOptions = sizeOptions.length > 0;
+  const selectedModelMeasurementsLabel = selectedModel
+    ? createProductModelDisplay({
+        measurements: selectedModel.measurements,
+      }).measurementsLabel
+    : "-";
 
   return (
     <SectionCard className="catalog-page-card">
@@ -145,14 +151,9 @@ export default function ModelSelector({
                 </InfoRow>
               </>
             ) : (
-              <>
-                <InfoRow label="カラー">
-                  {selectedModel.colorName || "-"}
-                </InfoRow>
-                <InfoRow label="サイズ">
-                  {selectedModel.size || "-"}
-                </InfoRow>
-              </>
+              <InfoRow label="採寸">
+                {selectedModelMeasurementsLabel}
+              </InfoRow>
             )}
 
             <InfoRow label="価格">

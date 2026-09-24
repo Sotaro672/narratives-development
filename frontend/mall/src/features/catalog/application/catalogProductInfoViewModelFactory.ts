@@ -1,4 +1,4 @@
-// frontend/amol/src/features/catalog/application/catalogProductInfoViewModelFactory.ts
+// frontend/mall/src/features/catalog/application/catalogProductInfoViewModelFactory.ts
 
 import type { CatalogProductBlueprint } from "../../shared/types/catalog";
 import type { ProductCategoryKind } from "../../shared/types/category";
@@ -30,10 +30,6 @@ function formatAlcoholContent(value: unknown): string {
   }
 
   return "";
-}
-
-function resolveCategoryLabel(productBlueprint: CatalogProductBlueprint): string {
-  return productBlueprint.productBlueprintCategoryPath?.join(".") ?? "";
 }
 
 function resolveQualityAssuranceItems(value: unknown): string[] {
@@ -93,13 +89,7 @@ export function createProductInfoCardViewModel(args: {
   const rows: ProductInfoRowViewModel[] = [];
   const categoryFields = product.categoryFields ?? null;
 
-  appendRow(rows, createRow("productName", "商品名", product.productName));
   appendRow(rows, createRow("brandName", "ブランド", product.brandName));
-  appendRow(rows, createRow("companyName", "会社名", product.companyName));
-  appendRow(
-    rows,
-    createFormattedRow("category", "カテゴリ", resolveCategoryLabel(product)),
-  );
 
   if (isAlcohol) {
     appendRow(rows, createRow("material", "材料", categoryFields?.material));

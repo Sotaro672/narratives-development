@@ -103,6 +103,7 @@ func (
 		return dto.CatalogDTO{},
 			ldom.ErrNotFound
 	}
+
 	// ------------------------------------------------------------
 	// List
 	// ------------------------------------------------------------
@@ -118,9 +119,11 @@ func (
 		return dto.CatalogDTO{},
 			ldom.ErrNotFound
 	}
+
 	output := dto.CatalogDTO{
 		List: toCatalogListDTO(listItem),
 	}
+
 	// ------------------------------------------------------------
 	// List images
 	// ------------------------------------------------------------
@@ -137,6 +140,7 @@ func (
 			)
 	}
 	output.ListImages = listImages
+
 	// ------------------------------------------------------------
 	// Inventory
 	// ------------------------------------------------------------
@@ -146,6 +150,7 @@ func (
 				"inventory repo is nil",
 			)
 	}
+
 	inventoryID := output.List.InventoryID
 	if inventoryID == "" {
 		return dto.CatalogDTO{},
@@ -153,6 +158,7 @@ func (
 				"inventoryId is empty",
 			)
 	}
+
 	inventory, err :=
 		q.InventoryRepo.GetByID(
 			ctx,
@@ -161,6 +167,7 @@ func (
 	if err != nil {
 		return dto.CatalogDTO{}, err
 	}
+
 	inventoryDTO :=
 		toCatalogInventoryDTOFromMint(
 			inventory,
@@ -171,13 +178,16 @@ func (
 				"inventory dto is nil",
 			)
 	}
+
 	output.Inventory = inventoryDTO
+
 	// ============================================================
 	// SOURCE OF TRUTH:
 	// inventoryId -> inventoryDTO -> productBlueprintId/tokenBlueprintId
 	//
 	// List側のProductBlueprintIDとTokenBlueprintIDは参照しない。
 	// ============================================================
+
 	// ------------------------------------------------------------
 	// ProductBlueprint
 	// ------------------------------------------------------------
@@ -189,12 +199,14 @@ func (
 				"productBlueprintId is empty on inventory",
 			)
 	}
+
 	if q.ProductRepo == nil {
 		return dto.CatalogDTO{},
 			errors.New(
 				"product repo is nil",
 			)
 	}
+
 	productBlueprint, err :=
 		q.ProductRepo.GetByID(
 			ctx,
@@ -203,6 +215,7 @@ func (
 	if err != nil {
 		return dto.CatalogDTO{}, err
 	}
+
 	productBlueprintDTO :=
 		toCatalogProductBlueprintDTO(
 			&productBlueprint,
@@ -214,8 +227,10 @@ func (
 			&productBlueprintDTO,
 		)
 	}
+
 	output.ProductBlueprint =
 		&productBlueprintDTO
+
 	// ------------------------------------------------------------
 	// ProductBlueprintReview summary
 	// ------------------------------------------------------------
@@ -225,9 +240,11 @@ func (
 				"productBlueprintReview repo is nil",
 			)
 	}
+
 	reviewStatus :=
 		productBlueprintReview.
 			ReviewStatusPublished
+
 	reviewSummary, err :=
 		q.ProductBlueprintReviewRepo.
 			GetProductSummary(
@@ -238,10 +255,12 @@ func (
 	if err != nil {
 		return dto.CatalogDTO{}, err
 	}
+
 	output.ProductReviewSummary =
 		toCatalogProductReviewSummaryDTO(
 			reviewSummary,
 		)
+
 	// ------------------------------------------------------------
 	// TokenBlueprint
 	// ------------------------------------------------------------
@@ -253,12 +272,14 @@ func (
 				"tokenBlueprintId is empty on inventory",
 			)
 	}
+
 	if q.TokenRepo == nil {
 		return dto.CatalogDTO{},
 			errors.New(
 				"tokenBlueprint repo is nil",
 			)
 	}
+
 	tokenBlueprint, err :=
 		q.TokenRepo.GetByID(
 			ctx,
@@ -271,10 +292,12 @@ func (
 		return dto.CatalogDTO{},
 			tbdom.ErrNotFound
 	}
+
 	tokenBlueprintPatch :=
 		tbdom.NewPatchFromTokenBlueprint(
 			tokenBlueprint,
 		)
+
 	if q.NameResolver != nil {
 		fillTokenBlueprintPatchNames(
 			ctx,
@@ -282,6 +305,7 @@ func (
 			&tokenBlueprintPatch,
 		)
 	}
+
 	companyName := ""
 	if q.NameResolver != nil {
 		companyName =
@@ -289,6 +313,7 @@ func (
 				ctx,
 				tokenBlueprintPatch.CompanyID,
 			)
+
 		if companyName == "" {
 			brandCompanyID :=
 				q.NameResolver.
@@ -296,6 +321,7 @@ func (
 						ctx,
 						tokenBlueprintPatch.BrandID,
 					)
+
 			if brandCompanyID != "" {
 				companyName =
 					q.NameResolver.
@@ -306,12 +332,14 @@ func (
 			}
 		}
 	}
+
 	// Firebase Storage移行後:
 	//   - Patch.IconURLにはFirebase StorageのdownloadURLが入る
 	//   - GCS objectPathからURLを解決しない
 	//   - TokenIconObjectPathは使わない
 	resolvedIconURL :=
 		tokenBlueprintPatch.IconURL
+
 	tokenBlueprintDTO :=
 		dto.CatalogTokenBlueprintDTO{
 			ID:          tokenBlueprintPatch.ID,
@@ -323,8 +351,10 @@ func (
 			Description: tokenBlueprintPatch.Description,
 			TokenIcon:   resolvedIconURL,
 		}
+
 	output.TokenBlueprint =
 		&tokenBlueprintDTO
+
 	// ------------------------------------------------------------
 	// Models
 	// ------------------------------------------------------------
@@ -340,6 +370,7 @@ func (
 				"name resolver is nil",
 			)
 	}
+
 	variations, err :=
 		q.ModelRepo.
 			ListByProductBlueprintID(
@@ -349,11 +380,13 @@ func (
 	if err != nil {
 		return dto.CatalogDTO{}, err
 	}
+
 	modelVariationItems := make(
 		[]dto.CatalogModelVariationDTO,
 		0,
 		len(variations),
 	)
+
 	for _, variation := range variations {
 		if variation == nil {
 			return dto.CatalogDTO{},
@@ -361,6 +394,7 @@ func (
 					"model variation is nil",
 				)
 		}
+
 		modelID := variation.GetID()
 		if modelID == "" {
 			return dto.CatalogDTO{},
@@ -368,6 +402,7 @@ func (
 					"model variation id is empty",
 				)
 		}
+
 		resolved :=
 			q.NameResolver.
 				ResolveModelResolved(
@@ -381,6 +416,7 @@ func (
 					modelID,
 				)
 		}
+
 		modelVariationItems = append(
 			modelVariationItems,
 			toCatalogModelVariationDTOFromResolved(
@@ -390,18 +426,22 @@ func (
 			),
 		)
 	}
+
 	attachStockToModelVariations(
 		&modelVariationItems,
 		inventoryDTO,
 	)
+
 	output.ModelVariations =
 		modelVariationItems
+
 	return output, nil
 }
 
 // ============================================================
 // ListImages
 // ============================================================
+
 // loadListImages returns DTO-ready list images and an error string.
 // Empty error string means success.
 func (
@@ -413,10 +453,12 @@ func (
 	if listID == "" {
 		return nil, "listId is empty"
 	}
+
 	if q == nil ||
 		q.ListImageRepo == nil {
 		return nil, ""
 	}
+
 	listImages, err :=
 		q.ListImageRepo.ListByListID(
 			ctx,
@@ -425,21 +467,27 @@ func (
 	if err != nil {
 		return nil, err.Error()
 	}
+
 	output := make(
 		[]dto.CatalogListImageDTO,
 		0,
 		len(listImages),
 	)
+
 	seen := make(map[string]struct{})
+
 	for _, listImage := range listImages {
 		id := listImage.ID
 		if id == "" {
 			continue
 		}
+
 		if _, exists := seen[id]; exists {
 			continue
 		}
+
 		seen[id] = struct{}{}
+
 		output = append(
 			output,
 			toCatalogListImageDTO(
@@ -447,27 +495,34 @@ func (
 			),
 		)
 	}
+
 	sort.Slice(
 		output,
 		func(i, j int) bool {
 			left := output[i]
 			right := output[j]
+
 			leftOrder := left.DisplayOrder
 			rightOrder := right.DisplayOrder
+
 			leftKnown := leftOrder > 0
 			rightKnown := rightOrder > 0
+
 			if leftKnown != rightKnown {
 				return leftKnown
 			}
+
 			if leftKnown &&
 				rightKnown &&
 				leftOrder != rightOrder {
 				return leftOrder <
 					rightOrder
 			}
+
 			return left.ID < right.ID
 		},
 	)
+
 	return output, ""
 }
 
@@ -509,6 +564,7 @@ func toCatalogProductBlueprintDTO(
 	if productBlueprint == nil {
 		return dto.CatalogProductBlueprintDTO{}
 	}
+
 	output :=
 		dto.CatalogProductBlueprintDTO{
 			ID:          productBlueprint.ID,
@@ -528,16 +584,19 @@ func toCatalogProductBlueprintDTO(
 			),
 			ModelRefs: nil,
 		}
+
 	if len(productBlueprint.ModelRefs) > 0 {
 		modelRefs := make(
 			[]dto.CatalogProductBlueprintModelRefDTO,
 			0,
 			len(productBlueprint.ModelRefs),
 		)
+
 		for _, modelRef := range productBlueprint.ModelRefs {
 			if modelRef.ModelID == "" {
 				continue
 			}
+
 			modelRefs = append(
 				modelRefs,
 				dto.CatalogProductBlueprintModelRefDTO{
@@ -546,10 +605,12 @@ func toCatalogProductBlueprintDTO(
 				},
 			)
 		}
+
 		if len(modelRefs) > 0 {
 			output.ModelRefs = modelRefs
 		}
 	}
+
 	return output
 }
 
@@ -559,20 +620,25 @@ func cloneCatalogCategoryFields(
 	if len(fields) == 0 {
 		return nil
 	}
+
 	output := make(
 		map[string]any,
 		len(fields),
 	)
+
 	for key, value := range fields {
 		if key == "" ||
 			value == nil {
 			continue
 		}
+
 		output[key] = value
 	}
+
 	if len(output) == 0 {
 		return nil
 	}
+
 	return output
 }
 
@@ -595,19 +661,23 @@ func toCatalogInventoryDTOFromMint(
 		Stock: map[string]dto.
 			CatalogInventoryModelStockDTO{},
 	}
+
 	if mint.Stock == nil {
 		return output
 	}
+
 	for modelID, modelStock := range mint.Stock {
 		if modelID == "" {
 			continue
 		}
+
 		output.Stock[modelID] =
 			dto.CatalogInventoryModelStockDTO{
 				Accumulation:  modelStock.Accumulation,
 				ReservedCount: modelStock.ReservedCount,
 			}
 	}
+
 	return output
 }
 
@@ -642,20 +712,24 @@ func toCatalogModelVariationDTOFromResolved(
 			Size:               resolved.Size,
 			ColorName:          resolved.Color,
 			VolumeUnit:         resolved.VolumeUnit,
-			Measurements:       map[string]int{},
+			Measurements:       resolved.Measurements.Clone(),
 			StockKeys:          0,
 		}
+
 	if resolved.RGB != nil {
 		output.ColorRGB =
 			*resolved.RGB
 	}
+
 	if resolved.VolumeValue != nil {
 		value :=
 			float64(
 				*resolved.VolumeValue,
 			)
+
 		output.VolumeValue = &value
 	}
+
 	return output
 }
 
@@ -671,23 +745,27 @@ func fillProductBlueprintNames(
 		productBlueprintDTO == nil {
 		return
 	}
+
 	if productBlueprintDTO.BrandID != "" {
 		brandName :=
 			resolver.ResolveBrandName(
 				ctx,
 				productBlueprintDTO.BrandID,
 			)
+
 		if brandName != "" {
 			productBlueprintDTO.BrandName =
 				brandName
 		}
 	}
+
 	if productBlueprintDTO.CompanyID != "" {
 		companyName :=
 			resolver.ResolveCompanyName(
 				ctx,
 				productBlueprintDTO.CompanyID,
 			)
+
 		if companyName != "" {
 			productBlueprintDTO.CompanyName =
 				companyName
@@ -706,6 +784,7 @@ func fillTokenBlueprintPatchNames(
 		patch == nil {
 		return
 	}
+
 	if patch.BrandID != "" &&
 		patch.BrandName == "" {
 		brandName :=
@@ -713,6 +792,7 @@ func fillTokenBlueprintPatchNames(
 				ctx,
 				patch.BrandID,
 			)
+
 		if brandName != "" {
 			patch.BrandName = brandName
 		}
@@ -738,13 +818,16 @@ func attachStockToModelVariations(
 		len(*items) == 0 {
 		return
 	}
+
 	stockKeys := 0
+
 	if inventory != nil {
 		stockKeys =
 			stockKeyCount(
 				inventory.Stock,
 			)
 	}
+
 	for index := range *items {
 		(*items)[index].StockKeys =
 			stockKeys
