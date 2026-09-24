@@ -121,12 +121,13 @@ export default function ReportModal({
       ariaLabelledBy="report-modal-title"
       ariaDescribedBy="report-modal-description"
       ariaBusy={submitting}
+      panelClassName="report-modal__panel"
     >
       <ModalHeader
         onClose={submitting ? undefined : onClose}
         closeLabel="通報画面を閉じる"
       >
-        <span className="report-modal__eyebrow">通報</span>
+
         <ModalTitle id="report-modal-title">{targetLabel}を通報</ModalTitle>
       </ModalHeader>
 
@@ -139,7 +140,9 @@ export default function ReportModal({
 
             <div className="report-modal__result-body">
               <h3 className="report-modal__result-title">
-                {alreadyReported ? "この内容はすでに通報済みです" : "通報を受け付けました"}
+                {alreadyReported
+                  ? "この内容はすでに通報済みです"
+                  : "通報を受け付けました"}
               </h3>
 
               <ModalDescription id="report-modal-description">
@@ -216,15 +219,6 @@ export default function ReportModal({
           </ModalBody>
 
           <ModalFooter className="report-modal__actions">
-            <Button
-              variant="secondary"
-              size="md"
-              disabled={submitting}
-              onClick={onClose}
-            >
-              キャンセル
-            </Button>
-
             <Button
               variant="primary"
               size="md"

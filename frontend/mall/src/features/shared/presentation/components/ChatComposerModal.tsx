@@ -28,7 +28,6 @@ export type ChatComposerModalProps = {
   onSubmit: () => void;
   description?: ReactNode;
   afterInput?: ReactNode;
-  cancelLabel?: string;
   inputAriaLabel?: string;
   rows?: number;
   maxLength?: number | null;
@@ -49,7 +48,6 @@ export default function ChatComposerModal({
   onSubmit,
   description,
   afterInput,
-  cancelLabel = "キャンセル",
   inputAriaLabel,
   rows = 6,
   maxLength = 500,
@@ -101,15 +99,6 @@ export default function ChatComposerModal({
       </ModalBody>
 
       <ModalFooter>
-        <Button
-          variant="secondary"
-          size="md"
-          disabled={submitting}
-          onClick={onCancel}
-        >
-          {cancelLabel}
-        </Button>
-
         <Button
           variant="primary"
           size="md"

@@ -1,12 +1,24 @@
 /* frontend/mall/src/features/report/styles/report.css */
 
-.report-modal__eyebrow {
-  display: block;
-  margin-bottom: 4px;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+.report-modal__panel {
+  display: flex;
+  max-height: min(760px, calc(100dvh - 48px));
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.report-modal__panel .ui-modal__header {
+  flex-shrink: 0;
+}
+
+.report-modal__panel .ui-modal__body {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.report-modal__panel .ui-modal__footer {
+  flex-shrink: 0;
 }
 
 .report-modal__body {
@@ -172,6 +184,10 @@
 }
 
 @media (max-width: 640px) {
+  .report-modal__panel {
+    max-height: calc(100dvh - 24px);
+  }
+
   .report-modal__actions {
     display: grid;
     grid-template-columns: 1fr;
