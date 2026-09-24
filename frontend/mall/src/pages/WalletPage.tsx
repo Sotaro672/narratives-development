@@ -7,6 +7,7 @@ import "../styles/wallet-page.css";
 import "../styles/wallet-page/resale-panel.css";
 
 import Layout from "../components/layout/Layout";
+import StatePanel from "../components/ui/StatePanel";
 import WalletHistoryPanel from "../features/wallet/components/WalletHistoryPanel";
 import WalletProfile from "../features/wallet/components/WalletProfile";
 import WalletProfileActions from "../features/wallet/components/WalletProfileActions";
@@ -129,7 +130,10 @@ export default function WalletPage() {
   const renderTokenList = () => (
     <div className="wallet-page-token-list">
       {tokenLoading ? (
-        <p className="wallet-page__message">読み込み中です...</p>
+        <StatePanel
+          variant="loading"
+          title="読み込み中です..."
+        />
       ) : null}
 
       {!tokenLoading && tokenError ? (

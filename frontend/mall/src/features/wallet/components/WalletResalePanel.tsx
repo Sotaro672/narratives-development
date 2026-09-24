@@ -6,6 +6,7 @@ import Alert from "../../../components/ui/Alert";
 import Button from "../../../components/ui/Button";
 import List from "../../../components/ui/List";
 import Media from "../../../components/ui/Media";
+import StatePanel from "../../../components/ui/StatePanel";
 import TextState from "../../../components/ui/TextState";
 import { formatDateTime } from "../../../components/utils/date";
 import { textOrEmpty } from "../../../components/utils/textOrEmpty";
@@ -204,9 +205,10 @@ export default function WalletResalePanel({
 
   if (loading) {
     return (
-      <List>
-        <TextState variant="loading">読み込み中です...</TextState>
-      </List>
+      <StatePanel
+        variant="loading"
+        title="読み込み中です..."
+      />
     );
   }
 

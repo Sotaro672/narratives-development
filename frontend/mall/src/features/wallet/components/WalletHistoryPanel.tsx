@@ -5,6 +5,7 @@ import Badge from "../../../components/ui/Badge";
 import Card from "../../../components/ui/Card";
 import Media from "../../../components/ui/Media";
 import MediaIcon from "../../../components/ui/MediaIcon";
+import StatePanel from "../../../components/ui/StatePanel";
 import TextState from "../../../components/ui/TextState";
 import { formatDateTime } from "../../../components/utils/date";
 import type {
@@ -244,7 +245,12 @@ export default function WalletHistoryPanel({
   onOrderClick,
 }: WalletHistoryPanelProps) {
   if (loading) {
-    return <TextState variant="loading">読み込み中です...</TextState>;
+    return (
+      <StatePanel
+        variant="loading"
+        title="読み込み中です..."
+      />
+    );
   }
 
   if (error) {

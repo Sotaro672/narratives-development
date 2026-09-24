@@ -6,6 +6,7 @@ import Card from "../../../components/ui/Card";
 import Chip from "../../../components/ui/Chip";
 import Media from "../../../components/ui/Media";
 import { formatDateTime } from "../../../components/utils/date";
+import ReportFlagButton from "../../shared/presentation/components/ReportFlagButton";
 import type {
   TokenComment,
   TokenCommentTreeNode,
@@ -112,6 +113,7 @@ export default function TokenCommentItem({
 
   const commentId = comment.commentId?.trim() || "";
   const authorAvatarId = getAuthorAvatarId(comment);
+  const displayName = getTokenCommentDisplayName(comment);
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const normalizedCurrentAvatarId = currentAvatarId.trim();
   const isExpanded = expandedIds.has(commentId);
@@ -213,9 +215,10 @@ export default function TokenCommentItem({
           </Chip>
 
           {canReport ? (
-            <Chip size="sm" variant="danger" onClick={handleReport}>
-              通報
-            </Chip>
+            <ReportFlagButton
+              label={`${displayName}のコメントを通報`}
+              onClick={handleReport}
+            />
           ) : null}
 
           {hasChildren ? (
