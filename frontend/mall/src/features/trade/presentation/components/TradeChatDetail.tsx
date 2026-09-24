@@ -2,6 +2,7 @@
 
 import { useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
 import StatePanel from "../../../../components/ui/StatePanel";
@@ -38,6 +39,7 @@ export default function TradeChatDetail({
   tradeId,
 }: TradeChatDetailProps) {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
   const thread = useTradeThread(tradeId);
 
   const cancelFlow = useTradeCancel({
@@ -249,6 +251,7 @@ export default function TradeChatDetail({
     <>
       <Layout
         title={title}
+        showHeader={!isMobilePortrait}
         showFooter={
           !reply.open &&
           !cancelFlow.open &&
@@ -271,7 +274,7 @@ export default function TradeChatDetail({
           onCenterActionClick: reply.openModal,
         }}
       >
-        <section className="page-section content-page-section chat-detail-page">
+        <section className="product-detail-page-layout chat-detail-page">
           {thread.error ? (
             <Alert
               variant="error"
@@ -296,43 +299,47 @@ export default function TradeChatDetail({
           ) : null}
 
           {!thread.loading && thread.trade ? (
-            <div className="chat-detail-page__thread">
-              <TradeThreadHeader trade={thread.trade} />
+            <div className="chat-detail-page__split">
+              <div className="chat-detail-page__left">
+                <TradeThreadHeader trade={thread.trade} />
+              </div>
 
-              <div className="chat-detail-page__reply-section">
-                <h3 className="chat-detail-page__section-title">
-                  メッセージ一覧
-                </h3>
+              <div className="chat-detail-page__right">
+                <div className="chat-detail-page__reply-section">
+                  <h3 className="chat-detail-page__section-title">
+                    メッセージ一覧
+                  </h3>
 
-                {thread.messages.length === 0 &&
-                !shouldShowOrderAction ? (
-                  <TextState
-                    variant="empty"
-                    className="chat-detail-page__no-replies"
-                  >
-                    まだメッセージはありません。
-                  </TextState>
-                ) : (
-                  <div className="chat-detail-page__replies">
-                    {thread.messages.map((message) => (
-                      <TradeMessageCard
-                        key={message.id}
-                        message={message}
-                        trade={thread.trade!}
-                        onReport={report.openMessageReport}
-                      />
-                    ))}
+                  {thread.messages.length === 0 &&
+                  !shouldShowOrderAction ? (
+                    <TextState
+                      variant="empty"
+                      className="chat-detail-page__no-replies"
+                    >
+                      まだメッセージはありません。
+                    </TextState>
+                  ) : (
+                    <div className="chat-detail-page__replies">
+                      {thread.messages.map((message) => (
+                        <TradeMessageCard
+                          key={message.id}
+                          message={message}
+                          trade={thread.trade!}
+                          onReport={report.openMessageReport}
+                        />
+                      ))}
 
-                    {orderAction ? (
-                      <TradeOrderActionPrompt
-                        action={orderAction}
-                        processing={orderActionProcessing}
-                        error={orderActionError}
-                        onAction={handleOrderAction}
-                      />
-                    ) : null}
-                  </div>
-                )}
+                      {orderAction ? (
+                        <TradeOrderActionPrompt
+                          action={orderAction}
+                          processing={orderActionProcessing}
+                          error={orderActionError}
+                          onAction={handleOrderAction}
+                        />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : null}

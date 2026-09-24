@@ -544,8 +544,8 @@ export default function ResaleChatDetail({
           ) : null}
 
           {!loading && item ? (
-            <div className="chat-detail-page__resale-split">
-              <div className="chat-detail-page__resale-left">
+            <div className="chat-detail-page__split">
+              <div className="chat-detail-page__left">
                 <ResaleThreadHeader
                   item={item}
                   images={images}
@@ -558,7 +558,7 @@ export default function ResaleChatDetail({
                 />
               </div>
 
-              <div className="chat-detail-page__resale-right">
+              <div className="chat-detail-page__right">
                 <div className="chat-detail-page__reply-section">
                   <h3 className="chat-detail-page__section-title">
                     コメント一覧
