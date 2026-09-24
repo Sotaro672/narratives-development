@@ -2,6 +2,7 @@
 
 import { useParams } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import StatePanel from "../components/ui/StatePanel";
@@ -39,6 +40,8 @@ export default function ChatDetailPage() {
 }
 
 function InquiryChatDetail() {
+  const isMobilePortrait = useMobilePortrait();
+
   const {
     title,
     inquiry,
@@ -68,6 +71,7 @@ function InquiryChatDetail() {
     <>
       <Layout
         title={title}
+        showHeader={!isMobilePortrait}
         showFooter={!isReplyModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"
@@ -81,7 +85,7 @@ function InquiryChatDetail() {
           onCenterActionClick: openReplyModal,
         }}
       >
-        <section className="page-section content-page-section chat-detail-page">
+        <section className="product-detail-page-layout chat-detail-page">
           {error ? (
             <Alert variant="error" className="chat-detail-page__error">
               {error}
@@ -103,42 +107,46 @@ function InquiryChatDetail() {
           ) : null}
 
           {!loading && inquiry ? (
-            <div className="chat-detail-page__thread">
-              <InquiryMessageCard inquiry={inquiry} />
+            <div className="chat-detail-page__split">
+              <div className="chat-detail-page__left">
+                <InquiryMessageCard inquiry={inquiry} />
+              </div>
 
-              <div className="chat-detail-page__reply-section">
-                <h3 className="chat-detail-page__section-title">
-                  返信一覧
-                </h3>
+              <div className="chat-detail-page__right">
+                <div className="chat-detail-page__reply-section">
+                  <h3 className="chat-detail-page__section-title">
+                    返信一覧
+                  </h3>
 
-                {sortedReplies.length === 0 && !shouldShowClosePrompt ? (
-                  <TextState
-                    variant="empty"
-                    className="chat-detail-page__no-replies"
-                  >
-                    まだ返信はありません。
-                  </TextState>
-                ) : (
-                  <div className="chat-detail-page__replies">
-                    <InquiryReplyList
-                      replies={sortedReplies}
-                      brandName={inquiry.brandName}
-                      brandIcon={inquiry.brandIcon}
-                      avatarName={inquiry.avatarName}
-                      avatarIcon={inquiry.avatarIcon}
-                    />
-
-                    {shouldShowClosePrompt ? (
-                      <InquiryClosePrompt
-                        error={closeError}
-                        closing={closingInquiry}
-                        onClose={() => {
-                          void handleCloseInquiry();
-                        }}
+                  {sortedReplies.length === 0 && !shouldShowClosePrompt ? (
+                    <TextState
+                      variant="empty"
+                      className="chat-detail-page__no-replies"
+                    >
+                      まだ返信はありません。
+                    </TextState>
+                  ) : (
+                    <div className="chat-detail-page__replies">
+                      <InquiryReplyList
+                        replies={sortedReplies}
+                        brandName={inquiry.brandName}
+                        brandIcon={inquiry.brandIcon}
+                        avatarName={inquiry.avatarName}
+                        avatarIcon={inquiry.avatarIcon}
                       />
-                    ) : null}
-                  </div>
-                )}
+
+                      {shouldShowClosePrompt ? (
+                        <InquiryClosePrompt
+                          error={closeError}
+                          closing={closingInquiry}
+                          onClose={() => {
+                            void handleCloseInquiry();
+                          }}
+                        />
+                      ) : null}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : null}
