@@ -62,6 +62,7 @@ export default function CatalogPage() {
     selectedModelPrice,
     selectedModelStock,
     canAddToCart,
+    isMobilePortrait,
     handlePrevImage,
     handleNextImage,
     handleSelectImage,
@@ -139,7 +140,7 @@ export default function CatalogPage() {
       }
       titleClickable={false}
       mode={isLoggedIn ? "mypage" : "landing"}
-      showHeader={false}
+      showHeader={!isMobilePortrait}
       showFooter={isLoggedIn}
     >
       <section className="catalog-page-section">
