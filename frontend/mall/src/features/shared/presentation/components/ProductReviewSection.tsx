@@ -3,9 +3,12 @@
 import { useState } from "react";
 
 import Alert from "../../../../components/ui/Alert";
+import Card from "../../../../components/ui/Card";
+import DateDisplay from "../../../../components/ui/Date";
+import MediaIcon from "../../../../components/ui/MediaIcon";
+import SectionHeader from "../../../../components/ui/SectionHeader";
 import TextButton from "../../../../components/ui/TextButton";
 import TextState from "../../../../components/ui/TextState";
-import { formatDateTime } from "../../../../components/utils/date";
 
 import ReportModal from "../../../report/components/ReportModal";
 import { useReport } from "../../../report/hooks/useReport";
@@ -38,10 +41,6 @@ export type ProductReviewSectionProps = {
   onAvatarClick?: (avatarId: string) => void;
   className?: string;
 };
-
-function joinClassNames(...classNames: Array<string | undefined | false>): string {
-  return classNames.filter(Boolean).join(" ");
-}
 
 function renderRatingStars(value?: number | null): string {
   const rating = Math.max(0, Math.min(5, Math.trunc(Number(value ?? 0))));
@@ -107,16 +106,24 @@ export default function ProductReviewSection({
 
   return (
     <>
-      <section className={joinClassNames("product-review", className)}>
-        <div className="product-review__header">
-          <h2 className="product-review__heading">レビュー</h2>
-
-          {loading ? (
-            <TextState variant="loading" className="product-review__status">
-              読み込み中...
-            </TextState>
-          ) : null}
-        </div>
+      <Card
+        as="section"
+        variant="panel"
+        padding="md"
+        className={["product-review", className].filter(Boolean).join(" ")}
+      >
+        <SectionHeader
+          title="レビュー"
+          titleAs="h2"
+          className="ui-section-header--title-sm"
+          right={
+            loading ? (
+              <TextState variant="loading">
+                読み込み中...
+              </TextState>
+            ) : undefined
+          }
+        />
 
         {hasSummary ? (
           <div className="product-review__summary">
@@ -135,13 +142,13 @@ export default function ProductReviewSection({
         ) : null}
 
         {safeErrorMessage ? (
-          <Alert variant="error" className="product-review__error">
+          <Alert variant="error">
             {safeErrorMessage}
           </Alert>
         ) : null}
 
         {!loading && !safeErrorMessage && safeItems.length === 0 ? (
-          <TextState variant="empty" className="product-review__empty">
+          <TextState variant="empty">
             {emptyText}
           </TextState>
         ) : null}
@@ -173,7 +180,7 @@ export default function ProductReviewSection({
             ) : null}
           </>
         ) : null}
-      </section>
+      </Card>
 
       <ReportModal
         open={isOpen}
@@ -214,7 +221,6 @@ function ProductReviewItemView({
   const avatarIcon = review.avatarIcon?.trim() || "";
   const reviewBody = review.body?.trim() || "";
   const reviewedAt = review.reviewedAt?.trim() || "";
-  const reviewedAtLabel = reviewedAt ? formatDateTime(reviewedAt) : "-";
   const canOpenAvatar = Boolean(avatarId && onAvatarClick);
 
   const isOwnReview = Boolean(
@@ -233,21 +239,13 @@ function ProductReviewItemView({
 
   const avatarContent = (
     <>
-      {avatarIcon ? (
-        <img
-          src={avatarIcon}
-          alt={avatarName}
-          className="product-review__avatar"
-          loading="lazy"
-        />
-      ) : (
-        <span
-          className="product-review__avatar-placeholder"
-          aria-hidden="true"
-        >
-          {avatarName.slice(0, 1)}
-        </span>
-      )}
+      <MediaIcon
+        src={avatarIcon}
+        alt={avatarIcon ? avatarName : ""}
+        fallback={avatarName.slice(0, 1)}
+        size="sm"
+        shape="circle"
+      />
 
       <div className="product-review__author-body">
         <span className="product-review__author-name">
@@ -256,7 +254,16 @@ function ProductReviewItemView({
 
         <span className="product-review__meta">
           {renderRatingStars(review.rating)}
-          {reviewedAtLabel !== "-" ? `・${reviewedAtLabel}` : ""}
+          {reviewedAt ? (
+            <>
+              {"・"}
+              <DateDisplay
+                value={reviewedAt}
+                variant="dateTime"
+                className="product-review__date"
+              />
+            </>
+          ) : null}
         </span>
       </div>
     </>
@@ -266,13 +273,12 @@ function ProductReviewItemView({
     <article className="product-review__item">
       <div className="product-review__item-header">
         {canOpenAvatar ? (
-          <button
-            type="button"
+          <TextButton
             className="product-review__author product-review__author--button"
             onClick={() => onAvatarClick?.(avatarId)}
           >
             {avatarContent}
-          </button>
+          </TextButton>
         ) : (
           <div className="product-review__author">
             {avatarContent}

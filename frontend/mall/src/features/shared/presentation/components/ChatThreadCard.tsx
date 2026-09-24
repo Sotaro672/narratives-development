@@ -4,8 +4,6 @@ import type { HTMLAttributes, ReactNode } from "react";
 
 import Card from "../../../../components/ui/Card";
 
-import "../../styles/chat-thread-card.css";
-
 export type ChatThreadCardVariant =
   | "inquiry"
   | "trade"
@@ -20,12 +18,6 @@ export type ChatThreadCardProps = Omit<
   className?: string;
 };
 
-function joinClassNames(
-  ...classNames: Array<string | undefined | false>
-): string {
-  return classNames.filter(Boolean).join(" ");
-}
-
 export default function ChatThreadCard({
   children,
   variant,
@@ -35,11 +27,9 @@ export default function ChatThreadCard({
   return (
     <Card
       as="article"
-      className={joinClassNames(
-        "chat-thread-card",
-        variant && `chat-thread-card--${variant}`,
-        className,
-      )}
+      padding="md"
+      className={className}
+      data-chat-variant={variant}
       {...articleProps}
     >
       {children}

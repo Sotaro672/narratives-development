@@ -131,12 +131,7 @@
 
 .chat-detail-page__reply {
   width: min(88%, 620px);
-  padding: 15px 16px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 18px 18px 18px 6px;
-  background: #ffffff;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.055);
-  box-sizing: border-box;
 }
 
 .chat-detail-page__reply--avatar {
@@ -227,7 +222,6 @@
 
   .chat-detail-page__reply {
     width: 92%;
-    padding: 14px;
   }
 }
 

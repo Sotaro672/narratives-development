@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import Card from "../../../../components/ui/Card";
 import ChatMessageHeader from "./ChatMessageHeader";
 
 export type ChatMessageBubbleProps = {
@@ -41,7 +42,11 @@ export default function ChatMessageBubble({
   );
 
   return (
-    <article className={bubbleClassName}>
+    <Card
+      as="article"
+      padding="md"
+      className={bubbleClassName}
+    >
       <ChatMessageHeader
         name={senderName}
         icon={senderIcon}
@@ -57,6 +62,6 @@ export default function ChatMessageBubble({
       ) : null}
 
       {afterContent}
-    </article>
+    </Card>
   );
 }

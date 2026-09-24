@@ -1,6 +1,9 @@
 // frontend/mall/src/features/trade/presentation/components/TradeOrderActionPrompt.tsx
 
+import Alert from "../../../../components/ui/Alert";
 import Button from "../../../../components/ui/Button";
+import Card from "../../../../components/ui/Card";
+import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 import type { TradeOrderActionKind } from "../util/tradeChatDetail";
 
 type TradeOrderActionPromptProps = {
@@ -77,26 +80,24 @@ export default function TradeOrderActionPrompt({
   onAction,
 }: TradeOrderActionPromptProps) {
   return (
-    <article className="chat-detail-page__reply chat-detail-page__reply--system">
-      <div className="chat-detail-page__message-head">
-        <div>
-          <span className="chat-detail-page__sender">
-            システム
-          </span>
-        </div>
-      </div>
+    <Card
+      as="article"
+      padding="md"
+      className="chat-detail-page__reply chat-detail-page__reply--system"
+    >
+      <ChatMessageHeader
+        name="システム"
+        showAvatar={false}
+      />
 
       <p className="chat-detail-page__content">
         {getPromptText(action)}
       </p>
 
       {error ? (
-        <div
-          className="chat-detail-page__modal-error"
-          role="alert"
-        >
+        <Alert variant="error">
           {error}
-        </div>
+        </Alert>
       ) : null}
 
       <div className="chat-detail-page__close-prompt-actions">
@@ -109,6 +110,6 @@ export default function TradeOrderActionPrompt({
           {getActionLabel(action, processing)}
         </Button>
       </div>
-    </article>
+    </Card>
   );
 }

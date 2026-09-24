@@ -1,6 +1,9 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryClosePrompt.tsx
 
+import Alert from "../../../../components/ui/Alert";
 import Button from "../../../../components/ui/Button";
+import Card from "../../../../components/ui/Card";
+import ChatMessageHeader from "../../../shared/presentation/components/ChatMessageHeader";
 
 type InquiryClosePromptProps = {
   error?: string | null;
@@ -14,26 +17,24 @@ export default function InquiryClosePrompt({
   onClose,
 }: InquiryClosePromptProps) {
   return (
-    <article className="chat-detail-page__reply chat-detail-page__reply--system">
-      <div className="chat-detail-page__message-head">
-        <div>
-          <span className="chat-detail-page__sender">
-            テナント
-          </span>
-        </div>
-      </div>
+    <Card
+      as="article"
+      padding="md"
+      className="chat-detail-page__reply chat-detail-page__reply--system"
+    >
+      <ChatMessageHeader
+        name="テナント"
+        showAvatar={false}
+      />
 
       <p className="chat-detail-page__content">
         クローズしますか？
       </p>
 
       {error ? (
-        <div
-          className="chat-detail-page__modal-error"
-          role="alert"
-        >
+        <Alert variant="error">
           {error}
-        </div>
+        </Alert>
       ) : null}
 
       <div className="chat-detail-page__close-prompt-actions">
@@ -46,6 +47,6 @@ export default function InquiryClosePrompt({
           {closing ? "クローズ中..." : "クローズする"}
         </Button>
       </div>
-    </article>
+    </Card>
   );
 }
