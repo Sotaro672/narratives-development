@@ -8,6 +8,7 @@ import { getMyAvatar } from "../../avatar/api/avatarApi";
 import ReportModal from "../../report/components/ReportModal";
 import { useReport } from "../../report/hooks/useReport";
 import { useAuthState } from "../../shared/hooks/useAuthState";
+import ReportFlagButton from "../../shared/presentation/components/ReportFlagButton";
 import { useTokenReviewAggregateCard } from "../hooks/useTokenReviewAggregateCard";
 
 type TokenReviewAggregateCardProps = {
@@ -155,16 +156,11 @@ export default function TokenReviewAggregateCard({
           <span>{resaleLabel}</span>
         </Chip>
 
-        <Chip
-          variant="neutral"
-          size="md"
-          aria-label="トークンを通報"
+        <ReportFlagButton
+          label="トークンを通報"
           disabled={!canReport}
           onClick={handleOpenReport}
-        >
-          <span aria-hidden="true">⚑</span>
-          <span>通報</span>
-        </Chip>
+        />
 
         <span className="token-review-aggregate__spacer" />
 

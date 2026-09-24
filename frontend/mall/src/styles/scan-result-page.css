@@ -97,28 +97,6 @@
   margin-top: 14px;
 }
 
-.scan-result-token-body {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.scan-result-token-name {
-  font-size: 14px;
-  font-weight: 800;
-}
-
-.scan-result-token-icon {
-  background: var(--color-surface-subtle, #f9fafb);
-}
-
-.scan-result-description {
-  color: var(--color-text-muted, #6b7280);
-  font-size: 0.88rem;
-  line-height: 1.6;
-}
-
 .scan-result-actions {
   display: flex;
   flex-wrap: wrap;
@@ -325,10 +303,6 @@
 
   .scan-result-brand-value--button {
     text-align: left;
-  }
-
-  .scan-result-token-body {
-    grid-template-columns: 56px minmax(0, 1fr);
   }
 
   .scan-result-actions {

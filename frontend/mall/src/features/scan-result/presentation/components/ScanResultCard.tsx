@@ -6,11 +6,11 @@ import TextState from "../../../../components/ui/TextState";
 
 import type { ScanResultPageViewModel } from "../../application/scanPageViewModelFactory";
 import type { ScanResultPageState } from "../../../shared/types/scanResult";
+import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
 
 import ScanResultProductSection from "./ScanResultProductSection";
 import ScanResultReviewForm from "./ScanResultReviewForm";
 import ScanResultReviewList from "./ScanResultReviewList";
-import ScanResultTokenSection from "./ScanResultTokenSection";
 
 type ScanResultCardProps = {
   state: ScanResultPageState;
@@ -57,14 +57,9 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     return (
       <SectionCard>
         <h1>Scan Result</h1>
-        <TextState variant="error">
-          {state.error}
-        </TextState>
+        <TextState variant="error">{state.error}</TextState>
 
-        <Button
-          type="button"
-          onClick={onRefresh}
-        >
+        <Button type="button" onClick={onRefresh}>
           再読み込み
         </Button>
       </SectionCard>
@@ -75,9 +70,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     return (
       <SectionCard>
         <h1>Scan Result</h1>
-        <TextState>
-          プレビューが空です。
-        </TextState>
+        <TextState>プレビューが空です。</TextState>
       </SectionCard>
     );
   }
@@ -116,15 +109,14 @@ export default function ScanResultCard(props: ScanResultCardProps) {
         />
 
         {token ? (
-          <ScanResultTokenSection
+          <TokenSummaryCard
+            brandName={token.brandName}
             tokenName={token.tokenName}
-            tokenIconUrl={token.tokenIconUrl}
-            tokenBrandName={token.tokenBrandName}
-            tokenCompanyName={token.tokenCompanyName}
-            tokenDescription={token.tokenDescription}
-            mintAddress={token.assetId}
-            canOpenTokenContents={token.canOpenTokenContents}
-            onOpenTokenContents={onOpenTokenContents}
+            tokenIcon={token.tokenIcon}
+            symbol={token.symbol}
+            description={token.description}
+            onClick={() => void onOpenTokenContents(token.assetId)}
+            disabled={!token.canOpenTokenContents}
           />
         ) : null}
       </div>

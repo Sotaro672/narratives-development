@@ -2,6 +2,10 @@
 
 import { rgbToCssColor } from "../../../components/utils/color";
 import type {
+  ProductBlueprintCategoryRoot,
+  ProductCategoryKind,
+} from "../../shared/types/category";
+import type {
   MallOwnerInfo,
   PreviewState,
   ProductBlueprintPatch,
@@ -35,11 +39,11 @@ export type ScanProductSectionViewModel = {
 };
 
 export type ScanTokenSectionViewModel = {
+  brandName: string;
   tokenName: string;
-  tokenIconUrl: string;
-  tokenBrandName: string;
-  tokenCompanyName: string;
-  tokenDescription: string;
+  tokenIcon: string;
+  symbol: string;
+  description: string;
   assetId: string;
   canOpenTokenContents: boolean;
 };
@@ -66,6 +70,28 @@ function resolveOwnerLabel(owner: MallOwnerInfo | null): string {
   if (owner.ownerType === "avatar") return owner.avatarName ?? "-";
   if (owner.ownerType === "brand") return owner.brandName ?? "-";
   return "-";
+}
+
+function isProductBlueprintCategoryRoot(
+  value: string | undefined,
+): value is ProductBlueprintCategoryRoot {
+  switch (value) {
+    case "apparel":
+    case "alcohol":
+    case "cosmetics":
+    case "healthcare":
+    case "other":
+      return true;
+    default:
+      return false;
+  }
+}
+
+function resolveProductCategoryKind(
+  categoryPath: string[] | undefined,
+): ProductCategoryKind {
+  const root = categoryPath?.[0];
+  return isProductBlueprintCategoryRoot(root) ? root : "unknown";
 }
 
 function createProductBlueprintRows(
@@ -105,7 +131,6 @@ function createQualityAssuranceTabs(
 ): string[] {
   const rawValue = patch?.categoryFields?.qualityAssurance;
   if (!Array.isArray(rawValue)) return [];
-
   return rawValue.map(toDisplayText).filter(Boolean);
 }
 
@@ -135,11 +160,11 @@ function createTokenViewModel(input: {
   const assetId = preview.token?.assetId ?? "";
 
   return {
+    brandName: tokenBlueprintPatch.brandName,
     tokenName: tokenBlueprintPatch.tokenName,
-    tokenIconUrl: tokenBlueprintPatch.tokenIcon,
-    tokenBrandName: tokenBlueprintPatch.brandName,
-    tokenCompanyName: tokenBlueprintPatch.companyName,
-    tokenDescription: tokenBlueprintPatch.description,
+    tokenIcon: tokenBlueprintPatch.tokenIcon,
+    symbol: tokenBlueprintPatch.symbol,
+    description: tokenBlueprintPatch.description,
     assetId,
     canOpenTokenContents:
       input.ownedByWallet === true &&
@@ -165,8 +190,9 @@ export function createScanResultPageViewModel(
   const brandName = preview.brandName ?? "";
   const size = preview.size;
   const color = preview.color;
-  const productBlueprintCategoryKind =
-    preview.productBlueprintCategoryPath?.[0] ?? "";
+  const productBlueprintCategoryKind = resolveProductCategoryKind(
+    preview.productBlueprintCategoryPath,
+  );
 
   const alcoholInfo = createScanAlcoholInfo({
     categoryFields: patch?.categoryFields,

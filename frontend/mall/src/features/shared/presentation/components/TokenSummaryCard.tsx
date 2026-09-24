@@ -1,4 +1,4 @@
-// frontend\amol\src\features\shared\presentation\components\TokenSummaryCard.tsx
+// frontend/amol/src/features/shared/presentation/components/TokenSummaryCard.tsx
 
 import EntitySummaryCard from "./EntitySummaryCard";
 
@@ -8,6 +8,8 @@ export type TokenSummaryCardProps = {
   tokenIcon?: string | null;
   symbol?: string | null;
   description?: string | null;
+  onClick?: () => void;
+  disabled?: boolean;
 };
 
 export default function TokenSummaryCard({
@@ -16,6 +18,8 @@ export default function TokenSummaryCard({
   tokenIcon,
   symbol,
   description,
+  onClick,
+  disabled = false,
 }: TokenSummaryCardProps) {
   const safeBrandName = brandName?.trim() || "ブランド名未設定";
   const safeTokenName = tokenName?.trim() || "トークン名未設定";
@@ -36,6 +40,8 @@ export default function TokenSummaryCard({
       name={safeTokenName}
       secondaryText={safeSymbol}
       description={safeDescription}
+      onClick={onClick}
+      disabled={disabled}
     />
   );
 }
