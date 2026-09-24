@@ -43,7 +43,6 @@ function InquiryChatDetail() {
   const isMobilePortrait = useMobilePortrait();
 
   const {
-    title,
     inquiry,
     sortedReplies,
     loading,
@@ -70,11 +69,12 @@ function InquiryChatDetail() {
   return (
     <>
       <Layout
-        title={title}
+        title="AMOL"
         showHeader={!isMobilePortrait}
         showFooter={!isReplyModalOpen}
         mode="mypage"
-        mainClassName="chat-detail-page-layout"
+        mainClassName="chat-detail-page-layout chat-detail-page-layout--inquiry"
+        disableFooterPaddingOnDesktop
         actionButtonLabel="返信"
         onActionButtonClick={openReplyModal}
         actionButtonDisabled={replyActionDisabled}
@@ -114,10 +114,6 @@ function InquiryChatDetail() {
 
               <div className="chat-detail-page__right">
                 <div className="chat-detail-page__reply-section">
-                  <h3 className="chat-detail-page__section-title">
-                    返信一覧
-                  </h3>
-
                   {sortedReplies.length === 0 && !shouldShowClosePrompt ? (
                     <TextState
                       variant="empty"
