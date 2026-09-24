@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
 import Badge from "../../../../components/ui/Badge";
@@ -239,6 +240,7 @@ export default function ResaleChatDetail({
 }: ResaleChatDetailProps) {
   const location = useLocation();
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
   const routeState = location.state as ResaleChatRouteState | null;
   const preferredSource = routeState?.source;
   const normalizedResaleId = resaleId.trim();
@@ -506,6 +508,7 @@ export default function ResaleChatDetail({
     <>
       <Layout
         title={title}
+        showHeader={!isMobilePortrait}
         showFooter={!isReplyModalOpen}
         mode="mypage"
         mainClassName="chat-detail-page-layout"
@@ -519,7 +522,7 @@ export default function ResaleChatDetail({
           onCenterActionClick: openReplyModal,
         }}
       >
-        <section className="page-section content-page-section chat-detail-page">
+        <section className="product-detail-page-layout chat-detail-page">
           {error ? (
             <Alert variant="error" className="chat-detail-page__error">
               {error}
@@ -541,57 +544,61 @@ export default function ResaleChatDetail({
           ) : null}
 
           {!loading && item ? (
-            <div className="chat-detail-page__thread">
-              <ResaleThreadHeader
-                item={item}
-                images={images}
-                productMetaItems={productMetaItems}
-                onOpenMarketDetail={
-                  source === "market" && item.status === "listing"
-                    ? handleOpenMarketDetail
-                    : undefined
-                }
-              />
+            <div className="chat-detail-page__resale-split">
+              <div className="chat-detail-page__resale-left">
+                <ResaleThreadHeader
+                  item={item}
+                  images={images}
+                  productMetaItems={productMetaItems}
+                  onOpenMarketDetail={
+                    source === "market" && item.status === "listing"
+                      ? handleOpenMarketDetail
+                      : undefined
+                  }
+                />
+              </div>
 
-              <div className="chat-detail-page__reply-section">
-                <h3 className="chat-detail-page__section-title">
-                  コメント一覧
-                </h3>
+              <div className="chat-detail-page__resale-right">
+                <div className="chat-detail-page__reply-section">
+                  <h3 className="chat-detail-page__section-title">
+                    コメント一覧
+                  </h3>
 
-                {sortedComments.length === 0 ? (
-                  <TextState
-                    variant="empty"
-                    className="chat-detail-page__no-replies"
-                  >
-                    まだコメントはありません。
-                  </TextState>
-                ) : (
-                  <div className="chat-detail-page__replies">
-                    {sortedComments.map((comment) => {
-                      const isMine =
-                        Boolean(viewerAvatarId) &&
-                        comment.avatarId === viewerAvatarId;
+                  {sortedComments.length === 0 ? (
+                    <TextState
+                      variant="empty"
+                      className="chat-detail-page__no-replies"
+                    >
+                      まだコメントはありません。
+                    </TextState>
+                  ) : (
+                    <div className="chat-detail-page__replies">
+                      {sortedComments.map((comment) => {
+                        const isMine =
+                          Boolean(viewerAvatarId) &&
+                          comment.avatarId === viewerAvatarId;
 
-                      const canDelete =
-                        item.status === "listing" &&
-                        isMine &&
-                        !comment.isRead;
+                        const canDelete =
+                          item.status === "listing" &&
+                          isMine &&
+                          !comment.isRead;
 
-                      return (
-                        <ResaleCommentMessage
-                          key={comment.commentId}
-                          comment={comment}
-                          isMine={isMine}
-                          canDelete={canDelete}
-                          deleting={deletingCommentId === comment.commentId}
-                          onDelete={() => {
-                            void handleDeleteComment(comment);
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                )}
+                        return (
+                          <ResaleCommentMessage
+                            key={comment.commentId}
+                            comment={comment}
+                            isMine={isMine}
+                            canDelete={canDelete}
+                            deleting={deletingCommentId === comment.commentId}
+                            onDelete={() => {
+                              void handleDeleteComment(comment);
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ) : null}
