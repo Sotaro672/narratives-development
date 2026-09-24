@@ -13,8 +13,7 @@ export default function ContentsPage() {
 
   return (
     <Layout
-      title={page.pageTitle}
-      titleClickable={false}
+      title="AMOL"
       mode="mypage"
       hideHamburgerMenu
       showFooter
