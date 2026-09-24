@@ -1,36 +1,5 @@
 /* frontend/mall/src/features/report/styles/report.css */
 
-.report-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.48);
-  box-sizing: border-box;
-}
-
-.report-modal__panel {
-  width: min(100%, 520px);
-  max-height: min(720px, calc(100vh - 48px));
-  overflow-y: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
-  box-sizing: border-box;
-}
-
-.report-modal__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 24px 24px 16px;
-}
-
 .report-modal__eyebrow {
   display: block;
   margin-bottom: 4px;
@@ -40,35 +9,9 @@
   letter-spacing: 0.04em;
 }
 
-.report-modal__title {
-  margin: 0;
-  color: #111827;
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
-.report-modal__close {
-  width: 36px;
-  height: 36px;
-  min-height: 36px;
-  flex: 0 0 36px;
-  border-radius: 50%;
-  padding: 0;
-}
-
-.report-modal__description {
-  margin: 0;
-  padding: 0 24px 20px;
-  color: #4b5563;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
 .report-modal__body {
   display: grid;
   gap: 20px;
-  padding: 0 24px 24px;
 }
 
 .report-modal__reasons {
@@ -190,31 +133,10 @@
   opacity: 0.65;
 }
 
-.report-modal__error {
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #fecaca;
-  border-radius: 8px;
-  background: #fef2f2;
-  color: #b91c1c;
-  font-size: 13px;
-  line-height: 1.6;
-}
-
-.report-modal__actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  padding: 16px 24px 24px;
-  border-top: 1px solid #f3f4f6;
-}
-
 .report-modal__result {
   display: grid;
   justify-items: center;
   gap: 16px;
-  padding: 12px 24px 24px;
   text-align: center;
 }
 
@@ -245,55 +167,18 @@
   line-height: 1.5;
 }
 
-.report-modal__result .report-modal__description {
-  padding: 0;
-}
-
-.report-modal__result .report-modal__actions {
-  width: 100%;
+.report-modal__result-actions {
   justify-content: center;
-  padding: 8px 0 0;
-  border-top: 0;
 }
 
 @media (max-width: 640px) {
-  .report-modal {
-    align-items: flex-end;
-    padding: 0;
-  }
-
-  .report-modal__panel {
-    width: 100%;
-    max-height: 88vh;
-    border-right: 0;
-    border-bottom: 0;
-    border-left: 0;
-    border-radius: 16px 16px 0 0;
-  }
-
-  .report-modal__header {
-    padding: 20px 20px 14px;
-  }
-
-  .report-modal__description {
-    padding: 0 20px 18px;
-  }
-
-  .report-modal__body {
-    padding: 0 20px 20px;
-  }
-
   .report-modal__actions {
     display: grid;
     grid-template-columns: 1fr;
-    padding: 16px 20px 20px;
   }
 
-  .report-modal__actions > .ui-button {
+  .report-modal__actions > .ui-button,
+  .report-modal__result-actions > .ui-button {
     width: 100%;
-  }
-
-  .report-modal__result {
-    padding: 12px 20px 20px;
   }
 }

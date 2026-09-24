@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
+import StatePanel from "../../../../components/ui/StatePanel";
 import TextState from "../../../../components/ui/TextState";
 import ReportModal from "../../../report/components/ReportModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
@@ -281,21 +282,17 @@ export default function TradeChatDetail({
           ) : null}
 
           {thread.loading ? (
-            <TextState
+            <StatePanel
               variant="loading"
-              className="chat-detail-page__state"
-            >
-              読み込み中...
-            </TextState>
+              title="読み込み中..."
+            />
           ) : null}
 
           {!thread.loading && !thread.trade ? (
-            <TextState
+            <StatePanel
               variant="empty"
-              className="chat-detail-page__empty"
-            >
-              取引が見つかりません。
-            </TextState>
+              title="取引が見つかりません。"
+            />
           ) : null}
 
           {!thread.loading && thread.trade ? (

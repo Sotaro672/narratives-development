@@ -15,16 +15,6 @@
   margin: 16px 0;
 }
 
-.chat-detail-page__state,
-.chat-detail-page__empty {
-  margin: 16px 0;
-  padding: 28px 18px;
-  border-radius: 16px;
-  background: #ffffff;
-  text-align: center;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
-}
-
 .chat-detail-page__thread {
   display: flex;
   flex-direction: column;
@@ -45,30 +35,6 @@
   align-items: center;
   gap: 9px;
   min-width: 0;
-}
-
-.chat-detail-page__sender-icon {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.06);
-  color: #334155;
-  font-size: 0.78rem;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.chat-detail-page__sender-icon-image {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  object-fit: cover;
-  object-position: center;
 }
 
 .chat-detail-page__sender {
@@ -95,52 +61,6 @@
   font-weight: 850;
   line-height: 1.55;
   letter-spacing: 0.01em;
-}
-
-.chat-detail-page__product-meta {
-  margin: 0 0 14px;
-  padding: 12px 14px;
-  border: 1px solid rgba(15, 23, 42, 0.07);
-  border-radius: 14px;
-  background: #f8fafc;
-}
-
-.chat-detail-page__product-meta-title {
-  margin: 0 0 8px;
-  color: rgba(15, 23, 42, 0.62);
-  font-size: 0.76rem;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
-.chat-detail-page__product-meta-list {
-  display: grid;
-  gap: 5px;
-  margin: 0;
-}
-
-.chat-detail-page__product-meta-row {
-  display: grid;
-  grid-template-columns: minmax(84px, auto) minmax(0, 1fr);
-  gap: 12px;
-  margin: 0;
-}
-
-.chat-detail-page__product-meta-row dt {
-  color: rgba(15, 23, 42, 0.48);
-  font-size: 0.78rem;
-  font-weight: 650;
-  line-height: 1.5;
-}
-
-.chat-detail-page__product-meta-row dd {
-  min-width: 0;
-  margin: 0;
-  color: #0f172a;
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
 }
 
 .chat-detail-page__content {
@@ -250,46 +170,6 @@
   margin-top: 12px;
 }
 
-.chat-detail-page__close-prompt-actions button {
-  min-height: 38px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: #2563eb;
-  color: #ffffff;
-  font-size: 0.86rem;
-  font-weight: 850;
-  cursor: pointer;
-  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.2);
-}
-
-.chat-detail-page__close-prompt-actions button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-  box-shadow: none;
-}
-
-.chat-detail-page__file-picker {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  margin-top: 12px;
-  padding: 0 14px;
-  border: 1px solid rgba(37, 99, 235, 0.22);
-  border-radius: 999px;
-  background: rgba(37, 99, 235, 0.08);
-  color: #1d4ed8;
-  font-size: 0.86rem;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.chat-detail-page__file-picker input {
-  display: none;
-}
-
 .chat-detail-page__selected-files {
   display: flex;
   flex-direction: column;
@@ -320,24 +200,6 @@
   white-space: nowrap;
 }
 
-.chat-detail-page__selected-file button {
-  flex: 0 0 auto;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #b91c1c;
-  font-size: 0.78rem;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.chat-detail-page__selected-file button:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 @media (max-width: 640px) {
   .chat-detail-page {
     max-width: none;
@@ -349,22 +211,8 @@
     padding-top: 12px;
   }
 
-  .chat-detail-page__sender-icon {
-    width: 32px;
-    height: 32px;
-  }
-
   .chat-detail-page__subject {
     font-size: 1rem;
-  }
-
-  .chat-detail-page__product-meta {
-    padding: 11px 12px;
-  }
-
-  .chat-detail-page__product-meta-row {
-    grid-template-columns: minmax(72px, auto) minmax(0, 1fr);
-    gap: 10px;
   }
 
   .chat-detail-page__content {
@@ -397,17 +245,6 @@
     gap: 7px;
   }
 
-  .chat-detail-page__sender-icon {
-    width: 30px;
-    height: 30px;
-    font-size: 0.72rem;
-  }
-
-  .chat-detail-page__product-meta-row {
-    grid-template-columns: 68px minmax(0, 1fr);
-    gap: 8px;
-  }
-
   .chat-detail-page__images {
     gap: 8px;
   }
@@ -419,9 +256,5 @@
   .chat-detail-page__selected-file {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .chat-detail-page__selected-file button {
-    width: 100%;
   }
 }

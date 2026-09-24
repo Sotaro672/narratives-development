@@ -4,6 +4,7 @@ import { useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
+import StatePanel from "../components/ui/StatePanel";
 import TextState from "../components/ui/TextState";
 
 import InquiryClosePrompt from "../features/inquiry/presentation/components/InquiryClosePrompt";
@@ -88,15 +89,17 @@ function InquiryChatDetail() {
           ) : null}
 
           {loading ? (
-            <TextState variant="loading" className="chat-detail-page__state">
-              読み込み中...
-            </TextState>
+            <StatePanel
+              variant="loading"
+              title="読み込み中..."
+            />
           ) : null}
 
           {!loading && !inquiry ? (
-            <TextState variant="empty" className="chat-detail-page__empty">
-              問い合わせが見つかりません。
-            </TextState>
+            <StatePanel
+              variant="empty"
+              title="問い合わせが見つかりません。"
+            />
           ) : null}
 
           {!loading && inquiry ? (

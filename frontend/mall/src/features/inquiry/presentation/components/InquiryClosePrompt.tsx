@@ -1,5 +1,7 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryClosePrompt.tsx
 
+import Button from "../../../../components/ui/Button";
+
 type InquiryClosePromptProps = {
   error?: string | null;
   closing: boolean;
@@ -35,15 +37,14 @@ export default function InquiryClosePrompt({
       ) : null}
 
       <div className="chat-detail-page__close-prompt-actions">
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={onClose}
           disabled={closing}
         >
-          {closing
-            ? "クローズ中..."
-            : "クローズする"}
-        </button>
+          {closing ? "クローズ中..." : "クローズする"}
+        </Button>
       </div>
     </article>
   );

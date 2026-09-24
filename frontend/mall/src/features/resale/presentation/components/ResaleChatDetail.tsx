@@ -7,6 +7,7 @@ import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
 import Badge from "../../../../components/ui/Badge";
 import Button from "../../../../components/ui/Button";
+import StatePanel from "../../../../components/ui/StatePanel";
 import TextState from "../../../../components/ui/TextState";
 
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
@@ -526,21 +527,17 @@ export default function ResaleChatDetail({
           ) : null}
 
           {loading ? (
-            <TextState
+            <StatePanel
               variant="loading"
-              className="chat-detail-page__state"
-            >
-              読み込み中...
-            </TextState>
+              title="読み込み中..."
+            />
           ) : null}
 
           {!loading && !item ? (
-            <TextState
+            <StatePanel
               variant="empty"
-              className="chat-detail-page__empty"
-            >
-              出品情報が見つかりません。
-            </TextState>
+              title="出品情報が見つかりません。"
+            />
           ) : null}
 
           {!loading && item ? (

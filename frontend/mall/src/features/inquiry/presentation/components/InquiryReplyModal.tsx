@@ -1,7 +1,11 @@
 // frontend/amol/src/features/inquiry/presentation/components/InquiryReplyModal.tsx
 
-import type { ChangeEvent } from "react";
+import {
+  type ChangeEvent,
+  useRef,
+} from "react";
 
+import Button from "../../../../components/ui/Button";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 
 type InquiryReplyModalProps = {
@@ -12,9 +16,7 @@ type InquiryReplyModalProps = {
   submitting: boolean;
   canSubmit: boolean;
   onContentChange: (value: string) => void;
-  onFilesChange: (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
+  onFilesChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveFile: (index: number) => void;
   onCancel: () => void;
   onSubmit: () => void;
@@ -33,6 +35,8 @@ export default function InquiryReplyModal({
   onCancel,
   onSubmit,
 }: InquiryReplyModalProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <ChatComposerModal
       open={open}
@@ -51,17 +55,25 @@ export default function InquiryReplyModal({
       maxLength={null}
       afterInput={
         <>
-          <label className="chat-detail-page__file-picker">
-            <span>画像を追加</span>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={onFilesChange}
+            disabled={submitting}
+            hidden
+          />
 
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={onFilesChange}
-              disabled={submitting}
-            />
-          </label>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={submitting}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            画像を追加
+          </Button>
 
           {files.length > 0 ? (
             <div className="chat-detail-page__selected-files">
@@ -72,15 +84,15 @@ export default function InquiryReplyModal({
                 >
                   <span>{file.name}</span>
 
-                  <button
+                  <Button
                     type="button"
-                    onClick={() => {
-                      onRemoveFile(index);
-                    }}
+                    variant="ghost"
+                    size="sm"
                     disabled={submitting}
+                    onClick={() => onRemoveFile(index)}
                   >
                     削除
-                  </button>
+                  </Button>
                 </div>
               ))}
             </div>

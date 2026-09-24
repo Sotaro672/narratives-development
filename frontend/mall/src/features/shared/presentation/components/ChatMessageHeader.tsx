@@ -2,7 +2,8 @@
 
 import type { ReactNode } from "react";
 
-import { formatDateTime } from "../../../../components/utils/date";
+import DateDisplay from "../../../../components/ui/Date";
+import MediaIcon from "../../../../components/ui/MediaIcon";
 
 export type ChatMessageHeaderProps = {
   name: string;
@@ -43,20 +44,15 @@ export default function ChatMessageHeader({
     >
       <div className="chat-detail-page__sender-profile">
         {showAvatar ? (
-          <div
-            className="chat-detail-page__sender-icon"
-            aria-hidden="true"
-          >
-            {icon ? (
-              <img
-                src={icon}
-                alt=""
-                className="chat-detail-page__sender-icon-image"
-              />
-            ) : (
-              <span>{initial}</span>
-            )}
-          </div>
+          <span aria-hidden="true">
+            <MediaIcon
+              src={icon}
+              alt=""
+              fallback={initial}
+              size="sm"
+              shape="circle"
+            />
+          </span>
         ) : null}
 
         <div>
@@ -65,17 +61,16 @@ export default function ChatMessageHeader({
           </span>
 
           {createdAt ? (
-            <time
+            <DateDisplay
+              value={createdAt}
+              variant="dateTime"
               className="chat-detail-page__date"
-              dateTime={createdAt}
-            >
-              {formatDateTime(createdAt)}
-            </time>
+            />
           ) : null}
         </div>
       </div>
 
-      {action ? action : null}
+      {action ?? null}
     </div>
   );
 }
