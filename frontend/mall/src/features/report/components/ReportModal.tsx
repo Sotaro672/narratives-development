@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import Button from "../../../components/ui/Button";
+import Radio from "../../../components/ui/Radio";
 import type {
   ReportReason,
   ReportResponse,
@@ -219,32 +220,29 @@ export default function ReportModal({
                 </legend>
 
                 <div className="report-modal__reason-list">
-                  {REPORT_REASONS.map((value) => (
-                    <label
-                      key={value}
-                      className={[
-                        "report-modal__reason",
-                        reason === value
-                          ? "report-modal__reason--selected"
-                          : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      <input
-                        type="radio"
-                        className="report-modal__reason-input"
+                  {REPORT_REASONS.map((value) => {
+                    const selected = reason === value;
+
+                    return (
+                      <Radio
+                        key={value}
                         name="report-reason"
                         value={value}
-                        checked={reason === value}
+                        checked={selected}
+                        disabled={submitting}
+                        label={getReportReasonLabel(value)}
+                        className={[
+                          "report-modal__reason",
+                          selected
+                            ? "report-modal__reason--selected"
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
                         onChange={() => onReasonChange(value)}
                       />
-
-                      <span className="report-modal__reason-label">
-                        {getReportReasonLabel(value)}
-                      </span>
-                    </label>
-                  ))}
+                    );
+                  })}
                 </div>
               </fieldset>
 

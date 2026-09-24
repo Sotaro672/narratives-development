@@ -94,19 +94,16 @@
 }
 
 .report-modal__reason {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   min-height: 44px;
   padding: 10px 12px;
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #ffffff;
-  cursor: pointer;
   box-sizing: border-box;
+  transition: border-color 160ms ease, background-color 160ms ease;
 }
 
-.report-modal__reason:hover {
+.report-modal__reason:hover:not(.ui-radio--disabled) {
   border-color: #9ca3af;
   background: #f9fafb;
 }
@@ -116,27 +113,25 @@
   background: #f9fafb;
 }
 
-.report-modal__reason-input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: #111827;
-  cursor: pointer;
+.report-modal__reason .ui-radio__label {
+  width: 100%;
+  align-items: center;
+  gap: 10px;
 }
 
-.report-modal__reason-label {
+.report-modal__reason .ui-radio__content {
+  min-width: 0;
+  flex: 1;
+}
+
+.report-modal__reason .ui-radio__text {
   color: #1f2937;
   font-size: 14px;
   line-height: 1.5;
 }
 
 .report-modal__reasons:disabled .report-modal__reason {
-  cursor: not-allowed;
   opacity: 0.6;
-}
-
-.report-modal__reasons:disabled .report-modal__reason-input {
-  cursor: not-allowed;
 }
 
 .report-modal__detail-field {

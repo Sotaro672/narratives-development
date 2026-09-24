@@ -202,6 +202,7 @@ export default function PayoutBranchSelectPage() {
                   key={branch.branchCode}
                   title={branch.branchName}
                   subLabel={`支店コード ${branch.branchCode}`}
+                  selected={selected}
                   meta={
                     <span
                       className={[
@@ -216,9 +217,6 @@ export default function PayoutBranchSelectPage() {
                         <Check size={18} strokeWidth={2.5} />
                       ) : null}
                     </span>
-                  }
-                  className={
-                    selected ? "payout-select__list-row--selected" : undefined
                   }
                   ariaLabel={`${branch.branchName} 支店コード ${branch.branchCode}${
                     selected ? " 選択中" : ""

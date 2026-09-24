@@ -149,6 +149,27 @@
   font-weight: 650;
 }
 
+.ui-list__row--selected {
+  background: #f3f4f6;
+}
+
+.ui-list__row--selected:hover {
+  background: #eef0f2;
+}
+
+.ui-list__row--selected.ui-list__row--attention {
+  background: #eef4fb;
+}
+
+.ui-list__row--selected.ui-list__row--attention:hover {
+  background: #e8f0f9;
+}
+
+.ui-list__row--rich.ui-list__row--selected.ui-list__row--disabled,
+.ui-list__row--rich.ui-list__row--selected.ui-list__row--disabled:hover {
+  background: #f3f4f6;
+}
+
 .ui-list__leading {
   display: grid;
   width: 48px;

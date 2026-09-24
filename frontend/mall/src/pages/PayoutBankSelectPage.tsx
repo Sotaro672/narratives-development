@@ -184,6 +184,7 @@ export default function PayoutBankSelectPage() {
                   key={bank.bankCode}
                   title={bank.bankName}
                   subLabel={`金融機関コード ${bank.bankCode}`}
+                  selected={selected}
                   meta={
                     <span
                       className={[
@@ -198,9 +199,6 @@ export default function PayoutBankSelectPage() {
                         <Check size={18} strokeWidth={2.5} />
                       ) : null}
                     </span>
-                  }
-                  className={
-                    selected ? "payout-select__list-row--selected" : undefined
                   }
                   ariaLabel={`${bank.bankName} 金融機関コード ${bank.bankCode}${
                     selected ? " 選択中" : ""

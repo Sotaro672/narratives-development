@@ -31,6 +31,7 @@ type ListRowProps = {
   preview?: ReactNode;
   meta?: ReactNode;
   attention?: boolean;
+  selected?: boolean;
   busy?: boolean;
   disabled?: boolean;
   ariaLabel: string;
@@ -51,7 +52,9 @@ export function ListItem({
     danger ? "ui-list__row--danger" : "",
     disabled ? "ui-list__row--disabled" : "",
     className,
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={classes}>
@@ -78,6 +81,7 @@ export function ListRow({
   preview,
   meta,
   attention = false,
+  selected,
   busy = false,
   disabled = false,
   ariaLabel,
@@ -90,9 +94,12 @@ export function ListRow({
     "ui-list__row",
     "ui-list__row--rich",
     attention ? "ui-list__row--attention" : "",
+    selected === true ? "ui-list__row--selected" : "",
     unavailable ? "ui-list__row--disabled" : "",
     className,
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const handleOpen = () => {
     if (unavailable) {
@@ -120,6 +127,9 @@ export function ListRow({
       role="button"
       tabIndex={unavailable ? -1 : 0}
       aria-label={ariaLabel}
+      aria-pressed={
+        selected === undefined ? undefined : selected
+      }
       aria-busy={busy || undefined}
       aria-disabled={unavailable || undefined}
       onClick={handleOpen}
@@ -135,6 +145,7 @@ export function ListRow({
         <div className="ui-list__head">
           <div className="ui-list__title-wrap">
             <h2 className="ui-list__title">{title}</h2>
+
             {subLabel ? (
               <span className="ui-list__sub-label">
                 {subLabel}
@@ -178,7 +189,9 @@ export default function List({
   className = "",
   ...props
 }: ListProps) {
-  const classes = ["ui-list", className].filter(Boolean).join(" ");
+  const classes = ["ui-list", className]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className={classes} {...props}>

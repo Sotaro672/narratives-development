@@ -74,10 +74,8 @@
   background: var(--color-surface);
 }
 
-.trade-return-receipt-modal__summary-row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-4);
+.trade-return-receipt-modal__summary .ui-info-list {
+  width: 100%;
 }
 
 /* =========================================================

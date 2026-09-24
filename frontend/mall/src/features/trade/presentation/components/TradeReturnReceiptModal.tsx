@@ -2,6 +2,7 @@
 
 import Alert from "../../../../components/ui/Alert";
 import Button from "../../../../components/ui/Button";
+import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
 import Modal, {
   ModalBody,
   ModalDescription,
@@ -97,15 +98,15 @@ export default function TradeReturnReceiptModal({
             >
               <strong>合意済みの返品条件</strong>
 
-              <div className="trade-return-receipt-modal__summary-row">
-                <span>商品の返送</span>
-                <strong>必要</strong>
-              </div>
+              <InfoList>
+                <InfoRow label="商品の返送">
+                  必要
+                </InfoRow>
 
-              <div className="trade-return-receipt-modal__summary-row">
-                <span>商品代金の返金額（税込）</span>
-                <strong>{formatCurrency(refundAmount)}</strong>
-              </div>
+                <InfoRow label="商品代金の返金額（税込）">
+                  {formatCurrency(refundAmount)}
+                </InfoRow>
+              </InfoList>
             </section>
           ) : (
             <Alert variant="error">
