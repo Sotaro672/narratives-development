@@ -1,12 +1,5 @@
 /* frontend/mall/src/styles/wallet-page/resale-panel.css */
 
-.wallet-resale-list {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  background: #fff;
-}
-
 .wallet-resale-list__item {
   width: 100%;
   box-sizing: border-box;

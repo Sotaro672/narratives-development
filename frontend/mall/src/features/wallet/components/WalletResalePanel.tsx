@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import Alert from "../../../components/ui/Alert";
+import Button from "../../../components/ui/Button";
+import List from "../../../components/ui/List";
 import Media from "../../../components/ui/Media";
+import TextState from "../../../components/ui/TextState";
 import { formatDateTime } from "../../../components/utils/date";
 import { textOrEmpty } from "../../../components/utils/textOrEmpty";
 import {
@@ -172,11 +176,7 @@ export default function WalletResalePanel({
     } finally {
       setLoading(false);
     }
-  }, [
-    isPublicAvatarMode,
-    loadResaleImages,
-    normalizedAvatarId,
-  ]);
+  }, [isPublicAvatarMode, loadResaleImages, normalizedAvatarId]);
 
   useEffect(() => {
     void loadResales();
@@ -204,41 +204,35 @@ export default function WalletResalePanel({
 
   if (loading) {
     return (
-      <div className="wallet-resale-list">
-        <p className="wallet-page__message">読み込み中です...</p>
-      </div>
+      <List>
+        <TextState variant="loading">読み込み中です...</TextState>
+      </List>
     );
   }
 
   if (error) {
     return (
-      <div className="wallet-resale-list">
-        <div role="alert" className="wallet-page__message">
+      <List>
+        <Alert variant="error">
           <p>{error}</p>
-          <button
-            type="button"
-            className="page-button page-button--secondary"
-            onClick={() => void loadResales()}
-          >
+          <Button variant="secondary" onClick={() => void loadResales()}>
             再読み込み
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Alert>
+      </List>
     );
   }
 
   if (!hasItems) {
     return (
-      <div className="wallet-resale-list">
-        <div className="wallet-page__message">
-          <p>出品中の商品はありません。</p>
-        </div>
-      </div>
+      <List>
+        <TextState variant="empty">出品中の商品はありません。</TextState>
+      </List>
     );
   }
 
   return (
-    <div className="wallet-resale-list">
+    <List>
       {sortedItems.map((item) => {
         const resaleId = item.id;
         const imageUrl = imageUrlByResaleId[resaleId] ?? "";
@@ -284,10 +278,7 @@ export default function WalletResalePanel({
                     fit="cover"
                   />
                 ) : (
-                  <div
-                    className="ui-media-fallback"
-                    aria-label="画像未設定"
-                  >
+                  <div className="ui-media-fallback" aria-label="画像未設定">
                     画像未設定
                   </div>
                 )}
@@ -296,21 +287,13 @@ export default function WalletResalePanel({
               <div className="wallet-resale-card__body">
                 <div className="wallet-resale-card__summary">
                   {productName ? (
-                    <p className="wallet-resale-card__product-name">
-                      {productName}
-                    </p>
+                    <p className="wallet-resale-card__product-name">{productName}</p>
                   ) : null}
-
                   {tokenName ? (
-                    <p className="wallet-resale-card__token-name">
-                      {tokenName}
-                    </p>
+                    <p className="wallet-resale-card__token-name">{tokenName}</p>
                   ) : null}
-
                   {brandName ? (
-                    <p className="wallet-resale-card__brand-name">
-                      {brandName}
-                    </p>
+                    <p className="wallet-resale-card__brand-name">{brandName}</p>
                   ) : null}
                 </div>
 
@@ -327,6 +310,6 @@ export default function WalletResalePanel({
           </article>
         );
       })}
-    </div>
+    </List>
   );
 }
