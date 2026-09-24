@@ -18,15 +18,23 @@ type MarketResaleRepository interface {
 	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
 }
 
+// MarketResaleReviewContext is the read model used to display a resale review
+// thread independently from the active market listing detail.
+type MarketResaleReviewContext struct {
+	Resale resaledom.Resale
+	Images []resaledom.ResaleImage
+}
+
 // MarketQuery is the buyer-facing market read model.
 //
 // Market policy:
-// - Only listing resales are visible.
-// - Suspended resales are never returned from List / ListByCursor.
+// - Only listing resales are visible in List / ListByCursor.
+// - Suspended resales are never returned from public market reads.
 // - Own resales are excluded from List / ListByCursor by ExcludeAvatarIDs.
-// - Detail visibility is guarded by status and viewer avatarId.
+// - Normal market detail visibility is guarded by listing status and viewer avatarId.
+// - Sold resales remain readable only through GetReviewContextByID for historical review display.
 // - Display fields are enriched here.
-// - Images are visible only when the parent resale is listing and not owned by the viewer.
+// - Normal market images are visible only when the parent resale is listing and not owned by the viewer.
 type MarketQuery struct {
 	resaleRepo      MarketResaleRepository
 	imageRepo       applicationport.ResaleImageLister
@@ -138,6 +146,48 @@ func (q *MarketQuery) GetByID(
 	item = q.enrichResaleForDisplay(ctx, item)
 
 	return item, nil
+}
+
+// GetReviewContextByID returns the resale information required to render
+// a historical resale review thread.
+//
+// Unlike GetByID, this read is not an active market listing detail.
+// A sold resale remains readable so avatars other than the seller can
+// continue to view the review thread after the transaction is completed.
+//
+// Suspended resales remain hidden.
+func (q *MarketQuery) GetReviewContextByID(
+	ctx context.Context,
+	resaleID string,
+) (MarketResaleReviewContext, error) {
+	if q == nil || q.resaleRepo == nil || q.imageRepo == nil {
+		return MarketResaleReviewContext{}, errors.New("not supported: MarketQuery.GetReviewContextByID")
+	}
+
+	if resaleID == "" {
+		return MarketResaleReviewContext{}, resaledom.ErrInvalidID
+	}
+
+	item, err := q.resaleRepo.GetByID(ctx, resaleID)
+	if err != nil {
+		return MarketResaleReviewContext{}, err
+	}
+
+	if item.Status != resaledom.StatusListing && item.Status != resaledom.StatusSold {
+		return MarketResaleReviewContext{}, resaledom.ErrNotFound
+	}
+
+	item = q.enrichResaleForDisplay(ctx, item)
+
+	images, err := q.imageRepo.ListByResaleID(ctx, resaleID)
+	if err != nil {
+		return MarketResaleReviewContext{}, err
+	}
+
+	return MarketResaleReviewContext{
+		Resale: item,
+		Images: images,
+	}, nil
 }
 
 func (q *MarketQuery) ListImagesByResaleID(

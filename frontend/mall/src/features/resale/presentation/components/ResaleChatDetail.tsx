@@ -1,4 +1,4 @@
-// frontend/amol/src/features/resale/presentation/components/ResaleChatDetail.tsx
+// frontend/mall/src/features/resale/presentation/components/ResaleChatDetail.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -11,8 +11,7 @@ import TextState from "../../../../components/ui/TextState";
 
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
 
-import { fetchMarketResaleById } from "../../../market/infrastructure/marketResaleApi";
-import { fetchMarketResaleConditionImages } from "../../../market/infrastructure/marketResaleImageApi";
+import { fetchMarketResaleReviewContext } from "../../../market/infrastructure/marketResaleReviewContextApi";
 import {
   createMarketResaleComment,
   deleteMarketResaleComment,
@@ -202,16 +201,15 @@ async function loadOwnerChat(resaleId: string): Promise<ResaleChatData> {
 }
 
 async function loadMarketChat(resaleId: string): Promise<ResaleChatData> {
-  const [item, images, comments] = await Promise.all([
-    fetchMarketResaleById(resaleId),
-    fetchMarketResaleConditionImages(resaleId),
+  const [context, comments] = await Promise.all([
+    fetchMarketResaleReviewContext(resaleId),
     fetchAllComments("market", resaleId),
   ]);
 
   return {
     source: "market",
-    item,
-    images,
+    item: context.data,
+    images: context.images,
     comments,
   };
 }

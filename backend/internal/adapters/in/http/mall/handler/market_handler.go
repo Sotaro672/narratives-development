@@ -93,6 +93,16 @@ func (h *MarketHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(parts) == 2 && parts[1] == "review-context" {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.getResaleReviewContext(w, r, resaleID)
+		return
+	}
+
 	if len(parts) == 2 && parts[1] == "comments" {
 		switch r.Method {
 		case http.MethodGet:
@@ -277,6 +287,39 @@ func (h *MarketHandler) listResaleImages(w http.ResponseWriter, r *http.Request,
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"items": images,
+	})
+}
+
+func (h *MarketHandler) getResaleReviewContext(
+	w http.ResponseWriter,
+	r *http.Request,
+	resaleID string,
+) {
+	ctx := r.Context()
+
+	if h == nil || h.marketQ == nil {
+		writeJSON(w, http.StatusNotImplemented, map[string]string{
+			"error": "not_implemented",
+		})
+		return
+	}
+
+	if _, ok := currentMarketAvatarID(w, r); !ok {
+		return
+	}
+
+	result, err := h.marketQ.GetReviewContextByID(
+		ctx,
+		resaleID,
+	)
+	if err != nil {
+		writeResaleErr(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"data":   result.Resale,
+		"images": result.Images,
 	})
 }
 
