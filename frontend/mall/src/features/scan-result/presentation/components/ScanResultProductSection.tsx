@@ -4,9 +4,9 @@ import { useNavigate } from "react-router-dom";
 
 import Badge from "../../../../components/ui/Badge";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
-import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Tab from "../../../../components/ui/Tab";
+import TextLink from "../../../../components/ui/textLink";
 import TextState from "../../../../components/ui/TextState";
 
 import type { ScanAlcoholInfo } from "../../application/scanAlcoholInfoFactory";
@@ -27,11 +27,6 @@ type ScanResultProductSectionProps = {
   color: string;
   swatch: string;
   measurementEntries: ScanDisplayRowViewModel[];
-
-  /**
-   * alcohol用の表示情報。
-   * Application層で生成された値のみを表示する。
-   */
   alcoholInfo?: ScanAlcoholInfo | null;
 };
 
@@ -49,7 +44,9 @@ function hasAlcoholDisplayInfo(alcoholInfo?: ScanAlcoholInfo | null): boolean {
   );
 }
 
-export default function ScanResultProductSection(props: ScanResultProductSectionProps) {
+export default function ScanResultProductSection(
+  props: ScanResultProductSectionProps,
+) {
   const navigate = useNavigate();
 
   const {
@@ -85,10 +82,10 @@ export default function ScanResultProductSection(props: ScanResultProductSection
   };
 
   return (
-    <SectionCard>
+    <section>
       <SectionHeader
-        eyebrow="商品情報"
         title={title}
+        className="ui-section-header--title-sm"
         right={
           owned === true ? (
             <Badge variant="success" size="md">
@@ -106,18 +103,19 @@ export default function ScanResultProductSection(props: ScanResultProductSection
         </TextState>
       ) : null}
 
-      {hasBrandInfo || productBlueprintRows.length > 0 || qualityAssuranceTabs.length > 0 ? (
+      {hasBrandInfo ||
+      productBlueprintRows.length > 0 ||
+      qualityAssuranceTabs.length > 0 ? (
         <InfoList>
           {hasBrandInfo ? (
             <InfoRow label="ブランド">
-              <button
-                type="button"
-                className="scan-result-brand-value scan-result-brand-value--button"
+              <TextLink
                 onClick={handleOpenBrand}
                 disabled={!canOpenBrand}
+                aria-label={`${brandName || "ブランド"}のブランドページへ移動`}
               >
-                <span>{brandName || "-"}</span>
-              </button>
+                {brandName || "-"}
+              </TextLink>
             </InfoRow>
           ) : null}
 
@@ -151,11 +149,15 @@ export default function ScanResultProductSection(props: ScanResultProductSection
         {isAlcohol ? (
           <>
             <InfoRow label="容量">{alcoholInfo?.volumeLabel || "-"}</InfoRow>
-            <InfoRow label="ヴィンテージ">{alcoholInfo?.vintage || "-"}</InfoRow>
+            <InfoRow label="ヴィンテージ">
+              {alcoholInfo?.vintage || "-"}
+            </InfoRow>
             <InfoRow label="地域・産地">{alcoholInfo?.region || "-"}</InfoRow>
             <InfoRow label="原材料">{alcoholInfo?.material || "-"}</InfoRow>
             <InfoRow label="アルコール度数">
-              {alcoholInfo?.alcoholContent ? `${alcoholInfo.alcoholContent}%` : "-"}
+              {alcoholInfo?.alcoholContent
+                ? `${alcoholInfo.alcoholContent}%`
+                : "-"}
             </InfoRow>
           </>
         ) : (
@@ -177,14 +179,15 @@ export default function ScanResultProductSection(props: ScanResultProductSection
 
       {!isAlcohol && measurementEntries.length > 0 ? (
         <div className="scan-result-measurements">
-          <h2>採寸</h2>
+          <SectionHeader
+            title="採寸"
+            titleAs="h2"
+            className="ui-section-header--title-sm"
+          />
 
           <InfoList>
             {measurementEntries.map((row, index) => (
-              <InfoRow
-                label={row.label}
-                key={`${row.label}-${index}`}
-              >
+              <InfoRow label={row.label} key={`${row.label}-${index}`}>
                 {row.value || "-"}
               </InfoRow>
             ))}
@@ -195,6 +198,6 @@ export default function ScanResultProductSection(props: ScanResultProductSection
       {isAlcohol && !shouldShowAlcoholInfo ? (
         <TextState>酒類情報を取得できませんでした。</TextState>
       ) : null}
-    </SectionCard>
+    </section>
   );
 }

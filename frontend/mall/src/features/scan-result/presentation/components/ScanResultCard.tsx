@@ -1,4 +1,4 @@
-// frontend/amol/src/features/scan-result/presentation/components/ScanResultCard.tsx
+// frontend/mall/src/features/scan-result/presentation/components/ScanResultCard.tsx
 
 import Button from "../../../../components/ui/Button";
 import SectionCard from "../../../../components/ui/SectionCard";
@@ -6,18 +6,18 @@ import TextState from "../../../../components/ui/TextState";
 
 import type { ScanResultPageViewModel } from "../../application/scanPageViewModelFactory";
 import type { ScanResultPageState } from "../../../shared/types/scanResult";
+import ProductReviewSection from "../../../shared/presentation/components/ProductReviewSection";
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
 
 import ScanResultProductSection from "./ScanResultProductSection";
 import ScanResultReviewForm from "./ScanResultReviewForm";
-import ScanResultReviewList from "./ScanResultReviewList";
 
 type ScanResultCardProps = {
   state: ScanResultPageState;
   viewModel: ScanResultPageViewModel | null;
+  currentAvatarId: string;
   onRefresh: () => void;
-  onPrevReviewsPage: () => void;
-  onNextReviewsPage: () => void;
+  onAvatarClick: (avatarId: string) => void;
   onOpenTokenContents: (assetId: string) => void | Promise<void>;
   reviewBody: string;
   reviewRating: number;
@@ -31,9 +31,9 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const {
     state,
     viewModel,
+    currentAvatarId,
     onRefresh,
-    onPrevReviewsPage,
-    onNextReviewsPage,
+    onAvatarClick,
     onOpenTokenContents,
     reviewBody,
     reviewRating,
@@ -78,6 +78,8 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const { product, token } = viewModel;
   const owned = state.ownedByWallet;
   const ownedError = state.ownedByWalletError ?? "";
+  const productBlueprintId =
+    state.previewState?.raw.productBlueprintId?.trim() ?? "";
 
   return (
     <div className="scan-result-desktop-grid">
@@ -134,13 +136,15 @@ export default function ScanResultCard(props: ScanResultCardProps) {
           />
         ) : null}
 
-        <ScanResultReviewList
-          reviews={state.reviews}
-          reviewsError={state.reviewsError}
-          busyReviews={state.busyReviews}
-          reviewPage={state.reviewPage}
-          onPrevReviewsPage={onPrevReviewsPage}
-          onNextReviewsPage={onNextReviewsPage}
+        <ProductReviewSection
+          items={state.reviews?.items ?? []}
+          productBlueprintId={productBlueprintId}
+          currentAvatarId={currentAvatarId}
+          totalCount={state.reviews?.total}
+          loading={state.busyReviews}
+          errorMessage={state.reviewsError}
+          showHelpfulVotes
+          onAvatarClick={onAvatarClick}
         />
       </aside>
     </div>

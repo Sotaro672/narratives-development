@@ -1,15 +1,17 @@
-// frontend/amol/src/pages/ScanResultPage.tsx
+// frontend/mall/src/pages/ScanResultPage.tsx
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
+import Layout from "../components/layout/Layout";
 
+import { getMyAvatar } from "../features/avatar/api/avatarApi";
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
 import ScanTransferSuccessModal from "../features/scan-result/presentation/components/ScanTransferSuccessModal";
 import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
 
+import "../styles/page-layout.css";
 import "../styles/scan-result-page.css";
 
 export default function ScanResultPage() {
@@ -18,6 +20,7 @@ export default function ScanResultPage() {
 
   const [reviewBody, setReviewBody] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
+  const [currentAvatarId, setCurrentAvatarId] = useState("");
 
   const {
     state,
@@ -26,14 +29,43 @@ export default function ScanResultPage() {
     canOpenTransferContents,
     load,
     submitReview,
-    nextReviewsPage,
-    prevReviewsPage,
     openContentsAfterResolve,
     openTokenContentsByAssetId,
     transferModalOpen,
     transferModalError,
     closeTransferModal,
   } = useScanResultPage();
+
+  const isLoggedIn = state.authAvailable === true;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCurrentAvatar() {
+      if (!isLoggedIn) {
+        setCurrentAvatarId("");
+        return;
+      }
+
+      try {
+        const avatar = await getMyAvatar();
+
+        if (!cancelled) {
+          setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
+        }
+      } catch {
+        if (!cancelled) {
+          setCurrentAvatarId("");
+        }
+      }
+    }
+
+    void loadCurrentAvatar();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn]);
 
   const handleSubmitReview = useCallback(async () => {
     const ok = await submitReview(reviewBody, reviewRating);
@@ -55,7 +87,18 @@ export default function ScanResultPage() {
     navigate(`/inquiries/new?${searchParams.toString()}`);
   }, [navigate, state.productId]);
 
-  const isLoggedIn = state.authAvailable === true;
+  const handleAvatarClick = useCallback(
+    (avatarId: string) => {
+      const normalizedAvatarId = avatarId.trim();
+
+      if (!normalizedAvatarId) {
+        return;
+      }
+
+      navigate(`/avatars/${encodeURIComponent(normalizedAvatarId)}`);
+    },
+    [navigate],
+  );
 
   const isResalePurchase =
     state.transferResult?.matchedItemType === "resale" ||
@@ -83,14 +126,11 @@ export default function ScanResultPage() {
       hideHamburgerMenu={false}
       hideSettingsButton={!isLoggedIn}
       hideAnnouncementButton={!isLoggedIn}
-      mainClassName="scan-result-page"
       secondaryActionButtonLabel={
         canOpenInquiryPage ? "問い合わせ" : undefined
       }
       onSecondaryActionButtonClick={
-        canOpenInquiryPage
-          ? handleOpenInquiryPage
-          : undefined
+        canOpenInquiryPage ? handleOpenInquiryPage : undefined
       }
       secondaryActionButtonDisabled={!canOpenInquiryPage}
       footerProps={
@@ -102,9 +142,7 @@ export default function ScanResultPage() {
               value: reviewBody,
               rating: reviewRating,
               placeholder: "口コミを入力",
-              buttonLabel: state.postingReview
-                ? "投稿中"
-                : "投稿",
+              buttonLabel: state.postingReview ? "投稿中" : "投稿",
               disabled: !canPostReview,
               posting: state.postingReview,
               onChange: setReviewBody,
@@ -116,20 +154,22 @@ export default function ScanResultPage() {
             }
       }
     >
-      <ScanResultCard
-        state={state}
-        viewModel={viewModel}
-        onRefresh={load}
-        onPrevReviewsPage={prevReviewsPage}
-        onNextReviewsPage={nextReviewsPage}
-        onOpenTokenContents={openTokenContentsByAssetId}
-        reviewBody={reviewBody}
-        reviewRating={reviewRating}
-        onReviewBodyChange={setReviewBody}
-        onReviewRatingChange={setReviewRating}
-        onSubmitReviewForm={handleSubmitReview}
-        hideReviewForm={isMobilePortrait}
-      />
+      <section className="product-detail-page-layout">
+        <ScanResultCard
+          state={state}
+          viewModel={viewModel}
+          currentAvatarId={currentAvatarId}
+          onRefresh={load}
+          onAvatarClick={handleAvatarClick}
+          onOpenTokenContents={openTokenContentsByAssetId}
+          reviewBody={reviewBody}
+          reviewRating={reviewRating}
+          onReviewBodyChange={setReviewBody}
+          onReviewRatingChange={setReviewRating}
+          onSubmitReviewForm={handleSubmitReview}
+          hideReviewForm={isMobilePortrait}
+        />
+      </section>
 
       <ScanTransferSuccessModal
         open={transferModalOpen}
