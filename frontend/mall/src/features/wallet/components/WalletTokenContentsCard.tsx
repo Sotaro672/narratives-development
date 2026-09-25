@@ -1,5 +1,7 @@
 // frontend/amol/src/features/wallet/components/WalletTokenContentsCard.tsx
 
+import Media from "../../../components/ui/Media";
+
 type WalletTokenContentsCardProps = {
   tokenIconUrl?: string | null;
   tokenName?: string;
@@ -22,14 +24,14 @@ export default function WalletTokenContentsCard({
     >
       <div className="wallet-token-card__icon-wrap">
         {tokenIconUrl ? (
-          <img
+          <Media
             src={tokenIconUrl}
             alt={tokenName || "トークンアイコン"}
-            className="wallet-token-card__icon"
             loading="lazy"
+            fit="cover"
           />
         ) : (
-          <div className="wallet-token-card__icon wallet-token-card__icon--fallback">
+          <div className="ui-media-fallback wallet-token-card__icon--fallback">
             ◎
           </div>
         )}

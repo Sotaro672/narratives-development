@@ -203,7 +203,6 @@ function renderBrandLabel(
         fallback={getFallbackInitial(brandName)}
         size="xs"
         shape="circle"
-        className="wallet-page-history__brand-icon"
       />
 
       <TextLink
