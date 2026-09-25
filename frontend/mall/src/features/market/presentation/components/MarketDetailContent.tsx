@@ -150,7 +150,7 @@ export default function MarketDetailContent({
     !reportSubmitting;
 
   return (
-    <div className="page-layout market-detail-page">
+    <div className="page-layout product-detail-page-layout market-detail-page">
       {loading ? (
         <Card padding="lg" className="market-detail-page__state-card">
           <TextState variant="loading" className="market-detail-page__state-text">
@@ -183,12 +183,10 @@ export default function MarketDetailContent({
                   disabled={loadingLike || updatingLike}
                   onClick={handleToggleLike}
                 />
-
                 <ResaleCommentButton
                   commentCount={commentCount}
                   onClick={onOpenResaleChat}
                 />
-
                 <ReportFlagButton
                   disabled={!canReportResale}
                   onClick={onOpenResaleReport}
@@ -210,7 +208,6 @@ export default function MarketDetailContent({
                 tokenIcon={tokenIcon}
                 description={tokenDescription}
               />
-
               <AvatarSummaryCard
                 avatarId={sellerAvatarId}
                 avatarName={avatarName}

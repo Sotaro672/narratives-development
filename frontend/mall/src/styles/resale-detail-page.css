@@ -3,7 +3,8 @@
 .resale-detail-page {
   max-width: 960px;
   margin: 0 auto;
-  padding: 24px 20px calc(var(--footer-action-height, 76px) + 24px);
+  padding-top: 24px;
+  padding-bottom: calc(var(--footer-action-height, 76px) + 24px);
 }
 
 .resale-detail-page__image-wrap--editing {
@@ -70,7 +71,8 @@
 
 @media (max-width: 760px) {
   .resale-detail-page {
-    padding: 16px 16px calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 20px);
+    padding-top: 16px;
+    padding-bottom: calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 20px);
   }
 
   .resale-detail-page__image-wrap--editing {

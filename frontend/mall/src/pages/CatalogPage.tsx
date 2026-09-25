@@ -1,6 +1,7 @@
 // frontend/mall/src/pages/CatalogPage.tsx
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
@@ -29,6 +30,7 @@ import "../styles/page-layout.css";
 import "../styles/catalog-page.css";
 
 export default function CatalogPage() {
+  const navigate = useNavigate();
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
 
@@ -140,6 +142,10 @@ export default function CatalogPage() {
       mode={isLoggedIn ? "mypage" : "landing"}
       showHeader={!isMobilePortrait}
       showFooter={isLoggedIn}
+      hideSettingsButton
+      showCartButton={isLoggedIn}
+      cartButtonLabel="カート"
+      onCartButtonClick={() => navigate("/cart")}
     >
       <section className="product-detail-page-layout catalog-page-section">
         {isLoadingCatalog ? (

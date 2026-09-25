@@ -22,8 +22,6 @@
    ============================== */
 
 .catalog-page-content {
-  padding-right: 16px;
-  padding-left: 16px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -235,17 +233,6 @@
 .catalog-page-purchase-action {
   margin-top: 24px;
   margin-bottom: 24px;
-}
-
-/* ==============================
-   Desktop
-   ============================== */
-
-@media (min-width: 960px) {
-  .catalog-page-media {
-    padding-left: 16px;
-    box-sizing: border-box;
-  }
 }
 
 /* ==============================

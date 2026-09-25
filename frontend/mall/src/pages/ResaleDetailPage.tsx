@@ -92,7 +92,7 @@ export default function ResaleDetailPage() {
       footerProps={footerProps}
       {...headerActionProps}
     >
-      <div className="page-layout resale-detail-page">
+      <div className="page-layout product-detail-page-layout resale-detail-page">
         {loading ? (
           <TextState variant="loading">読み込み中です...</TextState>
         ) : null}
