@@ -135,6 +135,23 @@ export default function CatalogPage() {
     });
   };
 
+  const handleReviewAvatarClick = (avatarId: string) => {
+    const normalizedAvatarId = avatarId.trim();
+    const normalizedCurrentAvatarId = currentAvatarId.trim();
+
+    if (!normalizedAvatarId) return;
+
+    if (
+      normalizedCurrentAvatarId &&
+      normalizedAvatarId === normalizedCurrentAvatarId
+    ) {
+      navigate("/wallet");
+      return;
+    }
+
+    handleAvatarClick(normalizedAvatarId);
+  };
+
   return (
     <Layout
       title="AMOL"
@@ -284,7 +301,7 @@ export default function CatalogPage() {
               totalCount={reviewSummary?.totalCount}
               errorMessage={reviewErrorMessage}
               showHelpfulVotes
-              onAvatarClick={handleAvatarClick}
+              onAvatarClick={handleReviewAvatarClick}
             />
           </ProductDetailLayout>
         ) : null}

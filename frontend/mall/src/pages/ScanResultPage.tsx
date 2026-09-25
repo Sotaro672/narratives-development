@@ -109,14 +109,23 @@ export default function ScanResultPage() {
   const handleAvatarClick = useCallback(
     (avatarId: string) => {
       const normalizedAvatarId = avatarId.trim();
+      const normalizedCurrentAvatarId = currentAvatarId.trim();
 
       if (!normalizedAvatarId) {
         return;
       }
 
+      if (
+        normalizedCurrentAvatarId &&
+        normalizedAvatarId === normalizedCurrentAvatarId
+      ) {
+        navigate("/wallet");
+        return;
+      }
+
       navigate(`/avatars/${encodeURIComponent(normalizedAvatarId)}`);
     },
-    [navigate],
+    [currentAvatarId, navigate],
   );
 
   const isResalePurchase =
