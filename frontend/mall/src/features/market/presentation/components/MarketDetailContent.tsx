@@ -251,10 +251,7 @@ export default function MarketDetailContent({
             model={model}
           />
 
-          <ProductDescription
-            description={item.description}
-            className="product-detail__description--standalone"
-          />
+          <ProductDescription description={item.description} />
 
           {cartMessage ? (
             <Alert variant="success" className="market-detail-page__cart-message">

@@ -17,20 +17,6 @@
   color: #b42318;
 }
 
-/* ==============================
-   Detail area
-   ============================== */
-
-.catalog-page-content {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.catalog-page-content .product-detail__title {
-  margin-top: 12px;
-}
-
 .catalog-page-actions {
   display: flex;
   align-items: center;

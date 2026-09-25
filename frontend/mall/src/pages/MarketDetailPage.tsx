@@ -34,7 +34,6 @@ export default function MarketDetailPage() {
   });
 
   const {
-    title,
     sellerAvatarId,
     handleAddToCart,
   } = detail;
@@ -88,8 +87,8 @@ export default function MarketDetailPage() {
 
   return (
     <Layout
-      title={title}
-      titleClickable={false}
+      title="AMOL"
+      titleClickable
       mode="mypage"
       showHeader={!isMobilePortrait}
       hideAnnouncementButton

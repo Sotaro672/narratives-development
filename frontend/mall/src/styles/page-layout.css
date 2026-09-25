@@ -54,6 +54,10 @@
   box-sizing: border-box;
 }
 
+.product-detail-page-layout .product-detail__content {
+  padding-top: 12px;
+}
+
 /* PC split-page layout */
 
 @media (min-width: 960px) {

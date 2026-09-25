@@ -180,7 +180,6 @@ export default function ResaleDetailPage() {
                     description={
                       readonlyInfoProps.description || "説明文はありません。"
                     }
-                    className="product-detail__description--standalone"
                   />
                 ) : null}
               </>
@@ -209,7 +208,6 @@ export default function ResaleDetailPage() {
             ) : (
               <>
                 <ProductPrice priceLabel={readonlyInfoProps.priceLabel} />
-
                 <ProductModelMeta
                   conditionLabel={readonlyInfoProps.conditionLabel}
                   model={model}
