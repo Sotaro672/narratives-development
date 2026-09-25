@@ -127,6 +127,11 @@
     gap: 20px;
   }
 
+  .scan-result-desktop-main,
+  .scan-result-desktop-side {
+    padding-top: 24px;
+  }
+
   .scan-result-desktop-side {
     position: sticky;
     top: 88px;
@@ -136,11 +141,6 @@
   .scan-result-desktop-main .ui-section-card,
   .scan-result-desktop-side .ui-section-card {
     margin-bottom: 20px;
-  }
-
-  .scan-result-desktop-side .ui-section-card:first-child,
-  .scan-result-desktop-main .ui-section-card:first-child {
-    margin-top: 24px;
   }
 }
 

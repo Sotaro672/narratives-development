@@ -124,7 +124,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
       </div>
 
       <aside className="scan-result-desktop-side">
-        {owned === true && !hideReviewForm ? (
+        {state.authAvailable === true && !hideReviewForm ? (
           <ScanResultReviewForm
             reviewBody={reviewBody}
             reviewRating={reviewRating}

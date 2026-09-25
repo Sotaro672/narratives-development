@@ -148,16 +148,17 @@ function createMeasurementEntries(
     }));
 }
 
-function createTokenViewModel(input: {
-  previewState: PreviewState;
-  ownedByWallet: boolean | null;
-}): ScanTokenSectionViewModel | null {
-  const preview = input.previewState.raw;
+function createTokenViewModel(
+  previewState: PreviewState,
+): ScanTokenSectionViewModel | null {
+  const preview = previewState.raw;
   const tokenBlueprintPatch = preview.tokenBlueprintPatch;
 
   if (!tokenBlueprintPatch) return null;
 
-  const assetId = preview.token?.assetId ?? "";
+  const assetId = preview.token?.assetId?.trim() ?? "";
+  const metadataUri = preview.token?.metadataUri?.trim() ?? "";
+  const tokenBlueprintId = preview.token?.tokenBlueprintId?.trim() ?? "";
 
   return {
     brandName: tokenBlueprintPatch.brandName,
@@ -166,10 +167,11 @@ function createTokenViewModel(input: {
     symbol: tokenBlueprintPatch.symbol,
     description: tokenBlueprintPatch.description,
     assetId,
-    canOpenTokenContents:
-      input.ownedByWallet === true &&
-      Boolean(assetId) &&
-      Boolean(tokenBlueprintPatch.tokenName),
+    canOpenTokenContents: Boolean(
+      assetId &&
+        metadataUri &&
+        tokenBlueprintId,
+    ),
   };
 }
 
@@ -219,9 +221,6 @@ export function createScanResultPageViewModel(
       measurementEntries: createMeasurementEntries(preview.measurements),
       alcoholInfo,
     },
-    token: createTokenViewModel({
-      previewState,
-      ownedByWallet: input.ownedByWallet,
-    }),
+    token: createTokenViewModel(previewState),
   };
 }

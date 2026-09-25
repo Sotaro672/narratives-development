@@ -16,7 +16,6 @@ import {
   isOwnedByWalletAssetId,
   isReturnInProgressOpenedError,
   loadPreviewState,
-  resolveOwnedWalletTokenByAssetId,
   transferScanPurchased,
 } from "../../infrastructure/scanResultApi";
 
@@ -56,9 +55,11 @@ function readStoredTransferOperationId(productId: string): string {
   if (!productId) return "";
 
   try {
-    return globalThis.sessionStorage
-      .getItem(getTransferOperationStorageKey(productId))
-      ?.trim() ?? "";
+    return (
+      globalThis.sessionStorage
+        .getItem(getTransferOperationStorageKey(productId))
+        ?.trim() ?? ""
+    );
   } catch {
     return "";
   }
@@ -251,8 +252,7 @@ export function useScanResultPage() {
       setBusyOwnedByWallet(true);
       setOwnedByWalletError(null);
 
-      const maxAttempts =
-        retryAfterTransfer ? OWNERSHIP_RETRY_ATTEMPTS : 1;
+      const maxAttempts = retryAfterTransfer ? OWNERSHIP_RETRY_ATTEMPTS : 1;
       let lastError: unknown = null;
 
       try {
@@ -445,9 +445,7 @@ export function useScanResultPage() {
         if (isReturnInProgressOpenedError(caughtError)) {
           const blockedResult: MallScanTransferResponse = {
             avatarId: caughtError.avatarId,
-            productId:
-              caughtError.productId ||
-              normalizedProductId,
+            productId: caughtError.productId || normalizedProductId,
             matched: false,
             matchedOrderId: caughtError.matchedOrderId,
             matchedItemIndex: caughtError.matchedItemIndex,
@@ -769,7 +767,7 @@ export function useScanResultPage() {
     async (assetId: string) => {
       const normalizedAssetId = assetId.trim();
 
-      if (!normalizedAssetId) {
+      if (!normalizedAssetId || !previewState) {
         return;
       }
 
@@ -780,65 +778,43 @@ export function useScanResultPage() {
         return;
       }
 
-      try {
-        setOwnedByWalletError(null);
+      const preview = previewState.raw;
+      const token = preview.token;
+      const productBlueprintPatch = preview.productBlueprintPatch;
+      const tokenBlueprintPatch = preview.tokenBlueprintPatch;
 
-        const resolved = await resolveOwnedWalletTokenByAssetId(
-          normalizedAssetId,
-          headers,
-        );
+      const metadataUri = token?.metadataUri?.trim() ?? "";
+      const tokenBlueprintId = token?.tokenBlueprintId?.trim() ?? "";
 
-        if (!resolved.metadataUri) {
-          throw new Error("metadataUri is empty");
-        }
-
-        const token = previewState?.raw.token;
-        const tokenBlueprintPatch =
-          previewState?.raw.tokenBlueprintPatch;
-
-        const searchParams = new URLSearchParams({
-          assetId: resolved.assetId,
-          metadataUri: resolved.metadataUri,
-          productId: resolved.productId,
-          brandId: resolved.brandId,
-          brandName: resolved.brandName,
-          productName: resolved.productName,
-          productBlueprintId: resolved.productBlueprintId,
-        });
-
-        if (token?.tokenBlueprintId) {
-          searchParams.set(
-            "tokenBlueprintId",
-            token.tokenBlueprintId,
-          );
-        }
-
-        if (tokenBlueprintPatch?.tokenName) {
-          searchParams.set(
-            "tokenName",
-            tokenBlueprintPatch.tokenName,
-          );
-        }
-
-        if (tokenBlueprintPatch?.tokenIcon) {
-          searchParams.set(
-            "tokenIconUrl",
-            tokenBlueprintPatch.tokenIcon,
-          );
-        }
-
-        navigate(`/contents?${searchParams.toString()}`);
-      } catch (caughtError) {
-        if (!mountedRef.current) {
-          return;
-        }
-
+      if (!metadataUri || !tokenBlueprintId) {
         setOwnedByWalletError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : String(caughtError),
+          "トークンコンテンツ情報を取得できませんでした。",
         );
+        return;
       }
+
+      setOwnedByWalletError(null);
+
+      const searchParams = new URLSearchParams({
+        assetId: normalizedAssetId,
+        metadataUri,
+        productId: preview.productId,
+        brandId:
+          token?.brandId?.trim() ||
+          productBlueprintPatch?.brandId?.trim() ||
+          "",
+        brandName:
+          token?.brandName?.trim() ||
+          preview.brandName?.trim() ||
+          tokenBlueprintPatch?.brandName?.trim() ||
+          "",
+        productName:
+          productBlueprintPatch?.productName?.trim() || "",
+        productBlueprintId: preview.productBlueprintId,
+        tokenBlueprintId,
+      });
+
+      navigate(`/contents?${searchParams.toString()}`);
     },
     [navigate, previewState],
   );
