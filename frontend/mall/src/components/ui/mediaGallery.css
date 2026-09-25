@@ -1,4 +1,4 @@
-/* frontend/amol/src/components/ui/media-gallery.css */
+/* frontend/mall/src/components/ui/mediaGallery.css */
 
 .media-gallery {
   width: 100%;
@@ -8,18 +8,34 @@
 .media-gallery__viewer {
   position: relative;
   width: 100%;
-  min-height: 280px;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
+  touch-action: pan-y;
+}
+
+.media-gallery__track {
   display: flex;
+  width: 100%;
+  height: 100%;
+  will-change: transform;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.media-gallery__slide {
+  display: flex;
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   align-items: center;
   justify-content: center;
-  touch-action: pan-y;
+  overflow: hidden;
 }
 
 .media-gallery__media {
   display: block;
   width: 100%;
-  max-height: 640px;
+  height: 100%;
   object-fit: contain;
   object-position: center;
   user-select: none;
@@ -27,16 +43,21 @@
 }
 
 .media-gallery__placeholder {
-  width: 100%;
-  min-height: 280px;
-  border-radius: 20px;
-  background: #f3f4f6;
-  color: #9ca3af;
   display: flex;
+  width: 100%;
+  aspect-ratio: 1 / 1;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  background: #f3f4f6;
+  color: #9ca3af;
   font-size: 14px;
   font-weight: 700;
+}
+
+.media-gallery__slide .media-gallery__placeholder {
+  height: 100%;
+  aspect-ratio: auto;
 }
 
 .media-gallery__nav {
@@ -81,22 +102,22 @@
 }
 
 .media-gallery__thumbnail-list {
-  margin-top: 12px;
   display: flex;
   gap: 10px;
-  overflow-x: auto;
+  margin-top: 12px;
   padding-bottom: 2px;
+  overflow-x: auto;
 }
 
 .media-gallery__thumbnail-button {
   appearance: none;
+  flex: 0 0 auto;
   width: 64px;
   height: 64px;
-  flex: 0 0 auto;
   padding: 0;
+  overflow: hidden;
   border: 2px solid transparent;
   border-radius: 12px;
-  overflow: hidden;
   background: #f3f4f6;
   cursor: pointer;
 }
@@ -114,33 +135,17 @@
 }
 
 .media-gallery__thumbnail-video-label {
+  display: flex;
   width: 100%;
   height: 100%;
+  align-items: center;
+  justify-content: center;
   color: #6b7280;
   font-size: 11px;
   font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-@media (min-width: 768px) {
-  .media-gallery__viewer,
-  .media-gallery__placeholder {
-    min-height: 420px;
-  }
 }
 
 @media (max-width: 640px) {
-  .media-gallery__viewer {
-    min-height: 320px;
-  }
-
-  .media-gallery__placeholder {
-    min-height: 320px;
-    border-radius: 18px;
-  }
-
   .media-gallery__nav {
     display: none;
   }
@@ -158,5 +163,11 @@
     width: 56px;
     height: 56px;
     border-radius: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-gallery__track {
+    transition: none;
   }
 }

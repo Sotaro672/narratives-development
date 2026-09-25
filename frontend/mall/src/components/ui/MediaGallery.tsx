@@ -1,4 +1,5 @@
-// frontend/amol/src/components/ui/MediaGallery.tsx
+// frontend/mall/src/components/ui/MediaGallery.tsx
+
 import {
   useRef,
   type TouchEvent,
@@ -41,9 +42,11 @@ export default function MediaGallery({
   onTouchEnd,
 }: MediaGalleryProps) {
   const touchStartXRef = useRef<number | null>(null);
-
-  const activeItem = items[activeIndex];
+  const hasItems = items.length > 0;
   const hasMultipleItems = items.length > 1;
+  const safeActiveIndex = hasItems
+    ? Math.min(Math.max(activeIndex, 0), items.length - 1)
+    : 0;
 
   const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
     if (onTouchStart) {
@@ -65,15 +68,11 @@ export default function MediaGallery({
 
     touchStartXRef.current = null;
 
-    if (startX === null || endX === null) {
-      return;
-    }
+    if (startX === null || endX === null) return;
 
     const diff = endX - startX;
 
-    if (Math.abs(diff) < SWIPE_THRESHOLD) {
-      return;
-    }
+    if (Math.abs(diff) < SWIPE_THRESHOLD) return;
 
     if (diff > 0) {
       onPrev();
@@ -84,18 +83,34 @@ export default function MediaGallery({
   };
 
   return (
-    <div
-      className={["media-gallery", className || ""]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {activeItem?.url ? (
+    <div className={["media-gallery", className || ""].filter(Boolean).join(" ")}>
+      {hasItems ? (
         <div
           className="media-gallery__viewer"
           onTouchStart={handleTouchStart}
           onTouchEnd={handleTouchEnd}
         >
-          <MediaGalleryPreview item={activeItem} altFallback={altFallback} />
+          <div
+            className="media-gallery__track"
+            style={{
+              transform: `translate3d(-${safeActiveIndex * 100}%, 0, 0)`,
+            }}
+          >
+            {items.map((item) => (
+              <div key={item.id} className="media-gallery__slide">
+                {item.url ? (
+                  <MediaGalleryPreview
+                    item={item}
+                    altFallback={altFallback}
+                  />
+                ) : (
+                  <div className="media-gallery__placeholder">
+                    {placeholderText}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
 
           {hasMultipleItems ? (
             <>
@@ -118,13 +133,15 @@ export default function MediaGallery({
               </button>
 
               <div className="media-gallery__counter">
-                {activeIndex + 1} / {items.length}
+                {safeActiveIndex + 1} / {items.length}
               </div>
             </>
           ) : null}
         </div>
       ) : (
-        <div className="media-gallery__placeholder">{placeholderText}</div>
+        <div className="media-gallery__placeholder">
+          {placeholderText}
+        </div>
       )}
 
       {hasMultipleItems ? (
@@ -135,7 +152,7 @@ export default function MediaGallery({
               type="button"
               className={[
                 "media-gallery__thumbnail-button",
-                index === activeIndex
+                index === safeActiveIndex
                   ? "media-gallery__thumbnail-button--active"
                   : "",
               ]
