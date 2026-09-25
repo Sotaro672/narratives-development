@@ -2,7 +2,6 @@
 
 import Button from "../../../../components/ui/Button";
 import RatingSelect from "../../../../components/ui/RatingSelect";
-import SectionCard from "../../../../components/ui/SectionCard";
 import Textbox from "../../../../components/ui/Textbox";
 
 type ScanResultReviewFormProps = {
@@ -27,7 +26,7 @@ export default function ScanResultReviewForm(props: ScanResultReviewFormProps) {
   } = props;
 
   return (
-    <SectionCard>
+    <section>
       <h2>口コミを投稿</h2>
 
       <label className="scan-result-label">
@@ -54,6 +53,6 @@ export default function ScanResultReviewForm(props: ScanResultReviewFormProps) {
       >
         {postingReview ? "投稿中..." : "投稿する"}
       </Button>
-    </SectionCard>
+    </section>
   );
 }
