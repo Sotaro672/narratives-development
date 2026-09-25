@@ -1,13 +1,11 @@
 // frontend/amol/src/lib/authToken.ts
 
-import {
-  auth,
-} from "./firebase";
+import { waitForAuthReady } from "./authReady";
 
 export async function getFirebaseIdToken(
   forceRefresh = false,
 ): Promise<string> {
-  const user = auth.currentUser;
+  const user = await waitForAuthReady();
 
   if (!user) {
     throw new Error(
@@ -15,10 +13,7 @@ export async function getFirebaseIdToken(
     );
   }
 
-  const token = await user.getIdToken(
-    forceRefresh,
-  );
-
+  const token = await user.getIdToken(forceRefresh);
   const normalizedToken = token.trim();
 
   if (!normalizedToken) {
