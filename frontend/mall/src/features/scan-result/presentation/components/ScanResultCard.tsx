@@ -37,9 +37,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   if (state.loading) {
     return (
       <SectionCard>
-        <TextState variant="loading">
-          プレビューを取得しています...
-        </TextState>
+        <TextState variant="loading">プレビューを取得しています...</TextState>
       </SectionCard>
     );
   }
@@ -49,10 +47,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
       <SectionCard>
         <h1>Scan Result</h1>
         <TextState variant="error">{state.error}</TextState>
-
-        <Button type="button" onClick={onRefresh}>
-          再読み込み
-        </Button>
+        <Button type="button" onClick={onRefresh}>再読み込み</Button>
       </SectionCard>
     );
   }
@@ -69,8 +64,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const { product, token } = viewModel;
   const owned = state.ownedByWallet;
   const ownedError = state.ownedByWalletError ?? "";
-  const productBlueprintId =
-    state.previewState?.raw.productBlueprintId?.trim() ?? "";
+  const productBlueprintId = state.previewState?.raw.productBlueprintId?.trim() ?? "";
 
   return (
     <div className="scan-result-desktop-grid">
@@ -127,16 +121,18 @@ export default function ScanResultCard(props: ScanResultCardProps) {
           </div>
         ) : null}
 
-        <ProductReviewSection
-          items={state.reviews?.items ?? []}
-          productBlueprintId={productBlueprintId}
-          currentAvatarId={currentAvatarId}
-          totalCount={state.reviews?.total}
-          loading={state.busyReviews}
-          errorMessage={state.reviewsError}
-          showHelpfulVotes
-          onAvatarClick={onAvatarClick}
-        />
+        <div className="scan-result-review-scroll">
+          <ProductReviewSection
+            items={state.reviews?.items ?? []}
+            productBlueprintId={productBlueprintId}
+            currentAvatarId={currentAvatarId}
+            totalCount={state.reviews?.total}
+            loading={state.busyReviews}
+            errorMessage={state.reviewsError}
+            showHelpfulVotes
+            onAvatarClick={onAvatarClick}
+          />
+        </div>
       </aside>
     </div>
   );
