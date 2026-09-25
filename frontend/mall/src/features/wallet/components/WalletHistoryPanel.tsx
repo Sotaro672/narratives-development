@@ -5,6 +5,7 @@ import Badge from "../../../components/ui/Badge";
 import Media from "../../../components/ui/Media";
 import MediaIcon from "../../../components/ui/MediaIcon";
 import StatePanel from "../../../components/ui/StatePanel";
+import TextLink from "../../../components/ui/textLink";
 import TextState from "../../../components/ui/TextState";
 import { formatDateTime } from "../../../components/utils/date";
 import type {
@@ -194,8 +195,8 @@ function renderBrandLabel(
   const brandId = item.brandId?.trim() || "";
   const canOpenBrand = Boolean(brandId && onBrandClick);
 
-  const content = (
-    <>
+  return (
+    <div className="wallet-page-history__brand">
       <MediaIcon
         src={item.brandIcon}
         alt={brandName}
@@ -204,33 +205,24 @@ function renderBrandLabel(
         shape="circle"
         className="wallet-page-history__brand-icon"
       />
-      <span className="wallet-page-history__brand-name">{brandName}</span>
-    </>
-  );
 
-  if (!canOpenBrand) {
-    return <div className="wallet-page-history__brand">{content}</div>;
-  }
-
-  return (
-    <div
-      className="wallet-page-history__brand"
-      role="button"
-      tabIndex={0}
-      aria-label={`${brandName}のブランドページへ移動`}
-      onClick={(event) => {
-        event.stopPropagation();
-        onBrandClick?.(brandId);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          event.stopPropagation();
-          onBrandClick?.(brandId);
+      <TextLink
+        disabled={!canOpenBrand}
+        aria-label={
+          canOpenBrand ? `${brandName}のブランドページへ移動` : undefined
         }
-      }}
-    >
-      {content}
+        onClick={(event) => {
+          event.stopPropagation();
+
+          if (!canOpenBrand) {
+            return;
+          }
+
+          onBrandClick?.(brandId);
+        }}
+      >
+        {brandName}
+      </TextLink>
     </div>
   );
 }

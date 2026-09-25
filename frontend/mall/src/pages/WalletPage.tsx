@@ -4,10 +4,10 @@ import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/wallet-page.css";
-import "../styles/wallet-page/resale-panel.css";
 
 import Layout from "../components/layout/Layout";
 import StatePanel from "../components/ui/StatePanel";
+import type { WalletTokenItem } from "../features/shared/types/tokenTypes";
 import WalletHistoryPanel from "../features/wallet/components/WalletHistoryPanel";
 import WalletProfile from "../features/wallet/components/WalletProfile";
 import WalletProfileActions from "../features/wallet/components/WalletProfileActions";
@@ -16,7 +16,6 @@ import WalletTabs from "../features/wallet/components/WalletTabs";
 import WalletTokenContentsCard from "../features/wallet/components/WalletTokenContentsCard";
 import WalletTokenEmpty from "../features/wallet/components/WalletTokenEmpty";
 import { useWalletPage } from "../features/wallet/hooks/useWalletPage";
-import type { WalletTokenItem } from "../features/shared/types/tokenTypes";
 
 export default function WalletPage() {
   const navigate = useNavigate();
@@ -182,7 +181,10 @@ export default function WalletPage() {
           </aside>
 
           <div className="wallet-page-layout__main">
-            <WalletTabs activeTab={activeTab} onChange={setActiveTab} />
+            <WalletTabs
+              activeTab={activeTab}
+              onChange={setActiveTab}
+            />
 
             {activeTab === "history" ? (
               <WalletHistoryPanel

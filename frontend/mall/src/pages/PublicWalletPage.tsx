@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/wallet-page.css";
-import "../styles/wallet-page/resale-panel.css";
 
 import Layout from "../components/layout/Layout";
 import ReportModal from "../features/report/components/ReportModal";
