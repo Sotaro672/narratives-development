@@ -2,7 +2,6 @@
 
 import Alert from "../../../components/ui/Alert";
 import Badge from "../../../components/ui/Badge";
-import Card from "../../../components/ui/Card";
 import Media from "../../../components/ui/Media";
 import MediaIcon from "../../../components/ui/MediaIcon";
 import StatePanel from "../../../components/ui/StatePanel";
@@ -245,12 +244,7 @@ export default function WalletHistoryPanel({
   onOrderClick,
 }: WalletHistoryPanelProps) {
   if (loading) {
-    return (
-      <StatePanel
-        variant="loading"
-        title="読み込み中です..."
-      />
-    );
+    return <StatePanel variant="loading" title="読み込み中です..." />;
   }
 
   if (error) {
@@ -263,94 +257,104 @@ export default function WalletHistoryPanel({
 
   return (
     <div className="wallet-page-history">
-      {orderHistory.map((order) => (
-        <Card
-          key={order.id}
-          as="article"
-          variant="panel"
-          interactive={Boolean(onOrderClick)}
-          className="wallet-page-history__item"
-          aria-label={
-            onOrderClick ? `注文 ${order.id} の詳細を表示` : undefined
-          }
-          onClick={
-            onOrderClick
-              ? () => {
-                  onOrderClick(order.id);
-                }
-              : undefined
-          }
-        >
-          <div className="wallet-page-history__main">
-            <div className="wallet-page-history__header">
-              <p className="wallet-page-history__date">
-                {formatDateTime(order.createdAt)}
+      {orderHistory.map((order) => {
+        const canOpenOrder = Boolean(onOrderClick);
+
+        return (
+          <article
+            key={order.id}
+            className="wallet-page-history__item"
+            role={canOpenOrder ? "button" : undefined}
+            tabIndex={canOpenOrder ? 0 : undefined}
+            aria-label={
+              canOpenOrder ? `注文 ${order.id} の詳細を表示` : undefined
+            }
+            onClick={
+              canOpenOrder
+                ? () => {
+                    onOrderClick?.(order.id);
+                  }
+                : undefined
+            }
+            onKeyDown={
+              canOpenOrder
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOrderClick?.(order.id);
+                    }
+                  }
+                : undefined
+            }
+          >
+            <div className="wallet-page-history__main">
+              <div className="wallet-page-history__header">
+                <p className="wallet-page-history__date">
+                  {formatDateTime(order.createdAt)}
+                </p>
+
+                <Badge variant={getOrderStatusVariant(order)} size="sm">
+                  {getOrderStatusLabel(order)}
+                </Badge>
+              </div>
+
+              <p className="wallet-page-history__title">
+                注文ID: {order.id || "-"}
               </p>
 
-              <Badge
-                variant={getOrderStatusVariant(order)}
-                size="sm"
-              >
-                {getOrderStatusLabel(order)}
-              </Badge>
+              <p className="wallet-page-history__summary">
+                {getOrderSummary(order)}
+              </p>
             </div>
 
-            <p className="wallet-page-history__title">
-              注文ID: {order.id || "-"}
-            </p>
+            {order.items.length > 0 ? (
+              <ul className="wallet-page-history__items">
+                {order.items.map((item, index) => {
+                  const productTitle = getProductTitle(item);
+                  const productSubtitle = getProductSubtitle(item);
+                  const brandName = item.brandName || "ブランド未設定";
+                  const itemKey = `${order.id}-${item.inventoryId}-${item.modelId}-${index}`;
 
-            <p className="wallet-page-history__summary">
-              {getOrderSummary(order)}
-            </p>
-          </div>
-
-          {order.items.length > 0 ? (
-            <ul className="wallet-page-history__items">
-              {order.items.map((item, index) => {
-                const productTitle = getProductTitle(item);
-                const productSubtitle = getProductSubtitle(item);
-                const brandName = item.brandName || "ブランド未設定";
-                const itemKey = `${order.id}-${item.inventoryId}-${item.modelId}-${index}`;
-
-                return (
-                  <li key={itemKey} className="wallet-page-history__product">
-                    <div className="wallet-page-history__product-visual">
-                      {renderImage(
-                        item.tokenIcon,
-                        item.tokenName || productTitle,
-                        getFallbackInitial(item.tokenName || productTitle),
-                      )}
-                    </div>
-
-                    <div className="wallet-page-history__product-body">
-                      <div className="wallet-page-history__product-heading">
-                        <div className="wallet-page-history__product-title-area">
-                          <span className="wallet-page-history__product-name">
-                            {productTitle}
-                          </span>
-
-                          {productSubtitle ? (
-                            <span className="wallet-page-history__product-subtitle">
-                              {productSubtitle}
-                            </span>
-                          ) : null}
-                        </div>
-
-                        <span className="wallet-page-history__product-meta">
-                          {item.qty}点 / {formatAmount(item.price)}
-                        </span>
+                  return (
+                    <li key={itemKey} className="wallet-page-history__product">
+                      <div className="wallet-page-history__product-visual">
+                        {renderImage(
+                          item.tokenIcon,
+                          item.tokenName || productTitle,
+                          getFallbackInitial(item.tokenName || productTitle),
+                        )}
                       </div>
 
-                      {renderBrandLabel(item, brandName, onBrandClick)}
-                      {renderItemMeta(item)}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-        </Card>
-      ))}
+                      <div className="wallet-page-history__product-body">
+                        <div className="wallet-page-history__product-heading">
+                          <div className="wallet-page-history__product-title-area">
+                            <span className="wallet-page-history__product-name">
+                              {productTitle}
+                            </span>
+
+                            {productSubtitle ? (
+                              <span className="wallet-page-history__product-subtitle">
+                                {productSubtitle}
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <span className="wallet-page-history__product-meta">
+                            {item.qty}点 / {formatAmount(item.price)}
+                          </span>
+                        </div>
+
+                        {renderBrandLabel(item, brandName, onBrandClick)}
+                        {renderItemMeta(item)}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
+          </article>
+        );
+      })}
     </div>
   );
 }

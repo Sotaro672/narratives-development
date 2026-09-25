@@ -30,8 +30,7 @@ export default function AvatarPage() {
   return (
     <>
       <Layout
-        title={vm.pageTitle}
-        titleClickable={false}
+        title="AMOL"
         actionButtonLabel={vm.saveButtonLabel}
         onActionButtonClick={handleSaveClick}
         actionButtonDisabled={vm.saving || vm.loading}
