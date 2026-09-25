@@ -1,6 +1,6 @@
 // frontend/amol/src/features/contents/components/ContentsDetailPanel.tsx
 
-import TokenCommentCard from "../../token-commnet/components/TokenCommentCard";
+import TokenCommentCard from "../../token-commnet/components/TokenCommentSection";
 
 import type {
   ContentsSearchParams,

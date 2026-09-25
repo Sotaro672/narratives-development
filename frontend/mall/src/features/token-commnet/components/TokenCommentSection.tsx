@@ -1,4 +1,4 @@
-// frontend/mall/src/features/token-commnet/components/TokenCommentCard.tsx
+// frontend/mall/src/features/token-commnet/components/TokenCommentSection.tsx
 
 import { useEffect, useState } from "react";
 
@@ -14,7 +14,7 @@ import type { TokenCommentTreeNode } from "../../shared/types/tokenCommentTypes"
 import TokenCommentForm from "./TokenCommentForm";
 import TokenCommentList from "./TokenCommentList";
 
-type TokenCommentCardProps = {
+type TokenCommentSectionProps = {
   tokenBlueprintId: string;
   loading?: boolean;
   hideCommentForm?: boolean;
@@ -38,7 +38,7 @@ type TokenCommentCardProps = {
   onSubmitReply: (parentCommentId: string) => Promise<void>;
 };
 
-export default function TokenCommentCard({
+export default function TokenCommentSection({
   tokenBlueprintId,
   loading = false,
   hideCommentForm = false,
@@ -60,7 +60,7 @@ export default function TokenCommentCard({
   onStartReply,
   onCancelReply,
   onSubmitReply,
-}: TokenCommentCardProps) {
+}: TokenCommentSectionProps) {
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
 
