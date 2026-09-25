@@ -15,15 +15,6 @@
   margin-bottom: 24px;
 }
 
-.inquiry-page__eyebrow {
-  margin: 0 0 6px;
-  color: #6b7280;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-}
-
 .inquiry-page__title {
   margin: 0;
   color: var(--color-text, #111827);

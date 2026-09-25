@@ -54,7 +54,6 @@ export default function InquiryCreatePage() {
     >
       <section className="inquiry-page__container">
         <div className="inquiry-page__header">
-          <p className="inquiry-page__eyebrow">CONTACT</p>
           <h1 className="inquiry-page__title">商品について問い合わせる</h1>
         </div>
 
