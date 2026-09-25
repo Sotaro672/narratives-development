@@ -1,12 +1,11 @@
 // frontend/mall/src/pages/ScanResultPage.tsx
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 
-import { getMyAvatar } from "../features/avatar/api/avatarApi";
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
 import ScanTransferSuccessModal from "../features/scan-result/presentation/components/ScanTransferSuccessModal";
 import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
@@ -22,11 +21,11 @@ export default function ScanResultPage() {
   const [reviewBody, setReviewBody] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
-  const [currentAvatarId, setCurrentAvatarId] = useState("");
 
   const {
     state,
     viewModel,
+    currentAvatarId,
     hasMultipleTransfers,
     canOpenTransferContents,
     load,
@@ -39,35 +38,6 @@ export default function ScanResultPage() {
   } = useScanResultPage();
 
   const isLoggedIn = state.authAvailable === true;
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadCurrentAvatar() {
-      if (!isLoggedIn) {
-        setCurrentAvatarId("");
-        return;
-      }
-
-      try {
-        const avatar = await getMyAvatar();
-
-        if (!cancelled) {
-          setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
-        }
-      } catch {
-        if (!cancelled) {
-          setCurrentAvatarId("");
-        }
-      }
-    }
-
-    void loadCurrentAvatar();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isLoggedIn]);
 
   const handleSubmitReview = useCallback(async () => {
     const ok = await submitReview(reviewBody, reviewRating);
