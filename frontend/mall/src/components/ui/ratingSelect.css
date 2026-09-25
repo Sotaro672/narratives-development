@@ -1,16 +1,48 @@
-/* frontend/amol/src/components/ui/rating-select.css */
+/* frontend/mall/src/components/ui/ratingSelect.css */
 
 .ui-rating-select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 12px;
-  background: var(--color-surface, #ffffff);
-  color: var(--color-text, #111827);
-  font: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  width: auto;
 }
 
-.ui-rating-select:focus {
+.ui-rating-select__button {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  padding: 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #b8b8b8;
+  cursor: pointer;
+  transition: color 0.12s ease, transform 0.12s ease;
+}
+
+.ui-rating-select__button--active {
+  color: #f59e0b;
+}
+
+.ui-rating-select__button:hover:not(:disabled) {
+  transform: scale(1.08);
+}
+
+.ui-rating-select__button:focus-visible {
   outline: 2px solid var(--color-focus, #93c5fd);
   outline-offset: 2px;
+}
+
+.ui-rating-select__button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.ui-rating-select__star {
+  width: 28px;
+  height: 28px;
 }
