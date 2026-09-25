@@ -3,7 +3,6 @@
 import Alert from "../../../../components/ui/Alert";
 import Chip from "../../../../components/ui/Chip";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
-import SectionHeader from "../../../../components/ui/SectionHeader";
 import { rgbToCssColor } from "../../../../components/utils/color";
 import { formatPrice } from "../../../../components/utils/price";
 import type {
@@ -59,12 +58,6 @@ export default function ModelSelector({
 
   return (
     <section className="catalog-page-model">
-      <SectionHeader
-        title="モデル"
-        titleAs="h2"
-        className="catalog-page-card-header"
-      />
-
       {isAlcoholCatalog ? (
         <div className="catalog-page-option-section">
           <p className="catalog-page-option-label">容量</p>

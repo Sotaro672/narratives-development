@@ -2,7 +2,6 @@
 
 import Chip from "../../../../components/ui/Chip";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
-import SectionHeader from "../../../../components/ui/SectionHeader";
 import TextButton from "../../../../components/ui/TextButton";
 import type { CatalogProductBlueprint } from "../../../shared/types/catalog";
 import {
@@ -28,12 +27,6 @@ export default function ProductInfoCard({
 
   return (
     <section className="catalog-page-product-info">
-      <SectionHeader
-        title="商品情報"
-        titleAs="h2"
-        className="catalog-page-card-header"
-      />
-
       <InfoList className="catalog-page-definition-list">
         {viewModel.rows.map((row) => {
           const isBrandRow = row.label === "ブランド";

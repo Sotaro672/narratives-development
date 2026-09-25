@@ -1,6 +1,5 @@
 // frontend/mall/src/features/catalog/presentation/components/MeasurementTable.tsx
 
-import SectionHeader from "../../../../components/ui/SectionHeader";
 import type { MeasurementTableRow } from "../../../shared/types/catalog";
 
 type MeasurementTableProps = {
@@ -14,12 +13,6 @@ export default function MeasurementTable({
 }: MeasurementTableProps) {
   return (
     <section className="catalog-page-measurement">
-      <SectionHeader
-        title="採寸表"
-        titleAs="h2"
-        className="catalog-page-card-header"
-      />
-
       <div className="catalog-page-measurement-table-wrap">
         <table className="catalog-page-measurement-table">
           <thead>

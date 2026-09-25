@@ -180,7 +180,6 @@
 
 /*
   Common UI migration:
-  - .catalog-page-card-header overrides <SectionHeader />
   - .catalog-page-definition-list overrides <InfoList />
   - .catalog-page-brand-link overrides <TextButton />
   - .catalog-page-chip overrides <Chip />
@@ -188,18 +187,6 @@
 
 .catalog-page-product-info {
   margin-top: 24px;
-}
-
-.catalog-page-card-header {
-  margin-bottom: 16px;
-}
-
-.catalog-page-card-header .ui-section-header__title {
-  margin: 0;
-  color: var(--color-text, #1f1f1f);
-  font-size: 17px;
-  font-weight: 900;
-  line-height: 1.4;
 }
 
 .catalog-page-definition-list {
@@ -465,6 +452,10 @@
   .catalog-page-content {
     padding-right: 16px;
     padding-left: 16px;
+  }
+
+  .catalog-page-token-summary-mobile {
+    margin-top: 24px;
   }
 
   .catalog-page-image-viewer {

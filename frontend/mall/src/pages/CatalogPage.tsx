@@ -170,13 +170,15 @@ export default function CatalogPage() {
               />
             }
             mediaFooter={
-              <TokenSummaryCard
-                brandName={catalog.productBlueprint.brandName}
-                tokenName={catalog.tokenBlueprint.tokenName}
-                tokenIcon={catalog.tokenBlueprint.tokenIcon}
-                symbol={catalog.tokenBlueprint.symbol}
-                description={catalog.tokenBlueprint.description}
-              />
+              !isMobilePortrait ? (
+                <TokenSummaryCard
+                  brandName={catalog.productBlueprint.brandName}
+                  tokenName={catalog.tokenBlueprint.tokenName}
+                  tokenIcon={catalog.tokenBlueprint.tokenIcon}
+                  symbol={catalog.tokenBlueprint.symbol}
+                  description={catalog.tokenBlueprint.description}
+                />
+              ) : null
             }
             mediaColumnClassName="catalog-page-media"
             contentClassName="catalog-page-content"
@@ -242,6 +244,18 @@ export default function CatalogPage() {
               onSelectSize={handleSelectSize}
               onSelectModel={handleSelectModel}
             />
+
+            {isMobilePortrait ? (
+              <div className="catalog-page-token-summary-mobile">
+                <TokenSummaryCard
+                  brandName={catalog.productBlueprint.brandName}
+                  tokenName={catalog.tokenBlueprint.tokenName}
+                  tokenIcon={catalog.tokenBlueprint.tokenIcon}
+                  symbol={catalog.tokenBlueprint.symbol}
+                  description={catalog.tokenBlueprint.description}
+                />
+              </div>
+            ) : null}
 
             {isLoggedIn ? (
               <div className="catalog-page-purchase-action">

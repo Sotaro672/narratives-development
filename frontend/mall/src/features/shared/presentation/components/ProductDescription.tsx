@@ -1,9 +1,6 @@
-// frontend\mall\src\features\shared\presentation\components\ProductDescription.tsx
+// frontend/mall/src/features/shared/presentation/components/ProductDescription.tsx
 
-import {
-  useId,
-  useState,
-} from "react";
+import { useId, useState } from "react";
 
 import TextButton from "../../../../components/ui/TextButton";
 
@@ -11,7 +8,7 @@ const DESCRIPTION_COLLAPSE_THRESHOLD = 80;
 
 export type ProductDescriptionProps = {
   description?: string | null;
-  title?: string;
+  title?: string | null;
   className?: string;
 };
 
@@ -28,15 +25,14 @@ export default function ProductDescription({
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
 
   const safeDescription = description?.trim() || "";
-  const isDescriptionExpandable = safeDescription.length > DESCRIPTION_COLLAPSE_THRESHOLD;
+  const isDescriptionExpandable =
+    safeDescription.length > DESCRIPTION_COLLAPSE_THRESHOLD;
 
-  if (!safeDescription) {
-    return null;
-  }
+  if (!safeDescription) return null;
 
   return (
     <div className={joinClassNames("product-detail__description", className)}>
-      <h2>{title}</h2>
+      {title ? <h2>{title}</h2> : null}
 
       <p
         id={descriptionId}
