@@ -164,7 +164,15 @@ export default function CatalogPage() {
       cartButtonLabel="カート"
       onCartButtonClick={() => navigate("/cart")}
     >
-      <section className="product-detail-page-layout catalog-page-section">
+      <section
+        className={[
+          "product-detail-page-layout",
+          "catalog-page-section",
+          isLoggedIn ? "catalog-page-section--with-footer" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         {isLoadingCatalog ? (
           <p className="catalog-page-state">カタログ詳細を読み込んでいます。</p>
         ) : null}

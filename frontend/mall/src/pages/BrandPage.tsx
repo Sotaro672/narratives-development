@@ -58,7 +58,6 @@ export default function BrandPage() {
     };
   }, [authResolved, isLoggedIn]);
 
-  const title = brand?.brandName?.trim() || "ブランド";
   const canReportBrand =
     authResolved &&
     isLoggedIn &&
@@ -81,13 +80,16 @@ export default function BrandPage() {
   return (
     <>
       <Layout
-        title={title}
-        titleClickable={false}
-        mode="landing"
+        title="AMOL"
+        titleClickable
+        mode={isLoggedIn ? "mypage" : "landing"}
         showHeader
-        showFooter={false}
+        showFooter={isLoggedIn}
         hideHamburgerMenu={false}
         hideSettingsButton
+        showCartButton={isLoggedIn}
+        cartButtonLabel="カート"
+        onCartButtonClick={() => navigate("/cart")}
         mainClassName="brand-page-main"
       >
         {loading ? <BrandPageLoading /> : null}

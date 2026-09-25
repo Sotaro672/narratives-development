@@ -145,6 +145,17 @@ export default function ScanResultPage() {
     Boolean(state.productId.trim()) &&
     !isResalePurchase;
 
+  const scanResultSectionClassName = [
+    "product-detail-page-layout",
+    isLoggedIn && isMobilePortrait
+      ? state.ownedByWallet === true
+        ? "scan-result-page-section--with-review-footer"
+        : "scan-result-page-section--with-footer"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <>
       <Layout
@@ -183,7 +194,7 @@ export default function ScanResultPage() {
               }
         }
       >
-        <section className="product-detail-page-layout">
+        <section className={scanResultSectionClassName}>
           <ScanResultCard
             state={state}
             viewModel={viewModel}

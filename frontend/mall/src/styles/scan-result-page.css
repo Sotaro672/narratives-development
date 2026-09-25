@@ -126,6 +126,14 @@
   margin-bottom: 20px;
 }
 
+.scan-result-page-section--with-footer {
+  padding-bottom: var(--footer-nav-height, 76px);
+}
+
+.scan-result-page-section--with-review-footer {
+  padding-bottom: var(--footer-review-action-height, 92px);
+}
+
 @media (min-width: 1024px) {
   .scan-result-desktop-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

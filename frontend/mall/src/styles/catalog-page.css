@@ -190,6 +190,10 @@
     overflow: visible;
   }
 
+  .catalog-page-section--with-footer {
+    padding-bottom: var(--footer-nav-height, 76px);
+  }
+
   .catalog-page-media {
     position: relative;
     width: 100%;
