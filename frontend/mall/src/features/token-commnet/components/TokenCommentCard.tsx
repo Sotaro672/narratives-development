@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 
 import Alert from "../../../components/ui/Alert";
-import Card from "../../../components/ui/Card";
 import TextState from "../../../components/ui/TextState";
 import { getMyAvatar } from "../../avatar/api/avatarApi";
 import ReportModal from "../../report/components/ReportModal";
@@ -147,10 +146,8 @@ export default function TokenCommentCard({
 
   return (
     <>
-      <Card
-        as="section"
-        variant="panel"
-        className={hideCommentForm ? "token-comment-card--hide-form" : ""}
+      <section
+        className={hideCommentForm ? "token-comment-card--hide-form" : undefined}
       >
         <div className="token-comment-card__header">
           <div className="token-comment-card__title-wrap">
@@ -196,7 +193,7 @@ export default function TokenCommentCard({
             />
           </>
         )}
-      </Card>
+      </section>
 
       <ChatComposerModal
         open={Boolean(replyingCommentId)}

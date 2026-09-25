@@ -2,6 +2,7 @@
 
 import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
 import MediaGallery from "../../../components/ui/MediaGallery";
+import TextState from "../../../components/ui/TextState";
 
 type ContentsMediaPanelProps = {
   loading: boolean;
@@ -31,9 +32,9 @@ export default function ContentsMediaPanel({
   onSelectFile,
 }: ContentsMediaPanelProps) {
   return (
-    <div className="split-page-left contents-page-media-area">
+    <div className="split-page-left">
       {loading ? (
-        <p className="contents-page-card__message">読み込み中です...</p>
+        <TextState variant="loading">読み込み中です...</TextState>
       ) : null}
 
       {!loading && moderationHidden ? (
@@ -42,7 +43,7 @@ export default function ContentsMediaPanel({
           activeIndex={0}
           altFallback={tokenName || "トークンコンテンツ"}
           placeholderText="不適切な内容として削除されました。"
-          className="contents-page-media-gallery"
+          variant="fill"
           onPrev={onPrevFile}
           onNext={onNextFile}
           onSelect={onSelectFile}
@@ -50,13 +51,13 @@ export default function ContentsMediaPanel({
       ) : null}
 
       {!loading && !moderationHidden && error ? (
-        <p className="contents-page-card__error">{error}</p>
+        <TextState variant="error">{error}</TextState>
       ) : null}
 
       {!loading && !moderationHidden && !error && !metadataUri ? (
-        <p className="contents-page-card__error">
+        <TextState variant="error">
           metadataUri が指定されていません。
-        </p>
+        </TextState>
       ) : null}
 
       {!loading &&
@@ -64,9 +65,9 @@ export default function ContentsMediaPanel({
       !error &&
       metadataUri &&
       !hasMediaItems ? (
-        <p className="contents-page-card__message">
+        <TextState variant="empty">
           表示できるコンテンツはまだありません。
-        </p>
+        </TextState>
       ) : null}
 
       {!loading &&
@@ -77,7 +78,7 @@ export default function ContentsMediaPanel({
           items={mediaItems}
           activeIndex={activeFileIndex}
           altFallback={tokenName || "トークンコンテンツ"}
-          className="contents-page-media-gallery"
+          variant="fill"
           onPrev={onPrevFile}
           onNext={onNextFile}
           onSelect={onSelectFile}

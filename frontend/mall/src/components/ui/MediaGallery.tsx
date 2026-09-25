@@ -1,9 +1,6 @@
 // frontend/mall/src/components/ui/MediaGallery.tsx
 
-import {
-  useRef,
-  type TouchEvent,
-} from "react";
+import { useRef, type TouchEvent } from "react";
 
 import "./mediaGallery.css";
 
@@ -14,11 +11,14 @@ export type MediaGalleryItem = {
   type?: string;
 };
 
+export type MediaGalleryVariant = "default" | "fill";
+
 type MediaGalleryProps = {
   items: MediaGalleryItem[];
   activeIndex: number;
   altFallback: string;
   placeholderText?: string;
+  variant?: MediaGalleryVariant;
   className?: string;
   onPrev: () => void;
   onNext: () => void;
@@ -34,6 +34,7 @@ export default function MediaGallery({
   activeIndex,
   altFallback,
   placeholderText = "No Image",
+  variant = "default",
   className,
   onPrev,
   onNext,
@@ -83,7 +84,15 @@ export default function MediaGallery({
   };
 
   return (
-    <div className={["media-gallery", className || ""].filter(Boolean).join(" ")}>
+    <div
+      className={[
+        "media-gallery",
+        variant !== "default" ? `media-gallery--${variant}` : "",
+        className || "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       {hasItems ? (
         <div
           className="media-gallery__viewer"
@@ -139,9 +148,7 @@ export default function MediaGallery({
           ) : null}
         </div>
       ) : (
-        <div className="media-gallery__placeholder">
-          {placeholderText}
-        </div>
+        <div className="media-gallery__placeholder">{placeholderText}</div>
       )}
 
       {hasMultipleItems ? (

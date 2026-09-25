@@ -14,10 +14,6 @@ export type ProductMetaListProps = {
   className?: string;
 };
 
-function joinClassNames(...classNames: Array<string | undefined | false>): string {
-  return classNames.filter(Boolean).join(" ");
-}
-
 export default function ProductMetaList({
   items,
   className,
@@ -27,13 +23,9 @@ export default function ProductMetaList({
   }
 
   return (
-    <InfoList className={joinClassNames("product-detail__meta", className)}>
+    <InfoList className={className}>
       {items.map((item, index) => (
-        <InfoRow
-          key={`${item.label}-${index}`}
-          label={item.label}
-          className="product-detail__meta-row"
-        >
+        <InfoRow key={`${item.label}-${index}`} label={item.label}>
           {item.value}
         </InfoRow>
       ))}

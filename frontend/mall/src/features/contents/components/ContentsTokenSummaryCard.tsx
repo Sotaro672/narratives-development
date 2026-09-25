@@ -1,6 +1,5 @@
 // frontend/mall/src/features/contents/components/ContentsTokenSummaryCard.tsx
 
-import Card from "../../../components/ui/Card";
 import Tab from "../../../components/ui/Tab";
 import TokenReviewAggregateCard from "../../token-commnet/components/TokenReviewAggregateCard";
 import type { ContentsSearchParams } from "../../shared/types/contents";
@@ -30,7 +29,7 @@ export default function ContentsTokenSummaryCard({
   const hasBrandName = Boolean(contents.brandName);
 
   return (
-    <Card variant="panel">
+    <section className="contents-page-token-summary">
       <div className="contents-page-card__header">
         <div className="contents-page-card__icon-wrap">
           {tokenIconUrl ? (
@@ -84,6 +83,6 @@ export default function ContentsTokenSummaryCard({
         resaleLabel={resaleLabel}
         onResaleClick={onResaleClick}
       />
-    </Card>
+    </section>
   );
 }
