@@ -1,0 +1,15 @@
+/* frontend/mall/src/components/ui/textLink.css */
+
+.text-link {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  font-weight: 900;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+  word-break: break-word;
+}
+
+.text-link:disabled {
+  opacity: 1;
+}

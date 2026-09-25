@@ -1,6 +1,6 @@
 // frontend/mall/src/features/contents/components/ContentsTokenSummaryCard.tsx
 
-import Tab from "../../../components/ui/Tab";
+import TextLink from "../../../components/ui/textLink";
 import TokenReviewAggregateCard from "../../token-commnet/components/TokenReviewAggregateCard";
 import type { ContentsSearchParams } from "../../shared/types/contents";
 
@@ -53,23 +53,21 @@ export default function ContentsTokenSummaryCard({
           {hasProductName || hasBrandName ? (
             <div className="contents-page-card__tag-list">
               {hasProductName ? (
-                <Tab
-                  className="contents-page-card__product-name"
+                <TextLink
                   onClick={onProductNameClick}
                   disabled={!contents.productId}
                 >
                   {contents.productName}
-                </Tab>
+                </TextLink>
               ) : null}
 
               {hasBrandName ? (
-                <Tab
-                  className="contents-page-card__brand-name"
+                <TextLink
                   onClick={onBrandNameClick}
                   disabled={!contents.brandId}
                 >
                   {contents.brandName}
-                </Tab>
+                </TextLink>
               ) : null}
             </div>
           ) : null}

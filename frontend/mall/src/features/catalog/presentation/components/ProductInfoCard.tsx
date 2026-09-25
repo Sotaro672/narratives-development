@@ -2,7 +2,7 @@
 
 import Chip from "../../../../components/ui/Chip";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
-import TextButton from "../../../../components/ui/TextButton";
+import TextLink from "../../../../components/ui/textLink";
 import type { CatalogProductBlueprint } from "../../../shared/types/catalog";
 import {
   createProductInfoCardViewModel,
@@ -34,14 +34,13 @@ export default function ProductInfoCard({
           return (
             <InfoRow key={row.key} label={row.label}>
               {isBrandRow ? (
-                <TextButton
-                  className="catalog-page-brand-link"
+                <TextLink
                   onClick={onBrandClick}
                   disabled={!onBrandClick}
                   aria-label={`${productBlueprint.brandName}のブランドページへ移動`}
                 >
                   {row.value}
-                </TextButton>
+                </TextLink>
               ) : (
                 row.value
               )}
