@@ -1,6 +1,8 @@
-// frontend\amol\src\features\shared\presentation\components\ProductMediaGallery.tsx
+// frontend/amol/src/features/shared/presentation/components/ProductMediaGallery.tsx
 
-import MediaGallery, { type MediaGalleryItem } from "../../../../components/ui/MediaGallery";
+import MediaGallery, {
+  type MediaGalleryItem,
+} from "../../../../components/ui/MediaGallery";
 
 export type ProductMediaGalleryProps = {
   items: MediaGalleryItem[];
@@ -22,17 +24,15 @@ export default function ProductMediaGallery({
   onSelect,
 }: ProductMediaGalleryProps) {
   return (
-    <div className="product-detail__image-wrap">
-      <MediaGallery
-        items={items}
-        activeIndex={activeIndex}
-        altFallback={altFallback}
-        placeholderText={placeholderText}
-        className="product-detail__gallery"
-        onPrev={onPrev}
-        onNext={onNext}
-        onSelect={onSelect}
-      />
-    </div>
+    <MediaGallery
+      items={items}
+      activeIndex={activeIndex}
+      altFallback={altFallback}
+      placeholderText={placeholderText}
+      className="product-detail__gallery"
+      onPrev={onPrev}
+      onNext={onNext}
+      onSelect={onSelect}
+    />
   );
 }

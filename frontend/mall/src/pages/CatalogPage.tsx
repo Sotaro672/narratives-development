@@ -135,11 +135,8 @@ export default function CatalogPage() {
 
   return (
     <Layout
-      title={
-        catalog?.productBlueprint.productName ||
-        (isLoadingCatalog ? "" : "カタログ詳細")
-      }
-      titleClickable={false}
+      title="AMOL"
+      titleClickable
       mode={isLoggedIn ? "mypage" : "landing"}
       showHeader={!isMobilePortrait}
       showFooter={isLoggedIn}

@@ -72,10 +72,7 @@ export default function ResaleDetailPage() {
 
   function handleOpenResaleChat() {
     const resaleId = item?.id?.trim() ?? "";
-
-    if (!resaleId) {
-      return;
-    }
+    if (!resaleId) return;
 
     navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
       state: {
@@ -97,9 +94,7 @@ export default function ResaleDetailPage() {
     >
       <div className="page-layout resale-detail-page">
         {loading ? (
-          <TextState variant="loading">
-            読み込み中です...
-          </TextState>
+          <TextState variant="loading">読み込み中です...</TextState>
         ) : null}
 
         {showLoadError ? (
@@ -133,20 +128,18 @@ export default function ResaleDetailPage() {
             className="product-detail__layout--summary-after-content-mobile"
             media={
               isEditing ? (
-                <div className="product-detail__image-wrap resale-detail-page__image-wrap--editing">
-                  <ResaleConditionMediaField
-                    items={editFormProps.conditionMediaItems}
-                    currentIndex={editFormProps.conditionMediaCurrentIndex}
-                    inputRef={editFormProps.conditionMediaInputRef}
-                    carouselRef={editFormProps.conditionMediaCarouselRef}
-                    disabled={editFormProps.saving}
-                    selecting={editFormProps.saving}
-                    onFilesSelected={editFormProps.onConditionMediaSelected}
-                    onRemoveItem={editFormProps.onRemoveConditionMedia}
-                    onCarouselScroll={editFormProps.onConditionMediaCarouselScroll}
-                    onMoveToSlide={editFormProps.onMoveToConditionMediaSlide}
-                  />
-                </div>
+                <ResaleConditionMediaField
+                  items={editFormProps.conditionMediaItems}
+                  currentIndex={editFormProps.conditionMediaCurrentIndex}
+                  inputRef={editFormProps.conditionMediaInputRef}
+                  carouselRef={editFormProps.conditionMediaCarouselRef}
+                  disabled={editFormProps.saving}
+                  selecting={editFormProps.saving}
+                  onFilesSelected={editFormProps.onConditionMediaSelected}
+                  onRemoveItem={editFormProps.onRemoveConditionMedia}
+                  onCarouselScroll={editFormProps.onConditionMediaCarouselScroll}
+                  onMoveToSlide={editFormProps.onMoveToConditionMediaSlide}
+                />
               ) : (
                 <ProductMediaGallery
                   items={readonlyInfoProps.galleryItems}
@@ -225,9 +218,7 @@ export default function ResaleDetailPage() {
             )}
 
             {errorMessage ? (
-              <Alert variant="error">
-                {errorMessage}
-              </Alert>
+              <Alert variant="error">{errorMessage}</Alert>
             ) : null}
 
             {saveMessage ? (
