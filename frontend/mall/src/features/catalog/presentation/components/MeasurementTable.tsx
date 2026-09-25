@@ -17,7 +17,7 @@ export default function MeasurementTable({
         <table className="catalog-page-measurement-table">
           <thead>
             <tr>
-              <th scope="col">サイズ</th>
+              <th scope="col">サイズ（mm）</th>
               {measurementKeys.map((key) => (
                 <th key={key} scope="col">{key}</th>
               ))}
