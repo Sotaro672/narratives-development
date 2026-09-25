@@ -2,7 +2,6 @@
 
 import { useNavigate } from "react-router-dom";
 
-import Card from "../../../components/ui/Card";
 import Chip from "../../../components/ui/Chip";
 import MediaIcon from "../../../components/ui/MediaIcon";
 import { formatDateTime } from "../../../components/utils/date";
@@ -157,7 +156,7 @@ export default function TokenCommentItem({
       className="token-comment-item"
       style={{ marginLeft: `${indent}px` }}
     >
-      <Card padding="sm" className="token-comment-item__body">
+      <article className="token-comment-item__body">
         <div className="token-comment-item__header">
           <TokenCommentAuthor comment={comment} />
 
@@ -229,7 +228,7 @@ export default function TokenCommentItem({
             ))}
           </div>
         ) : null}
-      </Card>
+      </article>
     </div>
   );
 }

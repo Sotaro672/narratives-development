@@ -145,15 +145,6 @@ export default function TokenCommentSection({
   return (
     <>
       <section>
-        <div className="token-comment-card__header">
-          <div className="token-comment-card__title-wrap">
-            <span className="token-comment-card__icon" aria-hidden="true">
-              💬
-            </span>
-            <h2 className="token-comment-card__title">コメント</h2>
-          </div>
-        </div>
-
         {!normalizedTokenBlueprintId ? (
           <TextState variant="muted">
             tokenBlueprintId 未取得のためコメントを表示できません。
