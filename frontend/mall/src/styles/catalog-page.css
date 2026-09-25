@@ -124,6 +124,13 @@
    Detail area
    ============================== */
 
+.catalog-page-content {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
 .catalog-page-summary {
   padding-bottom: 24px;
   border-bottom: 1px solid var(--color-border, #e8e8e8);
@@ -168,23 +175,19 @@
 }
 
 /* ==============================
-   Cards
+   Detail sections
    ============================== */
 
 /*
   Common UI migration:
-  - .catalog-page-card overrides <SectionCard />
   - .catalog-page-card-header overrides <SectionHeader />
   - .catalog-page-definition-list overrides <InfoList />
   - .catalog-page-brand-link overrides <TextButton />
   - .catalog-page-chip overrides <Chip />
 */
 
-.catalog-page-card {
+.catalog-page-product-info {
   margin-top: 24px;
-  margin-bottom: 0;
-  padding: 20px;
-  border-radius: 18px;
 }
 
 .catalog-page-card-header {
@@ -254,6 +257,10 @@
    Measurement table
    ============================== */
 
+.catalog-page-measurement {
+  margin-top: 24px;
+}
+
 .catalog-page-measurement-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -299,6 +306,10 @@
 /* ==============================
    Model
    ============================== */
+
+.catalog-page-model {
+  margin-top: 24px;
+}
 
 .catalog-page-model-header {
   display: flex;
@@ -484,10 +495,10 @@
 }
 
 @media (max-width: 560px) {
-  .catalog-page-card {
+  .catalog-page-product-info,
+  .catalog-page-measurement,
+  .catalog-page-model {
     margin-top: 18px;
-    padding: 16px;
-    border-radius: 16px;
   }
 
   .catalog-page-definition-list .ui-info-row {

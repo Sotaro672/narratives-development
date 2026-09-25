@@ -182,6 +182,7 @@ export default function CatalogPage() {
               />
             }
             mediaColumnClassName="catalog-page-media"
+            contentClassName="catalog-page-content"
           >
             <ProductIdentity
               brandName={catalog.productBlueprint.brandName}

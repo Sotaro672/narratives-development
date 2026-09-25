@@ -3,7 +3,6 @@
 import Alert from "../../../../components/ui/Alert";
 import Chip from "../../../../components/ui/Chip";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
-import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import { rgbToCssColor } from "../../../../components/utils/color";
 import { formatPrice } from "../../../../components/utils/price";
@@ -59,7 +58,7 @@ export default function ModelSelector({
     : "-";
 
   return (
-    <SectionCard className="catalog-page-card">
+    <section className="catalog-page-model">
       <SectionHeader
         title="モデル"
         titleAs="h2"
@@ -183,6 +182,6 @@ export default function ModelSelector({
           {cartErrorMessage}
         </Alert>
       ) : null}
-    </SectionCard>
+    </section>
   );
 }

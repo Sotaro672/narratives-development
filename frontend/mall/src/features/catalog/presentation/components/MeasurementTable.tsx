@@ -1,6 +1,5 @@
 // frontend/mall/src/features/catalog/presentation/components/MeasurementTable.tsx
 
-import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import type { MeasurementTableRow } from "../../../shared/types/catalog";
 
@@ -14,7 +13,7 @@ export default function MeasurementTable({
   measurementKeys,
 }: MeasurementTableProps) {
   return (
-    <SectionCard className="catalog-page-card">
+    <section className="catalog-page-measurement">
       <SectionHeader
         title="採寸表"
         titleAs="h2"
@@ -48,6 +47,6 @@ export default function MeasurementTable({
           </tbody>
         </table>
       </div>
-    </SectionCard>
+    </section>
   );
 }

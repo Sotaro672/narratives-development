@@ -3,7 +3,6 @@
 import { useState } from "react";
 
 import Alert from "../../../../components/ui/Alert";
-import Card from "../../../../components/ui/Card";
 import DateDisplay from "../../../../components/ui/Date";
 import MediaIcon from "../../../../components/ui/MediaIcon";
 import SectionHeader from "../../../../components/ui/SectionHeader";
@@ -106,10 +105,7 @@ export default function ProductReviewSection({
 
   return (
     <>
-      <Card
-        as="section"
-        variant="panel"
-        padding="md"
+      <section
         className={["product-review", className].filter(Boolean).join(" ")}
       >
         <SectionHeader
@@ -118,9 +114,7 @@ export default function ProductReviewSection({
           className="ui-section-header--title-sm"
           right={
             loading ? (
-              <TextState variant="loading">
-                読み込み中...
-              </TextState>
+              <TextState variant="loading">読み込み中...</TextState>
             ) : undefined
           }
         />
@@ -142,15 +136,11 @@ export default function ProductReviewSection({
         ) : null}
 
         {safeErrorMessage ? (
-          <Alert variant="error">
-            {safeErrorMessage}
-          </Alert>
+          <Alert variant="error">{safeErrorMessage}</Alert>
         ) : null}
 
         {!loading && !safeErrorMessage && safeItems.length === 0 ? (
-          <TextState variant="empty">
-            {emptyText}
-          </TextState>
+          <TextState variant="empty">{emptyText}</TextState>
         ) : null}
 
         {!safeErrorMessage && safeItems.length > 0 ? (
@@ -180,7 +170,7 @@ export default function ProductReviewSection({
             ) : null}
           </>
         ) : null}
-      </Card>
+      </section>
 
       <ReportModal
         open={isOpen}
@@ -222,19 +212,17 @@ function ProductReviewItemView({
   const reviewBody = review.body?.trim() || "";
   const reviewedAt = review.reviewedAt?.trim() || "";
   const canOpenAvatar = Boolean(avatarId && onAvatarClick);
-
   const isOwnReview = Boolean(
     currentAvatarId &&
-    avatarId &&
-    currentAvatarId === avatarId,
+      avatarId &&
+      currentAvatarId === avatarId,
   );
-
   const canReport = Boolean(
     productBlueprintId &&
-    currentAvatarId &&
-    reviewId &&
-    !isOwnReview &&
-    onReport,
+      currentAvatarId &&
+      reviewId &&
+      !isOwnReview &&
+      onReport,
   );
 
   const avatarContent = (
@@ -248,9 +236,7 @@ function ProductReviewItemView({
       />
 
       <div className="product-review__author-body">
-        <span className="product-review__author-name">
-          {avatarName}
-        </span>
+        <span className="product-review__author-name">{avatarName}</span>
 
         <span className="product-review__meta">
           {renderRatingStars(review.rating)}
@@ -280,9 +266,7 @@ function ProductReviewItemView({
             {avatarContent}
           </TextButton>
         ) : (
-          <div className="product-review__author">
-            {avatarContent}
-          </div>
+          <div className="product-review__author">{avatarContent}</div>
         )}
 
         {canReport ? (
@@ -294,9 +278,7 @@ function ProductReviewItemView({
       </div>
 
       {reviewBody ? (
-        <p className="product-review__body">
-          {reviewBody}
-        </p>
+        <p className="product-review__body">{reviewBody}</p>
       ) : null}
 
       {showHelpfulVotes &&

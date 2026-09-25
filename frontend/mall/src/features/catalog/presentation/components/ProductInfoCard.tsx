@@ -2,7 +2,6 @@
 
 import Chip from "../../../../components/ui/Chip";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
-import SectionCard from "../../../../components/ui/SectionCard";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import TextButton from "../../../../components/ui/TextButton";
 import type { CatalogProductBlueprint } from "../../../shared/types/catalog";
@@ -28,7 +27,7 @@ export default function ProductInfoCard({
   });
 
   return (
-    <SectionCard className="catalog-page-card">
+    <section className="catalog-page-product-info">
       <SectionHeader
         title="商品情報"
         titleAs="h2"
@@ -72,6 +71,6 @@ export default function ProductInfoCard({
           ))}
         </div>
       ) : null}
-    </SectionCard>
+    </section>
   );
 }
