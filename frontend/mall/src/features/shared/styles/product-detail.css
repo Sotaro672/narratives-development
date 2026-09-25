@@ -61,15 +61,6 @@
   box-sizing: border-box;
 }
 
-.product-detail__brand {
-  margin: 0 0 8px;
-  color: #777;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-}
-
 .product-detail__title {
   margin: 0;
   color: #111;

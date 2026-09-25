@@ -187,7 +187,6 @@ export default function CatalogPage() {
               tokenName={catalog.tokenBlueprint.tokenName}
             />
 
-            <ProductDescription description={catalog.list.description} />
             <ProductPrice priceLabel={formatPrice(firstPrice?.price)} />
 
             {isLoggedIn ? (
@@ -211,6 +210,8 @@ export default function CatalogPage() {
                 ) : null}
               </>
             ) : null}
+
+            <ProductDescription description={catalog.list.description} />
 
             <ProductInfoCard
               productBlueprint={catalog.productBlueprint}

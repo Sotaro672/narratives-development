@@ -27,10 +27,6 @@
    Catalog media
    ============================== */
 
-.catalog-page-media {
-  background: var(--catalog-media-bg);
-}
-
 .catalog-page-image-viewer {
   position: relative;
   width: 100%;
@@ -129,6 +125,10 @@
   border: 0;
   border-radius: 0;
   background: transparent;
+}
+
+.catalog-page-content .product-detail__title {
+  margin-top: 12px;
 }
 
 .catalog-page-summary {
@@ -265,8 +265,8 @@
   width: 100%;
   overflow-x: auto;
   border: 1px solid var(--color-border, #d9d9d9);
-  border-radius: 12px;
-  background: #fff;
+  border-radius: 0;
+  background: transparent;
 }
 
 .catalog-page-measurement-table {
@@ -460,6 +460,11 @@
     width: 100%;
     height: auto;
     overflow: hidden;
+  }
+
+  .catalog-page-content {
+    padding-right: 16px;
+    padding-left: 16px;
   }
 
   .catalog-page-image-viewer {
