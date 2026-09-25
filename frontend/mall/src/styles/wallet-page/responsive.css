@@ -17,10 +17,10 @@
   .wallet-page-layout__profile {
     position: sticky;
     top: 88px;
-    overflow: hidden;
-    border: 1px solid #e5e7eb;
-    border-radius: 24px;
-    background: #fff;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
   }
 
   .wallet-page-layout__main {
@@ -33,36 +33,24 @@
 
   .wallet-page-profile {
     max-width: none;
-    grid-template-columns: 1fr;
-    gap: 18px;
-    justify-items: center;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 20px;
+    justify-items: stretch;
+    align-items: center;
     margin: 0;
-    padding: 32px 24px 18px;
-    text-align: center;
-  }
-
-  .wallet-page-profile__avatar-area,
-  .wallet-page-profile__avatar-wrap,
-  .wallet-page-profile__avatar {
-    width: 112px;
-  }
-
-  .wallet-page-profile__avatar-wrap,
-  .wallet-page-profile__avatar {
-    height: 112px;
-  }
-
-  .wallet-page-profile__avatar--fallback {
-    font-size: 52px;
+    padding: 24px 0 16px;
+    background: transparent;
+    text-align: left;
   }
 
   .wallet-page-profile__body {
-    width: 100%;
-    align-items: center;
+    width: auto;
+    min-width: 0;
+    align-items: flex-start;
   }
 
   .wallet-page-profile__stats {
-    justify-content: center;
+    justify-content: flex-start;
     gap: 40px;
   }
 
@@ -75,14 +63,15 @@
   }
 
   .wallet-page-profile__text {
-    max-width: 280px;
-    text-align: center;
+    max-width: none;
+    text-align: left;
   }
 
   .wallet-page-profile-actions-bar {
     max-width: none;
     margin: 0;
-    padding: 0 24px 24px;
+    padding: 0 0 24px;
+    background: transparent;
   }
 
   .wallet-page-tabs {

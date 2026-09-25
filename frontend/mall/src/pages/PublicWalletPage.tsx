@@ -7,9 +7,9 @@ import "../styles/wallet-page.css";
 import "../styles/wallet-page/resale-panel.css";
 
 import Layout from "../components/layout/Layout";
-import Button from "../components/ui/Button";
 import ReportModal from "../features/report/components/ReportModal";
 import { useReport } from "../features/report/hooks/useReport";
+import ReportFlagButton from "../features/shared/presentation/components/ReportFlagButton";
 import WalletProfile from "../features/wallet/components/WalletProfile";
 import WalletResalePanel from "../features/wallet/components/WalletResalePanel";
 import { useWalletPage } from "../features/wallet/hooks/useWalletPage";
@@ -115,17 +115,11 @@ export default function PublicWalletPage() {
                   {canReportAvatar ? (
                     <div className="wallet-page-profile-actions-bar">
                       <div className="wallet-page-profile-actions-bar__inner">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          fullWidth
+                        <ReportFlagButton
                           disabled={reportSubmitting}
-                          aria-label={`${avatarName || "アバター"}を通報`}
+                          label={`${avatarName || "アバター"}を通報`}
                           onClick={handleOpenAvatarReport}
-                        >
-                          通報
-                        </Button>
+                        />
                       </div>
                     </div>
                   ) : null}
