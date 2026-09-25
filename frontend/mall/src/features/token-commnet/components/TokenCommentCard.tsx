@@ -82,9 +82,7 @@ export default function TokenCommentCard({
 
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const canSubmitReply = Boolean(
-    replyingCommentId &&
-      replyBody.trim() &&
-      !replyPosting,
+    replyingCommentId && replyBody.trim() && !replyPosting,
   );
 
   useEffect(() => {
@@ -146,9 +144,7 @@ export default function TokenCommentCard({
 
   return (
     <>
-      <section
-        className={hideCommentForm ? "token-comment-card--hide-form" : undefined}
-      >
+      <section>
         <div className="token-comment-card__header">
           <div className="token-comment-card__title-wrap">
             <span className="token-comment-card__icon" aria-hidden="true">

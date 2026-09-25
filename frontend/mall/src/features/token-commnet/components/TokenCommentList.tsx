@@ -1,7 +1,8 @@
-// frontend/amol/src/features/token-commnet/components/TokenCommentList.tsx
+// frontend/mall/src/features/token-commnet/components/TokenCommentList.tsx
 
-import TokenCommentItem from "./TokenCommentItem";
+import TextState from "../../../components/ui/TextState";
 import type { TokenCommentTreeNode } from "../../shared/types/tokenCommentTypes";
+import TokenCommentItem from "./TokenCommentItem";
 
 type TokenCommentListProps = {
   tokenBlueprintId: string;
@@ -31,9 +32,9 @@ export default function TokenCommentList({
   if (commentsLoading && commentTree.length === 0) {
     return (
       <div className="token-comment-list">
-        <p className="token-comment-card__message">
+        <TextState variant="loading">
           コメントを読み込んでいます。
-        </p>
+        </TextState>
       </div>
     );
   }
@@ -41,9 +42,9 @@ export default function TokenCommentList({
   if (!commentsLoading && commentTree.length === 0) {
     return (
       <div className="token-comment-list">
-        <p className="token-comment-card__message">
+        <TextState variant="empty">
           コメントはまだありません。
-        </p>
+        </TextState>
       </div>
     );
   }
