@@ -10,7 +10,6 @@ import ProductReviewSection from "../../../shared/presentation/components/Produc
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
 
 import ScanResultProductSection from "./ScanResultProductSection";
-import ScanResultReviewForm from "./ScanResultReviewForm";
 
 type ScanResultCardProps = {
   state: ScanResultPageState;
@@ -19,12 +18,8 @@ type ScanResultCardProps = {
   onRefresh: () => void;
   onAvatarClick: (avatarId: string) => void;
   onOpenTokenContents: (assetId: string) => void | Promise<void>;
-  reviewBody: string;
-  reviewRating: number;
-  onReviewBodyChange: (value: string) => void;
-  onReviewRatingChange: (rating: number) => void;
-  onSubmitReviewForm: () => void | Promise<void>;
-  hideReviewForm?: boolean;
+  onOpenReviewModal: () => void;
+  hideReviewAction?: boolean;
 };
 
 export default function ScanResultCard(props: ScanResultCardProps) {
@@ -35,12 +30,8 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     onRefresh,
     onAvatarClick,
     onOpenTokenContents,
-    reviewBody,
-    reviewRating,
-    onReviewBodyChange,
-    onReviewRatingChange,
-    onSubmitReviewForm,
-    hideReviewForm = false,
+    onOpenReviewModal,
+    hideReviewAction = false,
   } = props;
 
   if (state.loading) {
@@ -124,16 +115,16 @@ export default function ScanResultCard(props: ScanResultCardProps) {
       </div>
 
       <aside className="scan-result-desktop-side">
-        {state.authAvailable === true && !hideReviewForm ? (
-          <ScanResultReviewForm
-            reviewBody={reviewBody}
-            reviewRating={reviewRating}
-            postingReview={state.postingReview}
-            postReviewError={state.postReviewError}
-            onReviewBodyChange={onReviewBodyChange}
-            onReviewRatingChange={onReviewRatingChange}
-            onSubmit={onSubmitReviewForm}
-          />
+        {state.authAvailable === true && !hideReviewAction ? (
+          <div className="scan-result-review-action">
+            <Button
+              type="button"
+              disabled={state.postingReview}
+              onClick={onOpenReviewModal}
+            >
+              レビューを書く
+            </Button>
+          </div>
         ) : null}
 
         <ProductReviewSection

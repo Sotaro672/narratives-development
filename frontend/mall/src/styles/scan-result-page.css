@@ -120,6 +120,12 @@
   gap: 10px;
 }
 
+.scan-result-review-action {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
 @media (min-width: 1024px) {
   .scan-result-desktop-grid {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

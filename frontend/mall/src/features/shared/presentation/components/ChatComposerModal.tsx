@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/presentation/components/ChatComposerModal.tsx
+// frontend/mall/src/features/shared/presentation/components/ChatComposerModal.tsx
 
 import { useId, type ReactNode } from "react";
 
@@ -27,6 +27,7 @@ export type ChatComposerModalProps = {
   onCancel: () => void;
   onSubmit: () => void;
   description?: ReactNode;
+  beforeInput?: ReactNode;
   afterInput?: ReactNode;
   inputAriaLabel?: string;
   rows?: number;
@@ -47,6 +48,7 @@ export default function ChatComposerModal({
   onCancel,
   onSubmit,
   description,
+  beforeInput,
   afterInput,
   inputAriaLabel,
   rows = 6,
@@ -79,6 +81,8 @@ export default function ChatComposerModal({
           </ModalDescription>
         ) : null}
 
+        {beforeInput}
+
         <Textbox
           value={content}
           placeholder={placeholder}
@@ -91,11 +95,7 @@ export default function ChatComposerModal({
 
         {afterInput}
 
-        {error ? (
-          <Alert variant="error">
-            {error}
-          </Alert>
-        ) : null}
+        {error ? <Alert variant="error">{error}</Alert> : null}
       </ModalBody>
 
       <ModalFooter>
