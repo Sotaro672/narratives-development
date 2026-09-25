@@ -29,39 +29,12 @@
 
 /*
   Common UI migration:
-  - .catalog-page-definition-list overrides <InfoList />
   - .catalog-page-brand-link overrides <TextButton />
   - .catalog-page-chip overrides <Chip />
 */
 
 .catalog-page-product-info {
   margin-top: 24px;
-}
-
-.catalog-page-definition-list {
-  gap: 12px;
-  margin-top: 0;
-}
-
-.catalog-page-definition-list .ui-info-row {
-  grid-template-columns: 112px minmax(0, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-.catalog-page-definition-list .ui-info-row__label {
-  color: var(--color-text-subtle, #888);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.6;
-}
-
-.catalog-page-definition-list .ui-info-row__value {
-  color: var(--color-text, #1f1f1f);
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.6;
-  word-break: break-word;
 }
 
 .catalog-page-brand-link {
@@ -249,11 +222,6 @@
   .catalog-page-measurement,
   .catalog-page-model {
     margin-top: 18px;
-  }
-
-  .catalog-page-definition-list .ui-info-row {
-    grid-template-columns: 92px minmax(0, 1fr);
-    gap: 10px;
   }
 
   .catalog-page-option-list {

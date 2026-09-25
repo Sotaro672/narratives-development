@@ -27,7 +27,7 @@ export default function ProductInfoCard({
 
   return (
     <section className="catalog-page-product-info">
-      <InfoList className="catalog-page-definition-list">
+      <InfoList>
         {viewModel.rows.map((row) => {
           const isBrandRow = row.label === "ブランド";
 

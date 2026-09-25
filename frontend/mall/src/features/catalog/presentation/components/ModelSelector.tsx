@@ -132,7 +132,7 @@ export default function ModelSelector({
 
       {selectedModel ? (
         <div className="catalog-page-selected-model">
-          <InfoList className="catalog-page-definition-list">
+          <InfoList>
             {isAlcoholCatalog ? (
               <>
                 <InfoRow label="モデル番号">
