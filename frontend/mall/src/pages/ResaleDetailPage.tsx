@@ -30,7 +30,6 @@ export default function ResaleDetailPage() {
   const navigate = useNavigate();
 
   const {
-    title,
     footerProps,
     loading,
     item,
@@ -49,27 +48,6 @@ export default function ResaleDetailPage() {
   const showLoadError = !loading && !item && Boolean(errorMessage);
   const showDetail = !loading && Boolean(item);
 
-  const headerActionProps =
-    footerProps?.variant === "action"
-      ? {
-          actionButtonLabel: footerProps.buttonLabel,
-          onActionButtonClick: footerProps.onButtonClick,
-          actionButtonDisabled: footerProps.disabled,
-        }
-      : footerProps?.variant === "tripleAction"
-        ? {
-            actionButtonLabel: footerProps.centerButtonLabel,
-            onActionButtonClick: footerProps.onCenterButtonClick,
-            actionButtonDisabled: footerProps.centerButtonDisabled,
-            secondaryActionButtonLabel: footerProps.leftButtonLabel,
-            onSecondaryActionButtonClick: footerProps.onLeftButtonClick,
-            secondaryActionButtonDisabled: footerProps.leftButtonDisabled,
-            tertiaryActionButtonLabel: footerProps.rightButtonLabel,
-            onTertiaryActionButtonClick: footerProps.onRightButtonClick,
-            tertiaryActionButtonDisabled: footerProps.rightButtonDisabled,
-          }
-        : {};
-
   function handleOpenResaleChat() {
     const resaleId = item?.id?.trim() ?? "";
     if (!resaleId) return;
@@ -81,17 +59,51 @@ export default function ResaleDetailPage() {
     });
   }
 
+  const pageActions =
+    footerProps?.variant === "action" ? (
+      <div className="page-actions resale-detail-page__actions">
+        <Button
+          variant="primary"
+          size="md"
+          onClick={() => void footerProps.onButtonClick()}
+          disabled={footerProps.disabled}
+        >
+          {footerProps.buttonLabel}
+        </Button>
+      </div>
+    ) : footerProps?.variant === "tripleAction" ? (
+      <div className="page-actions resale-detail-page__actions">
+        <Button
+          variant="secondary"
+          size="md"
+          onClick={() => void footerProps.onLeftButtonClick()}
+          disabled={footerProps.leftButtonDisabled}
+        >
+          {footerProps.leftButtonLabel}
+        </Button>
+
+        <Button
+          variant="primary"
+          size="md"
+          onClick={() => void footerProps.onCenterButtonClick()}
+          disabled={footerProps.centerButtonDisabled}
+        >
+          {footerProps.centerButtonLabel}
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="md"
+          onClick={() => void footerProps.onRightButtonClick()}
+          disabled={footerProps.rightButtonDisabled}
+        >
+          {footerProps.rightButtonLabel}
+        </Button>
+      </div>
+    ) : null;
+
   return (
-    <Layout
-      title={title}
-      titleClickable={false}
-      mode="mypage"
-      hideAnnouncementButton
-      hideSettingsButton
-      showFooter={Boolean(footerProps)}
-      footerProps={footerProps}
-      {...headerActionProps}
-    >
+    <Layout title="AMOL" mode="mypage">
       <div className="page-layout product-detail-page-layout resale-detail-page">
         {loading ? (
           <TextState variant="loading">読み込み中です...</TextState>
@@ -184,13 +196,17 @@ export default function ResaleDetailPage() {
               </>
             }
             contentFooter={
-              !isEditing ? (
-                <ResaleDetailReadonlyInfo
-                  statusLabel={readonlyInfoProps.statusLabel}
-                  createdAtLabel={readonlyInfoProps.createdAtLabel}
-                  updatedAtLabel={readonlyInfoProps.updatedAtLabel}
-                />
-              ) : null
+              <>
+                {!isEditing ? (
+                  <ResaleDetailReadonlyInfo
+                    statusLabel={readonlyInfoProps.statusLabel}
+                    createdAtLabel={readonlyInfoProps.createdAtLabel}
+                    updatedAtLabel={readonlyInfoProps.updatedAtLabel}
+                  />
+                ) : null}
+
+                {pageActions}
+              </>
             }
           >
             <ProductIdentity
