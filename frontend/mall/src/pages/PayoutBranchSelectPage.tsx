@@ -1,16 +1,14 @@
 // frontend/mall/src/pages/PayoutBranchSelectPage.tsx
 
-import { useEffect, useMemo, useState } from "react";
-import { Check, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
-import Input from "../components/ui/Input";
 import List, { ListRow } from "../components/ui/List";
 import TextState from "../components/ui/TextState";
-import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
 import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 
@@ -22,30 +20,22 @@ import "../styles/payout-branch-select-page.css";
 type BranchCandidate = {
   branchCode: string;
   branchName: string;
-  searchKeywords: string;
 };
 
 const MOCK_BRANCH_CANDIDATES: BranchCandidate[] = [
   {
     branchCode: "001",
     branchName: "本店（開発用）",
-    searchKeywords: "本店 ほんてん ホンテン",
   },
   {
     branchCode: "101",
     branchName: "東京支店（開発用）",
-    searchKeywords: "東京 とうきょう トウキョウ",
   },
   {
     branchCode: "201",
     branchName: "大阪支店（開発用）",
-    searchKeywords: "大阪 おおさか オオサカ",
   },
 ];
-
-function normalizeSearchValue(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, "");
-}
 
 function hasNonWhitespace(value: string): boolean {
   return /\S/.test(value);
@@ -53,12 +43,10 @@ function hasNonWhitespace(value: string): boolean {
 
 export default function PayoutBranchSelectPage() {
   const navigate = useNavigate();
-  const { isDesktop } = useContactViewport();
   const { draft, setBranch } = usePayoutAccountRegistration();
   const { validateBankCode, validateBranchCode } =
     usePayoutAccountRegistrationRules();
 
-  const [searchText, setSearchText] = useState("");
   const [selectedBranchCode, setSelectedBranchCode] = useState(draft.branchCode);
 
   useEffect(() => {
@@ -75,29 +63,10 @@ export default function PayoutBranchSelectPage() {
     validateBankCode,
   ]);
 
-  const filteredBranches = useMemo(() => {
-    const query = normalizeSearchValue(searchText);
-
-    if (!query) {
-      return MOCK_BRANCH_CANDIDATES;
-    }
-
-    return MOCK_BRANCH_CANDIDATES.filter((branch) => {
-      const searchable = normalizeSearchValue(
-        `${branch.branchCode} ${branch.branchName} ${branch.searchKeywords}`,
-      );
-
-      return searchable.includes(query);
-    });
-  }, [searchText]);
-
-  const selectedBranch = useMemo(
-    () =>
-      MOCK_BRANCH_CANDIDATES.find(
-        (branch) => branch.branchCode === selectedBranchCode,
-      ) ?? null,
-    [selectedBranchCode],
-  );
+  const selectedBranch =
+    MOCK_BRANCH_CANDIDATES.find(
+      (branch) => branch.branchCode === selectedBranchCode,
+    ) ?? null;
 
   const handleSelectBranch = (branch: BranchCandidate) => {
     if (validateBranchCode(branch.branchCode)) {
@@ -144,12 +113,9 @@ export default function PayoutBranchSelectPage() {
     <Layout
       title="支店を選択"
       titleClickable={false}
-      mode="default"
+      mode="mypage"
+      showFooter
       hideHamburgerMenu
-      hideSettingsButton
-      actionButtonLabel={isDesktop ? "次へ" : undefined}
-      onActionButtonClick={isDesktop ? handleNext : undefined}
-      actionButtonDisabled={actionButtonDisabled}
     >
       <section className="page-section content-page-section settings-page payout-select-page payout-branch-select-page">
         <p className="content-page-description payout-select-page__description">
@@ -175,82 +141,57 @@ export default function PayoutBranchSelectPage() {
           </div>
         </Card>
 
-        <div className="payout-select__search">
-          <Search
-            className="payout-select__search-icon"
-            size={20}
-            aria-hidden="true"
-          />
+        <List className="payout-select__list">
+          {MOCK_BRANCH_CANDIDATES.map((branch) => {
+            const selected = branch.branchCode === selectedBranchCode;
 
-          <Input
-            type="search"
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="支店名・支店コードで検索"
-            aria-label="支店を検索"
-            autoComplete="off"
-          />
-        </div>
-
-        {filteredBranches.length > 0 ? (
-          <List className="payout-select__list">
-            {filteredBranches.map((branch) => {
-              const selected = branch.branchCode === selectedBranchCode;
-
-              return (
-                <ListRow
-                  key={branch.branchCode}
-                  title={branch.branchName}
-                  subLabel={`支店コード ${branch.branchCode}`}
-                  selected={selected}
-                  meta={
-                    <span
-                      className={[
-                        "payout-select__check",
-                        selected ? "payout-select__check--selected" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      aria-hidden="true"
-                    >
-                      {selected ? (
-                        <Check size={18} strokeWidth={2.5} />
-                      ) : null}
-                    </span>
-                  }
-                  ariaLabel={`${branch.branchName} 支店コード ${branch.branchCode}${
-                    selected ? " 選択中" : ""
-                  }`}
-                  onClick={() => handleSelectBranch(branch)}
-                />
-              );
-            })}
-          </List>
-        ) : (
-          <div className="payout-select__empty">
-            <TextState variant="empty">
-              該当する支店が見つかりません
-            </TextState>
-
-            <TextState variant="muted">
-              支店名または支店コードを確認して、もう一度検索してください。
-            </TextState>
-          </div>
-        )}
+            return (
+              <ListRow
+                key={branch.branchCode}
+                title={branch.branchName}
+                subLabel={`支店コード ${branch.branchCode}`}
+                selected={selected}
+                meta={
+                  <span
+                    className={[
+                      "payout-select__check",
+                      selected ? "payout-select__check--selected" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                    aria-hidden="true"
+                  >
+                    {selected ? (
+                      <Check size={18} strokeWidth={2.5} />
+                    ) : null}
+                  </span>
+                }
+                ariaLabel={`${branch.branchName} 支店コード ${branch.branchCode}${
+                  selected ? " 選択中" : ""
+                }`}
+                onClick={() => handleSelectBranch(branch)}
+              />
+            );
+          })}
+        </List>
 
         <TextState variant="muted" className="payout-select__note">
           支店一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
         </TextState>
-      </section>
 
-      {!isDesktop ? (
-        <FooterNav
-          variant="action"
-          buttonLabel="次へ"
-          disabled={actionButtonDisabled}
-          onButtonClick={handleNext}
-        />
-      ) : null}
+        <div className="page-actions">
+          <Button
+            type="button"
+            variant="primary"
+            size="lg"
+            fullWidth
+            disabled={actionButtonDisabled}
+            onClick={handleNext}
+          >
+            次へ
+          </Button>
+        </div>
+      </section>
     </Layout>
   );
 }

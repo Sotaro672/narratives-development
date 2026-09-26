@@ -3,10 +3,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
-import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
 import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 import { usePayoutAccountRegistrationSubmit } from "../features/payout/hooks/usePayoutAccountRegistrationSubmit";
@@ -33,7 +32,6 @@ function hasNonWhitespace(value: string): boolean {
 
 export default function PayoutAccountConfirmPage() {
   const navigate = useNavigate();
-  const { isDesktop } = useContactViewport();
   const registrationSucceededRef = useRef(false);
 
   const {
@@ -164,18 +162,9 @@ export default function PayoutAccountConfirmPage() {
     <Layout
       title="口座情報を確認"
       titleClickable={false}
-      mode="default"
+      mode="mypage"
+      showFooter
       hideHamburgerMenu
-      hideSettingsButton
-      actionButtonLabel={
-        isDesktop
-          ? isSubmitting
-            ? "登録中..."
-            : "登録する"
-          : undefined
-      }
-      onActionButtonClick={isDesktop ? handleRegister : undefined}
-      actionButtonDisabled={actionButtonDisabled}
     >
       <section className="page-section content-page-section settings-page payout-page payout-account-confirm-page">
         <p className="content-page-description payout-page__description">
@@ -197,14 +186,16 @@ export default function PayoutAccountConfirmPage() {
               </div>
             </div>
 
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className="payout-account-confirm-page__edit-button"
               onClick={handleEditBank}
               disabled={isSubmitting}
             >
               変更
-            </button>
+            </Button>
           </div>
 
           <div className="payout-account-confirm-page__row">
@@ -221,14 +212,16 @@ export default function PayoutAccountConfirmPage() {
               </div>
             </div>
 
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className="payout-account-confirm-page__edit-button"
               onClick={handleEditBranch}
               disabled={isSubmitting}
             >
               変更
-            </button>
+            </Button>
           </div>
 
           <div className="payout-account-confirm-page__row">
@@ -239,14 +232,16 @@ export default function PayoutAccountConfirmPage() {
               </strong>
             </div>
 
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className="payout-account-confirm-page__edit-button"
               onClick={handleEditAccount}
               disabled={isSubmitting}
             >
               変更
-            </button>
+            </Button>
           </div>
 
           <div className="payout-account-confirm-page__row">
@@ -257,14 +252,16 @@ export default function PayoutAccountConfirmPage() {
               </strong>
             </div>
 
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className="payout-account-confirm-page__edit-button"
               onClick={handleEditAccount}
               disabled={isSubmitting}
             >
               変更
-            </button>
+            </Button>
           </div>
 
           <div className="payout-account-confirm-page__row">
@@ -275,14 +272,16 @@ export default function PayoutAccountConfirmPage() {
               </strong>
             </div>
 
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               className="payout-account-confirm-page__edit-button"
               onClick={handleEditAccount}
               disabled={isSubmitting}
             >
               変更
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -301,16 +300,20 @@ export default function PayoutAccountConfirmPage() {
             {errorMessage}
           </p>
         ) : null}
-      </section>
 
-      {!isDesktop ? (
-        <FooterNav
-          variant="action"
-          buttonLabel={isSubmitting ? "登録中..." : "登録する"}
-          disabled={actionButtonDisabled}
-          onButtonClick={handleRegister}
-        />
-      ) : null}
+        <div className="page-actions">
+          <Button
+            type="button"
+            variant="primary"
+            size="lg"
+            fullWidth
+            disabled={actionButtonDisabled}
+            onClick={() => void handleRegister()}
+          >
+            {isSubmitting ? "登録中..." : "登録する"}
+          </Button>
+        </div>
+      </section>
     </Layout>
   );
 }

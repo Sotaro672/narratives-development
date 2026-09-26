@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import InfoList, { InfoRow } from "../components/ui/InfoList";
 import Input from "../components/ui/Input";
 import Radio from "../components/ui/Radio";
-import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
 import { usePayoutAccountRegistrationRules } from "../features/payout/hooks/usePayoutAccountRegistrationRules";
 import type { PayoutBankAccountType } from "../features/shared/types/payoutAccount";
@@ -25,7 +24,6 @@ function hasNonWhitespace(value: string): boolean {
 
 export default function PayoutBankAccountPage() {
   const navigate = useNavigate();
-  const { isDesktop } = useContactViewport();
   const { draft, setAccountDetails } = usePayoutAccountRegistration();
   const {
     validateBankCode,
@@ -128,12 +126,9 @@ export default function PayoutBankAccountPage() {
     <Layout
       title="口座情報を入力"
       titleClickable={false}
-      mode="default"
+      mode="mypage"
+      showFooter
       hideHamburgerMenu
-      hideSettingsButton
-      actionButtonLabel={isDesktop ? "確認へ進む" : undefined}
-      onActionButtonClick={isDesktop ? handleNext : undefined}
-      actionButtonDisabled={actionButtonDisabled}
     >
       <section className="page-section content-page-section settings-page payout-page payout-bank-account-page">
         <p className="content-page-description payout-page__description">
@@ -241,16 +236,20 @@ export default function PayoutBankAccountPage() {
             入力した口座番号は登録処理のために使用します。登録後、AMOLの画面では口座番号の末尾4桁のみを表示します。
           </p>
         </Card>
-      </section>
 
-      {!isDesktop ? (
-        <FooterNav
-          variant="action"
-          buttonLabel="確認へ進む"
-          disabled={actionButtonDisabled}
-          onButtonClick={handleNext}
-        />
-      ) : null}
+        <div className="page-actions">
+          <Button
+            type="button"
+            variant="primary"
+            size="lg"
+            fullWidth
+            disabled={actionButtonDisabled}
+            onClick={handleNext}
+          >
+            確認へ進む
+          </Button>
+        </div>
+      </section>
     </Layout>
   );
 }
