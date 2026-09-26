@@ -36,6 +36,19 @@
   line-height: 1.6;
 }
 
+.order-detail-page__order-id {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
+  vertical-align: middle;
+}
+
+.order-detail-page__order-id-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* ==============================
    Items
    ============================== */
@@ -201,6 +214,10 @@
 
   .order-detail-page__section + .order-detail-page__section {
     padding-top: 20px;
+  }
+
+  .order-detail-page__order-id {
+    gap: 6px;
   }
 
   .order-detail-page__item {
