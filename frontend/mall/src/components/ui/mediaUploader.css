@@ -96,6 +96,7 @@
   position: absolute;
   top: 8px;
   right: 8px;
+  z-index: 1;
   width: 32px;
   height: 32px;
   border: none;
@@ -109,16 +110,17 @@
 
 .media-uploader__image-frame {
   width: 100%;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 8px;
   background: #f3f4f6;
 }
 
 .media-uploader__image {
+  display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .media-uploader__frame {
