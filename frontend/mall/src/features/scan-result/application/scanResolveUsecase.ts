@@ -11,7 +11,6 @@ import {
   type ScanOwnershipUsecaseDeps,
 } from "./scanOwnershipUsecase";
 import {
-  executeScanTransfer,
   recoverScanTransferAfterOwnershipConfirmed,
   type ReturnInProgressOpenedErrorLike,
   type ScanTransferUsecaseDeps,
@@ -56,6 +55,7 @@ export type ResolveScanResultResult = {
   transferError: string | null;
   transferModalError: string | null;
   shouldOpenTransferModal: boolean;
+  requiresTransferConfirmation: boolean;
   operationId: string;
 };
 
@@ -122,6 +122,7 @@ export async function resolveScanResult(
       transferError: null,
       transferModalError: null,
       shouldOpenTransferModal: false,
+      requiresTransferConfirmation: false,
       operationId: "",
     };
   }
@@ -143,6 +144,7 @@ export async function resolveScanResult(
       transferError: null,
       transferModalError: null,
       shouldOpenTransferModal: false,
+      requiresTransferConfirmation: false,
       operationId: storedOperationId,
     };
   }
@@ -190,6 +192,7 @@ export async function resolveScanResult(
           transferError: null,
           transferModalError: null,
           shouldOpenTransferModal: true,
+          requiresTransferConfirmation: false,
           operationId: recovery.operationId,
         };
       }
@@ -204,6 +207,7 @@ export async function resolveScanResult(
         transferError: null,
         transferModalError: null,
         shouldOpenTransferModal: false,
+        requiresTransferConfirmation: false,
         operationId: recovery.operationId,
       };
     }
@@ -218,68 +222,38 @@ export async function resolveScanResult(
       transferError: null,
       transferModalError: null,
       shouldOpenTransferModal: false,
+      requiresTransferConfirmation: false,
       operationId: storedOperationId,
     };
   }
 
-  const transfer = await executeScanTransfer(
-    transferDeps,
-    {
-      productId,
-      assetId,
-      headers,
+  if (initialOwnership.ownedByWallet === false) {
+    return {
+      previewState,
+      currentAvatarId,
+      authAvailable,
+      ownedByWallet: false,
+      ownedByWalletError: initialOwnership.error,
+      transferResult: null,
+      transferError: null,
+      transferModalError: null,
+      shouldOpenTransferModal: false,
+      requiresTransferConfirmation: true,
       operationId: storedOperationId,
-    },
-  );
-
-  const resolvedPreviewState =
-    transfer.previewState ?? previewState;
-
-  let ownedByWallet =
-    transfer.ownedByWallet ??
-    initialOwnership.ownedByWallet;
-
-  let ownedByWalletError =
-    transfer.ownedByWalletError ??
-    initialOwnership.error;
-
-  const ownedCheckAssetId =
-    transfer.transferResult?.assetId?.trim() ||
-    resolvedPreviewState.raw.token?.assetId?.trim() ||
-    assetId;
-
-  if (
-    transfer.transferResult?.matched === true &&
-    ownedCheckAssetId &&
-    transfer.ownedByWallet !== true
-  ) {
-    const ownershipAfterTransfer =
-      await checkScanOwnershipByAssetId(
-        ownershipDeps,
-        {
-          assetId: ownedCheckAssetId,
-          headers,
-          retryAfterTransfer: true,
-        },
-      );
-
-    ownedByWallet =
-      ownershipAfterTransfer.ownedByWallet;
-    ownedByWalletError =
-      ownershipAfterTransfer.error;
+    };
   }
 
   return {
-    previewState: resolvedPreviewState,
+    previewState,
     currentAvatarId,
     authAvailable,
-    ownedByWallet,
-    ownedByWalletError,
-    transferResult: transfer.transferResult,
-    transferError: transfer.transferError,
-    transferModalError: transfer.transferModalError,
-    shouldOpenTransferModal:
-      transfer.shouldOpenTransferModal,
-    operationId: transfer.operationId,
+    ownedByWallet: null,
+    ownedByWalletError: initialOwnership.error,
+    transferResult: null,
+    transferError: null,
+    transferModalError: null,
+    shouldOpenTransferModal: false,
+    requiresTransferConfirmation: false,
+    operationId: storedOperationId,
   };
 }

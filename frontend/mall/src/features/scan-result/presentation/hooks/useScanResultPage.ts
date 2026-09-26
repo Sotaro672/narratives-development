@@ -16,6 +16,7 @@ import {
   toScanReviewErrorMessage,
 } from "../../application/scanReviewUsecase";
 import { resolveScanResult } from "../../application/scanResolveUsecase";
+import { executeScanTransfer } from "../../application/scanTransferUsecase";
 
 import {
   createProductBlueprintReview,
@@ -65,6 +66,10 @@ export function useScanResultPage() {
   const [transferError, setTransferError] = useState<string | null>(null);
   const [authAvailable, setAuthAvailable] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [transferConfirmationRequired, setTransferConfirmationRequired] =
+    useState(false);
+  const [transferConfirmModalOpen, setTransferConfirmModalOpen] =
+    useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [transferModalError, setTransferModalError] =
     useState<string | null>(null);
@@ -86,6 +91,7 @@ export function useScanResultPage() {
     transferredAssetId,
     transferTxSignature,
     transferMatched,
+    transferConfirmationRequired,
     reviews,
     reviewsError,
     reviewPage,
@@ -115,6 +121,15 @@ export function useScanResultPage() {
     setTransferModalError(null);
   }, []);
 
+  const closeTransferConfirmModal = useCallback(() => {
+    if (busyTransfer) {
+      return;
+    }
+
+    setTransferConfirmModalOpen(false);
+    setTransferModalError(null);
+  }, [busyTransfer]);
+
   const load = useCallback(async () => {
     const pid = productId.trim();
 
@@ -127,6 +142,8 @@ export function useScanResultPage() {
     setPreviewState(null);
     setTransferResult(null);
     setTransferError(null);
+    setTransferConfirmationRequired(false);
+    setTransferConfirmModalOpen(false);
     setTransferModalOpen(false);
     setTransferModalError(null);
     setReviews(null);
@@ -171,6 +188,12 @@ export function useScanResultPage() {
       setTransferResult(result.transferResult);
       setTransferError(result.transferError);
       setTransferModalError(result.transferModalError);
+      setTransferConfirmationRequired(
+        result.requiresTransferConfirmation,
+      );
+      setTransferConfirmModalOpen(
+        result.requiresTransferConfirmation,
+      );
       setTransferModalOpen(result.shouldOpenTransferModal);
     } catch (caughtError) {
       if (
@@ -196,6 +219,172 @@ export function useScanResultPage() {
       }
     }
   }, [productId]);
+
+  const confirmTransfer = useCallback(async () => {
+    const pid = productId.trim();
+    const assetId = previewAssetId.trim();
+
+    if (busyTransfer || !transferConfirmationRequired) {
+      return;
+    }
+
+    if (!pid || !assetId || !previewState) {
+      setTransferModalError(
+        "トークン移譲に必要な情報を取得できませんでした。",
+      );
+      return;
+    }
+
+    setBusyTransfer(true);
+    setTransferError(null);
+    setTransferModalError(null);
+    setTransferModalOpen(false);
+
+    try {
+      const headers = await getOptionalAuthHeaders();
+
+      if (
+        !mountedRef.current ||
+        loadingProductIdRef.current !== pid
+      ) {
+        return;
+      }
+
+      if (!headers) {
+        setTransferConfirmationRequired(false);
+        setTransferConfirmModalOpen(false);
+        navigate("/signin");
+        return;
+      }
+
+      const transfer = await executeScanTransfer(
+        {
+          transferScanPurchased,
+          loadPreviewState,
+          checkOwnershipByAssetId: (input) =>
+            checkScanOwnershipByAssetId(
+              {
+                isOwnedByWalletAssetId,
+              },
+              input,
+            ),
+          isReturnInProgressOpenedError,
+          getOrCreateTransferOperationId,
+          clearStoredTransferOperationId,
+        },
+        {
+          productId: pid,
+          assetId,
+          headers,
+          operationId:
+            readStoredTransferOperationId(pid).trim(),
+        },
+      );
+
+      if (
+        !mountedRef.current ||
+        loadingProductIdRef.current !== pid
+      ) {
+        return;
+      }
+
+      const resolvedPreviewState =
+        transfer.previewState ?? previewState;
+
+      if (transfer.previewState) {
+        setPreviewState(transfer.previewState);
+      }
+
+      let nextOwnedByWallet =
+        transfer.ownedByWallet ?? ownedByWallet;
+      let nextOwnedByWalletError =
+        transfer.ownedByWalletError ?? ownedByWalletError;
+
+      const ownedCheckAssetId =
+        transfer.transferResult?.assetId?.trim() ||
+        resolvedPreviewState.raw.token?.assetId?.trim() ||
+        assetId;
+
+      if (
+        transfer.transferResult?.matched === true &&
+        ownedCheckAssetId &&
+        transfer.ownedByWallet !== true
+      ) {
+        const ownershipAfterTransfer =
+          await checkScanOwnershipByAssetId(
+            {
+              isOwnedByWalletAssetId,
+            },
+            {
+              assetId: ownedCheckAssetId,
+              headers,
+              retryAfterTransfer: true,
+            },
+          );
+
+        if (
+          !mountedRef.current ||
+          loadingProductIdRef.current !== pid
+        ) {
+          return;
+        }
+
+        nextOwnedByWallet =
+          ownershipAfterTransfer.ownedByWallet;
+        nextOwnedByWalletError =
+          ownershipAfterTransfer.error;
+      }
+
+      setTransferResult(transfer.transferResult);
+      setOwnedByWallet(nextOwnedByWallet);
+      setOwnedByWalletError(nextOwnedByWalletError);
+      setTransferError(transfer.transferError);
+      setTransferModalError(transfer.transferModalError);
+
+      if (transfer.shouldOpenTransferModal) {
+        setTransferConfirmationRequired(false);
+        setTransferConfirmModalOpen(false);
+        setTransferModalOpen(true);
+        return;
+      }
+
+      if (transfer.transferResult) {
+        setTransferConfirmationRequired(false);
+        setTransferConfirmModalOpen(false);
+      }
+    } catch (caughtError) {
+      if (
+        !mountedRef.current ||
+        loadingProductIdRef.current !== pid
+      ) {
+        return;
+      }
+
+      const message =
+        caughtError instanceof Error
+          ? caughtError.message
+          : String(caughtError);
+
+      setTransferError(message);
+      setTransferModalError(message);
+    } finally {
+      if (
+        mountedRef.current &&
+        loadingProductIdRef.current === pid
+      ) {
+        setBusyTransfer(false);
+      }
+    }
+  }, [
+    busyTransfer,
+    navigate,
+    ownedByWallet,
+    ownedByWalletError,
+    previewAssetId,
+    previewState,
+    productId,
+    transferConfirmationRequired,
+  ]);
 
   const loadReviews = useCallback(
     async (nextPage = reviewPage) => {
@@ -508,8 +697,11 @@ export function useScanResultPage() {
     prevReviewsPage,
     openContentsAfterResolve,
     openTokenContentsByAssetId,
+    transferConfirmModalOpen,
     transferModalOpen,
     transferModalError,
+    confirmTransfer,
+    closeTransferConfirmModal,
     closeTransferModal,
   };
 }

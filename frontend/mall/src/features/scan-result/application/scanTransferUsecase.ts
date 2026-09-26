@@ -91,6 +91,7 @@ function readErrorStatus(error: unknown): number | null {
   }
 
   const status = (error as { status?: unknown }).status;
+
   return typeof status === "number" && Number.isFinite(status)
     ? status
     : null;
@@ -205,6 +206,12 @@ export async function recoverScanTransferAfterOwnershipConfirmed(
   };
 }
 
+// この関数を呼ぶと実際の Token Transfer API が実行される。
+// ScanResult の初期解決時には呼ばず、ユーザーが確認モーダルで
+// 「承諾」を押下した後にのみ呼び出すこと。
+//
+// operationId は同一の論理 Transfer に対して再利用し、
+// HTTP リトライ時の二重移譲を防止する。
 export async function executeScanTransfer(
   deps: ScanTransferUsecaseDeps,
   input: ExecuteScanTransferInput,

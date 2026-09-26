@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/types/scanResult.ts
+// frontend/mall/src/features/shared/types/scanResult.ts
 
 import type {
   ProductBlueprintCategoryFields,
@@ -154,6 +154,7 @@ export type ScanResultPageState = {
   transferredAssetId: string;
   transferTxSignature: string;
   transferMatched: boolean;
+  transferConfirmationRequired: boolean;
   reviews: ProductBlueprintReviewPage | null;
   reviewsError: string | null;
   reviewPage: number;

@@ -1,9 +1,12 @@
+// frontend/mall/src/pages/ScanResultPage.tsx
+
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
+import ScanTransferConfirmModal from "../features/scan-result/presentation/components/ScanTransferConfirmModal";
 import ScanTransferSuccessModal from "../features/scan-result/presentation/components/ScanTransferSuccessModal";
 import { useScanResultPage } from "../features/scan-result/presentation/hooks/useScanResultPage";
 import ProductBlueprintReviewModal from "../features/shared/presentation/components/ProductBlueprintReviewModal";
@@ -28,8 +31,11 @@ export default function ScanResultPage() {
     submitReview,
     openContentsAfterResolve,
     openTokenContentsByAssetId,
+    transferConfirmModalOpen,
     transferModalOpen,
     transferModalError,
+    confirmTransfer,
+    closeTransferConfirmModal,
     closeTransferModal,
   } = useScanResultPage();
 
@@ -128,6 +134,14 @@ export default function ScanResultPage() {
             onOpenInquiryPage={handleOpenInquiryPage}
           />
         </section>
+
+        <ScanTransferConfirmModal
+          open={transferConfirmModalOpen}
+          loading={state.busyTransfer}
+          error={transferModalError}
+          onCancel={closeTransferConfirmModal}
+          onConfirm={confirmTransfer}
+        />
 
         <ScanTransferSuccessModal
           open={transferModalOpen}
