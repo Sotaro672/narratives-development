@@ -6,6 +6,7 @@ import { Link, useLocation } from "react-router-dom";
 import { useInquiryBadgeCounter } from "../../../features/inquiry/presentation/hooks/useInquiryBadgeCounter";
 import { useNotificationUnreadCount } from "../../../features/notification/presentation/hooks/useNotificationUnreadCount";
 import { useResaleChatBadgeCounter } from "../../../features/resale/presentation/hooks/useResaleChatBadgeCounter";
+import { useTradeDispatchBadgeCounter } from "../../../features/trade/presentation/hooks/useTradeDispatchBadgeCounter";
 
 import Badge from "../../ui/Badge";
 import Button from "../../ui/Button";
@@ -69,11 +70,20 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     enabled: shouldShowAnnouncementButton,
   });
 
+  const { badgeCount: tradeDispatchBadgeCount } = useTradeDispatchBadgeCounter({
+    enabled: shouldShowAnnouncementButton,
+  });
+
   const safeCartItemCount = normalizeCount(cartItemCount);
   const safeNotificationUnreadCount = normalizeCount(notificationUnreadCount);
   const safeInquiryBadgeCount = normalizeCount(inquiryBadgeCount);
   const safeResaleChatBadgeCount = normalizeCount(resaleChatBadgeCount);
-  const safeChatBadgeCount = safeInquiryBadgeCount + safeResaleChatBadgeCount;
+  const safeTradeDispatchBadgeCount = normalizeCount(tradeDispatchBadgeCount);
+
+  const safeChatBadgeCount =
+    safeInquiryBadgeCount +
+    safeResaleChatBadgeCount +
+    safeTradeDispatchBadgeCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
   const notificationUnreadBadgeLabel = formatBadgeLabel(

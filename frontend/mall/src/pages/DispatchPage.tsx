@@ -4,14 +4,13 @@ import { useMemo, useState } from "react";
 import { Check } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import FooterNav from "../components/layout/FooterNav";
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
+import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import InfoList from "../components/ui/InfoList";
 import Preview from "../components/ui/Preview";
 import SectionHeader from "../components/ui/SectionHeader";
-import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import {
   dispatchTrade,
   type TradeDispatchBoxSize,
@@ -91,7 +90,6 @@ function createPudoMockQrPayload(params: {
 export default function DispatchPage() {
   const navigate = useNavigate();
   const { tradeId } = useParams<DispatchRouteParams>();
-  const { isDesktop } = useContactViewport();
 
   const [carrier, setCarrier] = useState<TradeDispatchCarrier | null>(null);
   const [boxSize, setBoxSize] = useState<TradeDispatchBoxSize | null>(null);
@@ -170,27 +168,7 @@ export default function DispatchPage() {
 
   return (
     <>
-      <Layout
-        title="発送"
-        titleClickable={false}
-        showFooter={false}
-        mode="mypage"
-        actionButtonLabel={
-          isDesktop
-            ? submitting
-              ? "発送処理中..."
-              : "発送を確定"
-            : undefined
-        }
-        onActionButtonClick={
-          isDesktop
-            ? () => {
-                void handleConfirm();
-              }
-            : undefined
-        }
-        actionButtonDisabled={actionButtonDisabled}
-      >
+      <Layout title="発送" titleClickable={false} showFooter mode="mypage">
         <section className="page-section content-page-section dispatch-page">
           {!normalizedTradeId ? (
             <Alert variant="error" className="dispatch-page__alert">
@@ -351,18 +329,19 @@ export default function DispatchPage() {
               {submissionError}
             </Alert>
           ) : null}
-        </section>
 
-        {!isDesktop ? (
-          <FooterNav
-            variant="action"
-            buttonLabel={submitting ? "発送処理中..." : "発送を確定"}
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             disabled={actionButtonDisabled}
-            onButtonClick={() => {
+            onClick={() => {
               void handleConfirm();
             }}
-          />
-        ) : null}
+          >
+            {submitting ? "発送処理中..." : "発送を確定"}
+          </Button>
+        </section>
       </Layout>
 
       <Preview

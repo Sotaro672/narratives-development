@@ -1,9 +1,10 @@
-// frontend/amol/src/features/trade/presentation/util/tradeStatus.ts
+// frontend/mall/src/features/trade/presentation/util/tradeStatus.ts
 
 import type { TradeDetail } from "../../../shared/types/trade";
 
 export type TradeStatusSource = Pick<
   TradeDetail,
+  | "viewerSide"
   | "status"
   | "isCancelled"
   | "isDispatched"
@@ -49,6 +50,14 @@ export function getTradeStatusLabel(
 
     case "none":
       break;
+  }
+
+  if (
+    trade.viewerSide === "seller" &&
+    trade.status === "active" &&
+    !trade.isDispatched
+  ) {
+    return "発送待ち";
   }
 
   if (trade.isDispatched) {
