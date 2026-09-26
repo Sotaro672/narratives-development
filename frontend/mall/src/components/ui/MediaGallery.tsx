@@ -1,6 +1,8 @@
 // frontend/mall/src/components/ui/MediaGallery.tsx
 
-import { useRef, type TouchEvent } from "react";
+import { useRef, useState, type TouchEvent } from "react";
+
+import Preview from "./Preview";
 
 import "./mediaGallery.css";
 
@@ -43,11 +45,21 @@ export default function MediaGallery({
   onTouchEnd,
 }: MediaGalleryProps) {
   const touchStartXRef = useRef<number | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+
   const hasItems = items.length > 0;
   const hasMultipleItems = items.length > 1;
   const safeActiveIndex = hasItems
     ? Math.min(Math.max(activeIndex, 0), items.length - 1)
     : 0;
+
+  const safePreviewIndex =
+    previewIndex !== null && hasItems
+      ? Math.min(Math.max(previewIndex, 0), items.length - 1)
+      : null;
+
+  const previewItem =
+    safePreviewIndex !== null ? items[safePreviewIndex] : null;
 
   const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
     if (onTouchStart) {
@@ -83,128 +95,190 @@ export default function MediaGallery({
     onNext();
   };
 
+  const handlePreviewOpen = (index: number) => {
+    setPreviewIndex(index);
+
+    if (index !== safeActiveIndex) {
+      onSelect(index);
+    }
+  };
+
+  const handlePreviewClose = () => {
+    setPreviewIndex(null);
+  };
+
+  const handlePreviewPrev = () => {
+    if (safePreviewIndex === null || items.length <= 1) return;
+
+    const nextIndex =
+      safePreviewIndex <= 0
+        ? items.length - 1
+        : safePreviewIndex - 1;
+
+    setPreviewIndex(nextIndex);
+    onSelect(nextIndex);
+  };
+
+  const handlePreviewNext = () => {
+    if (safePreviewIndex === null || items.length <= 1) return;
+
+    const nextIndex =
+      safePreviewIndex >= items.length - 1
+        ? 0
+        : safePreviewIndex + 1;
+
+    setPreviewIndex(nextIndex);
+    onSelect(nextIndex);
+  };
+
   return (
-    <div
-      className={[
-        "media-gallery",
-        variant !== "default" ? `media-gallery--${variant}` : "",
-        className || "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      {hasItems ? (
-        <div
-          className="media-gallery__viewer"
-          onTouchStart={handleTouchStart}
-          onTouchEnd={handleTouchEnd}
-        >
+    <>
+      <div
+        className={[
+          "media-gallery",
+          variant !== "default" ? `media-gallery--${variant}` : "",
+          className || "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {hasItems ? (
           <div
-            className="media-gallery__track"
-            style={{
-              transform: `translate3d(-${safeActiveIndex * 100}%, 0, 0)`,
-            }}
+            className="media-gallery__viewer"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
           >
-            {items.map((item) => (
-              <div key={item.id} className="media-gallery__slide">
-                {item.url ? (
-                  <MediaGalleryPreview
-                    item={item}
-                    altFallback={altFallback}
-                  />
+            <div
+              className="media-gallery__track"
+              style={{
+                transform: `translate3d(-${safeActiveIndex * 100}%, 0, 0)`,
+              }}
+            >
+              {items.map((item, index) => (
+                <div key={item.id} className="media-gallery__slide">
+                  {item.url ? (
+                    <MediaGalleryPreview
+                      item={item}
+                      altFallback={altFallback}
+                      onClick={() => handlePreviewOpen(index)}
+                    />
+                  ) : (
+                    <div className="media-gallery__placeholder">
+                      {placeholderText}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {hasMultipleItems ? (
+              <>
+                <button
+                  type="button"
+                  className="media-gallery__nav media-gallery__nav--prev"
+                  onClick={onPrev}
+                  aria-label="前のメディアを表示"
+                >
+                  ‹
+                </button>
+
+                <button
+                  type="button"
+                  className="media-gallery__nav media-gallery__nav--next"
+                  onClick={onNext}
+                  aria-label="次のメディアを表示"
+                >
+                  ›
+                </button>
+
+                <div className="media-gallery__counter">
+                  {safeActiveIndex + 1} / {items.length}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : (
+          <div className="media-gallery__placeholder">{placeholderText}</div>
+        )}
+
+        {hasMultipleItems ? (
+          <div className="media-gallery__thumbnail-list">
+            {items.map((item, index) => (
+              <button
+                key={item.id}
+                type="button"
+                className={[
+                  "media-gallery__thumbnail-button",
+                  index === safeActiveIndex
+                    ? "media-gallery__thumbnail-button--active"
+                    : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => onSelect(index)}
+                aria-label={`${index + 1}番目のメディアを表示`}
+              >
+                {item.type?.startsWith("video/") ? (
+                  <span className="media-gallery__thumbnail-video-label">
+                    video
+                  </span>
                 ) : (
-                  <div className="media-gallery__placeholder">
-                    {placeholderText}
-                  </div>
+                  <img
+                    src={item.url}
+                    alt={item.fileName || altFallback}
+                    className="media-gallery__thumbnail"
+                    draggable={false}
+                  />
                 )}
-              </div>
+              </button>
             ))}
           </div>
+        ) : null}
+      </div>
 
-          {hasMultipleItems ? (
-            <>
-              <button
-                type="button"
-                className="media-gallery__nav media-gallery__nav--prev"
-                onClick={onPrev}
-                aria-label="前のメディアを表示"
-              >
-                ‹
-              </button>
-
-              <button
-                type="button"
-                className="media-gallery__nav media-gallery__nav--next"
-                onClick={onNext}
-                aria-label="次のメディアを表示"
-              >
-                ›
-              </button>
-
-              <div className="media-gallery__counter">
-                {safeActiveIndex + 1} / {items.length}
-              </div>
-            </>
-          ) : null}
-        </div>
-      ) : (
-        <div className="media-gallery__placeholder">{placeholderText}</div>
-      )}
-
-      {hasMultipleItems ? (
-        <div className="media-gallery__thumbnail-list">
-          {items.map((item, index) => (
-            <button
-              key={item.id}
-              type="button"
-              className={[
-                "media-gallery__thumbnail-button",
-                index === safeActiveIndex
-                  ? "media-gallery__thumbnail-button--active"
-                  : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => onSelect(index)}
-              aria-label={`${index + 1}番目のメディアを表示`}
-            >
-              {item.type?.startsWith("video/") ? (
-                <span className="media-gallery__thumbnail-video-label">
-                  video
-                </span>
-              ) : (
-                <img
-                  src={item.url}
-                  alt={item.fileName || altFallback}
-                  className="media-gallery__thumbnail"
-                  draggable={false}
-                />
-              )}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+      <Preview
+        open={previewItem !== null}
+        src={previewItem?.url}
+        alt={previewItem?.fileName || altFallback}
+        type={previewItem?.type}
+        onClose={handlePreviewClose}
+        onPrev={hasMultipleItems ? handlePreviewPrev : undefined}
+        onNext={hasMultipleItems ? handlePreviewNext : undefined}
+      />
+    </>
   );
 }
 
 type MediaGalleryPreviewProps = {
   item: MediaGalleryItem;
   altFallback: string;
+  onClick: () => void;
 };
 
 function MediaGalleryPreview({
   item,
   altFallback,
+  onClick,
 }: MediaGalleryPreviewProps) {
+  const label = item.fileName || altFallback;
+
   if (item.type?.startsWith("video/")) {
     return (
       <video
         src={item.url}
         className="media-gallery__media"
-        controls
         playsInline
         preload="metadata"
+        aria-label={`${label}を全画面表示`}
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onClick();
+          }
+        }}
       />
     );
   }
@@ -212,9 +286,18 @@ function MediaGalleryPreview({
   return (
     <img
       src={item.url}
-      alt={item.fileName || altFallback}
+      alt={label}
       className="media-gallery__media"
       draggable={false}
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
     />
   );
 }

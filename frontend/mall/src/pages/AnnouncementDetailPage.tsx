@@ -1,11 +1,13 @@
 // frontend/mall/src/pages/AnnouncementDetailPage.tsx
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
-import Media from "../components/ui/Media";
+import MediaGallery, {
+  type MediaGalleryItem,
+} from "../components/ui/MediaGallery";
 import SectionHeader from "../components/ui/SectionHeader";
 import TextState from "../components/ui/TextState";
 import { formatDateTime } from "../components/utils/date";
@@ -51,6 +53,8 @@ export default function AnnouncementDetailPage() {
   const stateDecisionNotification = locationState?.reportDecisionNotification;
   const stateNews = locationState?.news;
   const report = useReport();
+
+  const [attachmentActiveIndex, setAttachmentActiveIndex] = useState(0);
 
   const effectiveNewsId = useMemo(
     () => newsId || stateNews?.id || "",
@@ -195,6 +199,113 @@ export default function AnnouncementDetailPage() {
     ? announcement.attachmentFiles
     : [];
 
+  const attachmentMediaItems = useMemo<MediaGalleryItem[]>(
+    () =>
+      attachmentFiles.flatMap((file, index) => {
+        const fileUrl = file.fileUrl?.trim() || "";
+        const mimeType = file.mimeType?.trim() || "";
+        const isMedia =
+          mimeType.startsWith("image/") ||
+          mimeType.startsWith("video/");
+
+        if (!fileUrl || !isMedia) {
+          return [];
+        }
+
+        const fileName =
+          file.fileName ||
+          file.id ||
+          `添付メディア ${index + 1}`;
+
+        return [
+          {
+            id: `${file.id || fileName}-${index}`,
+            url: fileUrl,
+            fileName,
+            type: mimeType,
+          },
+        ];
+      }),
+    [attachmentFiles],
+  );
+
+  const attachmentOtherFiles = useMemo(
+    () =>
+      attachmentFiles.flatMap((file, index) => {
+        const fileUrl = file.fileUrl?.trim() || "";
+        const mimeType = file.mimeType?.trim() || "";
+        const isMedia =
+          mimeType.startsWith("image/") ||
+          mimeType.startsWith("video/");
+
+        if (fileUrl && isMedia) {
+          return [];
+        }
+
+        return [
+          {
+            file,
+            index,
+            fileUrl,
+            mimeType,
+            fileName:
+              file.fileName ||
+              file.id ||
+              `添付ファイル ${index + 1}`,
+          },
+        ];
+      }),
+    [attachmentFiles],
+  );
+
+  useEffect(() => {
+    setAttachmentActiveIndex((currentIndex) => {
+      if (attachmentMediaItems.length === 0) {
+        return 0;
+      }
+
+      return Math.min(
+        Math.max(currentIndex, 0),
+        attachmentMediaItems.length - 1,
+      );
+    });
+  }, [attachmentMediaItems.length]);
+
+  const handleAttachmentPrev = () => {
+    if (attachmentMediaItems.length <= 1) {
+      return;
+    }
+
+    setAttachmentActiveIndex((currentIndex) =>
+      currentIndex <= 0
+        ? attachmentMediaItems.length - 1
+        : currentIndex - 1,
+    );
+  };
+
+  const handleAttachmentNext = () => {
+    if (attachmentMediaItems.length <= 1) {
+      return;
+    }
+
+    setAttachmentActiveIndex((currentIndex) =>
+      currentIndex >= attachmentMediaItems.length - 1
+        ? 0
+        : currentIndex + 1,
+    );
+  };
+
+  const handleAttachmentSelect = (index: number) => {
+    if (
+      index < 0 ||
+      index >= attachmentMediaItems.length
+    ) {
+      return;
+    }
+
+    setAttachmentActiveIndex(index);
+  };
+
   const handleOpenAnnouncementReport = () => {
     if (!announcement?.id) {
       return;
@@ -315,80 +426,74 @@ export default function AnnouncementDetailPage() {
 
               {attachmentFiles.length > 0 ? (
                 <div className="announcement-page__detail-attachments">
-                  <div className="announcement-page__attachment-list">
-                    {attachmentFiles.map((file, index) => {
-                      const fileName =
-                        file.fileName ||
-                        file.id ||
-                        `添付ファイル ${index + 1}`;
+                  {attachmentMediaItems.length > 0 ? (
+                    <MediaGallery
+                      items={attachmentMediaItems}
+                      activeIndex={attachmentActiveIndex}
+                      altFallback="お知らせ添付メディア"
+                      placeholderText="メディアがありません"
+                      className="announcement-page__attachment-gallery"
+                      onPrev={handleAttachmentPrev}
+                      onNext={handleAttachmentNext}
+                      onSelect={handleAttachmentSelect}
+                    />
+                  ) : null}
 
-                      const fileUrl = file.fileUrl || "";
-                      const mimeType = file.mimeType || "";
-                      const isImage = mimeType.startsWith("image/");
-                      const attachmentKey =
-                        `${file.id || fileName}-${index}`;
+                  {attachmentOtherFiles.length > 0 ? (
+                    <div className="announcement-page__attachment-list">
+                      {attachmentOtherFiles.map(
+                        ({
+                          file,
+                          index,
+                          fileUrl,
+                          mimeType,
+                          fileName,
+                        }) => {
+                          const attachmentKey =
+                            `${file.id || fileName}-${index}`;
 
-                      if (isImage && fileUrl) {
-                        return (
-                          <a
-                            key={attachmentKey}
-                            className="announcement-page__image-attachment"
-                            href={fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label={`${fileName} を開く`}
-                          >
-                            <Media
-                              className="announcement-page__attachment-image"
-                              src={fileUrl}
-                              alt={fileName}
-                              fit="contain"
-                              loading="lazy"
-                            />
-                          </a>
-                        );
-                      }
+                          if (fileUrl) {
+                            return (
+                              <a
+                                key={attachmentKey}
+                                className="announcement-page__attachment-item announcement-page__attachment-link"
+                                href={fileUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <span className="announcement-page__attachment-name">
+                                  {fileName}
+                                </span>
 
-                      if (fileUrl) {
-                        return (
-                          <a
-                            key={attachmentKey}
-                            className="announcement-page__attachment-item announcement-page__attachment-link"
-                            href={fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            <span className="announcement-page__attachment-name">
-                              {fileName}
-                            </span>
+                                {mimeType ? (
+                                  <span className="announcement-page__attachment-meta">
+                                    {mimeType}
+                                  </span>
+                                ) : null}
+                              </a>
+                            );
+                          }
 
-                            {mimeType ? (
-                              <span className="announcement-page__attachment-meta">
-                                {mimeType}
+                          return (
+                            <div
+                              key={attachmentKey}
+                              className="announcement-page__attachment-item"
+                            >
+                              <span className="announcement-page__attachment-name">
+                                {fileName}
                               </span>
-                            ) : null}
-                          </a>
-                        );
-                      }
 
-                      return (
-                        <div
-                          key={attachmentKey}
-                          className="announcement-page__attachment-item"
-                        >
-                          <span className="announcement-page__attachment-name">
-                            {fileName}
-                          </span>
-
-                          {mimeType ? (
-                            <span className="announcement-page__attachment-meta">
-                              {mimeType}
-                            </span>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
+                              {mimeType ? (
+                                <span className="announcement-page__attachment-meta">
+                                  {mimeType}
+                                </span>
+                              ) : null}
+                            </div>
+                          );
+                        },
+                      )}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
             </article>
