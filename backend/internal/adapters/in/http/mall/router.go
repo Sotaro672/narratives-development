@@ -1,4 +1,4 @@
-// backend/internal/adapters/in/http/mall/router.go
+// backend\internal\adapters\in\http\mall\router.go
 package mall
 
 import (
@@ -23,7 +23,7 @@ type Deps struct {
 
 	// ProductBlueprint reviews (catalog + me/catalog)
 	// - public: GET /mall/catalog/product-blueprints/{pbId}/reviews
-	// - me:     GET/POST /mall/me/catalog/product-blueprints/{pbId}/reviews
+	// - me:     POST /mall/me/catalog/product-blueprints/{pbId}/reviews
 	ProductBlueprintReview http.Handler
 
 	// Brand routes
@@ -65,8 +65,7 @@ type Deps struct {
 	Cart    http.Handler
 	Payment http.Handler
 
-	Preview   http.Handler
-	PreviewMe http.Handler
+	Preview http.Handler
 
 	OrderScanTransfer http.Handler
 	Order             http.Handler
@@ -703,24 +702,6 @@ func Register(
 		avatar,
 	)
 
-	// catalog (me)
-	handleSafeAuthAvatar(
-		mux,
-		"/mall/me/catalog",
-		deps.Catalog,
-		"Catalog(me)",
-		auth,
-		avatar,
-	)
-	handleSafeAuthAvatar(
-		mux,
-		"/mall/me/catalog/",
-		deps.Catalog,
-		"Catalog(me)",
-		auth,
-		avatar,
-	)
-
 	// productBlueprint reviews (me catalog)
 	handleSafeAuthAvatar(
 		mux,
@@ -826,24 +807,6 @@ func Register(
 		"/mall/me/cart/",
 		deps.Cart,
 		"Cart(me)",
-		auth,
-		avatar,
-	)
-
-	// preview (me)
-	handleSafeAuthAvatar(
-		mux,
-		"/mall/me/preview",
-		deps.PreviewMe,
-		"Preview(me)",
-		auth,
-		avatar,
-	)
-	handleSafeAuthAvatar(
-		mux,
-		"/mall/me/preview/",
-		deps.PreviewMe,
-		"Preview(me)",
 		auth,
 		avatar,
 	)

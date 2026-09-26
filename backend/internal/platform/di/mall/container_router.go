@@ -66,7 +66,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var marketH http.Handler
 	var resaleH http.Handler
 	var previewPublicH http.Handler
-	var previewMeH http.Handler
 	var setupStatusH http.Handler
 
 	// TokenBlueprint の base handler。
@@ -336,13 +335,6 @@ func Register(mux *http.ServeMux, cont *Container) {
 			cont.PreviewQ,
 			opts...,
 		)
-
-		previewMeH = mallhandler.NewPreviewMeHandler(
-			cont.PreviewQ,
-			cont.OwnerResolveQ,
-			nil,
-			cont.NameResolver,
-		)
 	}
 
 	// Order scan transfer
@@ -384,8 +376,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		Market: marketH,
 		Resale: resaleH,
 
-		Preview:   previewPublicH,
-		PreviewMe: previewMeH,
+		Preview: previewPublicH,
 
 		OrderScanTransfer: orderScanTransferH,
 

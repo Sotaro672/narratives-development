@@ -211,6 +211,7 @@ export async function executeScanTransfer(
 ): Promise<ExecuteScanTransferResult> {
   const normalizedProductId = input.productId.trim();
   const normalizedAssetId = input.assetId.trim();
+  const existingOperationId = input.operationId?.trim() ?? "";
 
   if (!normalizedProductId) {
     return {
@@ -226,8 +227,22 @@ export async function executeScanTransfer(
     };
   }
 
+  if (!normalizedAssetId) {
+    return {
+      transferResult: null,
+      previewState: null,
+      ownedByWallet: null,
+      ownedByWalletError: null,
+      transferError: null,
+      transferModalError: null,
+      shouldOpenTransferModal: false,
+      operationId: existingOperationId,
+      recovered: false,
+    };
+  }
+
   let operationId =
-    input.operationId?.trim() ||
+    existingOperationId ||
     deps.getOrCreateTransferOperationId(normalizedProductId);
 
   try {
@@ -297,7 +312,6 @@ export async function executeScanTransfer(
     };
 
     if (
-      normalizedAssetId &&
       isRetryableScanTransferError(
         caughtError,
         deps.isReturnInProgressOpenedError,

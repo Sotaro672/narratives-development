@@ -1,6 +1,6 @@
 // frontend\mall\src\features\scan-result\infrastructure\scanResultApi.ts
+
 import { requestJson } from "../../../lib/http";
-import { getOptionalAuthHeaders } from "../../../lib/authHeaders";
 import { HttpError } from "../../../lib/http/httpError";
 
 import type {
@@ -39,57 +39,35 @@ type ReturnInProgressOpenedErrorParams = {
 };
 
 export class ReturnInProgressOpenedError extends Error {
-  readonly code =
-    RETURN_IN_PROGRESS_OPENED_ERROR_CODE;
-
+  readonly code = RETURN_IN_PROGRESS_OPENED_ERROR_CODE;
   readonly status = 409;
   readonly avatarId: string;
   readonly productId: string;
   readonly matchedOrderId: string;
   readonly matchedItemIndex: number;
 
-  constructor(
-    params: ReturnInProgressOpenedErrorParams,
-  ) {
+  constructor(params: ReturnInProgressOpenedErrorParams) {
     super(params.message);
 
-    this.name =
-      "ReturnInProgressOpenedError";
-
-    this.avatarId =
-      params.avatarId;
-
-    this.productId =
-      params.productId;
-
-    this.matchedOrderId =
-      params.matchedOrderId;
-
-    this.matchedItemIndex =
-      params.matchedItemIndex;
+    this.name = "ReturnInProgressOpenedError";
+    this.avatarId = params.avatarId;
+    this.productId = params.productId;
+    this.matchedOrderId = params.matchedOrderId;
+    this.matchedItemIndex = params.matchedItemIndex;
   }
 }
 
 export function isReturnInProgressOpenedError(
   caught: unknown,
 ): caught is ReturnInProgressOpenedError {
-  return caught instanceof
-    ReturnInProgressOpenedError;
+  return caught instanceof ReturnInProgressOpenedError;
 }
 
-function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value)
-  );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function unwrapErrorBody(
-  value: unknown,
-): Record<string, unknown> | null {
+function unwrapErrorBody(value: unknown): Record<string, unknown> | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -101,17 +79,11 @@ function unwrapErrorBody(
   return value;
 }
 
-function readStringValue(
-  value: unknown,
-): string {
-  return typeof value === "string"
-    ? value.trim()
-    : "";
+function readStringValue(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
-function readItemIndex(
-  value: unknown,
-): number | null {
+function readItemIndex(value: unknown): number | null {
   if (
     typeof value !== "number" ||
     !Number.isInteger(value) ||
@@ -134,36 +106,22 @@ function toReturnInProgressOpenedError(
     return null;
   }
 
-  const body =
-    unwrapErrorBody(
-      caught.body,
-    );
+  const body = unwrapErrorBody(caught.body);
 
   if (!body) {
     return null;
   }
 
-  const errorCode =
-    readStringValue(
-      body.error,
-    );
+  const errorCode = readStringValue(body.error);
 
   if (
-    errorCode !==
-    RETURN_IN_PROGRESS_OPENED_ERROR_CODE
+    errorCode !== RETURN_IN_PROGRESS_OPENED_ERROR_CODE
   ) {
     return null;
   }
 
-  const matchedOrderId =
-    readStringValue(
-      body.orderId,
-    );
-
-  const matchedItemIndex =
-    readItemIndex(
-      body.itemIndex,
-    );
+  const matchedOrderId = readStringValue(body.orderId);
+  const matchedItemIndex = readItemIndex(body.itemIndex);
 
   if (
     !matchedOrderId ||
@@ -173,51 +131,50 @@ function toReturnInProgressOpenedError(
   }
 
   const message =
-    readStringValue(
-      body.message,
-    ) ||
+    readStringValue(body.message) ||
     RETURN_IN_PROGRESS_OPENED_MESSAGE;
 
   return new ReturnInProgressOpenedError({
     message,
-    avatarId:
-      readStringValue(
-        body.avatarId,
-      ),
+    avatarId: readStringValue(body.avatarId),
     productId:
-      readStringValue(
-        body.productId,
-      ) || requestedProductId,
+      readStringValue(body.productId) ||
+      requestedProductId,
     matchedOrderId,
     matchedItemIndex,
   });
 }
 
-export async function loadPreviewState(productId: string): Promise<PreviewState> {
+export async function loadPreviewState(
+  productId: string,
+): Promise<PreviewState> {
   const id = productId.trim();
 
   if (!id) {
     throw new Error("preview: productId is empty");
   }
 
-  const authHeaders = await getOptionalAuthHeaders();
-  const path = authHeaders ? "/mall/me/preview" : "/mall/preview";
-
-  const raw = await requestJson<MallPreviewResponse>(path, {
-    method: "GET",
-    headers: authHeaders,
-    query: { productId: id },
-    unwrapData: true,
-    messages: {
-      requestErrorMessage: "fetchPreviewByProductId failed",
-      nonJsonErrorMessage: "fetchPreviewByProductId failed: response is not json",
-      invalidJsonErrorMessage: "fetchPreviewByProductId failed: invalid json",
+  const raw = await requestJson<MallPreviewResponse>(
+    "/mall/preview",
+    {
+      method: "GET",
+      auth: "none",
+      query: { productId: id },
+      unwrapData: true,
+      messages: {
+        requestErrorMessage: "fetchPreviewByProductId failed",
+        nonJsonErrorMessage:
+          "fetchPreviewByProductId failed: response is not json",
+        invalidJsonErrorMessage:
+          "fetchPreviewByProductId failed: invalid json",
+      },
     },
-  });
+  );
 
   return {
     raw,
-    tokenIconUrlEncoded: raw.tokenBlueprintPatch?.tokenIcon ?? null,
+    tokenIconUrlEncoded:
+      raw.tokenBlueprintPatch?.tokenIcon ?? null,
   };
 }
 
@@ -251,8 +208,10 @@ export async function transferScanPurchased(args: {
         unwrapData: true,
         messages: {
           requestErrorMessage: "transferScanPurchased failed",
-          nonJsonErrorMessage: "transferScanPurchased failed: response is not json",
-          invalidJsonErrorMessage: "transferScanPurchased failed: invalid json",
+          nonJsonErrorMessage:
+            "transferScanPurchased failed: response is not json",
+          invalidJsonErrorMessage:
+            "transferScanPurchased failed: invalid json",
         },
       },
     );
@@ -276,10 +235,13 @@ export async function fetchReviewsByProductBlueprintId(args: {
   page: number;
   perPage: number;
 }): Promise<ProductBlueprintReviewPage> {
-  const productBlueprintId = args.productBlueprintId.trim();
+  const productBlueprintId =
+    args.productBlueprintId.trim();
 
   if (!productBlueprintId) {
-    throw new Error("preview review: productBlueprintId is empty");
+    throw new Error(
+      "preview review: productBlueprintId is empty",
+    );
   }
 
   return requestJson<ProductBlueprintReviewPage>(
@@ -292,9 +254,12 @@ export async function fetchReviewsByProductBlueprintId(args: {
         perPage: args.perPage,
       },
       messages: {
-        requestErrorMessage: "fetchReviewsByProductBlueprintId failed",
-        nonJsonErrorMessage: "fetchReviewsByProductBlueprintId failed: response is not json",
-        invalidJsonErrorMessage: "fetchReviewsByProductBlueprintId failed: invalid json",
+        requestErrorMessage:
+          "fetchReviewsByProductBlueprintId failed",
+        nonJsonErrorMessage:
+          "fetchReviewsByProductBlueprintId failed: response is not json",
+        invalidJsonErrorMessage:
+          "fetchReviewsByProductBlueprintId failed: invalid json",
       },
     },
   );
@@ -306,18 +271,26 @@ export async function createProductBlueprintReview(args: {
   rating: number;
   headers?: HeadersInit;
 }): Promise<ProductBlueprintReview> {
-  const productBlueprintId = args.productBlueprintId.trim();
+  const productBlueprintId =
+    args.productBlueprintId.trim();
   const body = args.body.trim();
 
   if (!productBlueprintId) {
-    throw new Error("preview review create: productBlueprintId is empty");
+    throw new Error(
+      "preview review create: productBlueprintId is empty",
+    );
   }
 
   if (!body) {
-    throw new Error("preview review create: body is empty");
+    throw new Error(
+      "preview review create: body is empty",
+    );
   }
 
-  const rating = Math.max(1, Math.min(5, Math.trunc(args.rating)));
+  const rating = Math.max(
+    1,
+    Math.min(5, Math.trunc(args.rating)),
+  );
 
   return requestJson<ProductBlueprintReview>(
     `/mall/me/catalog/product-blueprints/${encodeURIComponent(productBlueprintId)}/reviews`,
@@ -330,9 +303,12 @@ export async function createProductBlueprintReview(args: {
         rating,
       },
       messages: {
-        requestErrorMessage: "createProductBlueprintReview failed",
-        nonJsonErrorMessage: "createProductBlueprintReview failed: response is not json",
-        invalidJsonErrorMessage: "createProductBlueprintReview failed: invalid json",
+        requestErrorMessage:
+          "createProductBlueprintReview failed",
+        nonJsonErrorMessage:
+          "createProductBlueprintReview failed: response is not json",
+        invalidJsonErrorMessage:
+          "createProductBlueprintReview failed: invalid json",
       },
     },
   );
@@ -356,9 +332,12 @@ export async function resolveOwnedWalletTokenByAssetId(
       headers,
       query: { assetId: id },
       messages: {
-        requestErrorMessage: "resolveOwnedWalletTokenByAssetId failed",
-        nonJsonErrorMessage: "resolveOwnedWalletTokenByAssetId failed: response is not json",
-        invalidJsonErrorMessage: "resolveOwnedWalletTokenByAssetId failed: invalid json",
+        requestErrorMessage:
+          "resolveOwnedWalletTokenByAssetId failed",
+        nonJsonErrorMessage:
+          "resolveOwnedWalletTokenByAssetId failed: response is not json",
+        invalidJsonErrorMessage:
+          "resolveOwnedWalletTokenByAssetId failed: invalid json",
       },
     },
   );
@@ -383,9 +362,12 @@ export async function isOwnedByWalletAssetId(
         headers,
         query: { assetId: id },
         messages: {
-          requestErrorMessage: "isOwnedByWalletAssetId failed",
-          nonJsonErrorMessage: "isOwnedByWalletAssetId failed: response is not json",
-          invalidJsonErrorMessage: "isOwnedByWalletAssetId failed: invalid json",
+          requestErrorMessage:
+            "isOwnedByWalletAssetId failed",
+          nonJsonErrorMessage:
+            "isOwnedByWalletAssetId failed: response is not json",
+          invalidJsonErrorMessage:
+            "isOwnedByWalletAssetId failed: invalid json",
         },
       },
     );

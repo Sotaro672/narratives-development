@@ -76,16 +76,10 @@ function createTransferDeps(
     transferScanPurchased: deps.transferScanPurchased,
     loadPreviewState: deps.loadPreviewState,
     checkOwnershipByAssetId: (input) =>
-      checkScanOwnershipByAssetId(
-        ownershipDeps,
-        input,
-      ),
-    isReturnInProgressOpenedError:
-      deps.isReturnInProgressOpenedError,
-    getOrCreateTransferOperationId:
-      deps.getOrCreateTransferOperationId,
-    clearStoredTransferOperationId:
-      deps.clearStoredTransferOperationId,
+      checkScanOwnershipByAssetId(ownershipDeps, input),
+    isReturnInProgressOpenedError: deps.isReturnInProgressOpenedError,
+    getOrCreateTransferOperationId: deps.getOrCreateTransferOperationId,
+    clearStoredTransferOperationId: deps.clearStoredTransferOperationId,
     wait: deps.wait,
   };
 }
@@ -136,8 +130,22 @@ export async function resolveScanResult(
   const assetId = previewState.raw.token?.assetId?.trim() ?? "";
   const storedOperationId =
     deps.readStoredTransferOperationId(productId).trim();
-  const hasPendingTransferOperation =
-    Boolean(storedOperationId);
+  const hasPendingTransferOperation = Boolean(storedOperationId);
+
+  if (!assetId) {
+    return {
+      previewState,
+      currentAvatarId,
+      authAvailable,
+      ownedByWallet: null,
+      ownedByWalletError: null,
+      transferResult: null,
+      transferError: null,
+      transferModalError: null,
+      shouldOpenTransferModal: false,
+      operationId: storedOperationId,
+    };
+  }
 
   const ownershipDeps = createOwnershipDeps(deps);
   const transferDeps = createTransferDeps(
@@ -151,16 +159,12 @@ export async function resolveScanResult(
       previewState,
       currentAvatarId,
       headers,
-      retryAfterTransfer:
-        hasPendingTransferOperation,
+      retryAfterTransfer: hasPendingTransferOperation,
     },
   );
 
   if (initialOwnership.ownedByWallet === true) {
-    if (
-      hasPendingTransferOperation &&
-      assetId
-    ) {
+    if (hasPendingTransferOperation) {
       const recovery =
         await recoverScanTransferAfterOwnershipConfirmed(
           transferDeps,
