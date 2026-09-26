@@ -65,8 +65,7 @@ export default function OrderDetail() {
 
   return (
     <Layout
-      title="注文詳細"
-      titleClickable={false}
+      title="AMOL"
       mode="mypage"
       showFooter
     >
