@@ -1,16 +1,16 @@
-// frontend/amol/src/pages/ResaleCreatePage.tsx
+// frontend/mall/src/pages/ResaleCreatePage.tsx
 
 import Layout from "../components/layout/Layout";
-
-import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
-import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
-import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
+import Button from "../components/ui/Button";
 
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
 import ResaleCreateForm from "../features/resale/presentation/components/ResaleCreateForm";
 import ResaleCreateMissingTarget from "../features/resale/presentation/components/ResaleCreateMissingTarget";
 import ResaleCreateProgressModal from "../features/resale/presentation/components/ResaleCreateProgressModal";
 import { useResaleCreatePage } from "../features/resale/presentation/hooks/useResaleCreatePage";
+import ProductDetailLayout from "../features/shared/presentation/components/ProductDetailLayout";
+import ProductIdentity from "../features/shared/presentation/components/ProductIdentity";
+import TokenSummaryCard from "../features/shared/presentation/components/TokenSummaryCard";
 
 import "../styles/page-layout.css";
 import "../styles/resale-page.css";
@@ -50,16 +50,7 @@ export default function ResaleCreatePage() {
       <Layout
         title="出品"
         mode="mypage"
-        actionButtonLabel="出品"
-        onActionButtonClick={handleSubmit}
-        actionButtonDisabled={!canSubmit || isSubmitting}
         showFooter
-        footerProps={{
-          variant: "action",
-          buttonLabel: submitButtonLabel,
-          disabled: !canSubmit || isSubmitting,
-          onButtonClick: handleSubmit,
-        }}
       >
         <section className="page-section">
           {!hasRequiredListingTarget ? (
@@ -109,6 +100,19 @@ export default function ResaleCreatePage() {
                   {errorMessage}
                 </p>
               ) : null}
+
+              <div className="page-actions">
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={!canSubmit || isSubmitting}
+                  onClick={() => void handleSubmit()}
+                >
+                  {submitButtonLabel}
+                </Button>
+              </div>
             </ProductDetailLayout>
           )}
         </section>

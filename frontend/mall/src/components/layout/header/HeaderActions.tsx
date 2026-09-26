@@ -26,10 +26,6 @@ function formatBadgeLabel(count: number): string {
   return count > 99 ? "99+" : String(count);
 }
 
-function isResalePagePath(pathname: string): boolean {
-  return pathname === "/resale" || pathname === "/resale/";
-}
-
 function isResaleDetailPagePath(pathname: string): boolean {
   return /^\/resales\/[^/]+\/?$/.test(pathname);
 }
@@ -81,17 +77,13 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
   const notificationUnreadBadgeLabel = formatBadgeLabel(
-    safeNotificationUnreadCount
+    safeNotificationUnreadCount,
   );
   const chatBadgeLabel = formatBadgeLabel(safeChatBadgeCount);
 
-  const shouldShowResaleButton = isResalePagePath(location.pathname);
   const shouldShowResaleDetailActions = isResaleDetailPagePath(
-    location.pathname
+    location.pathname,
   );
-
-  const resaleButtonLabel = actionButtonLabel || "出品";
-  const resaleButtonDisabled = !onActionButtonClick || actionButtonDisabled;
 
   const primaryActionClassName = [
     "header__action-button",
@@ -120,21 +112,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
 
   return (
     <div className="header__right">
-      {shouldShowResaleButton ? (
-        <Button
-          variant="primary"
-          size="sm"
-          className="header__resale-button"
-          aria-label={resaleButtonLabel}
-          title={resaleButtonLabel}
-          onClick={onActionButtonClick}
-          disabled={resaleButtonDisabled}
-        >
-          {resaleButtonLabel}
-        </Button>
-      ) : null}
-
-      {hasActionButton && !shouldShowResaleButton ? (
+      {hasActionButton ? (
         <Button
           variant="secondary"
           size="sm"
