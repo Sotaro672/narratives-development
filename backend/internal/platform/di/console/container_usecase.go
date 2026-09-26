@@ -71,6 +71,7 @@ type usecases struct {
 func buildSettlementUsecase(
 	r *repos,
 	salesReceivableUC *uc.SalesReceivableUsecase,
+	brandFeeSettlementUC *uc.BrandFeeSettlementUsecase,
 	dependencies *shared.SettlementDependencies,
 ) (*uc.SettlementUsecase, error) {
 	if r == nil || r.settlementRepo == nil {
@@ -78,6 +79,9 @@ func buildSettlementUsecase(
 	}
 	if salesReceivableUC == nil {
 		return nil, errors.New("di.console: sales receivable usecase is nil")
+	}
+	if brandFeeSettlementUC == nil {
+		return nil, errors.New("di.console: brand fee settlement usecase is nil")
 	}
 	if dependencies == nil {
 		return nil, errors.New("di.console: settlement dependencies are nil")
@@ -90,10 +94,11 @@ func buildSettlementUsecase(
 	}
 
 	settlementUC := uc.NewSettlementUsecase(uc.NewSettlementUsecaseInput{
-		Repository:             r.settlementRepo,
-		Calculator:             dependencies.SettlementCalculator,
-		SalesReceivableUsecase: salesReceivableUC,
-		StripeTransferGateway:  dependencies.StripeTransferGateway,
+		Repository:                r.settlementRepo,
+		Calculator:                dependencies.SettlementCalculator,
+		SalesReceivableUsecase:    salesReceivableUC,
+		BrandFeeSettlementUsecase: brandFeeSettlementUC,
+		StripeTransferGateway:     dependencies.StripeTransferGateway,
 	})
 	if settlementUC == nil {
 		return nil, errors.New("di.console: settlement usecase is nil")
@@ -349,12 +354,25 @@ func buildUsecases(
 		return nil, resources.CloseWithError(errors.New("di.console: sales receivable usecase is nil"))
 	}
 
+	if r.brandFeeSettlementRepo == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: brand fee settlement repository is nil"))
+	}
+	brandFeeSettlementUC := uc.NewBrandFeeSettlementUsecase(r.brandFeeSettlementRepo)
+	if brandFeeSettlementUC == nil {
+		return nil, resources.CloseWithError(errors.New("di.console: brand fee settlement usecase is nil"))
+	}
+
 	settlementDependencies, err := shared.BuildSettlementDependencies(ctx, c.infra)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
 
-	settlementUC, err := buildSettlementUsecase(r, salesReceivableUC, settlementDependencies)
+	settlementUC, err := buildSettlementUsecase(
+		r,
+		salesReceivableUC,
+		brandFeeSettlementUC,
+		settlementDependencies,
+	)
 	if err != nil {
 		return nil, resources.CloseWithError(err)
 	}
