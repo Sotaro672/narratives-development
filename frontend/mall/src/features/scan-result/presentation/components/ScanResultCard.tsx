@@ -5,9 +5,9 @@ import SectionCard from "../../../../components/ui/SectionCard";
 import TextState from "../../../../components/ui/TextState";
 
 import type { ScanResultPageViewModel } from "../../application/scanPageViewModelFactory";
-import type { ScanResultPageState } from "../../../shared/types/scanResult";
 import ProductReviewSection from "../../../shared/presentation/components/ProductReviewSection";
 import TokenSummaryCard from "../../../shared/presentation/components/TokenSummaryCard";
+import type { ScanResultPageState } from "../../../shared/types/scanResult";
 
 import ScanResultProductSection from "./ScanResultProductSection";
 
@@ -19,7 +19,8 @@ type ScanResultCardProps = {
   onAvatarClick: (avatarId: string) => void;
   onOpenTokenContents: (assetId: string) => void | Promise<void>;
   onOpenReviewModal: () => void;
-  hideReviewAction?: boolean;
+  canOpenInquiryPage: boolean;
+  onOpenInquiryPage: () => void;
 };
 
 export default function ScanResultCard(props: ScanResultCardProps) {
@@ -31,7 +32,8 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     onAvatarClick,
     onOpenTokenContents,
     onOpenReviewModal,
-    hideReviewAction = false,
+    canOpenInquiryPage,
+    onOpenInquiryPage,
   } = props;
 
   if (state.loading) {
@@ -64,7 +66,10 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const { product, token } = viewModel;
   const owned = state.ownedByWallet;
   const ownedError = state.ownedByWalletError ?? "";
-  const productBlueprintId = state.previewState?.raw.productBlueprintId?.trim() ?? "";
+  const productBlueprintId =
+    state.previewState?.raw.productBlueprintId?.trim() ?? "";
+  const showReviewActions =
+    state.authAvailable === true || canOpenInquiryPage;
 
   return (
     <div className="scan-result-desktop-grid">
@@ -109,15 +114,23 @@ export default function ScanResultCard(props: ScanResultCardProps) {
       </div>
 
       <aside className="scan-result-desktop-side">
-        {state.authAvailable === true && !hideReviewAction ? (
-          <div className="scan-result-review-action">
-            <Button
-              type="button"
-              disabled={state.postingReview}
-              onClick={onOpenReviewModal}
-            >
-              レビューを書く
-            </Button>
+        {showReviewActions ? (
+          <div className="scan-result-review-actions">
+            {state.authAvailable === true ? (
+              <Button
+                type="button"
+                disabled={state.postingReview}
+                onClick={onOpenReviewModal}
+              >
+                レビューを書く
+              </Button>
+            ) : null}
+
+            {canOpenInquiryPage ? (
+              <Button type="button" onClick={onOpenInquiryPage}>
+                問い合わせ
+              </Button>
+            ) : null}
           </div>
         ) : null}
 

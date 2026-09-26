@@ -3,7 +3,6 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
@@ -16,7 +15,6 @@ import "../styles/scan-result-page.css";
 
 export default function ScanResultPage() {
   const navigate = useNavigate();
-  const isMobilePortrait = useMobilePortrait();
 
   const [reviewBody, setReviewBody] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
@@ -102,12 +100,6 @@ export default function ScanResultPage() {
     state.transferResult?.matchedItemType === "resale" ||
     hasMultipleTransfers;
 
-  const canPostReview =
-    state.ownedByWallet === true &&
-    !state.loading &&
-    !state.postingReview &&
-    Boolean(reviewBody.trim());
-
   const canOpenInquiryPage =
     isLoggedIn &&
     !state.loading &&
@@ -115,56 +107,17 @@ export default function ScanResultPage() {
     Boolean(state.productId.trim()) &&
     !isResalePurchase;
 
-  const scanResultSectionClassName = [
-    "product-detail-page-layout",
-    isLoggedIn && isMobilePortrait
-      ? state.ownedByWallet === true
-        ? "scan-result-page-section--with-review-footer"
-        : "scan-result-page-section--with-footer"
-      : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
   return (
     <>
       <Layout
         title="AMOL"
         mode={isLoggedIn ? "mypage" : "landing"}
         showHeader
-        showFooter={isLoggedIn && isMobilePortrait}
         hideHamburgerMenu={false}
         hideSettingsButton={!isLoggedIn}
         hideAnnouncementButton={!isLoggedIn}
-        secondaryActionButtonLabel={
-          canOpenInquiryPage ? "問い合わせ" : undefined
-        }
-        onSecondaryActionButtonClick={
-          canOpenInquiryPage ? handleOpenInquiryPage : undefined
-        }
-        secondaryActionButtonDisabled={!canOpenInquiryPage}
-        footerProps={
-          isLoggedIn &&
-          isMobilePortrait &&
-          state.ownedByWallet === true
-            ? {
-                variant: "reviewAction",
-                value: reviewBody,
-                rating: reviewRating,
-                placeholder: "口コミを入力",
-                buttonLabel: state.postingReview ? "投稿中" : "投稿",
-                disabled: !canPostReview,
-                posting: state.postingReview,
-                onChange: setReviewBody,
-                onRatingChange: setReviewRating,
-                onSubmit: handleSubmitReview,
-              }
-            : {
-                variant: "default",
-              }
-        }
       >
-        <section className={scanResultSectionClassName}>
+        <section className="product-detail-page-layout">
           <ScanResultCard
             state={state}
             viewModel={viewModel}
@@ -173,7 +126,8 @@ export default function ScanResultPage() {
             onAvatarClick={handleAvatarClick}
             onOpenTokenContents={openTokenContentsByAssetId}
             onOpenReviewModal={handleOpenReviewModal}
-            hideReviewAction={isMobilePortrait}
+            canOpenInquiryPage={canOpenInquiryPage}
+            onOpenInquiryPage={handleOpenInquiryPage}
           />
         </section>
 

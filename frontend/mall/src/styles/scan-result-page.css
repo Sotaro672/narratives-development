@@ -120,18 +120,12 @@
   gap: 10px;
 }
 
-.scan-result-review-action {
+.scan-result-review-actions {
   display: flex;
-  justify-content: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 20px;
-}
-
-.scan-result-page-section--with-footer {
-  padding-bottom: var(--footer-nav-height, 76px);
-}
-
-.scan-result-page-section--with-review-footer {
-  padding-bottom: var(--footer-review-action-height, 92px);
 }
 
 @media (min-width: 1024px) {
