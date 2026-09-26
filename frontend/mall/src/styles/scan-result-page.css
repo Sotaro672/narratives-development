@@ -1,5 +1,15 @@
 /* frontend/mall/src/styles/scan-result-page.css */
 
+.scan-result-page-layout {
+  padding-top: 24px;
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.scan-result-token-card {
+  margin-top: 20px;
+  margin-bottom: 20px;
+}
+
 .scan-result-desktop-grid {
   display: grid;
   gap: 16px;

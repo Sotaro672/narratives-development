@@ -1,5 +1,3 @@
-// frontend/mall/src/pages/ScanResultPage.tsx
-
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
@@ -117,7 +115,7 @@ export default function ScanResultPage() {
         hideSettingsButton={!isLoggedIn}
         hideAnnouncementButton={!isLoggedIn}
       >
-        <section className="product-detail-page-layout">
+        <section className="product-detail-page-layout scan-result-page-layout">
           <ScanResultCard
             state={state}
             viewModel={viewModel}
