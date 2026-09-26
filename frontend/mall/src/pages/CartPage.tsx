@@ -55,19 +55,6 @@ export default function CartPage() {
       showFooter={isMobilePortrait}
       hideHamburgerMenu
       hideSettingsButton
-      actionButtonLabel={isMobilePortrait ? undefined : "購入する"}
-      onActionButtonClick={isMobilePortrait ? undefined : handlePurchase}
-      actionButtonDisabled={isPurchaseDisabled}
-      footerProps={
-        isMobilePortrait
-          ? {
-              variant: "action",
-              buttonLabel: "購入する",
-              disabled: isPurchaseDisabled,
-              onButtonClick: handlePurchase,
-            }
-          : undefined
-      }
     >
       <section className="content-page-section cart-page-section-root">
         {loading ? <CartPageLoading /> : null}
@@ -88,8 +75,10 @@ export default function CartPage() {
             items={items}
             totalAmount={totalAmount}
             removingItemKey={removingItemKey}
+            isPurchaseDisabled={isPurchaseDisabled}
             onRemoveItem={removeItem}
             onOpenItem={handleOpenItem}
+            onPurchase={handlePurchase}
           />
         ) : null}
       </section>
