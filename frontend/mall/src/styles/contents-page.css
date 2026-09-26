@@ -84,35 +84,6 @@
   min-width: 0;
 }
 
-.token-comment-section__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.token-comment-section__title-wrap {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.token-comment-section__icon {
-  flex: 0 0 auto;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.token-comment-section__title {
-  margin: 0;
-  color: #111827;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 1.4;
-}
-
 .token-comment-form {
   display: flex;
   align-items: center;
@@ -148,11 +119,6 @@
   min-width: 0;
 }
 
-.token-comment-item__body.ui-card {
-  background: #f9fafb;
-  box-shadow: none;
-}
-
 .token-comment-item__header {
   display: flex;
   min-width: 0;
@@ -178,8 +144,7 @@
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.18s ease, box-shadow 0.18s ease,
-    transform 0.18s ease;
+  transition: background-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .token-comment-author--button:hover {
@@ -288,14 +253,6 @@
 
   .token-review-aggregate__spacer {
     display: none;
-  }
-
-  .token-comment-section__header {
-    align-items: flex-start;
-  }
-
-  .token-comment-section__title {
-    font-size: 15px;
   }
 
   .token-comment-item__header {
