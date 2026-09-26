@@ -16,6 +16,7 @@ import {
   type TradeDispatchBoxSize,
   type TradeDispatchCarrier,
 } from "../features/trade/infrastructure/tradeApi";
+import { createTradeDispatchQrPayload } from "../features/trade/presentation/util/tradeDispatchQr";
 
 import "../styles/page-layout.css";
 import "../styles/dispatch-page.css";
@@ -70,21 +71,6 @@ function getErrorMessage(caught: unknown, fallbackMessage: string): string {
   }
 
   return fallbackMessage;
-}
-
-function createPudoMockQrPayload(params: {
-  tradeId: string;
-  carrier: TradeDispatchCarrier;
-  boxSize: TradeDispatchBoxSize;
-}): string {
-  return JSON.stringify({
-    type: "amol-pudo-mock",
-    version: 1,
-    tradeId: params.tradeId,
-    carrier: params.carrier,
-    boxSize: params.boxSize,
-    issuedAt: new Date().toISOString(),
-  });
 }
 
 export default function DispatchPage() {
@@ -146,11 +132,7 @@ export default function DispatchPage() {
       });
 
       setPudoQrPayload(
-        createPudoMockQrPayload({
-          tradeId: normalizedTradeId,
-          carrier,
-          boxSize,
-        }),
+        createTradeDispatchQrPayload(normalizedTradeId),
       );
     } catch (caught) {
       setSubmissionError(

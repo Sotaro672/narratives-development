@@ -716,6 +716,7 @@ func buildMallUsecases(
 		usecase.NewResaleTradeDispatchUsecaseInput{
 			TradeRepository:            r.tradeRepo,
 			OrderRepository:            r.orderRepo,
+			MessageRepository:          r.tradeMessageRepo,
 			PaymentFlowUsecase:         paymentFlowUC,
 			PaymentUsecase:             paymentUC,
 			SettlementUsecase:          settlementUC,

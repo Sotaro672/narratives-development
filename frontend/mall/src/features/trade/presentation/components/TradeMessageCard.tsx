@@ -1,5 +1,6 @@
 // frontend/mall/src/features/trade/presentation/components/TradeMessageCard.tsx
 
+import TextLink from "../../../../components/ui/textLink";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import type {
   TradeDetail,
@@ -11,6 +12,7 @@ type TradeMessageCardProps = {
   message: TradeMessage;
   trade: TradeDetail;
   onReport: (message: TradeMessage) => void;
+  onOpenDispatchQr?: () => void;
 };
 
 type TradeSenderDisplay = {
@@ -18,7 +20,15 @@ type TradeSenderDisplay = {
   icon: string;
 };
 
-function getReturnSystemMessageActorSide(
+function isDispatchSystemMessage(message: TradeMessage): boolean {
+  return (
+    message.senderSide === "system" &&
+    message.senderType === "system" &&
+    message.id.trim() === "dispatch"
+  );
+}
+
+function getSystemMessageActorSide(
   message: TradeMessage,
 ): "buyer" | "seller" | null {
   if (
@@ -29,6 +39,10 @@ function getReturnSystemMessageActorSide(
   }
 
   const messageId = message.id.trim();
+
+  if (messageId === "dispatch") {
+    return "seller";
+  }
 
   if (messageId === "return-consultation") {
     return "buyer";
@@ -59,7 +73,7 @@ function getDisplaySenderSide(
     return message.senderSide;
   }
 
-  return getReturnSystemMessageActorSide(message) ?? "system";
+  return getSystemMessageActorSide(message) ?? "system";
 }
 
 function getSenderDisplay(
@@ -106,6 +120,7 @@ export default function TradeMessageCard({
   message,
   trade,
   onReport,
+  onOpenDispatchQr,
 }: TradeMessageCardProps) {
   const displaySenderSide = getDisplaySenderSide(message);
   const isSystem = displaySenderSide === "system";
@@ -118,6 +133,7 @@ export default function TradeMessageCard({
     message,
     trade,
   );
+  const dispatchSystemMessage = isDispatchSystemMessage(message);
 
   const canReport =
     message.senderType === "avatar" &&
@@ -145,10 +161,23 @@ export default function TradeMessageCard({
         ) : undefined
       }
       afterContent={
-        returnConsultationDetail ? (
-          <p className="chat-detail-page__content">
-            {returnConsultationDetail}
-          </p>
+        returnConsultationDetail || (dispatchSystemMessage && onOpenDispatchQr) ? (
+          <>
+            {returnConsultationDetail ? (
+              <p className="chat-detail-page__content">
+                {returnConsultationDetail}
+              </p>
+            ) : null}
+
+            {dispatchSystemMessage && onOpenDispatchQr ? (
+              <TextLink
+                className="trade-chat-detail__dispatch-qr-link"
+                onClick={onOpenDispatchQr}
+              >
+                PUDO QRを表示
+              </TextLink>
+            ) : null}
+          </>
         ) : undefined
       }
     />

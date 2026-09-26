@@ -1,10 +1,12 @@
 // frontend/mall/src/features/trade/presentation/components/TradeChatDetail.tsx
 
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
+import Preview from "../../../../components/ui/Preview";
 import StatePanel from "../../../../components/ui/StatePanel";
 import ReportModal from "../../../report/components/ReportModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
@@ -22,6 +24,7 @@ import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
 import useTradeReturnShipment from "../hooks/useTradeReturnShipment";
 import useTradeThread from "../hooks/useTradeThread";
 import { getTradeOrderAction } from "../util/tradeChatDetail";
+import { createTradeDispatchQrPayload } from "../util/tradeDispatchQr";
 
 import TradeMessageCard from "./TradeMessageCard";
 import TradeOrderActionPrompt from "./TradeOrderActionPrompt";
@@ -42,6 +45,12 @@ export default function TradeChatDetail({
   const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
   const thread = useTradeThread(tradeId);
+  const [dispatchQrPreviewOpen, setDispatchQrPreviewOpen] = useState(false);
+
+  const dispatchQrPayload = useMemo(
+    () => createTradeDispatchQrPayload(thread.tradeId),
+    [thread.tradeId],
+  );
 
   const cancelFlow = useTradeCancel({
     tradeId: thread.tradeId,
@@ -292,7 +301,8 @@ export default function TradeChatDetail({
           !returnShipmentFlow.open &&
           !returnReceiptFlow.open &&
           !returnDisputeFlow.open &&
-          !report.isOpen
+          !report.isOpen &&
+          !dispatchQrPreviewOpen
         }
         mode="mypage"
         mainClassName="chat-detail-page-layout chat-detail-page-layout--inquiry"
@@ -362,6 +372,9 @@ export default function TradeChatDetail({
                         message={message}
                         trade={thread.trade!}
                         onReport={report.openMessageReport}
+                        onOpenDispatchQr={() => {
+                          setDispatchQrPreviewOpen(true);
+                        }}
                       />
                     ))}
 
@@ -508,6 +521,19 @@ export default function TradeChatDetail({
         onCancel={returnReceiptFlow.closeModal}
         onSubmit={() => {
           void returnReceiptFlow.submit();
+        }}
+      />
+
+      <Preview
+        open={
+          dispatchQrPreviewOpen &&
+          Boolean(dispatchQrPayload)
+        }
+        type="qr"
+        qrValue={dispatchQrPayload}
+        alt="PUDO発送用QRコード"
+        onClose={() => {
+          setDispatchQrPreviewOpen(false);
         }}
       />
 

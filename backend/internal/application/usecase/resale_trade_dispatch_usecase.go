@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	applicationport "narratives/internal/application/port"
 	brandfeesettlementdom "narratives/internal/domain/brandFeeSettlement"
@@ -14,12 +15,17 @@ import (
 	transportationdom "narratives/internal/domain/transportation"
 )
 
+const resaleTradeDispatchSystemMessageID = "dispatch"
+
 var (
 	ErrResaleTradeDispatchTradeRepositoryMissing = errors.New(
 		"resale trade dispatch: trade repository is not configured",
 	)
 	ErrResaleTradeDispatchOrderRepositoryMissing = errors.New(
 		"resale trade dispatch: order repository is not configured",
+	)
+	ErrResaleTradeDispatchMessageRepositoryMissing = errors.New(
+		"resale trade dispatch: message repository is not configured",
 	)
 	ErrResaleTradeDispatchPaymentFlowUsecaseMissing = errors.New(
 		"resale trade dispatch: payment flow usecase is not configured",
@@ -50,6 +56,7 @@ var (
 type ResaleTradeDispatchUsecase struct {
 	tradeRepo     tradedom.Repository
 	orderRepo     orderdom.Repository
+	messageRepo   tradedom.MessageRepository
 	paymentFlowUC *PaymentFlowUsecase
 	paymentUC     *PaymentUsecase
 	settlementUC  *SettlementUsecase
@@ -63,8 +70,9 @@ type ResaleTradeDispatchUsecase struct {
 }
 
 type NewResaleTradeDispatchUsecaseInput struct {
-	TradeRepository tradedom.Repository
-	OrderRepository orderdom.Repository
+	TradeRepository   tradedom.Repository
+	OrderRepository   orderdom.Repository
+	MessageRepository tradedom.MessageRepository
 
 	PaymentFlowUsecase *PaymentFlowUsecase
 	PaymentUsecase     *PaymentUsecase
@@ -99,6 +107,7 @@ func NewResaleTradeDispatchUsecase(
 	return &ResaleTradeDispatchUsecase{
 		tradeRepo:                  in.TradeRepository,
 		orderRepo:                  in.OrderRepository,
+		messageRepo:                in.MessageRepository,
 		paymentFlowUC:              in.PaymentFlowUsecase,
 		paymentUC:                  in.PaymentUsecase,
 		settlementUC:               in.SettlementUsecase,
@@ -121,6 +130,10 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 	if u.orderRepo == nil {
 		return DispatchResaleTradeResult{},
 			ErrResaleTradeDispatchOrderRepositoryMissing
+	}
+	if u.messageRepo == nil {
+		return DispatchResaleTradeResult{},
+			ErrResaleTradeDispatchMessageRepositoryMissing
 	}
 	if u.paymentFlowUC == nil {
 		return DispatchResaleTradeResult{},
@@ -226,6 +239,10 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 			order,
 			item,
 		); err != nil {
+			return DispatchResaleTradeResult{}, err
+		}
+
+		if err := u.ensureDispatchSystemMessage(ctx, trade.ID); err != nil {
 			return DispatchResaleTradeResult{}, err
 		}
 
@@ -370,6 +387,10 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 			return DispatchResaleTradeResult{}, err
 		}
 
+		if err := u.ensureDispatchSystemMessage(ctx, trade.ID); err != nil {
+			return DispatchResaleTradeResult{}, err
+		}
+
 		return DispatchResaleTradeResult{
 			Trade:   trade,
 			Order:   paidOrder,
@@ -427,12 +448,48 @@ func (u *ResaleTradeDispatchUsecase) Dispatch(
 		return DispatchResaleTradeResult{}, err
 	}
 
+	if err := u.ensureDispatchSystemMessage(ctx, trade.ID); err != nil {
+		return DispatchResaleTradeResult{}, err
+	}
+
 	return DispatchResaleTradeResult{
 		Trade:   trade,
 		Order:   updatedOrder,
 		Item:    updatedItem,
 		Changed: true,
 	}, nil
+}
+
+func (u *ResaleTradeDispatchUsecase) ensureDispatchSystemMessage(
+	ctx context.Context,
+	tradeID string,
+) error {
+	message, err := tradedom.NewSystemMessageForCreate(
+		resaleTradeDispatchSystemMessageID,
+		tradeID,
+		"出品者が発送しました。",
+	)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	message.CreatedAt = now
+
+	if err := message.MarkReadBySeller(now); err != nil {
+		return err
+	}
+
+	_, err = u.messageRepo.Create(ctx, message)
+	if err != nil {
+		if errors.Is(err, tradedom.ErrMessageAlreadyExists) {
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 // notifyBuyerDispatched sends the buyer a dispatch notification after the
