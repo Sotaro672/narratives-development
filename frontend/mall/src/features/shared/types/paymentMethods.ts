@@ -22,7 +22,6 @@ type DataResponse<T> = {
 };
 
 export type PaymentMethodListResponse = DataResponse<CardPaymentMethod[]>;
-export type PaymentMethodDefaultResponse = DataResponse<CardPaymentMethod>;
 
 export type SetupIntentData = {
   clientSecret: string;

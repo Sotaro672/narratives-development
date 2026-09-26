@@ -83,11 +83,6 @@ func (h *PaymentMethodHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 		h.list(w, r)
 		return
 
-	// GET /mall/me/payment-methods/default
-	case r.Method == http.MethodGet && path == "/mall/me/payment-methods/default":
-		h.getDefault(w, r)
-		return
-
 	// POST /mall/me/payment-methods/setup-intent
 	case r.Method == http.MethodPost && path == "/mall/me/payment-methods/setup-intent":
 		h.postSetupIntent(w, r)
@@ -196,26 +191,6 @@ func (h *PaymentMethodHandler) list(w http.ResponseWriter, r *http.Request) {
 
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"data": items,
-	})
-}
-
-// GET /mall/me/payment-methods/default
-func (h *PaymentMethodHandler) getDefault(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	uid, ok := requireUID(w, r)
-	if !ok {
-		return
-	}
-
-	item, err := h.uc.GetDefaultByUser(ctx, uid)
-	if err != nil {
-		writePaymentMethodErr(w, err)
-		return
-	}
-
-	_ = json.NewEncoder(w).Encode(map[string]any{
-		"data": item,
 	})
 }
 
@@ -571,6 +546,7 @@ func decodePaymentMethodJSON(
 		if allowEmpty {
 			return nil
 		}
+
 		return io.EOF
 	}
 
@@ -588,6 +564,7 @@ func decodePaymentMethodJSON(
 		if allowEmpty && errors.Is(err, io.EOF) {
 			return nil
 		}
+
 		return err
 	}
 

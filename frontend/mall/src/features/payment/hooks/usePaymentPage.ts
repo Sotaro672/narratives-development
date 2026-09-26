@@ -341,9 +341,7 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
       return null;
     }
 
-    return (
-      paymentMethods.find((method) => method.id === selectedPaymentMethodId) ?? null
-    );
+    return paymentMethods.find((method) => method.id === selectedPaymentMethodId) ?? null;
   }, [paymentMethods, selectedPaymentMethodId]);
 
   const backTo =
@@ -450,7 +448,6 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
 
       const primaryPaymentMethod = selectPrimaryPaymentMethod(
         paymentMethodResult.methods,
-        paymentMethodResult.defaultMethod,
       );
 
       const draftPaymentMethodId =

@@ -1,22 +1,16 @@
 // frontend/amol/src/features/payment-method/api/paymentMethodApi.ts
 
-import {
-  HttpError,
-  requestJson,
-} from "../../../lib/http";
+import { requestJson } from "../../../lib/http";
 
 import type {
   CardPaymentMethod,
   ConfirmedCardPayload,
-  PaymentMethodDefaultResponse,
   PaymentMethodListResponse,
   SavePaymentMethodResponse,
   SetupIntentResponse,
   StripeConfigResponse,
 } from "../../shared/types/paymentMethods";
-import {
-  selectPrimaryPaymentMethod,
-} from "../utils/paymentMethodUtils";
+import { selectPrimaryPaymentMethod } from "../utils/paymentMethodUtils";
 
 export async function fetchStripeConfig(
   backendUrl: string,
@@ -45,8 +39,8 @@ export async function fetchCurrentPaymentMethod(
   void backendUrl;
   void idToken;
 
-  const [listBody, defaultBody] = await Promise.all([
-    requestJson<PaymentMethodListResponse>(
+  const listBody =
+    await requestJson<PaymentMethodListResponse>(
       "/mall/me/payment-methods",
       {
         method: "GET",
@@ -57,34 +51,9 @@ export async function fetchCurrentPaymentMethod(
             "支払方法の取得に失敗しました。",
         },
       },
-    ),
-    requestJson<PaymentMethodDefaultResponse>(
-      "/mall/me/payment-methods/default",
-      {
-        method: "GET",
-        auth: "required",
-        credentials: "include",
-        messages: {
-          requestErrorMessage:
-            "既定の支払方法の取得に失敗しました。",
-        },
-      },
-    ).catch((error: unknown) => {
-      if (
-        error instanceof HttpError &&
-        error.status === 404
-      ) {
-        return null;
-      }
+    );
 
-      throw error;
-    }),
-  ]);
-
-  return selectPrimaryPaymentMethod(
-    listBody,
-    defaultBody,
-  );
+  return selectPrimaryPaymentMethod(listBody);
 }
 
 export async function createSetupIntent(
@@ -129,22 +98,14 @@ export async function savePaymentMethod(
         auth: "required",
         credentials: "include",
         json: {
-          stripeCustomerId:
-            payload.stripeCustomerId,
-          stripePaymentMethodId:
-            payload.stripePaymentMethodId,
-          brand:
-            payload.brand,
-          last4:
-            payload.last4,
-          expMonth:
-            payload.expMonth,
-          expYear:
-            payload.expYear,
-          cardholderName:
-            payload.cardholderName,
-          isDefault:
-            true,
+          stripeCustomerId: payload.stripeCustomerId,
+          stripePaymentMethodId: payload.stripePaymentMethodId,
+          brand: payload.brand,
+          last4: payload.last4,
+          expMonth: payload.expMonth,
+          expYear: payload.expYear,
+          cardholderName: payload.cardholderName,
+          isDefault: true,
         },
         fallbackValue: null,
         messages: {

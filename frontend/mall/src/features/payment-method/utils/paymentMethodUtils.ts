@@ -2,7 +2,6 @@
 
 import type {
   CardPaymentMethod,
-  PaymentMethodDefaultResponse,
   PaymentMethodListResponse,
   SetupIntentResponse,
   StripeConfigResponse,
@@ -69,12 +68,7 @@ export function extractSetupIntentStripeCustomerId(
 
 export function selectPrimaryPaymentMethod(
   listResponse: PaymentMethodListResponse | null,
-  defaultResponse: PaymentMethodDefaultResponse | null,
 ): CardPaymentMethod | null {
-  if (defaultResponse?.data) {
-    return defaultResponse.data;
-  }
-
   const items = Array.isArray(listResponse?.data) ? listResponse.data : [];
   return items.find((item) => item.isDefault) ?? items[0] ?? null;
 }
