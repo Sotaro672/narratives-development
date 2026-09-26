@@ -49,8 +49,7 @@ export default function CartPage() {
 
   return (
     <Layout
-      title="カート"
-      titleClickable={false}
+      title="AMOL"
       mode="mypage"
       showFooter={isMobilePortrait}
       hideHamburgerMenu
