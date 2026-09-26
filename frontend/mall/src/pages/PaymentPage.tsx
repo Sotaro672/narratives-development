@@ -2,8 +2,8 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
-import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import Button from "../components/ui/Button";
 import TextState from "../components/ui/TextState";
 import { PaymentErrorModal } from "../features/payment/components/PaymentErrorModal";
 import { PaymentItemsCard } from "../features/payment/components/PaymentItemsCard";
@@ -16,7 +16,6 @@ import "../styles/payment-page.css";
 export default function PaymentPage() {
   const navigate = useNavigate();
   const { listId } = useParams<{ listId: string }>();
-  const isMobilePortrait = useMobilePortrait();
 
   const {
     amount,
@@ -47,8 +46,7 @@ export default function PaymentPage() {
     return (
       <>
         <Layout
-          title="お支払い"
-          titleClickable={false}
+          title="AMOL"
           mode="mypage"
           showFooter={false}
           hideHamburgerMenu
@@ -73,28 +71,12 @@ export default function PaymentPage() {
   return (
     <>
       <Layout
-        title="お支払い"
-        titleClickable={false}
+        title="AMOL"
         mode="mypage"
-        showFooter={isMobilePortrait}
+        showFooter={false}
         hideHamburgerMenu
         hideSettingsButton
         mainClassName="payment-page"
-        actionButtonLabel={isMobilePortrait ? undefined : paymentButtonLabel}
-        onActionButtonClick={
-          isMobilePortrait ? undefined : handleSubmitPayment
-        }
-        actionButtonDisabled={isPaymentDisabled}
-        footerProps={
-          isMobilePortrait
-            ? {
-                variant: "action",
-                buttonLabel: paymentButtonLabel,
-                disabled: isPaymentDisabled,
-                onButtonClick: handleSubmitPayment,
-              }
-            : undefined
-        }
       >
         <section className="payment-page__section">
           <div className="payment-page__content">
@@ -122,6 +104,16 @@ export default function PaymentPage() {
                 onSelectPaymentMethod={setSelectedPaymentMethodId}
                 onGoToPaymentMethod={handleGoToPaymentMethod}
               />
+
+              <Button
+                variant="primary"
+                size="lg"
+                fullWidth
+                disabled={isPaymentDisabled}
+                onClick={() => void handleSubmitPayment()}
+              >
+                {paymentButtonLabel}
+              </Button>
             </div>
           </div>
         </section>
