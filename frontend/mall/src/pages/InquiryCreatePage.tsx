@@ -125,8 +125,8 @@ export default function InquiryCreatePage() {
             <MediaUploader
               label="添付画像"
               hint="商品の状態が分かる画像を添付できます。"
-              emptyText="画像が登録されていません。"
-              selectButtonLabel="画像を選択"
+              emptyText="クリックして写真を追加"
+              selectButtonLabel="写真を追加"
               selectingButtonLabel="処理中..."
               accept="image/*"
               multiple
@@ -134,6 +134,7 @@ export default function InquiryCreatePage() {
               currentIndex={currentMediaIndex}
               disabled={formDisabled}
               selecting={submitting}
+              selectFromEmptyArea
               inputRef={fileInputRef}
               carouselRef={carouselRef}
               onFilesSelected={handleFilesSelected}

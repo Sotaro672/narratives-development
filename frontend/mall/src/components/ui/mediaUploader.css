@@ -40,12 +40,37 @@
 }
 
 .media-uploader__empty {
+  width: 100%;
   border: 1px dashed #ddd;
   border-radius: 12px;
   padding: 20px;
+  box-sizing: border-box;
   text-align: center;
   color: #666;
   background: #fafafa;
+}
+
+.media-uploader__empty--selectable {
+  margin: 0;
+  font: inherit;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.media-uploader__empty--selectable:hover:not(:disabled) {
+  border-color: #aaa;
+  background: #f5f5f5;
+}
+
+.media-uploader__empty--selectable:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.media-uploader__empty--selectable:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
 .media-uploader__carousel {

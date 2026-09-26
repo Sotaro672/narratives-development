@@ -1,15 +1,9 @@
-// frontend/amol/src/features/resale/presentation/components/ResaleConditionMediaField.tsx
+// frontend/mall/src/features/resale/presentation/components/ResaleConditionMediaField.tsx
 
-import type {
-  ChangeEvent,
-  RefObject,
-} from "react";
+import type { ChangeEvent, RefObject } from "react";
 
 import MediaUploader from "../../../../components/ui/MediaUploader";
-
-import type {
-  MediaUploaderItem,
-} from "../../../../components/ui/MediaUploader";
+import type { MediaUploaderItem } from "../../../../components/ui/MediaUploader";
 
 export type ResaleConditionMediaFieldProps = {
   items: MediaUploaderItem[];
@@ -18,9 +12,7 @@ export type ResaleConditionMediaFieldProps = {
   carouselRef: RefObject<HTMLDivElement>;
   disabled?: boolean;
   selecting?: boolean;
-  onFilesSelected: (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => void;
+  onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void;
   onRemoveItem: (id: string) => void;
   onCarouselScroll: () => void;
   onMoveToSlide: (index: number) => void;
@@ -42,7 +34,7 @@ export default function ResaleConditionMediaField({
     <MediaUploader
       label="商品状態の写真"
       hint="傷・汚れ・タグ・付属品など、購入者が状態を確認できる写真を追加してください。必須項目です。"
-      emptyText="商品状態の写真が登録されていません。"
+      emptyText="クリックして商品状態の写真を追加"
       selectButtonLabel="写真を追加"
       selectingButtonLabel="追加中..."
       accept="image/*"
@@ -53,6 +45,7 @@ export default function ResaleConditionMediaField({
       carouselRef={carouselRef}
       disabled={disabled}
       selecting={selecting}
+      selectFromEmptyArea
       onFilesSelected={onFilesSelected}
       onRemoveItem={onRemoveItem}
       onCarouselScroll={onCarouselScroll}

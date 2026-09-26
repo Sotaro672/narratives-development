@@ -1,4 +1,4 @@
-// frontend/src/components/ui/MediaUploader.tsx
+// frontend/mall/src/components/ui/MediaUploader.tsx
 
 import { ChangeEvent, RefObject } from "react";
 import Button from "./Button";
@@ -25,6 +25,7 @@ type MediaUploaderProps = {
   currentIndex: number;
   disabled?: boolean;
   selecting?: boolean;
+  selectFromEmptyArea?: boolean;
   inputRef: RefObject<HTMLInputElement>;
   carouselRef?: RefObject<HTMLDivElement>;
   onFilesSelected: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -46,6 +47,7 @@ export default function MediaUploader({
   currentIndex,
   disabled = false,
   selecting = false,
+  selectFromEmptyArea = false,
   inputRef,
   carouselRef,
   onFilesSelected,
@@ -54,6 +56,17 @@ export default function MediaUploader({
   onMoveToSlide,
   renderEmbedUrl,
 }: MediaUploaderProps) {
+  const hasItems = items.length > 0;
+  const showSelectButton = !selectFromEmptyArea || hasItems;
+
+  const handleOpenFilePicker = () => {
+    if (disabled) {
+      return;
+    }
+
+    inputRef.current?.click();
+  };
+
   return (
     <div className="media-uploader">
       <input
@@ -73,19 +86,33 @@ export default function MediaUploader({
             {hint ? <p className="media-uploader__hint">{hint}</p> : null}
           </div>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={disabled}
-            onClick={() => inputRef.current?.click()}
-          >
-            {selecting ? selectingButtonLabel : selectButtonLabel}
-          </Button>
+          {showSelectButton ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={disabled}
+              onClick={handleOpenFilePicker}
+            >
+              {selecting ? selectingButtonLabel : selectButtonLabel}
+            </Button>
+          ) : null}
         </div>
 
-        {items.length === 0 ? (
-          <div className="media-uploader__empty">{emptyText}</div>
+        {!hasItems ? (
+          selectFromEmptyArea ? (
+            <button
+              type="button"
+              aria-label={selecting ? selectingButtonLabel : selectButtonLabel}
+              disabled={disabled}
+              onClick={handleOpenFilePicker}
+              className="media-uploader__empty media-uploader__empty--selectable"
+            >
+              {selecting ? selectingButtonLabel : emptyText}
+            </button>
+          ) : (
+            <div className="media-uploader__empty">{emptyText}</div>
+          )
         ) : (
           <>
             <div
