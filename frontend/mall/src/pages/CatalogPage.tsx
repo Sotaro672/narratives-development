@@ -207,7 +207,6 @@ export default function CatalogPage() {
                   tokenName={catalog.tokenBlueprint.tokenName}
                   tokenIcon={catalog.tokenBlueprint.tokenIcon}
                   symbol={catalog.tokenBlueprint.symbol}
-                  description={catalog.tokenBlueprint.description}
                 />
               ) : null
             }
@@ -282,7 +281,6 @@ export default function CatalogPage() {
                   tokenName={catalog.tokenBlueprint.tokenName}
                   tokenIcon={catalog.tokenBlueprint.tokenIcon}
                   symbol={catalog.tokenBlueprint.symbol}
-                  description={catalog.tokenBlueprint.description}
                 />
               </div>
             ) : null}

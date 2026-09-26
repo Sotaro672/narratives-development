@@ -166,7 +166,6 @@ export default function ResaleDetailPage() {
                   brandName={listingTarget.brandName}
                   tokenName={listingTarget.tokenName}
                   tokenIcon={listingTarget.tokenIconUrl}
-                  description={listingTarget.tokenDescription}
                 />
 
                 <AvatarSummaryCard
