@@ -11,6 +11,7 @@ export type TradeOrderActionKind =
   | "start-return-consultation"
   | "respond-return-consultation"
   | "review-return-proposal"
+  | "report-return-dispute"
   | "prepare-return-shipment"
   | "receive-return"
   | "cancel";
@@ -52,6 +53,16 @@ function isAcceptedPhysicalReturnProposal(
     proposal.refundAmount !== undefined &&
     Number.isInteger(proposal.refundAmount) &&
     proposal.refundAmount > 0
+  );
+}
+
+function isRejectedReturnProposal(
+  proposal: TradeReturnProposal | undefined,
+): boolean {
+  return (
+    !!proposal &&
+    proposal.id.trim() !== "" &&
+    proposal.agreement === "disagree"
   );
 }
 
@@ -115,6 +126,13 @@ export function getTradeOrderAction(
     case "none":
       return "start-return-consultation";
 
+    case "discussing":
+      return isRejectedReturnProposal(
+        trade.returnProposal,
+      )
+        ? "report-return-dispute"
+        : null;
+
     case "proposed":
       return "review-return-proposal";
 
@@ -125,7 +143,6 @@ export function getTradeOrderAction(
         ? "prepare-return-shipment"
         : null;
 
-    case "discussing":
     case "return_shipped":
     case "return_received":
     case "refund_processing":

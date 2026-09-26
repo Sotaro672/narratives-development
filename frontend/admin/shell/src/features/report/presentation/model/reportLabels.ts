@@ -18,7 +18,13 @@ export function getStatusLabel(
       return "未対応";
 
     case "KEPT":
-      return targetType === "AVATAR" ? "変化なし" : "維持";
+      if (targetType === "AVATAR") {
+        return "変化なし";
+      }
+      if (targetType === "TRADE") {
+        return "確認済み";
+      }
+      return "維持";
 
     case "REMOVED":
       if (targetType === "AVATAR") {
@@ -32,6 +38,9 @@ export function getStatusLabel(
       }
       if (targetType === "BRAND") {
         return "無効";
+      }
+      if (targetType === "TRADE") {
+        return "措置済み";
       }
       return "削除";
 
@@ -82,6 +91,9 @@ export function getTargetTypeLabel(
 
     case "RESALE":
       return "再販出品";
+
+    case "TRADE":
+      return "取引トラブル";
 
     case "TRADE_MESSAGE":
       return "取引コメント";
@@ -152,6 +164,9 @@ export function getSnapshotTitleLabel(
     case "RESALE":
       return "商品";
 
+    case "TRADE":
+      return "トラブル種別";
+
     case "ANNOUNCEMENT":
       return "お知らせタイトル";
 
@@ -176,6 +191,9 @@ export function getSnapshotBodyLabel(
 
     case "RESALE":
       return "出品説明";
+
+    case "TRADE":
+      return "返品相談内容";
 
     case "TRADE_MESSAGE":
       return "メッセージ本文";
@@ -208,6 +226,9 @@ export function getTargetParentLabel(
     case "RESALE":
       return "対象商品";
 
+    case "TRADE":
+      return "注文ID";
+
     case "TRADE_MESSAGE":
       return "取引ID";
 
@@ -225,6 +246,7 @@ export function getTargetAuthorTypeLabel(
 
     case "LIST":
     case "RESALE":
+    case "TRADE":
       return "出品者種別";
 
     case "TOKEN_BLUEPRINT":
@@ -258,6 +280,7 @@ export function getTargetAuthorLabel(
       return "作成者";
 
     case "RESALE":
+    case "TRADE":
       return "出品者";
 
     case "TRADE_MESSAGE":

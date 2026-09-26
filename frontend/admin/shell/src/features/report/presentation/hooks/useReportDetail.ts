@@ -1,4 +1,4 @@
-// frontend/admin/shell/src/features/report/hooks/useReportDetail.ts
+// frontend/admin/shell/src/features/report/presentation/hooks/useReportDetail.ts
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -223,9 +223,16 @@ export function useReportDetail(caseId: string | undefined) {
         return null;
       }
 
-      if (decision === "REMOVE" && reportCase?.targetType === "TRADE_MESSAGE") {
-        setDecisionError("取引コメントは削除できません。");
-        return null;
+      if (decision === "REMOVE") {
+        if (reportCase?.targetType === "TRADE_MESSAGE") {
+          setDecisionError("取引コメントは削除できません。");
+          return null;
+        }
+
+        if (reportCase?.targetType === "TRADE") {
+          setDecisionError("取引トラブルは削除対象ではありません。");
+          return null;
+        }
       }
 
       if (deciding) {
@@ -290,6 +297,7 @@ export function useReportDetail(caseId: string | undefined) {
   const canKeep = reportCase?.status === "PENDING" && !deciding;
   const canRemove =
     reportCase?.targetType !== "TRADE_MESSAGE" &&
+    reportCase?.targetType !== "TRADE" &&
     (reportCase?.status === "PENDING" || reportCase?.status === "KEPT") &&
     !deciding;
   const canDecide = canKeep || canRemove;

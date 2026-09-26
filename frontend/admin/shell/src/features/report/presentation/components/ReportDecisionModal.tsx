@@ -2,7 +2,10 @@
 
 import { useEffect } from "react";
 
-import type { ReportCaseStatus, ReportTargetType } from "../../../../shared/type/report";
+import type {
+  ReportCaseStatus,
+  ReportTargetType,
+} from "../../../../shared/type/report";
 import Button from "../../../../shared/ui/Button/Button";
 
 import "./ReportDecisionModal.css";
@@ -22,7 +25,22 @@ type ReportDecisionModalProps = {
   onRemove: () => void | Promise<void>;
 };
 
-function getDescription(status: ReportCaseStatus, targetType?: ReportTargetType): string {
+function getDescription(
+  status: ReportCaseStatus,
+  targetType?: ReportTargetType,
+): string {
+  if (targetType === "TRADE") {
+    return status === "KEPT"
+      ? "この取引トラブルは確認済みです。"
+      : "取引トラブルの通報内容を確認し、運営での確認結果を確定します。";
+  }
+
+  if (targetType === "TRADE_MESSAGE") {
+    return status === "KEPT"
+      ? "この取引コメントは維持済みです。"
+      : "取引コメントの通報内容を確認し、維持するかを決定します。";
+  }
+
   if (targetType === "AVATAR") {
     return status === "KEPT"
       ? "このアバターは変化なしで裁定済みです。必要な場合は再販サービス利用停止へ変更できます。"
@@ -52,14 +70,28 @@ function getDescription(status: ReportCaseStatus, targetType?: ReportTargetType)
     : "投稿を維持するか、削除するかを決定します。";
 }
 
-function getPlaceholder(status: ReportCaseStatus, targetType?: ReportTargetType): string {
+function getPlaceholder(
+  status: ReportCaseStatus,
+  targetType?: ReportTargetType,
+): string {
+  if (targetType === "TRADE") {
+    return "取引トラブルの確認結果や判断の根拠を入力してください。";
+  }
+
+  if (targetType === "TRADE_MESSAGE") {
+    return "取引コメントを維持する判断の根拠を入力してください。";
+  }
+
   if (targetType === "AVATAR") {
     return status === "KEPT"
       ? "再販サービス利用停止へ変更する根拠を入力してください。"
       : "裁定の根拠を入力してください。";
   }
 
-  if (targetType === "LIST" || targetType === "RESALE") {
+  if (
+    targetType === "LIST" ||
+    targetType === "RESALE"
+  ) {
     return status === "KEPT"
       ? "出品停止へ変更する根拠を入力してください。"
       : "裁定の根拠を入力してください。";
@@ -78,6 +110,12 @@ function getPlaceholder(status: ReportCaseStatus, targetType?: ReportTargetType)
 
 function getNote(targetType?: ReportTargetType): string {
   switch (targetType) {
+    case "TRADE":
+      return "この裁定では取引自体や取引メッセージを削除しません。確認結果は通報した購入者へ通知されます。";
+
+    case "TRADE_MESSAGE":
+      return "取引コメントは削除対象ではありません。この裁定ではコメント内容を変更・削除しません。";
+
     case "AVATAR":
       return "「再販利用停止」を選択すると、アバター自体は削除・停止せず、対象アバターの再販サービスのみ利用停止にします。";
 
@@ -96,7 +134,16 @@ function getNote(targetType?: ReportTargetType): string {
 }
 
 function getKeepLabel(targetType?: ReportTargetType): string {
-  return targetType === "AVATAR" ? "変化なし" : "維持する";
+  switch (targetType) {
+    case "AVATAR":
+      return "変化なし";
+
+    case "TRADE":
+      return "確認済みにする";
+
+    default:
+      return "維持する";
+  }
 }
 
 function getRemoveLabel(targetType?: ReportTargetType): string {
@@ -134,11 +181,16 @@ export default function ReportDecisionModal({
     if (!open) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !deciding) onClose();
+      if (event.key === "Escape" && !deciding) {
+        onClose();
+      }
     };
 
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [deciding, onClose, open]);
 
   if (!open) return null;
@@ -155,20 +207,52 @@ export default function ReportDecisionModal({
       className="report-decision-modal__overlay"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !deciding) onClose();
+        if (
+          event.target === event.currentTarget &&
+          !deciding
+        ) {
+          onClose();
+        }
       }}
     >
-      <section className="report-decision-modal" role="dialog" aria-modal="true" aria-labelledby="report-decision-modal-title">
+      <section
+        className="report-decision-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="report-decision-modal-title"
+      >
         <header className="report-decision-modal__header">
           <div>
-            <h2 id="report-decision-modal-title" className="report-decision-modal__title">
+            <h2
+              id="report-decision-modal-title"
+              className="report-decision-modal__title"
+            >
               {status === "KEPT" ? "裁定変更" : "裁定"}
             </h2>
-            <p className="report-decision-modal__description">{description}</p>
+            <p className="report-decision-modal__description">
+              {description}
+            </p>
           </div>
 
-          <Button variant="ghost" size="sm" iconOnly aria-label="裁定モーダルを閉じる" disabled={deciding} onClick={onClose}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <Button
+            variant="ghost"
+            size="sm"
+            iconOnly
+            aria-label="裁定モーダルを閉じる"
+            disabled={deciding}
+            onClick={onClose}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <path d="M18 6 6 18" />
               <path d="m6 6 12 12" />
             </svg>
@@ -177,7 +261,9 @@ export default function ReportDecisionModal({
 
         <div className="report-decision-modal__body">
           <label className="report-decision-modal__field">
-            <span className="report-decision-modal__label">裁定理由</span>
+            <span className="report-decision-modal__label">
+              裁定理由
+            </span>
             <textarea
               className="report-decision-modal__textarea"
               value={decisionReason}
@@ -186,33 +272,57 @@ export default function ReportDecisionModal({
               disabled={deciding}
               autoFocus
               placeholder={placeholder}
-              onChange={(event) => onChangeDecisionReason(event.target.value)}
+              onChange={(event) =>
+                onChangeDecisionReason(event.target.value)
+              }
             />
           </label>
 
           {decisionError ? (
-            <p className="report-decision-modal__error" role="alert">
+            <p
+              className="report-decision-modal__error"
+              role="alert"
+            >
               {decisionError}
             </p>
           ) : null}
 
-          <p className="report-decision-modal__note">{note}</p>
+          <p className="report-decision-modal__note">
+            {note}
+          </p>
         </div>
 
         <footer className="report-decision-modal__actions">
-          <Button variant="secondary" size="md" disabled={deciding} onClick={onClose}>
+          <Button
+            variant="secondary"
+            size="md"
+            disabled={deciding}
+            onClick={onClose}
+          >
             キャンセル
           </Button>
 
           <div className="report-decision-modal__decision-actions">
             {canKeep ? (
-              <Button variant="secondary" size="md" loading={deciding} disabled={reasonRequired} onClick={() => void onKeep()}>
+              <Button
+                variant="secondary"
+                size="md"
+                loading={deciding}
+                disabled={reasonRequired}
+                onClick={() => void onKeep()}
+              >
                 {keepLabel}
               </Button>
             ) : null}
 
             {canRemove ? (
-              <Button variant="danger" size="md" loading={deciding} disabled={reasonRequired} onClick={() => void onRemove()}>
+              <Button
+                variant="danger"
+                size="md"
+                loading={deciding}
+                disabled={reasonRequired}
+                onClick={() => void onRemove()}
+              >
                 {removeLabel}
               </Button>
             ) : null}

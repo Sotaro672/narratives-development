@@ -16,6 +16,7 @@ import useTradeMessageReport from "../hooks/useTradeMessageReport";
 import useTradeReply from "../hooks/useTradeReply";
 import useTradeReturnAgreement from "../hooks/useTradeReturnAgreement";
 import useTradeReturnConsultation from "../hooks/useTradeReturnConsultation";
+import useTradeReturnDispute from "../hooks/useTradeReturnDispute";
 import useTradeReturnProposal from "../hooks/useTradeReturnProposal";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
 import useTradeReturnShipment from "../hooks/useTradeReturnShipment";
@@ -97,6 +98,19 @@ export default function TradeChatDetail({
       returnShipmentFlow.loading,
   });
 
+  const returnDisputeFlow = useTradeReturnDispute({
+    tradeId: thread.tradeId,
+    trade: thread.trade,
+    reload: thread.reload,
+    blocked:
+      cancelFlow.cancelling ||
+      returnConsultationFlow.submitting ||
+      returnProposalFlow.submitting ||
+      returnAgreementFlow.submitting ||
+      returnShipmentFlow.loading ||
+      returnReceiptFlow.submitting,
+  });
+
   const reply = useTradeReply({
     tradeId: thread.tradeId,
     trade: thread.trade,
@@ -108,7 +122,8 @@ export default function TradeChatDetail({
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
-      returnReceiptFlow.submitting,
+      returnReceiptFlow.submitting ||
+      returnDisputeFlow.submitting,
   });
 
   const report = useTradeMessageReport({
@@ -128,6 +143,7 @@ export default function TradeChatDetail({
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
       returnReceiptFlow.submitting ||
+      returnDisputeFlow.submitting ||
       !trade ||
       !orderAction ||
       trade.status !== "active" ||
@@ -190,6 +206,20 @@ export default function TradeChatDetail({
         returnAgreementFlow.openModal();
         return;
 
+      case "report-return-dispute":
+        if (
+          trade.viewerSide !== "buyer" ||
+          !trade.isDispatched ||
+          trade.transferred ||
+          trade.returnStatus !== "discussing" ||
+          trade.returnProposal?.agreement !== "disagree"
+        ) {
+          return;
+        }
+
+        returnDisputeFlow.openModal();
+        return;
+
       case "prepare-return-shipment": {
         const proposal = trade.returnProposal;
 
@@ -230,20 +260,23 @@ export default function TradeChatDetail({
     returnProposalFlow.submitting ||
     returnAgreementFlow.submitting ||
     returnShipmentFlow.loading ||
-    returnReceiptFlow.submitting;
+    returnReceiptFlow.submitting ||
+    returnDisputeFlow.submitting;
 
   const orderActionError =
-    orderAction === "prepare-return-shipment"
-      ? returnShipmentFlow.error
-      : orderAction === "receive-return"
-        ? returnReceiptFlow.error
-        : orderAction === "review-return-proposal"
-          ? returnAgreementFlow.error
-          : orderAction === "respond-return-consultation"
-            ? returnProposalFlow.error
-            : orderAction === "start-return-consultation"
-              ? returnConsultationFlow.error
-              : undefined;
+    orderAction === "report-return-dispute"
+      ? returnDisputeFlow.error
+      : orderAction === "prepare-return-shipment"
+        ? returnShipmentFlow.error
+        : orderAction === "receive-return"
+          ? returnReceiptFlow.error
+          : orderAction === "review-return-proposal"
+            ? returnAgreementFlow.error
+            : orderAction === "respond-return-consultation"
+              ? returnProposalFlow.error
+              : orderAction === "start-return-consultation"
+                ? returnConsultationFlow.error
+                : undefined;
 
   return (
     <>
@@ -258,6 +291,7 @@ export default function TradeChatDetail({
           !returnAgreementFlow.open &&
           !returnShipmentFlow.open &&
           !returnReceiptFlow.open &&
+          !returnDisputeFlow.open &&
           !report.isOpen
         }
         mode="mypage"
@@ -379,6 +413,25 @@ export default function TradeChatDetail({
         onCancel={cancelFlow.closeModal}
         onSubmit={() => {
           void cancelFlow.submit();
+        }}
+      />
+
+      <ChatComposerModal
+        open={returnDisputeFlow.open}
+        title="運営へ報告する"
+        content={returnDisputeFlow.content}
+        placeholder="取引の状況や解決してほしい内容を入力してください"
+        error={returnDisputeFlow.error}
+        submitting={returnDisputeFlow.submitting}
+        canSubmit={returnDisputeFlow.canSubmit}
+        submitLabel="運営へ報告する"
+        submittingLabel="報告中..."
+        description="出品者が返品に合意しなかったため、この取引を運営へ報告できます。取引の状況や確認してほしい内容を入力してください。"
+        maxLength={5000}
+        onContentChange={returnDisputeFlow.setContent}
+        onCancel={returnDisputeFlow.closeModal}
+        onSubmit={() => {
+          void returnDisputeFlow.submit();
         }}
       />
 

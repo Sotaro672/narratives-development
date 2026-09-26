@@ -35,6 +35,7 @@ import type {
 
 const TRADE_BASE_PATH = "/mall/me/trades";
 const MAX_RETURN_CONSULTATION_DETAIL_LENGTH = 5000;
+const MAX_RETURN_DISPUTE_DETAIL_LENGTH = 5000;
 
 type TradeRequestOptions = {
   signal?: AbortSignal;
@@ -84,6 +85,11 @@ export type DispatchTradeParams = {
   tradeId: string;
   carrier: TradeDispatchCarrier;
   boxSize: TradeDispatchBoxSize;
+};
+
+export type ReportTradeReturnDisputeParams = {
+  tradeId: string;
+  detail: string;
 };
 
 type TradeRequestInit = Omit<RequestInit, "body"> & {
@@ -165,6 +171,22 @@ function requireReturnConsultationDetail(detail: string): string {
   ) {
     throw new Error(
       `詳細は${MAX_RETURN_CONSULTATION_DETAIL_LENGTH}文字以内で入力してください。`,
+    );
+  }
+
+  return normalizedDetail;
+}
+
+function requireReturnDisputeDetail(detail: string): string {
+  const normalizedDetail = detail.trim();
+
+  if (!normalizedDetail) {
+    throw new Error("運営へ報告する内容を入力してください。");
+  }
+
+  if (normalizedDetail.length > MAX_RETURN_DISPUTE_DETAIL_LENGTH) {
+    throw new Error(
+      `報告内容は${MAX_RETURN_DISPUTE_DETAIL_LENGTH}文字以内で入力してください。`,
     );
   }
 
@@ -332,6 +354,24 @@ export async function dispatchTrade(
       json: {
         carrier: params.carrier,
         boxSize: params.boxSize,
+      },
+    },
+  );
+}
+
+export async function reportTradeReturnDispute(
+  params: ReportTradeReturnDisputeParams,
+): Promise<void> {
+  const tradeId = requireTradeId(params.tradeId);
+  const detail = requireReturnDisputeDetail(params.detail);
+
+  await fetchTradeWithAuth<unknown>(
+    `${buildTradePath(tradeId)}/reports`,
+    {
+      method: "POST",
+      json: {
+        reason: "OTHER",
+        detail,
       },
     },
   );

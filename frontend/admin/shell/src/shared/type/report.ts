@@ -8,6 +8,7 @@ export type ReportTargetType =
   | "AVATAR"
   | "BRAND"
   | "RESALE"
+  | "TRADE"
   | "TRADE_MESSAGE"
   | "ANNOUNCEMENT";
 

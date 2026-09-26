@@ -20,6 +20,7 @@ export type ReportTargetType =
   | "AVATAR"
   | "BRAND"
   | "RESALE"
+  | "TRADE"
   | "TRADE_MESSAGE"
   | "ANNOUNCEMENT";
 
@@ -77,6 +78,12 @@ export type ReportBrandInput = {
 
 export type ReportResaleInput = {
   resaleId: string;
+  reason: ReportReason;
+  detail?: string;
+};
+
+export type ReportTradeInput = {
+  tradeId: string;
   reason: ReportReason;
   detail?: string;
 };

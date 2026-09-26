@@ -99,6 +99,11 @@ func (u *ReportUsecase) removeReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
+	switch reportCase.TargetType {
+	case reportdom.TargetTypeTrade, reportdom.TargetTypeTradeMessage:
+		return reportdom.ReportCase{}, ErrReportInvalidDecision
+	}
+
 	// REMOVED 済みの LIST / TOKEN_BLUEPRINT / AVATAR / BRAND / RESALE / ANNOUNCEMENT 裁定は、
 	// 対象側の措置だけを再実行できるようにする。各 moderator は冪等に実装する。
 	if reportCase.IsRemoved() {
@@ -172,6 +177,7 @@ func (u *ReportUsecase) removeReportCase(
 	// 商品レビュー/コメント/ANNOUNCEMENT は削除、LIST / RESALE は Mall 上で出品停止、
 	// TOKEN_BLUEPRINT / BRAND は AMOL UI 上で非表示、
 	// AVATAR は再販サービスのみ利用停止とする。
+	// TRADE / TRADE_MESSAGE は REMOVE 対象外とし、この関数の冒頭で拒否する。
 	// 対象側処理に失敗した場合、ReportCase を REMOVED にしてはいけない。
 	switch reportCase.TargetType {
 	case reportdom.TargetTypeProductBlueprintReview:

@@ -25,6 +25,8 @@ function getPromptText(action: TradeOrderActionKind): string {
       return "購入者から返品についての相談が届いています。";
     case "review-return-proposal":
       return "出品者から返品条件が提示されています。";
+    case "report-return-dispute":
+      return "出品者が返品に合意しませんでした。解決できない場合は運営へ報告できます。";
     case "prepare-return-shipment":
       return "返品用QRを表示しますか？";
     case "receive-return":
@@ -48,6 +50,8 @@ function getActionLabel(
         return "回答中...";
       case "review-return-proposal":
         return "処理中...";
+      case "report-return-dispute":
+        return "報告中...";
       case "prepare-return-shipment":
         return "QR準備中...";
       case "receive-return":
@@ -66,6 +70,8 @@ function getActionLabel(
       return "返品相談に回答する";
     case "review-return-proposal":
       return "返品条件を確認する";
+    case "report-return-dispute":
+      return "運営へ報告する";
     case "prepare-return-shipment":
       return "返品用QRを表示する";
     case "receive-return":

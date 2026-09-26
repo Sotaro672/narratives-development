@@ -1,7 +1,10 @@
 // frontend/mall/src/features/notification/presentation/model/reportDecisionPresentation.ts
 
 import type { ReportDecisionNotification } from "../../infrastructure/reportDecisionNotificationApi";
-import { getReportReasonLabel, type ReportTargetType } from "../../../shared/types/report";
+import {
+  getReportReasonLabel,
+  type ReportTargetType,
+} from "../../../shared/types/report";
 
 export type ReportDecisionPresentation = {
   targetLabel: string;
@@ -14,7 +17,9 @@ export type ReportDecisionPresentation = {
   reportReasonLabel: string;
 };
 
-export function getReportTargetLabel(targetType: ReportTargetType): string {
+export function getReportTargetLabel(
+  targetType: ReportTargetType,
+): string {
   switch (targetType) {
     case "PRODUCT_BLUEPRINT_REVIEW":
       return "商品レビュー";
@@ -26,8 +31,16 @@ export function getReportTargetLabel(targetType: ReportTargetType): string {
       return "トークンコメント";
     case "AVATAR":
       return "アバター";
+    case "BRAND":
+      return "ブランド";
     case "RESALE":
       return "再販出品";
+    case "TRADE":
+      return "取引トラブル";
+    case "TRADE_MESSAGE":
+      return "取引コメント";
+    case "ANNOUNCEMENT":
+      return "お知らせ";
     default:
       return "投稿内容";
   }
@@ -49,6 +62,10 @@ export function getDecisionCardTitle(
 ): string {
   if (notification.notificationKind === "TARGET_ENFORCEMENT") {
     return "運営による措置のお知らせ";
+  }
+
+  if (notification.targetType === "TRADE") {
+    return "取引トラブルの確認が完了しました";
   }
 
   return "通報内容の確認が完了しました";
@@ -73,6 +90,17 @@ export function getDecisionBody(
         return "運営の裁定により、あなたのトークンコメントを削除しました。";
       default:
         return "運営の裁定により、対象コンテンツに措置を行いました。";
+    }
+  }
+
+  if (notification.targetType === "TRADE") {
+    switch (notification.decisionStatus) {
+      case "KEPT":
+        return "通報いただいた取引内容を確認しました。運営での確認が完了しました。";
+      case "REMOVED":
+        return "通報いただいた取引内容を確認し、運営による措置を行いました。";
+      default:
+        return "通報いただいた取引内容の確認が完了しました。";
     }
   }
 
@@ -133,6 +161,17 @@ export function getDecisionBody(
 export function getDecisionStatusLabel(
   notification: ReportDecisionNotification,
 ): string {
+  if (notification.targetType === "TRADE") {
+    switch (notification.decisionStatus) {
+      case "KEPT":
+        return "確認済み";
+      case "REMOVED":
+        return "措置済み";
+      default:
+        return notification.decisionStatus;
+    }
+  }
+
   if (notification.targetType === "AVATAR") {
     switch (notification.decisionStatus) {
       case "REMOVED":

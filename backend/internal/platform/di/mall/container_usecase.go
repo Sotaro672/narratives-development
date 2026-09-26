@@ -306,6 +306,7 @@ func buildMallUsecases(
 			ResaleRepo:               r.resaleRepo,
 			TradeRepo:                r.tradeRepo,
 			TradeMessageRepo:         r.tradeMessageRepo,
+			ReturnAgreementRepo:      r.tradeReturnAgreementRepo,
 			AnnouncementRepo:         r.announcementRepo,
 		},
 	)
@@ -960,7 +961,6 @@ func buildMallTransferUsecase(
 	}
 
 	var orderRepoForTransfer applicationport.OrderRepoForTransfer = r.orderTransferItemRepo
-
 	var tokenResolver applicationport.TokenResolver = mallfs.NewTokenResolverFS(
 		infra.Firestore,
 		"tokens",

@@ -68,10 +68,10 @@ export default function ReportsPage() {
           getValue: (reportCase) => reportCase.status,
           options: [
             { value: "PENDING", label: "未対応" },
-            { value: "KEPT", label: "維持・変化なし" },
+            { value: "KEPT", label: "維持・変化なし・確認済み" },
             {
               value: "REMOVED",
-              label: "削除・非表示・出品停止・再販利用停止",
+              label: "削除・非表示・出品停止・再販利用停止・措置済み",
             },
           ],
         },
@@ -96,6 +96,8 @@ export default function ReportsPage() {
               label: "トークンコメント",
             },
             { value: "AVATAR", label: "アバター" },
+            { value: "BRAND", label: "ブランド" },
+            { value: "TRADE", label: "取引トラブル" },
             { value: "TRADE_MESSAGE", label: "取引コメント" },
             { value: "ANNOUNCEMENT", label: "お知らせ" },
           ],
