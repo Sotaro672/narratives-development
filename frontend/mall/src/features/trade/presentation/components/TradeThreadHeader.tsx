@@ -1,11 +1,10 @@
 // frontend/mall/src/features/trade/presentation/components/TradeThreadHeader.tsx
 
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 import Badge from "../../../../components/ui/Badge";
-import Copy from "../../../../components/ui/Copy";
 import InfoList, { type InfoListRow } from "../../../../components/ui/InfoList";
+import TextLink from "../../../../components/ui/textLink";
 import { formatDateTime } from "../../../../components/utils/date";
 import type { TradeDetail } from "../../../shared/types/trade";
 import { getTradeTitle } from "../util/tradeChatDetail";
@@ -18,21 +17,7 @@ type TradeThreadHeaderProps = {
 export default function TradeThreadHeader({
   trade,
 }: TradeThreadHeaderProps) {
-  const [orderIdCopied, setOrderIdCopied] = useState(false);
-
-  useEffect(() => {
-    if (!orderIdCopied) {
-      return;
-    }
-
-    const timeoutId = window.setTimeout(() => {
-      setOrderIdCopied(false);
-    }, 2000);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [orderIdCopied]);
+  const navigate = useNavigate();
 
   if (!trade) {
     return null;
@@ -40,6 +25,7 @@ export default function TradeThreadHeader({
 
   const title = getTradeTitle(trade.productName);
   const resaleId = trade.resale?.id?.trim() ?? "";
+  const orderId = trade.orderId.trim();
 
   const resaleDetailPath =
     resaleId === ""
@@ -48,30 +34,12 @@ export default function TradeThreadHeader({
         ? `/resales/${encodeURIComponent(resaleId)}`
         : `/market/${encodeURIComponent(resaleId)}`;
 
-  const handleCopyOrderId = async (): Promise<void> => {
-    try {
-      await navigator.clipboard.writeText(trade.orderId);
-      setOrderIdCopied(true);
-    } catch {
-      // Clipboard API が利用できない環境では何もしない。
-    }
-  };
+  const orderDetailPath =
+    trade.viewerSide === "buyer" && orderId
+      ? `/orders/${encodeURIComponent(orderId)}`
+      : "";
 
-  const transactionMetaItems: InfoListRow[] = [
-    {
-      label: "注文ID",
-      value: (
-        <span className="trade-chat-detail__order-id">
-          <span>{trade.orderId}</span>
-          <Copy
-            onClick={handleCopyOrderId}
-            ariaLabel={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
-            title={orderIdCopied ? "コピーしました" : "注文IDをコピー"}
-          />
-        </span>
-      ),
-    },
-  ];
+  const transactionMetaItems: InfoListRow[] = [];
 
   if (trade.transferredAt) {
     transactionMetaItems.push({
@@ -80,34 +48,63 @@ export default function TradeThreadHeader({
     });
   }
 
+  const handleOpenResaleDetail = (): void => {
+    if (!resaleDetailPath) {
+      return;
+    }
+
+    navigate(resaleDetailPath, {
+      state:
+        trade.viewerSide === "buyer"
+          ? { reviewContext: true }
+          : undefined,
+    });
+  };
+
+  const handleOpenOrderDetail = (): void => {
+    if (!orderDetailPath) {
+      return;
+    }
+
+    navigate(orderDetailPath);
+  };
+
   return (
     <>
       <div className="trade-chat-detail__heading">
-        <h2 className="chat-detail-page__subject">
-          {title}
-        </h2>
+        <h2 className="chat-detail-page__subject">{title}</h2>
 
         <Badge variant="info">
           {getTradeStatusLabel(trade)}
         </Badge>
       </div>
 
-      <section className="trade-chat-detail__transaction">
-        <InfoList rows={transactionMetaItems} />
-      </section>
+      {transactionMetaItems.length > 0 ? (
+        <section className="trade-chat-detail__transaction">
+          <InfoList rows={transactionMetaItems} />
+        </section>
+      ) : null}
 
-      {resaleDetailPath ? (
-        <Link
-          to={resaleDetailPath}
-          state={
-            trade.viewerSide === "buyer"
-              ? { reviewContext: true }
-              : undefined
-          }
-          className="trade-chat-detail__resale-link"
-        >
-          出品詳細を見る
-        </Link>
+      {resaleDetailPath || orderDetailPath ? (
+        <div className="trade-chat-detail__detail-links">
+          {resaleDetailPath ? (
+            <TextLink
+              className="trade-chat-detail__detail-link"
+              onClick={handleOpenResaleDetail}
+            >
+              出品詳細を見る
+            </TextLink>
+          ) : null}
+
+          {orderDetailPath ? (
+            <TextLink
+              className="trade-chat-detail__detail-link"
+              onClick={handleOpenOrderDetail}
+            >
+              注文詳細を見る
+            </TextLink>
+          ) : null}
+        </div>
       ) : null}
     </>
   );

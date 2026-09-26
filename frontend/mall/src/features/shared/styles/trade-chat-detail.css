@@ -13,29 +13,22 @@
   margin: 0;
 }
 
-.trade-chat-detail__order-id {
+.trade-chat-detail__detail-links {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-}
-
-.trade-chat-detail__order-id > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.trade-chat-detail__resale-link {
-  display: inline-flex;
-  width: fit-content;
+  gap: 12px;
   margin-top: 16px;
+}
+
+.trade-chat-detail__detail-link {
+  width: fit-content;
   color: var(--color-primary, #2563eb);
   font-size: 0.9rem;
   font-weight: 700;
   line-height: 1.5;
-  text-decoration: none;
 }
 
-.trade-chat-detail__resale-link:hover {
+.trade-chat-detail__detail-link:hover {
   text-decoration: underline;
 }
