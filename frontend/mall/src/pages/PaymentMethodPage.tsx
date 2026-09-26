@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/PaymentMethodPage.tsx
+// frontend/mall/src/pages/PaymentMethodPage.tsx
 
 import { Elements } from "@stripe/react-stripe-js";
 
@@ -40,7 +40,8 @@ export default function PaymentMethodPage() {
     <Layout
       title="支払方法"
       titleClickable={false}
-      mode="signin"
+      mode="mypage"
+      showFooter
     >
       <section className="page-section settings-page">
         <div className="payment-method-page-content">

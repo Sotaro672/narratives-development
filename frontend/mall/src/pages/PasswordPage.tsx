@@ -1,4 +1,4 @@
-// frontend/src/pages/PasswordPage.tsx
+// frontend/mall/src/pages/PasswordPage.tsx
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -87,7 +87,8 @@ export default function PasswordPage() {
     <Layout
       title="パスワード変更"
       titleClickable={false}
-      mode="signin"
+      mode="mypage"
+      showFooter
     >
       <section className="page-section">
         <p className="page-description">

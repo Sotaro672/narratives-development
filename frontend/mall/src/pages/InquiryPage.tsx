@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/InquiryPage.tsx
+// frontend/mall/src/pages/InquiryPage.tsx
 
 import { useEffect, useMemo, useState } from "react";
 import { getAuth } from "firebase/auth";
@@ -60,9 +60,7 @@ export default function InquiryPage() {
           .join(" ");
 
         if (!resolvedName) {
-          throw new Error(
-            "ユーザー名を確認できませんでした。",
-          );
+          throw new Error("ユーザー名を確認できませんでした。");
         }
 
         setUserName(resolvedName);
@@ -134,9 +132,9 @@ export default function InquiryPage() {
       <Layout
         title="問い合わせ"
         titleClickable={false}
-        mode="default"
+        mode="mypage"
+        showFooter
         hideHamburgerMenu
-        hideSettingsButton
       >
         <section className="page-section content-page-section">
           <p className="page-description">
@@ -158,9 +156,7 @@ export default function InquiryPage() {
               rows={8}
               disabled={submitting || loadingUser}
               required
-              onChange={(event) =>
-                setMessage(event.target.value)
-              }
+              onChange={(event) => setMessage(event.target.value)}
             />
 
             <MediaUploader

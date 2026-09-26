@@ -1,4 +1,4 @@
-// frontend/src/pages/EmailPage.tsx
+// frontend/mall/src/pages/EmailPage.tsx
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -120,7 +120,8 @@ export default function EmailPage() {
     <Layout
       title="メールアドレス変更"
       titleClickable={false}
-      mode="signin"
+      mode="mypage"
+      showFooter
     >
       <section className="page-section">
         <p className="page-description">

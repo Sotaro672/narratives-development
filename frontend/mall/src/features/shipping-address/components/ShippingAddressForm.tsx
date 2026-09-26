@@ -1,6 +1,8 @@
-//frontend\amol\src\features\shipping-address\components\ShippingAddressForm.tsx
-import type { FormEvent, ChangeEvent } from "react";
+// frontend/mall/src/features/shipping-address/components/ShippingAddressForm.tsx
 
+import type { ChangeEvent, FormEvent } from "react";
+
+import Button from "../../../components/ui/Button";
 import Input from "../../../components/ui/Input";
 import type { ShippingAddressFormValues } from "../../shared/types/shippingAddress";
 
@@ -9,8 +11,10 @@ type ShippingAddressFormProps = {
   isLoading: boolean;
   isLookingUpAddress: boolean;
   zipCodeError: string;
+  actionButtonLabel: string;
+  actionButtonDisabled: boolean;
   onChange: (
-    name: keyof ShippingAddressFormValues
+    name: keyof ShippingAddressFormValues,
   ) => (event: ChangeEvent<HTMLInputElement>) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
@@ -20,6 +24,8 @@ export default function ShippingAddressForm({
   isLoading,
   isLookingUpAddress,
   zipCodeError,
+  actionButtonLabel,
+  actionButtonDisabled,
   onChange,
   onSubmit,
 }: ShippingAddressFormProps) {
@@ -82,7 +88,9 @@ export default function ShippingAddressForm({
               autoComplete="postal-code"
               inputMode="numeric"
               helperText={
-                isLookingUpAddress ? "住所を自動入力しています..." : undefined
+                isLookingUpAddress
+                  ? "住所を自動入力しています..."
+                  : undefined
               }
               error={zipCodeError || undefined}
               required
@@ -126,6 +134,18 @@ export default function ShippingAddressForm({
               placeholder="建物名・部屋番号"
               autoComplete="address-line2"
             />
+          </div>
+
+          <div className="shipping-address-page__actions">
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              fullWidth
+              disabled={actionButtonDisabled}
+            >
+              {actionButtonLabel}
+            </Button>
           </div>
         </>
       )}

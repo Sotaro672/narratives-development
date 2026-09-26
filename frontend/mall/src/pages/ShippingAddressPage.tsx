@@ -1,18 +1,14 @@
-// frontend/amol/src/pages/ShippingAddressPage.tsx
+// frontend/mall/src/pages/ShippingAddressPage.tsx
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/shipping-address-page.css";
 
 import Layout from "../components/layout/Layout";
-import FooterNav from "../components/layout/FooterNav";
-import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 import ShippingAddressForm from "../features/shipping-address/components/ShippingAddressForm";
 import { useShippingAddressPage } from "../features/shipping-address/hooks/useShippingAddressPage";
 
 export default function ShippingAddressPage() {
-  const { isDesktop } = useContactViewport();
-
   const {
     form,
     isLoading,
@@ -22,7 +18,6 @@ export default function ShippingAddressPage() {
     actionButtonLabel,
     actionButtonDisabled,
     handleChange,
-    handleSave,
     handleSubmit,
   } = useShippingAddressPage();
 
@@ -30,12 +25,9 @@ export default function ShippingAddressPage() {
     <Layout
       title={isEditMode ? "配送先情報編集" : "配送先情報登録"}
       titleClickable={false}
-      mode="default"
+      mode="mypage"
+      showFooter
       hideHamburgerMenu
-      hideSettingsButton
-      actionButtonLabel={isDesktop ? actionButtonLabel : undefined}
-      onActionButtonClick={isDesktop ? handleSave : undefined}
-      actionButtonDisabled={actionButtonDisabled}
     >
       <section className="page-section content-page-section settings-page shipping-address-page">
         <p className="content-page-description shipping-address-page__description">
@@ -49,19 +41,12 @@ export default function ShippingAddressPage() {
           isLoading={isLoading}
           isLookingUpAddress={isLookingUpAddress}
           zipCodeError={zipCodeError}
+          actionButtonLabel={actionButtonLabel}
+          actionButtonDisabled={actionButtonDisabled}
           onChange={handleChange}
           onSubmit={handleSubmit}
         />
       </section>
-
-      {!isDesktop ? (
-        <FooterNav
-          variant="action"
-          buttonLabel={actionButtonLabel}
-          disabled={actionButtonDisabled}
-          onButtonClick={handleSave}
-        />
-      ) : null}
     </Layout>
   );
 }

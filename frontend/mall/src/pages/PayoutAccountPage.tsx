@@ -26,7 +26,8 @@ export default function PayoutAccountPage() {
     <Layout
       title="売上受取口座"
       titleClickable={false}
-      mode="signin"
+      mode="mypage"
+      showFooter
     >
       <section className="page-section settings-page payout-account-page">
         <div className="payout-account-page__content">
