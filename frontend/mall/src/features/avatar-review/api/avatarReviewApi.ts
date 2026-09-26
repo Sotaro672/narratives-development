@@ -1,4 +1,4 @@
-// frontend/amol/src/features/avatar-review/api/avatarReviewApi.ts
+// frontend/mall/src/features/avatar-review/api/avatarReviewApi.ts
 
 import { requestJson } from "../../../lib/http";
 
@@ -29,6 +29,43 @@ export type AvatarReviewPageResponse = {
   items: AvatarReviewItem[];
 };
 
+export type AvatarReviewStatusResponse = {
+  eligible: boolean;
+  reviewed: boolean;
+  tradeId: string;
+  orderId: string;
+  orderItemIndex: number;
+  revieweeAvatarId: string;
+};
+
+export type CreateAvatarReviewInput = {
+  orderId: string;
+  orderItemIndex: number;
+  evaluation: AvatarReviewEvaluation;
+  comment: string;
+};
+
+function normalizeOrderId(orderId: string): string {
+  const normalized = orderId.trim();
+
+  if (!normalized) {
+    throw new Error("orderId is empty");
+  }
+
+  return normalized;
+}
+
+function normalizeOrderItemIndex(orderItemIndex: number): number {
+  if (
+    !Number.isInteger(orderItemIndex) ||
+    orderItemIndex < 0
+  ) {
+    throw new Error("orderItemIndex is invalid");
+  }
+
+  return orderItemIndex;
+}
+
 export async function fetchAvatarReviews(args: {
   avatarId: string;
   page?: number;
@@ -56,6 +93,77 @@ export async function fetchAvatarReviews(args: {
           "fetchAvatarReviews failed: response is not json",
         invalidJsonErrorMessage:
           "fetchAvatarReviews failed: invalid json",
+      },
+    },
+  );
+}
+
+export async function fetchAvatarReviewStatus(args: {
+  orderId: string;
+  orderItemIndex: number;
+}): Promise<AvatarReviewStatusResponse> {
+  const orderId = normalizeOrderId(args.orderId);
+  const orderItemIndex = normalizeOrderItemIndex(
+    args.orderItemIndex,
+  );
+
+  return requestJson<AvatarReviewStatusResponse>(
+    `/mall/me/avatar-reviews/order-items/${encodeURIComponent(orderId)}/${orderItemIndex}`,
+    {
+      method: "GET",
+      auth: "required",
+      unwrapData: true,
+      messages: {
+        requestErrorMessage:
+          "fetchAvatarReviewStatus failed",
+        nonJsonErrorMessage:
+          "fetchAvatarReviewStatus failed: response is not json",
+        invalidJsonErrorMessage:
+          "fetchAvatarReviewStatus failed: invalid json",
+      },
+    },
+  );
+}
+
+export async function createAvatarReview(
+  args: CreateAvatarReviewInput,
+): Promise<AvatarReviewItem> {
+  const orderId = normalizeOrderId(args.orderId);
+  const orderItemIndex = normalizeOrderItemIndex(
+    args.orderItemIndex,
+  );
+  const comment = args.comment.trim();
+
+  if (
+    args.evaluation !== "good" &&
+    args.evaluation !== "disappointed"
+  ) {
+    throw new Error("evaluation is invalid");
+  }
+
+  if (!comment) {
+    throw new Error("comment is empty");
+  }
+
+  return requestJson<AvatarReviewItem>(
+    "/mall/me/avatar-reviews",
+    {
+      method: "POST",
+      auth: "required",
+      json: {
+        orderId,
+        orderItemIndex,
+        evaluation: args.evaluation,
+        comment,
+      },
+      unwrapData: true,
+      messages: {
+        requestErrorMessage:
+          "createAvatarReview failed",
+        nonJsonErrorMessage:
+          "createAvatarReview failed: response is not json",
+        invalidJsonErrorMessage:
+          "createAvatarReview failed: invalid json",
       },
     },
   );

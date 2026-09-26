@@ -14,6 +14,7 @@ import VerificationSentPage from "../pages/VerificationSentPage";
 import PasswordResetPage from "../pages/PasswordResetPage";
 import AvatarPage from "../pages/AvatarPage";
 import AvatarReviewPage from "../pages/AvatarReviewPage";
+import AvatarReviewCreatePage from "../pages/AvatarReviewCreatePage";
 import EmailPage from "../pages/EmailPage";
 import PasswordPage from "../pages/PasswordPage";
 import PaymentMethodPage from "../pages/PaymentMethodPage";
@@ -162,6 +163,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <AvatarReviewPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/avatar-reviews/order-items/:orderId/:itemIndex/new",
+    element: (
+      <ProtectedRoute>
+        <AvatarReviewCreatePage />
       </ProtectedRoute>
     ),
   },

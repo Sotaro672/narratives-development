@@ -64,17 +64,18 @@ var (
 // Usecase
 // ============================================================
 
-// AvatarReviewUsecase coordinates public reads and creation of buyer-to-seller
-// Avatar reviews.
+// AvatarReviewUsecase coordinates public reads, review status resolution,
+// and creation of buyer-to-seller Avatar reviews.
 //
 // Avatar Review is available only for Avatar-to-Avatar Resale transactions.
 //
-// Public reads expose reviews received by a target Avatar. Review creation is
-// restricted to the authenticated buyer after token transfer completion.
+// Public reads expose reviews received by a target Avatar. Review status and
+// creation are restricted to the authenticated buyer after token transfer
+// completion.
 //
 // Reviewer identity is taken from the authenticated Avatar context by the HTTP
-// layer. Reviewee identity for creation is resolved from authoritative Trade and
-// Order snapshots and must never be trusted from client input.
+// layer. Reviewee identity is resolved from authoritative Trade and Order
+// snapshots and must never be trusted from client input.
 //
 // One Trade can have at most one Avatar Review. The repository is responsible
 // for enforcing that persistence constraint.
@@ -156,8 +157,6 @@ func (u *AvatarReviewUsecase) ListByRevieweeAvatarID(
 		return ListAvatarReviewsResult{}, avatarreviewdom.ErrInvalidPagination
 	}
 
-	// Fetch one additional record so HasNext can be determined without a
-	// separate count query.
 	reviews, err := u.reviewRepo.ListByRevieweeAvatarID(
 		ctx,
 		avatarreviewdom.ListByRevieweeAvatarIDParams{
@@ -196,6 +195,155 @@ func (u *AvatarReviewUsecase) ListByRevieweeAvatarID(
 		PerPage:           perPage,
 		HasNext:           hasNext,
 		Items:             reviews,
+	}, nil
+}
+
+// ============================================================
+// Review status
+// ============================================================
+
+type GetAvatarReviewStatusInput struct {
+	OrderID          string
+	OrderItemIndex   int
+	ReviewerAvatarID string
+}
+
+type GetAvatarReviewStatusResult struct {
+	Eligible         bool   `json:"eligible"`
+	Reviewed         bool   `json:"reviewed"`
+	TradeID          string `json:"tradeId"`
+	OrderID          string `json:"orderId"`
+	OrderItemIndex   int    `json:"orderItemIndex"`
+	RevieweeAvatarID string `json:"revieweeAvatarId"`
+}
+
+// GetStatusByOrderItem resolves whether the authenticated buyer can create an
+// Avatar Review for one completed Resale order item and whether that review
+// has already been submitted.
+//
+// The same authoritative Trade and Order checks used by Create are performed.
+// Review existence is resolved by Trade ID because one Trade can have at most
+// one Avatar Review.
+func (u *AvatarReviewUsecase) GetStatusByOrderItem(
+	ctx context.Context,
+	input GetAvatarReviewStatusInput,
+) (GetAvatarReviewStatusResult, error) {
+	if u == nil ||
+		u.reviewRepo == nil ||
+		u.tradeRepo == nil ||
+		u.orderRepo == nil {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewUsecaseNotConfigured
+	}
+
+	orderID := strings.TrimSpace(input.OrderID)
+	reviewerAvatarID := strings.TrimSpace(input.ReviewerAvatarID)
+
+	if reviewerAvatarID == "" {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewReviewerRequired
+	}
+
+	if orderID == "" {
+		return GetAvatarReviewStatusResult{}, avatarreviewdom.ErrInvalidOrderID
+	}
+
+	if input.OrderItemIndex < 0 {
+		return GetAvatarReviewStatusResult{}, avatarreviewdom.ErrInvalidOrderItemIndex
+	}
+
+	trade, err := u.tradeRepo.GetByOrderItem(
+		ctx,
+		orderID,
+		input.OrderItemIndex,
+	)
+	if err != nil {
+		if errors.Is(err, tradedom.ErrNotFound) {
+			return GetAvatarReviewStatusResult{}, ErrAvatarReviewTradeNotFound
+		}
+
+		return GetAvatarReviewStatusResult{}, err
+	}
+
+	if trade.OrderID != orderID ||
+		trade.OrderItemIndex != input.OrderItemIndex {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewOrderMismatch
+	}
+
+	if trade.BuyerAvatarID != reviewerAvatarID {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewForbidden
+	}
+
+	if trade.SellerType != tradedom.SellerTypeAvatar ||
+		strings.TrimSpace(trade.SellerAvatarID) == "" {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewUnsupportedTrade
+	}
+
+	if trade.SellerAvatarID == reviewerAvatarID {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewUnsupportedTrade
+	}
+
+	order, err := u.orderRepo.GetByID(
+		ctx,
+		orderID,
+	)
+	if err != nil {
+		if errors.Is(err, orderdom.ErrNotFound) {
+			return GetAvatarReviewStatusResult{}, ErrAvatarReviewOrderNotFound
+		}
+
+		return GetAvatarReviewStatusResult{}, err
+	}
+
+	if order.AvatarID != reviewerAvatarID {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewForbidden
+	}
+
+	if order.AvatarID != trade.BuyerAvatarID {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewOrderMismatch
+	}
+
+	if input.OrderItemIndex >= len(order.Items) {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewOrderMismatch
+	}
+
+	item := order.Items[input.OrderItemIndex]
+
+	if item.Type != orderdom.OrderItemTypeResale {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewUnsupportedTrade
+	}
+
+	if strings.TrimSpace(item.SellerSnapshot.AvatarID) == "" {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewOrderMismatch
+	}
+
+	if item.SellerSnapshot.AvatarID != trade.SellerAvatarID {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewOrderMismatch
+	}
+
+	if !item.Transferred ||
+		item.TransferredAt == nil ||
+		item.TransferredAt.IsZero() {
+		return GetAvatarReviewStatusResult{}, ErrAvatarReviewTransferIncomplete
+	}
+
+	reviewed := false
+
+	_, err = u.reviewRepo.GetByTradeID(
+		ctx,
+		trade.ID,
+	)
+	if err == nil {
+		reviewed = true
+	} else if !errors.Is(err, avatarreviewdom.ErrNotFound) {
+		return GetAvatarReviewStatusResult{}, err
+	}
+
+	return GetAvatarReviewStatusResult{
+		Eligible:         true,
+		Reviewed:         reviewed,
+		TradeID:          trade.ID,
+		OrderID:          order.ID,
+		OrderItemIndex:   input.OrderItemIndex,
+		RevieweeAvatarID: trade.SellerAvatarID,
 	}, nil
 }
 
@@ -272,21 +420,15 @@ func (u *AvatarReviewUsecase) Create(
 		return avatarreviewdom.Review{}, err
 	}
 
-	// GetByOrderItem should already guarantee this identity, but validate it
-	// defensively before using the Trade as the review target.
 	if trade.OrderID != orderID ||
 		trade.OrderItemIndex != input.OrderItemIndex {
 		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
 
-	// Only the Trade buyer can submit the post-transfer review.
 	if trade.BuyerAvatarID != reviewerAvatarID {
 		return avatarreviewdom.Review{}, ErrAvatarReviewForbidden
 	}
 
-	// Avatar Review is only for secondary-market Avatar-to-Avatar Trades.
-	//
-	// Primary List transactions use a company seller and are not eligible.
 	if trade.SellerType != tradedom.SellerTypeAvatar ||
 		strings.TrimSpace(trade.SellerAvatarID) == "" {
 		return avatarreviewdom.Review{}, ErrAvatarReviewUnsupportedTrade
@@ -312,12 +454,10 @@ func (u *AvatarReviewUsecase) Create(
 		return avatarreviewdom.Review{}, err
 	}
 
-	// The Order itself must belong to the same authenticated buyer.
 	if order.AvatarID != reviewerAvatarID {
 		return avatarreviewdom.Review{}, ErrAvatarReviewForbidden
 	}
 
-	// Trade buyer and Order buyer must describe the same transaction.
 	if order.AvatarID != trade.BuyerAvatarID {
 		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
@@ -328,17 +468,14 @@ func (u *AvatarReviewUsecase) Create(
 
 	item := order.Items[input.OrderItemIndex]
 
-	// Avatar Review is explicitly a Resale transaction review.
 	if item.Type != orderdom.OrderItemTypeResale {
 		return avatarreviewdom.Review{}, ErrAvatarReviewUnsupportedTrade
 	}
 
-	// A Resale Order item must snapshot the actual seller Avatar.
 	if strings.TrimSpace(item.SellerSnapshot.AvatarID) == "" {
 		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
 
-	// Trade seller and immutable Order seller snapshot must agree.
 	if item.SellerSnapshot.AvatarID != trade.SellerAvatarID {
 		return avatarreviewdom.Review{}, ErrAvatarReviewOrderMismatch
 	}
@@ -347,10 +484,6 @@ func (u *AvatarReviewUsecase) Create(
 	// Verify token transfer completion
 	// ------------------------------------------------------------
 
-	// Order is authoritative for token-transfer state.
-	//
-	// Review submission is allowed only after the item has actually been
-	// transferred to the buyer.
 	if !item.Transferred ||
 		item.TransferredAt == nil ||
 		item.TransferredAt.IsZero() {

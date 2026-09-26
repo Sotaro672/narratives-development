@@ -12,19 +12,24 @@ import (
 )
 
 const (
-	mallAvatarReviewsPath   = "/mall/avatar-reviews"
-	mallMeAvatarReviewsPath = "/mall/me/avatar-reviews"
+	mallAvatarReviewsPath            = "/mall/avatar-reviews"
+	mallMeAvatarReviewsPath          = "/mall/me/avatar-reviews"
+	mallMeAvatarReviewOrderItemsPath = "/mall/me/avatar-reviews/order-items"
 )
 
 // AvatarReviewHandler handles public Avatar review reads and authenticated
-// post-transfer Avatar review creation in Mall.
+// post-transfer Avatar review status / creation in Mall.
 //
 // Supported:
 //
 //	GET  /mall/avatar-reviews/{avatarId}
+//	GET  /mall/me/avatar-reviews/order-items/{orderId}/{itemIndex}
 //	POST /mall/me/avatar-reviews
 //
 // Public GET returns reviews received by the specified Avatar.
+//
+// Authenticated status GET resolves whether one completed Resale order item is
+// eligible for Avatar Review and whether the review has already been submitted.
 //
 // POST is available only for completed Avatar-to-Avatar Resale transactions.
 // Reviewer identity is resolved from AvatarContextMiddleware and is never
@@ -47,6 +52,7 @@ func NewAvatarReviewHandler(
 // Supported:
 //
 //	GET  /mall/avatar-reviews/{avatarId}?page=1&perPage=20
+//	GET  /mall/me/avatar-reviews/order-items/{orderId}/{itemIndex}
 //	POST /mall/me/avatar-reviews
 func (h *AvatarReviewHandler) ServeHTTP(
 	w http.ResponseWriter,
@@ -69,6 +75,21 @@ func (h *AvatarReviewHandler) ServeHTTP(
 		switch r.Method {
 		case http.MethodGet:
 			h.listByAvatar(w, r, avatarID)
+		case http.MethodOptions:
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			methodNotAllowed(w)
+		}
+		return
+	}
+
+	if strings.HasPrefix(
+		r.URL.Path,
+		mallMeAvatarReviewOrderItemsPath+"/",
+	) {
+		switch r.Method {
+		case http.MethodGet:
+			h.getStatusByOrderItem(w, r)
 		case http.MethodOptions:
 			w.WriteHeader(http.StatusNoContent)
 		default:
@@ -212,6 +233,94 @@ func parseAvatarReviewPositiveIntQuery(
 	}
 
 	return value, true
+}
+
+// ============================================================
+// Review status
+// ============================================================
+
+// GET /mall/me/avatar-reviews/order-items/{orderId}/{itemIndex}
+//
+// Returns whether the authenticated buyer can submit an Avatar Review for the
+// specified completed Resale transaction and whether a review already exists.
+//
+// Reviewer identity comes exclusively from AvatarContextMiddleware.
+func (h *AvatarReviewHandler) getStatusByOrderItem(
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	orderID, itemIndex, ok := avatarReviewOrderItemFromPath(
+		r.URL.Path,
+	)
+	if !ok {
+		badRequest(
+			w,
+			"invalid_avatar_review_order_item_path",
+		)
+		return
+	}
+
+	result, err := h.uc.GetStatusByOrderItem(
+		r.Context(),
+		usecase.GetAvatarReviewStatusInput{
+			OrderID:          orderID,
+			OrderItemIndex:   itemIndex,
+			ReviewerAvatarID: avatarID,
+		},
+	)
+	if err != nil {
+		writeAvatarReviewErr(w, err)
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		map[string]any{
+			"data": result,
+		},
+	)
+}
+
+func avatarReviewOrderItemFromPath(
+	path string,
+) (string, int, bool) {
+	prefix := mallMeAvatarReviewOrderItemsPath + "/"
+
+	if !strings.HasPrefix(path, prefix) {
+		return "", 0, false
+	}
+
+	remaining := strings.TrimSpace(
+		strings.TrimPrefix(path, prefix),
+	)
+	if remaining == "" {
+		return "", 0, false
+	}
+
+	parts := strings.Split(remaining, "/")
+	if len(parts) != 2 {
+		return "", 0, false
+	}
+
+	orderID := strings.TrimSpace(parts[0])
+	itemIndexRaw := strings.TrimSpace(parts[1])
+
+	if orderID == "" || itemIndexRaw == "" {
+		return "", 0, false
+	}
+
+	itemIndex, err := strconv.Atoi(itemIndexRaw)
+	if err != nil || itemIndex < 0 {
+		return "", 0, false
+	}
+
+	return orderID, itemIndex, true
 }
 
 // ============================================================

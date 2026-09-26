@@ -344,6 +344,27 @@ export function useScanResultPage() {
       if (transfer.shouldOpenTransferModal) {
         setTransferConfirmationRequired(false);
         setTransferConfirmModalOpen(false);
+
+        const matchedOrderId =
+          transfer.transferResult?.matchedOrderId?.trim() ?? "";
+        const matchedItemIndex =
+          transfer.transferResult?.matchedItemIndex;
+
+        if (
+          transfer.transferResult?.matchedItemType === "resale" &&
+          matchedOrderId &&
+          typeof matchedItemIndex === "number" &&
+          Number.isInteger(matchedItemIndex) &&
+          matchedItemIndex >= 0
+        ) {
+          navigate(
+            `/avatar-reviews/order-items/${encodeURIComponent(
+              matchedOrderId,
+            )}/${matchedItemIndex}/new`,
+          );
+          return;
+        }
+
         setTransferModalOpen(true);
         return;
       }
