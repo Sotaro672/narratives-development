@@ -31,21 +31,12 @@ export default function AvatarPage() {
     <>
       <Layout
         title="AMOL"
-        actionButtonLabel={vm.saveButtonLabel}
-        onActionButtonClick={handleSaveClick}
-        actionButtonDisabled={vm.saving || vm.loading}
         secondaryActionButtonLabel={isCreateMode ? "サインアウト" : undefined}
         onSecondaryActionButtonClick={
           isCreateMode ? handleSignOutClick : undefined
         }
         secondaryActionButtonDisabled={vm.saving || vm.loading}
         showFooter
-        footerProps={{
-          variant: "action",
-          buttonLabel: vm.saveButtonLabel,
-          disabled: vm.saving || vm.loading,
-          onButtonClick: handleSaveClick,
-        }}
       >
         <section className="page-section avatar-create-page-section">
           <div className="form-block avatar-create-form-block">
@@ -154,6 +145,18 @@ export default function AvatarPage() {
               disabled={vm.saving || vm.loading}
               fullWidth
             />
+
+            <div className="avatar-create-page-actions">
+              <Button
+                type="button"
+                variant="primary"
+                onClick={handleSaveClick}
+                disabled={vm.saving || vm.loading}
+                fullWidth
+              >
+                {vm.saveButtonLabel}
+              </Button>
+            </div>
 
             {vm.msg ? (
               <Alert
