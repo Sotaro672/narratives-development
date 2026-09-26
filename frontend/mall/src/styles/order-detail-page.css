@@ -8,14 +8,43 @@
 }
 
 .order-detail-page__stack {
+  display: flex;
   width: 100%;
   align-self: flex-start;
+  flex-direction: column;
+  gap: 24px;
 }
+
+.order-detail-page__section {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.order-detail-page__section + .order-detail-page__section {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+
+.order-detail-page__state {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.order-detail-page__state-text {
+  margin: 0;
+  color: var(--color-text, #111827);
+  line-height: 1.6;
+}
+
+/* ==============================
+   Items
+   ============================== */
 
 .order-detail-page__items {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -25,10 +54,17 @@
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   gap: 14px;
-  padding: 14px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 16px;
-  background: var(--color-muted-surface, #f9fafb);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--color-border, #e5e7eb);
+}
+
+.order-detail-page__item:first-child {
+  padding-top: 0;
+}
+
+.order-detail-page__item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
 }
 
 .order-detail-page__item-body {
@@ -82,10 +118,23 @@
   white-space: nowrap;
 }
 
+.order-detail-page__item-details {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+}
+
 .order-detail-page__cancel-actions {
+  width: 100%;
   justify-content: flex-end;
   margin-top: 4px;
 }
+
+/* ==============================
+   Payment
+   ============================== */
 
 .order-detail-page__payment-total {
   margin-top: 6px;
@@ -100,9 +149,9 @@
   font-weight: 700;
 }
 
-/* -------------------------------------------------------
- * Return request
- * ------------------------------------------------------- */
+/* ==============================
+   Return request
+   ============================== */
 
 .order-detail-page__return-modal-body {
   display: grid;
@@ -147,11 +196,26 @@
 }
 
 @media (max-width: 640px) {
+  .order-detail-page__stack {
+    gap: 20px;
+  }
+
+  .order-detail-page__section + .order-detail-page__section {
+    padding-top: 20px;
+  }
+
   .order-detail-page__item {
     grid-template-columns: 64px minmax(0, 1fr);
     gap: 10px;
-    padding: 12px;
-    border-radius: 14px;
+    padding: 14px 0;
+  }
+
+  .order-detail-page__item:first-child {
+    padding-top: 0;
+  }
+
+  .order-detail-page__item:last-child {
+    padding-bottom: 0;
   }
 
   .order-detail-page__item-heading {
@@ -162,6 +226,11 @@
   .order-detail-page__item-title,
   .order-detail-page__item-token-name {
     white-space: normal;
+  }
+
+  .order-detail-page__item-details {
+    grid-column: 1 / -1;
+    gap: 10px;
   }
 
   .order-detail-page__cancel-actions {

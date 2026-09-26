@@ -84,10 +84,14 @@ export default function OrderDetailItem({
         <div className="order-detail-page__item-heading">
           <div className="order-detail-page__item-title-area">
             <span className="order-detail-page__item-title">{productTitle}</span>
-            {item.tokenName ? <span className="order-detail-page__item-token-name">{item.tokenName}</span> : null}
+            {item.tokenName ? (
+              <span className="order-detail-page__item-token-name">{item.tokenName}</span>
+            ) : null}
           </div>
 
-          <span className="order-detail-page__item-price">{formatAmount(item.price)}</span>
+          <span className="order-detail-page__item-price">
+            {formatAmount(item.price)}
+          </span>
         </div>
 
         <div>
@@ -108,7 +112,9 @@ export default function OrderDetailItem({
             {brandName}
           </Button>
         </div>
+      </div>
 
+      <div className="order-detail-page__item-details">
         <OrderItemMeta item={item} />
 
         <InfoList>
@@ -122,15 +128,21 @@ export default function OrderDetailItem({
           </InfoRow>
 
           {item.returnRequestedAt ? (
-            <InfoRow label="返品申請日時">{formatDateTime(item.returnRequestedAt)}</InfoRow>
+            <InfoRow label="返品申請日時">
+              {formatDateTime(item.returnRequestedAt)}
+            </InfoRow>
           ) : null}
 
           {item.returnCompletedAt ? (
-            <InfoRow label="返品完了日時">{formatDateTime(item.returnCompletedAt)}</InfoRow>
+            <InfoRow label="返品完了日時">
+              {formatDateTime(item.returnCompletedAt)}
+            </InfoRow>
           ) : null}
 
           {item.transferredAt ? (
-            <InfoRow label="受取日時">{formatDateTime(item.transferredAt)}</InfoRow>
+            <InfoRow label="受取日時">
+              {formatDateTime(item.transferredAt)}
+            </InfoRow>
           ) : null}
         </InfoList>
 

@@ -2,7 +2,6 @@
 
 import Alert from "../../../components/ui/Alert";
 import Badge from "../../../components/ui/Badge";
-import Card from "../../../components/ui/Card";
 import SectionHeader from "../../../components/ui/SectionHeader";
 import { formatDateTime } from "../../../components/utils/date";
 import type { OrderDetail } from "../../shared/types/orderDetailTypes";
@@ -20,7 +19,7 @@ export default function OrderDetailSummary({
   tradeNavigationError = null,
 }: OrderDetailSummaryProps) {
   return (
-    <Card as="section">
+    <section className="order-detail-page__section order-detail-page__summary">
       <SectionHeader
         className="ui-section-header--title-sm"
         title={`注文ID: ${order.id}`}
@@ -38,6 +37,6 @@ export default function OrderDetailSummary({
       {tradeNavigationError ? (
         <Alert variant="error">{tradeNavigationError}</Alert>
       ) : null}
-    </Card>
+    </section>
   );
 }

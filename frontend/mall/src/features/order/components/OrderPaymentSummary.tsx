@@ -1,7 +1,6 @@
 // frontend/mall/src/features/order/components/OrderPaymentSummary.tsx
 
 import Badge from "../../../components/ui/Badge";
-import Card from "../../../components/ui/Card";
 import InfoList, { InfoRow } from "../../../components/ui/InfoList";
 import SectionHeader from "../../../components/ui/SectionHeader";
 import { formatDateTime } from "../../../components/utils/date";
@@ -55,7 +54,7 @@ export default function OrderPaymentSummary({
   );
 
   return (
-    <Card as="section">
+    <section className="order-detail-page__section order-detail-page__payment">
       <SectionHeader title="お支払い" titleAs="h2" />
 
       <InfoList>
@@ -101,6 +100,6 @@ export default function OrderPaymentSummary({
           </InfoRow>
         ) : null}
       </InfoList>
-    </Card>
+    </section>
   );
 }

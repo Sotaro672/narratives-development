@@ -72,18 +72,21 @@ export default function OrderDetail() {
     >
       <section className="page-section order-detail-page">
         {loading ? (
-          <div className="page-card">
-            <p className="page-card__text">読み込み中です...</p>
-          </div>
+          <section
+            className="order-detail-page__section order-detail-page__state"
+            aria-label="読み込み状態"
+          >
+            <p className="order-detail-page__state-text">読み込み中です...</p>
+          </section>
         ) : null}
 
         {showError ? (
-          <div className="page-card">
-            <SectionHeader title="注文情報を表示できません" titleAs="h2">
-              <p className="page-card__text" role="alert">
-                {error}
-              </p>
-            </SectionHeader>
+          <section className="order-detail-page__section order-detail-page__state">
+            <SectionHeader title="注文情報を表示できません" titleAs="h2" />
+
+            <p className="order-detail-page__state-text" role="alert">
+              {error}
+            </p>
 
             <div className="page-actions">
               <button
@@ -94,7 +97,7 @@ export default function OrderDetail() {
                 再読み込み
               </button>
             </div>
-          </div>
+          </section>
         ) : null}
 
         {showDetail && order ? (

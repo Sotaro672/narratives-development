@@ -1,6 +1,5 @@
 // frontend/mall/src/features/order/components/OrderDetailItemList.tsx
 
-import Card from "../../../components/ui/Card";
 import SectionHeader from "../../../components/ui/SectionHeader";
 import type { OrderDetail } from "../../shared/types/orderDetailTypes";
 import OrderDetailItem from "./OrderDetailItem";
@@ -27,7 +26,7 @@ export default function OrderDetailItemList({
   onOpenBrand,
 }: OrderDetailItemListProps) {
   return (
-    <Card as="section">
+    <section className="order-detail-page__section order-detail-page__products">
       <SectionHeader title="商品" titleAs="h2" />
 
       <ul className="order-detail-page__items">
@@ -47,6 +46,6 @@ export default function OrderDetailItemList({
           />
         ))}
       </ul>
-    </Card>
+    </section>
   );
 }
