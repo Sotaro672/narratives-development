@@ -44,18 +44,14 @@ func validatePreviewGETRequest(
 	return true
 }
 
-// resolvePreviewModelInfoFromRequest はPreview API共通の入力検証と
+// resolvePreviewModelInfoFromRequest はPreview APIの入力検証と
 // PreviewModelInfo取得処理を行います。
-//
-// extraResponseFieldsには、Preview Me固有のavatarIdなど、
-// エラー応答へ追加したい値を渡します。
 //
 // falseを返した場合は、この関数内でレスポンスを書き込み済みです。
 func resolvePreviewModelInfoFromRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 	q PreviewQuery,
-	extraResponseFields map[string]any,
 ) (*dto.PreviewModelInfo, bool) {
 	if q == nil {
 		writePreviewError(
@@ -63,7 +59,6 @@ func resolvePreviewModelInfoFromRequest(
 			http.StatusInternalServerError,
 			"preview query not configured",
 			"",
-			extraResponseFields,
 		)
 		return nil, false
 	}
@@ -75,7 +70,6 @@ func resolvePreviewModelInfoFromRequest(
 			http.StatusBadRequest,
 			"productId is required",
 			"",
-			extraResponseFields,
 		)
 		return nil, false
 	}
@@ -93,7 +87,6 @@ func resolvePreviewModelInfoFromRequest(
 				http.StatusRequestTimeout,
 				"request canceled",
 				productID,
-				extraResponseFields,
 			)
 		default:
 			writePreviewError(
@@ -101,7 +94,6 @@ func resolvePreviewModelInfoFromRequest(
 				http.StatusInternalServerError,
 				"resolve failed",
 				productID,
-				extraResponseFields,
 			)
 		}
 
@@ -114,7 +106,6 @@ func resolvePreviewModelInfoFromRequest(
 			http.StatusInternalServerError,
 			"resolve failed (nil result)",
 			productID,
-			extraResponseFields,
 		)
 		return nil, false
 	}
@@ -127,18 +118,10 @@ func writePreviewError(
 	status int,
 	message string,
 	productID string,
-	extraResponseFields map[string]any,
 ) {
-	response := make(
-		map[string]any,
-		len(extraResponseFields)+2,
-	)
-
-	for key, value := range extraResponseFields {
-		response[key] = value
+	response := map[string]any{
+		"error": message,
 	}
-
-	response["error"] = message
 
 	if productID != "" {
 		response["productId"] = productID

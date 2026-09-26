@@ -69,13 +69,6 @@ func (u *PaymentMethodUsecase) GetByUser(
 	return u.repo.GetByUser(ctx, userID)
 }
 
-func (u *PaymentMethodUsecase) GetDefaultByUser(
-	ctx context.Context,
-	userID string,
-) (*pm.PaymentMethod, error) {
-	return u.repo.GetDefaultByUser(ctx, userID)
-}
-
 func (u *PaymentMethodUsecase) GetByStripePaymentMethodID(
 	ctx context.Context,
 	stripePaymentMethodID string,

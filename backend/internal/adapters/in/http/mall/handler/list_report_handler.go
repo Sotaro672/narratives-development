@@ -3,7 +3,6 @@ package mallHandler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -26,20 +25,6 @@ type ListReportService interface {
 
 type ListReportHandler struct {
 	reportSvc ListReportService
-}
-
-type reportListRequest struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
-}
-
-type listReportResponse struct {
-	CaseID        string               `json:"caseId"`
-	ReportID      string               `json:"reportId"`
-	ReportCount   int                  `json:"reportCount"`
-	Status        reportdom.CaseStatus `json:"status"`
-	CaseCreated   bool                 `json:"caseCreated"`
-	ReportCreated bool                 `json:"reportCreated"`
 }
 
 func NewListReportHandler(
@@ -108,42 +93,8 @@ func (h *ListReportHandler) handleReport(
 		return
 	}
 
-	var request reportListRequest
-
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&request); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid json body",
-		)
-		return
-	}
-
-	reason := reportdom.ReportReason(
-		strings.ToUpper(
-			strings.TrimSpace(request.Reason),
-		),
-	)
-	if err := reason.Validate(); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid report reason",
-		)
-		return
-	}
-
-	request.Detail = strings.TrimSpace(request.Detail)
-	if reason == reportdom.ReportReasonOther &&
-		request.Detail == "" {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"report detail required",
-		)
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -153,7 +104,7 @@ func (h *ListReportHandler) handleReport(
 			ListID:   listID,
 			AvatarID: avatarID,
 			Reason:   reason,
-			Detail:   request.Detail,
+			Detail:   detail,
 		},
 	)
 	if err != nil {
@@ -161,23 +112,7 @@ func (h *ListReportHandler) handleReport(
 		return
 	}
 
-	statusCode := http.StatusCreated
-	if !result.ReportCreated {
-		statusCode = http.StatusOK
-	}
-
-	writeJSON(
-		w,
-		statusCode,
-		listReportResponse{
-			CaseID:        string(result.Case.ID),
-			ReportID:      string(result.Report.ID),
-			ReportCount:   result.Case.ReportCount,
-			Status:        result.Case.Status,
-			CaseCreated:   result.CaseCreated,
-			ReportCreated: result.ReportCreated,
-		},
-	)
+	writeReportResult(w, result)
 }
 
 func parseListReportPath(

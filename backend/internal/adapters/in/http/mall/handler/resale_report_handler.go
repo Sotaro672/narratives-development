@@ -2,30 +2,14 @@
 package mallHandler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
 	productblueprintdom "narratives/internal/domain/productBlueprint"
-	reportdom "narratives/internal/domain/report"
 	resaledom "narratives/internal/domain/resale"
 )
-
-type resaleReportRequest struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
-}
-
-type resaleReportResponse struct {
-	CaseID        string               `json:"caseId"`
-	ReportID      string               `json:"reportId"`
-	ReportCount   int                  `json:"reportCount"`
-	Status        reportdom.CaseStatus `json:"status"`
-	CaseCreated   bool                 `json:"caseCreated"`
-	ReportCreated bool                 `json:"reportCreated"`
-}
 
 func (h *ResaleHandler) reportResale(
 	w http.ResponseWriter,
@@ -56,42 +40,8 @@ func (h *ResaleHandler) reportResale(
 		return
 	}
 
-	var request resaleReportRequest
-
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&request); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid json body",
-		)
-		return
-	}
-
-	reason := reportdom.ReportReason(
-		strings.ToUpper(
-			strings.TrimSpace(request.Reason),
-		),
-	)
-	if err := reason.Validate(); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid report reason",
-		)
-		return
-	}
-
-	request.Detail = strings.TrimSpace(request.Detail)
-	if reason == reportdom.ReportReasonOther &&
-		request.Detail == "" {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"report detail required",
-		)
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -101,7 +51,7 @@ func (h *ResaleHandler) reportResale(
 			ResaleID: resaleID,
 			AvatarID: avatarID,
 			Reason:   reason,
-			Detail:   request.Detail,
+			Detail:   detail,
 		},
 	)
 	if err != nil {
@@ -109,23 +59,7 @@ func (h *ResaleHandler) reportResale(
 		return
 	}
 
-	statusCode := http.StatusCreated
-	if !result.ReportCreated {
-		statusCode = http.StatusOK
-	}
-
-	writeJSON(
-		w,
-		statusCode,
-		resaleReportResponse{
-			CaseID:        string(result.Case.ID),
-			ReportID:      string(result.Report.ID),
-			ReportCount:   result.Case.ReportCount,
-			Status:        result.Case.Status,
-			CaseCreated:   result.CaseCreated,
-			ReportCreated: result.ReportCreated,
-		},
-	)
+	writeReportResult(w, result)
 }
 
 func writeResaleReportError(

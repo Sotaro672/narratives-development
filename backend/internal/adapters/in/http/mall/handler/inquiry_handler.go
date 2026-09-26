@@ -146,7 +146,7 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // createInquiryRequest は mall 画面から商品問い合わせを起票する request です。
-// productId は /mall/me/preview?productId=... の productId を渡します。
+// productId は /mall/preview?productId=... の productId を渡します。
 // avatarId は request body では受け取らず、AvatarContextMiddleware 由来で解決します。
 type createInquiryRequest struct {
 	ProductID   string                 `json:"productId"`

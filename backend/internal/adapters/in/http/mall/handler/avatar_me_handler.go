@@ -12,7 +12,6 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 	avataruc "narratives/internal/application/usecase"
 	avatardom "narratives/internal/domain/avatar"
-	reportdom "narratives/internal/domain/report"
 )
 
 // Policy (me-only):
@@ -32,30 +31,6 @@ type MeAvatarHandler struct {
 	Repo     MeAvatarResolver
 	AvatarUC *avataruc.AvatarUsecase
 	ReportUC *avataruc.ReportUsecase
-}
-
-type meAvatarResponse struct {
-	AvatarID      string  `json:"avatarId"`
-	UserID        string  `json:"userId"`
-	AvatarName    string  `json:"avatarName"`
-	AvatarIcon    *string `json:"avatarIcon,omitempty"`
-	WalletAddress string  `json:"walletAddress"`
-	Profile       *string `json:"profile,omitempty"`
-	ExternalLink  *string `json:"externalLink,omitempty"`
-}
-
-type meAvatarReportRequest struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
-}
-
-type meAvatarReportResponse struct {
-	CaseID        string               `json:"caseId"`
-	ReportID      string               `json:"reportId"`
-	ReportCount   int                  `json:"reportCount"`
-	Status        reportdom.CaseStatus `json:"status"`
-	CaseCreated   bool                 `json:"caseCreated"`
-	ReportCreated bool                 `json:"reportCreated"`
 }
 
 func NewMeAvatarHandler(
@@ -150,50 +125,6 @@ func parseMeAvatarReportPath(path string) (string, bool) {
 	}
 
 	return parts[0], true
-}
-
-func httpAvatarIcon(value *string) *string {
-	if value == nil || *value == "" {
-		return nil
-	}
-
-	if !strings.HasPrefix(*value, "http://") &&
-		!strings.HasPrefix(*value, "https://") {
-		return nil
-	}
-
-	return value
-}
-
-func newMeAvatarResponse(
-	avatarID string,
-	patch avatardom.AvatarPatch,
-) (meAvatarResponse, error) {
-	if avatarID == "" {
-		return meAvatarResponse{}, avatardom.ErrInvalidID
-	}
-
-	if patch.UserID == "" {
-		return meAvatarResponse{}, avatardom.ErrInvalidUserID
-	}
-
-	if patch.AvatarName == nil || *patch.AvatarName == "" {
-		return meAvatarResponse{}, avatardom.ErrInvalidAvatarName
-	}
-
-	if patch.WalletAddress == nil || *patch.WalletAddress == "" {
-		return meAvatarResponse{}, avatardom.ErrInvalidWalletAddressLink
-	}
-
-	return meAvatarResponse{
-		AvatarID:      avatarID,
-		UserID:        patch.UserID,
-		AvatarName:    *patch.AvatarName,
-		AvatarIcon:    httpAvatarIcon(patch.AvatarIcon),
-		WalletAddress: *patch.WalletAddress,
-		Profile:       patch.Profile,
-		ExternalLink:  patch.ExternalLink,
-	}, nil
 }
 
 func (h *MeAvatarHandler) ResolveAvatarByUID(
@@ -454,26 +385,8 @@ func (h *MeAvatarHandler) handleReport(
 		return
 	}
 
-	var req meAvatarReportRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-
-	reason := reportdom.ReportReason(
-		strings.ToUpper(strings.TrimSpace(req.Reason)),
-	)
-	if err := reason.Validate(); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid report reason")
-		return
-	}
-
-	req.Detail = strings.TrimSpace(req.Detail)
-	if reason == reportdom.ReportReasonOther && req.Detail == "" {
-		writeJSONError(w, http.StatusBadRequest, "report detail required")
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -483,7 +396,7 @@ func (h *MeAvatarHandler) handleReport(
 			TargetAvatarID:   targetAvatarID,
 			ReporterAvatarID: reporterAvatarID,
 			Reason:           reason,
-			Detail:           req.Detail,
+			Detail:           detail,
 		},
 	)
 	if err != nil {
@@ -491,19 +404,7 @@ func (h *MeAvatarHandler) handleReport(
 		return
 	}
 
-	statusCode := http.StatusCreated
-	if !result.ReportCreated {
-		statusCode = http.StatusOK
-	}
-
-	writeJSON(w, statusCode, meAvatarReportResponse{
-		CaseID:        string(result.Case.ID),
-		ReportID:      string(result.Report.ID),
-		ReportCount:   result.Case.ReportCount,
-		Status:        result.Case.Status,
-		CaseCreated:   result.CaseCreated,
-		ReportCreated: result.ReportCreated,
-	})
+	writeReportResult(w, result)
 }
 
 func writeMeAvatarErr(w http.ResponseWriter, err error) {

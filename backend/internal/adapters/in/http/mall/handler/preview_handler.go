@@ -41,7 +41,6 @@ type PreviewNameResolver interface {
 type PreviewHandler struct {
 	q      PreviewQuery
 	ownerQ *sharedquery.OwnerResolveQuery
-
 	tbRepo TokenBlueprintPatchReader
 	nameR  PreviewNameResolver
 }
@@ -120,7 +119,6 @@ func (h *PreviewHandler) ServeHTTP(
 		w,
 		r,
 		q,
-		nil,
 	)
 	if !ok {
 		return

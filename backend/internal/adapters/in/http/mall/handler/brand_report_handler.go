@@ -3,7 +3,6 @@ package mallHandler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -24,20 +23,6 @@ type BrandReportService interface {
 
 type BrandReportHandler struct {
 	reportSvc BrandReportService
-}
-
-type reportBrandRequest struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
-}
-
-type brandReportResponse struct {
-	CaseID        string               `json:"caseId"`
-	ReportID      string               `json:"reportId"`
-	ReportCount   int                  `json:"reportCount"`
-	Status        reportdom.CaseStatus `json:"status"`
-	CaseCreated   bool                 `json:"caseCreated"`
-	ReportCreated bool                 `json:"reportCreated"`
 }
 
 func NewBrandReportHandler(
@@ -106,42 +91,8 @@ func (h *BrandReportHandler) handleReport(
 		return
 	}
 
-	var request reportBrandRequest
-
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&request); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid json body",
-		)
-		return
-	}
-
-	reason := reportdom.ReportReason(
-		strings.ToUpper(
-			strings.TrimSpace(request.Reason),
-		),
-	)
-	if err := reason.Validate(); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid report reason",
-		)
-		return
-	}
-
-	request.Detail = strings.TrimSpace(request.Detail)
-	if reason == reportdom.ReportReasonOther &&
-		request.Detail == "" {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"report detail required",
-		)
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -151,7 +102,7 @@ func (h *BrandReportHandler) handleReport(
 			BrandID:  brandID,
 			AvatarID: avatarID,
 			Reason:   reason,
-			Detail:   request.Detail,
+			Detail:   detail,
 		},
 	)
 	if err != nil {
@@ -159,23 +110,7 @@ func (h *BrandReportHandler) handleReport(
 		return
 	}
 
-	statusCode := http.StatusCreated
-	if !result.ReportCreated {
-		statusCode = http.StatusOK
-	}
-
-	writeJSON(
-		w,
-		statusCode,
-		brandReportResponse{
-			CaseID:        string(result.Case.ID),
-			ReportID:      string(result.Report.ID),
-			ReportCount:   result.Case.ReportCount,
-			Status:        result.Case.Status,
-			CaseCreated:   result.CaseCreated,
-			ReportCreated: result.ReportCreated,
-		},
-	)
+	writeReportResult(w, result)
 }
 
 func parseBrandReportPath(

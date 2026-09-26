@@ -25,7 +25,6 @@ export async function fetchPaymentContext(): Promise<PaymentContext> {
 
 export async function fetchPaymentMethods(): Promise<{
   methods: CardPaymentMethod[];
-  defaultMethod: CardPaymentMethod | null;
 }> {
   const listBody = await requestJson<PaymentMethodListResponse>(
     "/mall/me/payment-methods",
@@ -40,18 +39,10 @@ export async function fetchPaymentMethods(): Promise<{
     },
   );
 
-  const methods = Array.isArray(listBody?.data)
-    ? listBody.data
-    : [];
-
-  const defaultMethod =
-    methods.find((method) => method.isDefault) ??
-    methods[0] ??
-    null;
-
   return {
-    methods,
-    defaultMethod,
+    methods: Array.isArray(listBody?.data)
+      ? listBody.data
+      : [],
   };
 }
 

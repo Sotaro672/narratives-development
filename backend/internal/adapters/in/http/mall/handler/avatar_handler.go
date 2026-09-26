@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"time"
 
 	"narratives/internal/adapters/in/http/middleware"
 	avataruc "narratives/internal/application/usecase"
@@ -124,45 +123,6 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, toAvatarResponse(created))
-}
-
-type avatarResponse struct {
-	AvatarID      string    `json:"avatarId"`
-	UserID        string    `json:"userId"`
-	AvatarName    string    `json:"avatarName"`
-	AvatarIcon    *string   `json:"avatarIcon,omitempty"`
-	WalletAddress *string   `json:"walletAddress,omitempty"`
-	Profile       *string   `json:"profile,omitempty"`
-	ExternalLink  *string   `json:"externalLink,omitempty"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
-}
-
-func publicAvatarIconURL(value *string) *string {
-	if value == nil || *value == "" {
-		return nil
-	}
-
-	if !strings.HasPrefix(*value, "http://") &&
-		!strings.HasPrefix(*value, "https://") {
-		return nil
-	}
-
-	return value
-}
-
-func toAvatarResponse(a avatardom.Avatar) avatarResponse {
-	return avatarResponse{
-		AvatarID:      a.ID,
-		UserID:        a.UserID,
-		AvatarName:    a.AvatarName,
-		AvatarIcon:    publicAvatarIconURL(a.AvatarIcon),
-		WalletAddress: a.WalletAddress,
-		Profile:       a.Profile,
-		ExternalLink:  a.ExternalLink,
-		CreatedAt:     a.CreatedAt,
-		UpdatedAt:     a.UpdatedAt,
-	}
 }
 
 func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {

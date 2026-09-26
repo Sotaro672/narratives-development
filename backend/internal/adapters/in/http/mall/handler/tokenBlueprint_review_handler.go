@@ -345,11 +345,6 @@ type createCommentRequest struct {
 	Body            string  `json:"body"`
 }
 
-type reportTokenBlueprintCommentRequest struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
-}
-
 // ============================================================
 // Helpers
 // ============================================================
@@ -788,23 +783,8 @@ func (h *TokenBlueprintReviewHandler) reportComment(
 		return
 	}
 
-	var request reportTokenBlueprintCommentRequest
-	if err := readJSON(r, &request); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-
-	reason := reportdom.ReportReason(
-		strings.ToUpper(strings.TrimSpace(request.Reason)),
-	)
-	if err := reason.Validate(); err != nil {
-		badRequest(w, err.Error())
-		return
-	}
-
-	detail := strings.TrimSpace(request.Detail)
-	if reason == reportdom.ReportReasonOther && detail == "" {
-		badRequest(w, reportdom.ErrReportDetailRequired.Error())
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -823,75 +803,19 @@ func (h *TokenBlueprintReviewHandler) reportComment(
 		return
 	}
 
-	statusCode := http.StatusCreated
-	if !result.ReportCreated {
-		statusCode = http.StatusOK
-	}
-
-	writeJSON(
-		w,
-		statusCode,
-		map[string]any{
-			"caseId":        string(result.Case.ID),
-			"reportId":      string(result.Report.ID),
-			"reportCount":   result.Case.ReportCount,
-			"status":        result.Case.Status,
-			"caseCreated":   result.CaseCreated,
-			"reportCreated": result.ReportCreated,
-		},
-	)
+	writeReportResult(w, result)
 }
 
 func writeTokenBlueprintCommentReportError(
 	w http.ResponseWriter,
 	err error,
 ) {
-	switch {
-	case errors.Is(err, appusecase.ErrReportUsecaseNotConfigured):
-		writeJSON(
-			w,
-			http.StatusServiceUnavailable,
-			map[string]string{
-				"error": "report service not configured",
-			},
-		)
-
-	case errors.Is(err, appusecase.ErrReportForbidden):
-		writeJSON(
-			w,
-			http.StatusForbidden,
-			map[string]string{
-				"error": "report forbidden",
-			},
-		)
-
-	case errors.Is(err, appusecase.ErrReportSelfReport):
-		writeJSON(
-			w,
-			http.StatusForbidden,
-			map[string]string{
-				"error": "self report is not allowed",
-			},
-		)
-
-	case errors.Is(err, reportdom.ErrCannotReportRemovedTarget):
-		writeJSON(
-			w,
-			http.StatusConflict,
-			map[string]string{
-				"error": "cannot report removed target",
-			},
-		)
-
-	case reportdom.IsInvalid(err):
-		badRequest(w, err.Error())
-
-	case isNotFound(err):
+	if isNotFound(err) {
 		notFound(w)
-
-	default:
-		internalError(w, err.Error())
+		return
 	}
+
+	writeReportError(w, err)
 }
 
 // ============================================================

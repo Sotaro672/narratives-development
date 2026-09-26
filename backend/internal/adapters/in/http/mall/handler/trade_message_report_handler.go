@@ -2,29 +2,13 @@
 package mallHandler
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
 	usecase "narratives/internal/application/usecase"
-	reportdom "narratives/internal/domain/report"
 	tradedom "narratives/internal/domain/trade"
 )
-
-type reportTradeMessageRequest struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
-}
-
-type reportTradeMessageResponse struct {
-	CaseID        string               `json:"caseId"`
-	ReportID      string               `json:"reportId"`
-	ReportCount   int                  `json:"reportCount"`
-	Status        reportdom.CaseStatus `json:"status"`
-	CaseCreated   bool                 `json:"caseCreated"`
-	ReportCreated bool                 `json:"reportCreated"`
-}
 
 // POST /mall/me/trades/{tradeId}/messages/{messageId}/reports
 //
@@ -63,26 +47,8 @@ func (h *TradeHandler) reportMessage(
 		return
 	}
 
-	var req reportTradeMessageRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil {
-		badRequest(w, "invalid json body")
-		return
-	}
-
-	reason := reportdom.ReportReason(
-		strings.ToUpper(strings.TrimSpace(req.Reason)),
-	)
-	if err := reason.Validate(); err != nil {
-		badRequest(w, "invalid report reason")
-		return
-	}
-
-	req.Detail = strings.TrimSpace(req.Detail)
-	if reason == reportdom.ReportReasonOther && req.Detail == "" {
-		badRequest(w, "report detail required")
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -93,7 +59,7 @@ func (h *TradeHandler) reportMessage(
 			MessageID: messageID,
 			AvatarID:  avatarID,
 			Reason:    reason,
-			Detail:    req.Detail,
+			Detail:    detail,
 		},
 	)
 	if err != nil {
@@ -101,19 +67,7 @@ func (h *TradeHandler) reportMessage(
 		return
 	}
 
-	statusCode := http.StatusCreated
-	if !result.ReportCreated {
-		statusCode = http.StatusOK
-	}
-
-	writeJSON(w, statusCode, reportTradeMessageResponse{
-		CaseID:        string(result.Case.ID),
-		ReportID:      string(result.Report.ID),
-		ReportCount:   result.Case.ReportCount,
-		Status:        result.Case.Status,
-		CaseCreated:   result.CaseCreated,
-		ReportCreated: result.ReportCreated,
-	})
+	writeReportResult(w, result)
 }
 
 func writeTradeMessageReportErr(

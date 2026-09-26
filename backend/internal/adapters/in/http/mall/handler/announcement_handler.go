@@ -3,7 +3,6 @@ package mallHandler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -37,20 +36,6 @@ type MeAnnouncementHandler struct {
 	AnnouncementUC    *announcementuc.AnnouncementUsecase
 	AnnouncementQuery *mallquery.AnnouncementQueryService
 	ReportUC          *announcementuc.ReportUsecase
-}
-
-type meAnnouncementReportRequest struct {
-	Reason string `json:"reason"`
-	Detail string `json:"detail"`
-}
-
-type meAnnouncementReportResponse struct {
-	CaseID        string               `json:"caseId"`
-	ReportID      string               `json:"reportId"`
-	ReportCount   int                  `json:"reportCount"`
-	Status        reportdom.CaseStatus `json:"status"`
-	CaseCreated   bool                 `json:"caseCreated"`
-	ReportCreated bool                 `json:"reportCreated"`
 }
 
 func NewMeAnnouncementHandler(
@@ -229,38 +214,8 @@ func (h *MeAnnouncementHandler) handleReport(
 		return
 	}
 
-	var req meAnnouncementReportRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&req); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid json body",
-		)
-		return
-	}
-
-	reason := reportdom.ReportReason(
-		strings.ToUpper(strings.TrimSpace(req.Reason)),
-	)
-	if err := reason.Validate(); err != nil {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"invalid report reason",
-		)
-		return
-	}
-
-	req.Detail = strings.TrimSpace(req.Detail)
-	if reason == reportdom.ReportReasonOther && req.Detail == "" {
-		writeJSONError(
-			w,
-			http.StatusBadRequest,
-			"report detail required",
-		)
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -270,7 +225,7 @@ func (h *MeAnnouncementHandler) handleReport(
 			AnnouncementID: announcementID,
 			AvatarID:       avatarID,
 			Reason:         reason,
-			Detail:         req.Detail,
+			Detail:         detail,
 		},
 	)
 	if err != nil {
@@ -278,23 +233,7 @@ func (h *MeAnnouncementHandler) handleReport(
 		return
 	}
 
-	statusCode := http.StatusCreated
-	if !result.ReportCreated {
-		statusCode = http.StatusOK
-	}
-
-	writeJSON(
-		w,
-		statusCode,
-		meAnnouncementReportResponse{
-			CaseID:        string(result.Case.ID),
-			ReportID:      string(result.Report.ID),
-			ReportCount:   result.Case.ReportCount,
-			Status:        result.Case.Status,
-			CaseCreated:   result.CaseCreated,
-			ReportCreated: result.ReportCreated,
-		},
-	)
+	writeReportResult(w, result)
 }
 
 func (h *MeAnnouncementHandler) resolveAvatarID(

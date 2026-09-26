@@ -1001,7 +1001,7 @@ func Register(
 		mux,
 		"/mall/me/inquiries",
 		deps.Inquiry,
-		"Resale(me)",
+		"Inquiry(me)",
 		auth,
 		avatar,
 	)
@@ -1009,7 +1009,7 @@ func Register(
 		mux,
 		"/mall/me/inquiries/",
 		deps.Inquiry,
-		"Resale(me)",
+		"Inquiry(me)",
 		auth,
 		avatar,
 	)
