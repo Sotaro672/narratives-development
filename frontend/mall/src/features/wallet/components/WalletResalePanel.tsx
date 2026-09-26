@@ -25,6 +25,7 @@ type ResaleImageMap = Record<string, string>;
 
 type WalletResalePanelProps = {
   avatarId?: string;
+  excludeSold?: boolean;
   onItemClick?: (resaleId: string, item: ResaleListing) => void;
 };
 
@@ -85,6 +86,7 @@ function getPrimaryImageUrl(
 
 export default function WalletResalePanel({
   avatarId,
+  excludeSold = false,
   onItemClick,
 }: WalletResalePanelProps) {
   const normalizedAvatarId = avatarId?.trim() ?? "";
@@ -163,7 +165,9 @@ export default function WalletResalePanel({
             perPage: 50,
           });
 
-      const nextItems = result.items;
+      const nextItems = excludeSold
+        ? result.items.filter((item) => item.status !== "sold")
+        : result.items;
       const nextImageMap = await loadResaleImages(nextItems);
 
       setItems(nextItems);
@@ -177,7 +181,12 @@ export default function WalletResalePanel({
     } finally {
       setLoading(false);
     }
-  }, [isPublicAvatarMode, loadResaleImages, normalizedAvatarId]);
+  }, [
+    excludeSold,
+    isPublicAvatarMode,
+    loadResaleImages,
+    normalizedAvatarId,
+  ]);
 
   useEffect(() => {
     void loadResales();
@@ -204,12 +213,7 @@ export default function WalletResalePanel({
   };
 
   if (loading) {
-    return (
-      <StatePanel
-        variant="loading"
-        title="読み込み中です..."
-      />
-    );
+    return <StatePanel variant="loading" title="読み込み中です..." />;
   }
 
   if (error) {
@@ -289,11 +293,15 @@ export default function WalletResalePanel({
               <div className="wallet-resale-card__body">
                 <div className="wallet-resale-card__summary">
                   {productName ? (
-                    <p className="wallet-resale-card__product-name">{productName}</p>
+                    <p className="wallet-resale-card__product-name">
+                      {productName}
+                    </p>
                   ) : null}
+
                   {tokenName ? (
                     <p className="wallet-resale-card__token-name">{tokenName}</p>
                   ) : null}
+
                   {brandName ? (
                     <p className="wallet-resale-card__brand-name">{brandName}</p>
                   ) : null}

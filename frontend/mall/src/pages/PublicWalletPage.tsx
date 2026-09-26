@@ -130,6 +130,7 @@ export default function PublicWalletPage() {
               {!loading && !error ? (
                 <WalletResalePanel
                   avatarId={targetAvatarId}
+                  excludeSold
                   onItemClick={handleOpenMarketDetail}
                 />
               ) : null}
