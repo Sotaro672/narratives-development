@@ -53,8 +53,9 @@ type ReportUsecase struct {
 	resaleRepo      resaledom.Repository
 	resaleModerator ReportResaleModerator
 
-	tradeRepo        tradedom.Repository
-	tradeMessageRepo tradedom.MessageRepository
+	tradeRepo           tradedom.Repository
+	tradeMessageRepo    tradedom.MessageRepository
+	returnAgreementRepo tradedom.ReturnAgreementRepository
 
 	announcementRepo      announcementdom.Repository
 	announcementModerator ReportAnnouncementModerator
@@ -90,8 +91,9 @@ type ReportUsecaseDeps struct {
 	ResaleRepo      resaledom.Repository
 	ResaleModerator ReportResaleModerator
 
-	TradeRepo        tradedom.Repository
-	TradeMessageRepo tradedom.MessageRepository
+	TradeRepo           tradedom.Repository
+	TradeMessageRepo    tradedom.MessageRepository
+	ReturnAgreementRepo tradedom.ReturnAgreementRepository
 
 	AnnouncementRepo      announcementdom.Repository
 	AnnouncementModerator ReportAnnouncementModerator
@@ -128,6 +130,7 @@ func NewReportUsecase(deps ReportUsecaseDeps) *ReportUsecase {
 		resaleModerator:          deps.ResaleModerator,
 		tradeRepo:                deps.TradeRepo,
 		tradeMessageRepo:         deps.TradeMessageRepo,
+		returnAgreementRepo:      deps.ReturnAgreementRepo,
 		announcementRepo:         deps.AnnouncementRepo,
 		announcementModerator:    deps.AnnouncementModerator,
 		now:                      now,

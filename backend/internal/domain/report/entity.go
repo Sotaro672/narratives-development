@@ -89,6 +89,8 @@ func BuildCaseID(targetType TargetType, targetID string) (CaseID, error) {
 		prefix = "resale"
 	case TargetTypeResaleComment:
 		prefix = "resaleComment"
+	case TargetTypeTrade:
+		prefix = "trade"
 	case TargetTypeTradeMessage:
 		prefix = "tradeMessage"
 	case TargetTypeAnnouncement:
@@ -147,6 +149,7 @@ const (
 	TargetTypeBrand                  TargetType = "BRAND"
 	TargetTypeResale                 TargetType = "RESALE"
 	TargetTypeResaleComment          TargetType = "RESALE_COMMENT"
+	TargetTypeTrade                  TargetType = "TRADE"
 	TargetTypeTradeMessage           TargetType = "TRADE_MESSAGE"
 	TargetTypeAnnouncement           TargetType = "ANNOUNCEMENT"
 )
@@ -161,6 +164,7 @@ func (t TargetType) Validate() error {
 		TargetTypeBrand,
 		TargetTypeResale,
 		TargetTypeResaleComment,
+		TargetTypeTrade,
 		TargetTypeTradeMessage,
 		TargetTypeAnnouncement:
 		return nil
@@ -649,6 +653,12 @@ func validateSnapshotContent(targetType TargetType, title string, body string) e
 		}
 		return nil
 
+	case TargetTypeTrade:
+		if title == "" && body == "" {
+			return fmt.Errorf("%w: trade snapshot is empty", ErrInvalidTargetID)
+		}
+		return nil
+
 	case TargetTypeAnnouncement:
 		if title == "" && body == "" {
 			return fmt.Errorf("%w: announcement snapshot is empty", ErrInvalidTargetID)
@@ -677,6 +687,7 @@ func normalizeSnapshotRating(targetType TargetType, rating *int) (*int, error) {
 		TargetTypeBrand,
 		TargetTypeResale,
 		TargetTypeResaleComment,
+		TargetTypeTrade,
 		TargetTypeTradeMessage,
 		TargetTypeAnnouncement:
 		if rating != nil {

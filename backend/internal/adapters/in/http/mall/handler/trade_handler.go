@@ -63,6 +63,7 @@ func NewTradeHandler(
 //	GET  /mall/me/trades/order-items/{orderId}/{itemIndex}
 //	GET  /mall/me/trades/{tradeId}
 //	POST /mall/me/trades/{tradeId}/messages
+//	POST /mall/me/trades/{tradeId}/reports
 //	POST /mall/me/trades/{tradeId}/messages/{messageId}/reports
 //	POST /mall/me/trades/{tradeId}/read
 //	GET  /mall/me/trades/{tradeId}/unread-count
@@ -159,11 +160,9 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case "accept":
 			h.acceptReturnProposal(w, r, tradeID, parts[2])
 			return
-
 		case "reject":
 			h.rejectReturnProposal(w, r, tradeID, parts[2])
 			return
-
 		default:
 			notFound(w)
 			return
@@ -176,6 +175,14 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch parts[1] {
+	case "reports":
+		if r.Method != http.MethodPost {
+			methodNotAllowed(w)
+			return
+		}
+
+		h.reportTrade(w, r, tradeID)
+
 	case "messages":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
@@ -228,10 +235,8 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
 			h.createReturnShipment(w, r, tradeID)
-
 		case http.MethodGet:
 			h.getReturnShipment(w, r, tradeID)
-
 		default:
 			methodNotAllowed(w)
 		}
@@ -247,6 +252,53 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		notFound(w)
 	}
+}
+
+func (h *TradeHandler) reportTrade(
+	w http.ResponseWriter,
+	r *http.Request,
+	tradeID string,
+) {
+	if h == nil || h.reportUC == nil {
+		writeJSONError(
+			w,
+			http.StatusServiceUnavailable,
+			"report service not configured",
+		)
+		return
+	}
+
+	avatarID, ok := requireAvatarID(w, r)
+	if !ok {
+		return
+	}
+
+	tradeID = strings.TrimSpace(tradeID)
+	if tradeID == "" {
+		badRequest(w, "tradeId is required")
+		return
+	}
+
+	reason, detail, ok := decodeReportRequest(w, r)
+	if !ok {
+		return
+	}
+
+	result, err := h.reportUC.ReportTradeReturnDisputeByAvatar(
+		r.Context(),
+		usecase.ReportTradeReturnDisputeByAvatarInput{
+			TradeID:  tradeID,
+			AvatarID: avatarID,
+			Reason:   reason,
+			Detail:   detail,
+		},
+	)
+	if err != nil {
+		writeTradeReportErr(w, err)
+		return
+	}
+
+	writeReportResult(w, result)
 }
 
 func (h *TradeHandler) acceptReturnProposal(
@@ -423,6 +475,29 @@ func buildTradeReturnShipmentResponse(
 		"dropOffMethod": shipment.DropOffMethod,
 		"qrCodePayload": shipment.QRCodePayload,
 		"readyAt":       shipment.ReadyAt,
+	}
+}
+
+func writeTradeReportErr(
+	w http.ResponseWriter,
+	err error,
+) {
+	switch {
+	case err == nil:
+		internalError(w, "unknown error")
+
+	case errors.Is(err, tradedom.ErrNotFound),
+		errors.Is(err, tradedom.ErrReturnAgreementNotFound):
+		notFound(w)
+
+	case errors.Is(err, tradedom.ErrReturnDisputeNotAllowed),
+		errors.Is(err, tradedom.ErrReturnAgreementConflict):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": err.Error(),
+		})
+
+	default:
+		writeReportError(w, err)
 	}
 }
 
