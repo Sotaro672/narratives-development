@@ -21,9 +21,10 @@ type Deps struct {
 	// - report: POST /mall/me/token-blueprints/{tokenBlueprintId}/reports
 	TokenBlueprint http.Handler
 
-	// ProductBlueprint reviews (catalog + me/catalog)
-	// - public: GET /mall/catalog/product-blueprints/{pbId}/reviews
+	// ProductBlueprint review routes
+	// - public: GET  /mall/catalog/product-blueprints/{pbId}/reviews
 	// - me:     POST /mall/me/catalog/product-blueprints/{pbId}/reviews
+	// - report: POST /mall/me/catalog/product-blueprints/{pbId}/reviews/{reviewId}/reports
 	ProductBlueprintReview http.Handler
 
 	// Brand routes
@@ -400,7 +401,7 @@ func Register(
 		"Catalog",
 	)
 
-	// productBlueprint reviews (public catalog)
+	// productBlueprint reviews (public GET)
 	handleSafe(
 		mux,
 		"/mall/catalog/product-blueprints",
@@ -702,7 +703,9 @@ func Register(
 		avatar,
 	)
 
-	// productBlueprint reviews (me catalog)
+	// productBlueprint reviews (me)
+	// - POST /mall/me/catalog/product-blueprints/{pbId}/reviews
+	// - POST /mall/me/catalog/product-blueprints/{pbId}/reviews/{reviewId}/reports
 	handleSafeAuthAvatar(
 		mux,
 		"/mall/me/catalog/product-blueprints",

@@ -108,19 +108,22 @@ func (h *ProductBlueprintReviewHandler) handleReviewCollection(
 	productBlueprintID string,
 	isMe bool,
 ) {
-	switch r.Method {
-	case http.MethodGet:
-		h.handleList(w, r, productBlueprintID)
-	case http.MethodPost:
-		if !isMe {
-			writeJSONError(w, http.StatusMethodNotAllowed, "POST not allowed on public catalog")
+	if isMe {
+		if r.Method != http.MethodPost {
+			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 
 		h.handleCreateMe(w, r, productBlueprintID)
-	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
 	}
+
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	h.handleList(w, r, productBlueprintID)
 }
 
 func (h *ProductBlueprintReviewHandler) handleReport(
