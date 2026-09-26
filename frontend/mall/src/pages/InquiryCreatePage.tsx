@@ -45,12 +45,6 @@ export default function InquiryCreatePage() {
       hideHamburgerMenu={false}
       hideSettingsButton={false}
       mainClassName="inquiry-page"
-      footerProps={{
-        variant: "action",
-        buttonLabel: submitting ? "送信中" : submitted ? "送信済み" : "送信する",
-        disabled: !canSubmit,
-        onButtonClick: submitInquiry,
-      }}
     >
       <section className="inquiry-page__container">
         <div className="inquiry-page__header">
