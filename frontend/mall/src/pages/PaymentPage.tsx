@@ -2,6 +2,7 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
 import TextState from "../components/ui/TextState";
@@ -16,6 +17,7 @@ import "../styles/payment-page.css";
 export default function PaymentPage() {
   const navigate = useNavigate();
   const { listId } = useParams<{ listId: string }>();
+  const isMobilePortrait = useMobilePortrait();
 
   const {
     amount,
@@ -48,7 +50,7 @@ export default function PaymentPage() {
         <Layout
           title="AMOL"
           mode="mypage"
-          showFooter={false}
+          showFooter={isMobilePortrait}
           hideHamburgerMenu
           hideSettingsButton
           mainClassName="payment-page"
@@ -73,7 +75,7 @@ export default function PaymentPage() {
       <Layout
         title="AMOL"
         mode="mypage"
-        showFooter={false}
+        showFooter={isMobilePortrait}
         hideHamburgerMenu
         hideSettingsButton
         mainClassName="payment-page"
