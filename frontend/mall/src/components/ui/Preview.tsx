@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 
 import "./Preview.css";
 
@@ -17,6 +18,7 @@ export type PreviewProps = {
   src?: string | null;
   alt?: string;
   type?: string;
+  qrValue?: string | null;
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
@@ -64,6 +66,7 @@ export default function Preview({
   src,
   alt = "メディアプレビュー",
   type,
+  qrValue,
   onClose,
   onPrev,
   onNext,
@@ -81,10 +84,13 @@ export default function Preview({
   const [transform, setTransform] = useState<PreviewTransform>(INITIAL_TRANSFORM);
 
   const source = String(src ?? "").trim();
+  const qrPayload = String(qrValue ?? "").trim();
   const normalizedType = String(type ?? "").trim().toLowerCase();
+
   const isVideo =
     normalizedType === "video" ||
     normalizedType.startsWith("video/");
+  const isQr = normalizedType === "qr";
 
   const applyTransform = useCallback((nextTransform: PreviewTransform) => {
     transformRef.current = nextTransform;
@@ -185,7 +191,7 @@ export default function Preview({
       window.removeEventListener("resize", handleResize);
       clearGesture();
     };
-  }, [open, source, clearGesture, resetTransform]);
+  }, [open, source, qrPayload, clearGesture, resetTransform]);
 
   useEffect(() => {
     if (!open || typeof document === "undefined") {
@@ -223,7 +229,7 @@ export default function Preview({
   const handlePointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
   ): void => {
-    if (isVideo) {
+    if (isVideo || isQr) {
       return;
     }
 
@@ -271,7 +277,11 @@ export default function Preview({
   const handlePointerMove = (
     event: ReactPointerEvent<HTMLDivElement>,
   ): void => {
-    if (isVideo || !pointersRef.current.has(event.pointerId)) {
+    if (
+      isVideo ||
+      isQr ||
+      !pointersRef.current.has(event.pointerId)
+    ) {
       return;
     }
 
@@ -293,6 +303,7 @@ export default function Preview({
       const second = pointers[1][1];
       const currentDistance = getDistance(first, second);
       const ratio = currentDistance / pinchStartDistanceRef.current;
+
       const nextScale = clamp(
         pinchStartScaleRef.current * ratio,
         MIN_SCALE,
@@ -333,7 +344,7 @@ export default function Preview({
   const handlePointerEnd = (
     event: ReactPointerEvent<HTMLDivElement>,
   ): void => {
-    if (isVideo) {
+    if (isVideo || isQr) {
       return;
     }
 
@@ -377,7 +388,7 @@ export default function Preview({
   };
 
   const handleDoubleClick = (): void => {
-    if (isVideo) {
+    if (isVideo || isQr) {
       return;
     }
 
@@ -405,9 +416,11 @@ export default function Preview({
     onNext?.();
   };
 
+  const hasContent = isQr ? Boolean(qrPayload) : Boolean(source);
+
   if (
     !open ||
-    !source ||
+    !hasContent ||
     typeof document === "undefined"
   ) {
     return null;
@@ -445,7 +458,11 @@ export default function Preview({
         ref={contentRef}
         className={[
           "ui-preview__content",
-          isVideo ? "ui-preview__content--video" : "ui-preview__content--image",
+          isQr
+            ? "ui-preview__content--qr"
+            : isVideo
+              ? "ui-preview__content--video"
+              : "ui-preview__content--image",
         ].join(" ")}
         onPointerDown={(event) => {
           if (event.target === event.currentTarget) {
@@ -460,7 +477,25 @@ export default function Preview({
         onPointerCancel={handlePointerEnd}
         onDoubleClick={handleDoubleClick}
       >
-        {isVideo ? (
+        {isQr ? (
+          <div
+            className="ui-preview__qr-frame"
+            role="img"
+            aria-label={alt}
+          >
+            <QRCodeSVG
+              className="ui-preview__qr"
+              value={qrPayload}
+              size={320}
+              level="M"
+              includeMargin
+            />
+
+            <span className="ui-preview__qr-label">
+              PUDO MOCK
+            </span>
+          </div>
+        ) : isVideo ? (
           <video
             src={source}
             className="ui-preview__video"
