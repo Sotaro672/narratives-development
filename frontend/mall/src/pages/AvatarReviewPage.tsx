@@ -93,10 +93,7 @@ export default function AvatarReviewPage() {
     : 1;
 
   return (
-    <Layout
-      title={avatarName ? `${avatarName}の評価` : "評価"}
-      mode="mypage"
-    >
+    <Layout title="AMOL" mode="mypage">
       <section className="content-page-section avatar-review-page">
         {loading ? (
           <TextState variant="loading" className="avatar-review-page__message">
