@@ -1,16 +1,15 @@
 // frontend/mall/src/features/trade/presentation/components/TradeChatDetail.tsx
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
-import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
 import Preview from "../../../../components/ui/Preview";
 import StatePanel from "../../../../components/ui/StatePanel";
 import ReportModal from "../../../report/components/ReportModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
+import { useChatWorkspace } from "../../../shared/presentation/context/ChatWorkspaceContext";
 import "../../../shared/styles/trade-chat-detail.css";
 
 import useTradeCancel from "../hooks/useTradeCancel";
@@ -43,7 +42,7 @@ export default function TradeChatDetail({
   tradeId,
 }: TradeChatDetailProps) {
   const navigate = useNavigate();
-  const isMobilePortrait = useMobilePortrait();
+  const { registerAction } = useChatWorkspace();
   const thread = useTradeThread(tradeId);
   const [dispatchQrPreviewOpen, setDispatchQrPreviewOpen] = useState(false);
 
@@ -139,6 +138,18 @@ export default function TradeChatDetail({
     tradeId: thread.tradeId,
     trade: thread.trade,
   });
+
+  useEffect(() => {
+    return registerAction({
+      label: "返信",
+      onClick: reply.openModal,
+      disabled: reply.actionDisabled,
+    });
+  }, [
+    registerAction,
+    reply.actionDisabled,
+    reply.openModal,
+  ]);
 
   const orderAction = getTradeOrderAction(thread.trade);
 
@@ -289,33 +300,9 @@ export default function TradeChatDetail({
 
   return (
     <>
-      <Layout
-        title="AMOL"
-        showHeader={!isMobilePortrait}
-        showFooter={
-          !reply.open &&
-          !cancelFlow.open &&
-          !returnConsultationFlow.open &&
-          !returnProposalFlow.open &&
-          !returnAgreementFlow.open &&
-          !returnShipmentFlow.open &&
-          !returnReceiptFlow.open &&
-          !returnDisputeFlow.open &&
-          !report.isOpen &&
-          !dispatchQrPreviewOpen
-        }
-        mode="mypage"
-        mainClassName="chat-detail-page-layout chat-detail-page-layout--inquiry"
-        disableFooterPaddingOnDesktop
-        actionButtonLabel="返信"
-        onActionButtonClick={reply.openModal}
-        actionButtonDisabled={reply.actionDisabled}
-        footerProps={{
-          variant: "default",
-          centerActionLabel: "返信",
-          centerActionDisabled: reply.actionDisabled,
-          onCenterActionClick: reply.openModal,
-        }}
+      <div
+        className="chat-detail-page-layout chat-detail-page-layout--inquiry"
+        data-chat-detail
       >
         <section className="product-detail-page-layout chat-detail-page">
           {thread.error ? (
@@ -399,7 +386,7 @@ export default function TradeChatDetail({
             </div>
           ) : null}
         </section>
-      </Layout>
+      </div>
 
       <ChatComposerModal
         open={reply.open}

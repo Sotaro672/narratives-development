@@ -1,4 +1,4 @@
-/* frontend\mall\src\components\layout\header.css */
+/* frontend/mall/src/components/layout/header.css */
 
 :root {
   --amol-header-height: 72px;
@@ -45,6 +45,43 @@
   justify-content: flex-end;
   gap: 12px;
   margin-left: auto;
+}
+
+.header__back-button {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  padding: 0;
+  color: var(--color-text);
+  cursor: pointer;
+  transition:
+    background-color 0.2s ease,
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.header__back-button:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.header__back-button:active {
+  transform: translateX(-1px);
+}
+
+.header__back-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
 }
 
 .header__title-link {
@@ -280,6 +317,7 @@
   text-orientation: mixed;
 }
 
+.header__back-button:focus-visible,
 .header__menu-button:focus-visible,
 .header__title-link:focus-visible,
 .header__title-button:focus-visible,
@@ -503,6 +541,18 @@
     margin-left: 0;
   }
 
+  .header__back-button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .header__back-icon {
+    width: 22px;
+    height: 22px;
+  }
+
   .header__title-button {
     height: 40px;
     flex: 1 1 auto;
@@ -556,6 +606,18 @@
 
   .header__right {
     gap: 6px;
+  }
+
+  .header__back-button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  .header__back-icon {
+    width: 21px;
+    height: 21px;
   }
 
   .header__title {

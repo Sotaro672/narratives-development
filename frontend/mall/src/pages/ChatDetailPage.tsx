@@ -1,9 +1,8 @@
 // frontend/mall/src/pages/ChatDetailPage.tsx
 
+import { useEffect } from "react";
 import { useParams } from "react-router-dom";
 
-import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
-import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import StatePanel from "../components/ui/StatePanel";
 import TextState from "../components/ui/TextState";
@@ -15,6 +14,7 @@ import InquiryReplyModal from "../features/inquiry/presentation/components/Inqui
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import ResaleChatDetail from "../features/resale/presentation/components/ResaleChatDetail";
 import ChatMessageBubble from "../features/shared/presentation/components/ChatMessageBubble";
+import { useChatWorkspace } from "../features/shared/presentation/context/ChatWorkspaceContext";
 import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
 
 import "../styles/page-layout.css";
@@ -41,7 +41,7 @@ export default function ChatDetailPage() {
 }
 
 function InquiryChatDetail() {
-  const isMobilePortrait = useMobilePortrait();
+  const { registerAction } = useChatWorkspace();
 
   const {
     inquiry,
@@ -67,32 +67,34 @@ function InquiryChatDetail() {
     handleCloseInquiry,
   } = useInquiryDetailPage();
 
+  useEffect(() => {
+    return registerAction({
+      label: "返信",
+      onClick: openReplyModal,
+      disabled: replyActionDisabled,
+    });
+  }, [
+    openReplyModal,
+    registerAction,
+    replyActionDisabled,
+  ]);
+
   const hasInitialReturnMessage =
     inquiry?.inquiryType !== "product" &&
     !!inquiry?.content.trim();
 
   return (
     <>
-      <Layout
-        title="AMOL"
-        showHeader={!isMobilePortrait}
-        showFooter={!isReplyModalOpen}
-        mode="mypage"
-        mainClassName="chat-detail-page-layout chat-detail-page-layout--inquiry"
-        disableFooterPaddingOnDesktop
-        actionButtonLabel="返信"
-        onActionButtonClick={openReplyModal}
-        actionButtonDisabled={replyActionDisabled}
-        footerProps={{
-          variant: "default",
-          centerActionLabel: "返信",
-          centerActionDisabled: replyActionDisabled,
-          onCenterActionClick: openReplyModal,
-        }}
+      <div
+        className="chat-detail-page-layout chat-detail-page-layout--inquiry"
+        data-chat-detail
       >
         <section className="product-detail-page-layout chat-detail-page">
           {error ? (
-            <Alert variant="error" className="chat-detail-page__error">
+            <Alert
+              variant="error"
+              className="chat-detail-page__error"
+            >
               {error}
             </Alert>
           ) : null}
@@ -164,7 +166,7 @@ function InquiryChatDetail() {
             </div>
           ) : null}
         </section>
-      </Layout>
+      </div>
 
       <InquiryReplyModal
         open={isReplyModalOpen}

@@ -1,4 +1,6 @@
-// frontend/amol/src/components/layout/Header.tsx
+// frontend/mall/src/components/layout/Header.tsx
+
+import { ChevronLeft } from "lucide-react";
 
 import "./header.css";
 import "../../styles/settings-page.css";
@@ -20,7 +22,12 @@ export default function Header(props: HeaderProps) {
   } = useHeaderController(props);
 
   const hasDirectActionButton =
-    !!props.actionButtonLabel && typeof props.onActionButtonClick === "function";
+    !!props.actionButtonLabel &&
+    typeof props.onActionButtonClick === "function";
+
+  const hasBackButton =
+    props.showBackButton === true &&
+    typeof props.onBackButtonClick === "function";
 
   const mergedActions = {
     ...actions,
@@ -41,6 +48,25 @@ export default function Header(props: HeaderProps) {
     <header className="header">
       <div className="header__inner">
         <div className="header__left">
+          {hasBackButton ? (
+            <button
+              type="button"
+              className="header__back-button"
+              aria-label={props.backButtonLabel ?? "戻る"}
+              title={props.backButtonLabel ?? "戻る"}
+              onClick={() => {
+                void props.onBackButtonClick?.();
+              }}
+            >
+              <ChevronLeft
+                className="header__back-icon"
+                size={24}
+                strokeWidth={2}
+                aria-hidden="true"
+              />
+            </button>
+          ) : null}
+
           {props.titleClickable === false ? (
             <span className="header__title header__title-text">
               {displayTitle}

@@ -1,6 +1,5 @@
 // frontend/mall/src/features/inquiry/presentation/components/ChatListPane.tsx
 
-import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
 import Badge from "../../../../components/ui/Badge";
@@ -39,15 +38,15 @@ export default function ChatListPane() {
     handleOpenChat,
   } = useInquiryListPage();
 
-  const selectedChat = useMemo(
-    () => getSelectedChat(location.pathname),
-    [location.pathname],
-  );
+  const selectedChat = getSelectedChat(location.pathname);
 
   return (
     <section className="page-section content-page-section chat-list-page chat-list-page--workspace">
       {error ? (
-        <div className="chat-list-page__error" role="alert">
+        <div
+          className="chat-list-page__error"
+          role="alert"
+        >
           {error}
         </div>
       ) : null}
@@ -143,16 +142,20 @@ function InquiryChatListRow({
 }: InquiryChatListRowProps) {
   const closePendingCount =
     item.status === "resolved" ? 1 : 0;
+
   const badgeCount =
     item.unreadReplyCount + closePendingCount;
+
   const hasAttention = badgeCount > 0;
   const title = getInquiryTitle(item);
   const preview = getInquiryPreview(item);
   const statusLabel = getInquiryStatusLabel(item.status);
+
   const countLabel =
     item.replyCount > 0
       ? `返信 ${item.replyCount} 件`
       : "";
+
   const brandInitial = getInitial(
     item.brandName || item.productName,
   );
@@ -166,7 +169,10 @@ function InquiryChatListRow({
       onClick={onOpen}
       leading={
         item.brandIcon ? (
-          <img src={item.brandIcon} alt="" />
+          <img
+            src={item.brandIcon}
+            alt=""
+          />
         ) : (
           <span>{brandInitial}</span>
         )
@@ -226,16 +232,20 @@ function ResaleChatListRow({
 }: ResaleChatListRowProps) {
   const hasAttention =
     item.unreadCommentCount > 0;
+
   const title = getResaleTitle(item);
   const preview = getResalePreview(item);
   const statusLabel =
     getResaleStatusLabel(item.status);
+
   const countLabel =
     item.commentCount > 0
       ? `コメント ${item.commentCount} 件`
       : "";
+
   const imageUrl =
     item.imageUrl || item.tokenIcon;
+
   const initial = getInitial(
     item.productName ||
       item.tokenName ||
@@ -251,7 +261,10 @@ function ResaleChatListRow({
       onClick={onOpen}
       leading={
         imageUrl ? (
-          <img src={imageUrl} alt="" />
+          <img
+            src={imageUrl}
+            alt=""
+          />
         ) : (
           <span>{initial}</span>
         )
@@ -315,9 +328,11 @@ function TradeChatListRow({
 }: TradeChatListRowProps) {
   const hasAttention =
     item.unreadMessageCount > 0;
+
   const title = getTradeTitle(item);
   const preview = getTradePreview(item);
   const statusLabel = getTradeStatusLabel(item);
+
   const initial = getInitial(
     item.counterpartAvatarName ||
       item.productName ||

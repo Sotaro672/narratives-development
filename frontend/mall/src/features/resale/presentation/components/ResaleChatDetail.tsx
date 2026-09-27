@@ -3,8 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
-import Layout from "../../../../components/layout/Layout";
 import Alert from "../../../../components/ui/Alert";
 import Badge from "../../../../components/ui/Badge";
 import Button from "../../../../components/ui/Button";
@@ -22,6 +20,7 @@ import {
 
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
+import { useChatWorkspace } from "../../../shared/presentation/context/ChatWorkspaceContext";
 import "../../../shared/styles/trade-chat-detail.css";
 import type { MarketResaleListing } from "../../../shared/types/marketResale";
 import type { ResaleListing, ResaleStatus } from "../../../shared/types/resale";
@@ -168,7 +167,7 @@ export default function ResaleChatDetail({
   resaleId,
 }: ResaleChatDetailProps) {
   const location = useLocation();
-  const isMobilePortrait = useMobilePortrait();
+  const { registerAction } = useChatWorkspace();
   const routeState = location.state as ResaleChatRouteState | null;
   const preferredSource = routeState?.source;
   const normalizedResaleId = resaleId.trim();
@@ -177,10 +176,8 @@ export default function ResaleChatDetail({
   const [item, setItem] = useState<ResaleChatItem | null>(null);
   const [comments, setComments] = useState<ResaleReviewComment[]>([]);
   const [viewerAvatarId, setViewerAvatarId] = useState("");
-
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
   const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
   const [replyContent, setReplyContent] = useState("");
   const [replyError, setReplyError] = useState("");
@@ -276,6 +273,18 @@ export default function ResaleChatDetail({
     setReplyError("");
     setIsReplyModalOpen(true);
   }, [replyActionDisabled]);
+
+  useEffect(() => {
+    return registerAction({
+      label: "コメント",
+      onClick: openReplyModal,
+      disabled: replyActionDisabled,
+    });
+  }, [
+    openReplyModal,
+    registerAction,
+    replyActionDisabled,
+  ]);
 
   const closeReplyModal = useCallback(() => {
     if (postingReply) {
@@ -423,32 +432,25 @@ export default function ResaleChatDetail({
 
   return (
     <>
-      <Layout
-        title="AMOL"
-        showHeader={!isMobilePortrait}
-        showFooter={!isReplyModalOpen}
-        mode="mypage"
-        mainClassName="chat-detail-page-layout chat-detail-page-layout--inquiry"
-        disableFooterPaddingOnDesktop
-        actionButtonLabel="コメント"
-        onActionButtonClick={openReplyModal}
-        actionButtonDisabled={replyActionDisabled}
-        footerProps={{
-          variant: "default",
-          centerActionLabel: "コメント",
-          centerActionDisabled: replyActionDisabled,
-          onCenterActionClick: openReplyModal,
-        }}
+      <div
+        className="chat-detail-page-layout chat-detail-page-layout--inquiry"
+        data-chat-detail
       >
         <section className="product-detail-page-layout chat-detail-page">
           {error ? (
-            <Alert variant="error" className="chat-detail-page__error">
+            <Alert
+              variant="error"
+              className="chat-detail-page__error"
+            >
               {error}
             </Alert>
           ) : null}
 
           {loading ? (
-            <StatePanel variant="loading" title="読み込み中..." />
+            <StatePanel
+              variant="loading"
+              title="読み込み中..."
+            />
           ) : null}
 
           {!loading && !item ? (
@@ -510,7 +512,7 @@ export default function ResaleChatDetail({
             </div>
           ) : null}
         </section>
-      </Layout>
+      </div>
 
       <ChatComposerModal
         open={isReplyModalOpen}

@@ -1,12 +1,15 @@
-// frontend/amol/src/pages/TradeChatRedirectPage.tsx
+// frontend/mall/src/pages/TradeChatRedirectPage.tsx
 
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
+import Alert from "../components/ui/Alert";
+import StatePanel from "../components/ui/StatePanel";
+import { useChatWorkspace } from "../features/shared/presentation/context/ChatWorkspaceContext";
 import { fetchTradeByOrderItem } from "../features/trade/infrastructure/tradeApi";
 
 import "../styles/page-layout.css";
+import "../features/shared/styles/chat-detail-page.css";
 
 type TradeChatRedirectRouteParams = {
   orderId?: string;
@@ -26,10 +29,13 @@ function getErrorMessage(
 
 export default function TradeChatRedirectPage() {
   const navigate = useNavigate();
-  const { orderId, itemIndex } =
-    useParams<TradeChatRedirectRouteParams>();
-
+  const { orderId, itemIndex } = useParams<TradeChatRedirectRouteParams>();
+  const { clearAction } = useChatWorkspace();
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    clearAction();
+  }, [clearAction]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,22 +114,25 @@ export default function TradeChatRedirectPage() {
   ]);
 
   return (
-    <Layout
-      title="取引"
-      mode="mypage"
-      showFooter={false}
+    <div
+      className="chat-detail-page-layout chat-detail-page-layout--inquiry"
+      data-chat-detail
     >
-      <section className="page-section content-page-section">
+      <section className="product-detail-page-layout chat-detail-page">
         {error ? (
-          <div role="alert">
+          <Alert
+            variant="error"
+            className="chat-detail-page__error"
+          >
             {error}
-          </div>
+          </Alert>
         ) : (
-          <div>
-            取引を読み込み中...
-          </div>
+          <StatePanel
+            variant="loading"
+            title="取引を読み込み中..."
+          />
         )}
       </section>
-    </Layout>
+    </div>
   );
 }

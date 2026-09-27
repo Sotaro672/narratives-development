@@ -81,6 +81,10 @@ type LayoutProps = {
   mainClassName?: string;
   disableFooterPaddingOnDesktop?: boolean;
 
+  showBackButton?: boolean;
+  backButtonLabel?: string;
+  onBackButtonClick?: () => void | Promise<void>;
+
   actionButtonLabel?: string;
   onActionButtonClick?: () => void | Promise<void>;
   actionButtonDisabled?: boolean;
@@ -114,6 +118,10 @@ export default function Layout({
   hideAnnouncementButton = false,
   mainClassName,
   disableFooterPaddingOnDesktop = false,
+
+  showBackButton = false,
+  backButtonLabel = "戻る",
+  onBackButtonClick,
 
   actionButtonLabel,
   onActionButtonClick,
@@ -161,6 +169,9 @@ export default function Layout({
           hideHamburgerMenu={hideHamburgerMenu}
           hideSettingsButton={hideSettingsButton}
           hideAnnouncementButton={hideAnnouncementButton}
+          showBackButton={showBackButton}
+          backButtonLabel={backButtonLabel}
+          onBackButtonClick={onBackButtonClick}
           actionButtonLabel={actionButtonLabel}
           onActionButtonClick={onActionButtonClick}
           actionButtonDisabled={actionButtonDisabled}

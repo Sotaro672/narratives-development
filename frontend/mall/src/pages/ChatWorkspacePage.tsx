@@ -1,111 +1,297 @@
 // frontend/mall/src/pages/ChatWorkspacePage.tsx
 
-import type { CSSProperties } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
-import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import StatePanel from "../components/ui/StatePanel";
 import ChatListPane from "../features/inquiry/presentation/components/ChatListPane";
-
-import ChatListPage from "./ChatListPage";
+import {
+  ChatWorkspaceProvider,
+  useChatWorkspace,
+} from "../features/shared/presentation/context/ChatWorkspaceContext";
 
 import "../styles/page-layout.css";
 import "../features/inquiry/presentation/styles/inquiry-list-page.css";
+import "../features/shared/styles/chat-workspace.css";
 
-const workspaceStyle: CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "minmax(320px, 380px) minmax(0, 1fr)",
-  width: "100%",
-  height: "calc(100dvh - var(--amol-header-height))",
-  minHeight: 0,
-  overflow: "hidden",
-  background: "#f8fafc",
-};
+const MOBILE_CHAT_MEDIA_QUERY = "(max-width: 959px)";
+const MOBILE_SLIDE_DURATION_MS = 320;
 
-const listPaneStyle: CSSProperties = {
-  minWidth: 0,
-  minHeight: 0,
-  height: "100%",
-  overflowX: "hidden",
-  overflowY: "auto",
-  borderRight: "1px solid rgba(15, 23, 42, 0.1)",
-  background: "#ffffff",
-  boxSizing: "border-box",
-};
+type MobilePane = "list" | "detail";
 
-const detailPaneStyle: CSSProperties = {
-  minWidth: 0,
-  minHeight: 0,
-  height: "100%",
-  overflow: "hidden",
-  background: "#f8fafc",
-};
+function isChatListPath(pathname: string): boolean {
+  return pathname === "/chats" || pathname === "/chats/";
+}
 
-const emptyPaneStyle: CSSProperties = {
-  display: "grid",
-  width: "100%",
-  height: "100%",
-  minHeight: 0,
-  placeItems: "center",
-  padding: 24,
-  boxSizing: "border-box",
-};
-
-export default function ChatWorkspacePage() {
-  const location = useLocation();
-  const isMobilePortrait = useMobilePortrait();
-  const isChatListRoute =
-    location.pathname === "/chats" ||
-    location.pathname === "/chats/";
-
-  if (isMobilePortrait) {
-    if (isChatListRoute) {
-      return <ChatListPage />;
+function useMobileChatViewport(): boolean {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === "undefined") {
+      return false;
     }
 
-    return <Outlet />;
-  }
+    return window.matchMedia(MOBILE_CHAT_MEDIA_QUERY).matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const mediaQuery = window.matchMedia(MOBILE_CHAT_MEDIA_QUERY);
+
+    const handleChange = () => {
+      setIsMobile(mediaQuery.matches);
+    };
+
+    handleChange();
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+    } else {
+      mediaQuery.addListener(handleChange);
+    }
+
+    return () => {
+      if (typeof mediaQuery.removeEventListener === "function") {
+        mediaQuery.removeEventListener("change", handleChange);
+      } else {
+        mediaQuery.removeListener(handleChange);
+      }
+    };
+  }, []);
+
+  return isMobile;
+}
+
+export default function ChatWorkspacePage() {
+  return (
+    <ChatWorkspaceProvider>
+      <ChatWorkspaceContent />
+    </ChatWorkspaceProvider>
+  );
+}
+
+function ChatWorkspaceContent() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isMobile = useMobileChatViewport();
+  const { action } = useChatWorkspace();
+
+  const isChatListRoute = isChatListPath(location.pathname);
+  const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
+    isChatListRoute ? "list" : "detail",
+  );
+
+  const pendingBackNavigationRef = useRef(false);
+  const backNavigationTimerRef = useRef<number | null>(null);
+
+  const clearBackNavigationTimer = useCallback(() => {
+    if (backNavigationTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(backNavigationTimerRef.current);
+    backNavigationTimerRef.current = null;
+  }, []);
+
+  const completeBackNavigation = useCallback(() => {
+    if (!pendingBackNavigationRef.current) {
+      return;
+    }
+
+    pendingBackNavigationRef.current = false;
+    clearBackNavigationTimer();
+    navigate("/chats", { replace: true });
+  }, [clearBackNavigationTimer, navigate]);
+
+  useEffect(() => {
+    if (pendingBackNavigationRef.current) {
+      return;
+    }
+
+    setMobilePane(isChatListRoute ? "list" : "detail");
+  }, [
+    isChatListRoute,
+    location.pathname,
+  ]);
+
+  useEffect(() => {
+    if (!isMobile) {
+      pendingBackNavigationRef.current = false;
+      clearBackNavigationTimer();
+      return;
+    }
+
+    setMobilePane(isChatListRoute ? "list" : "detail");
+  }, [
+    clearBackNavigationTimer,
+    isChatListRoute,
+    isMobile,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearBackNavigationTimer();
+    };
+  }, [clearBackNavigationTimer]);
+
+  const handleBackToList = useCallback(() => {
+    if (isChatListRoute) {
+      return;
+    }
+
+    if (!isMobile) {
+      navigate("/chats", { replace: true });
+      return;
+    }
+
+    if (pendingBackNavigationRef.current) {
+      return;
+    }
+
+    pendingBackNavigationRef.current = true;
+    setMobilePane("list");
+    clearBackNavigationTimer();
+
+    const prefersReducedMotion =
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    if (prefersReducedMotion) {
+      completeBackNavigation();
+      return;
+    }
+
+    backNavigationTimerRef.current = window.setTimeout(
+      completeBackNavigation,
+      MOBILE_SLIDE_DURATION_MS,
+    );
+  }, [
+    clearBackNavigationTimer,
+    completeBackNavigation,
+    isChatListRoute,
+    isMobile,
+    navigate,
+  ]);
+
+  const handleRailTransitionEnd = useCallback(
+    (event: React.TransitionEvent<HTMLDivElement>) => {
+      if (
+        event.target !== event.currentTarget ||
+        event.propertyName !== "transform" ||
+        mobilePane !== "list"
+      ) {
+        return;
+      }
+
+      completeBackNavigation();
+    },
+    [
+      completeBackNavigation,
+      mobilePane,
+    ],
+  );
+
+  const workspaceClassName = [
+    "chat-workspace-page",
+    mobilePane === "detail"
+      ? "chat-workspace-page--detail"
+      : "chat-workspace-page--list",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  const hasDetailAction =
+    !isChatListRoute &&
+    action !== null &&
+    action.label !== "";
 
   return (
     <Layout
       title="AMOL"
-      showFooter={false}
+      showFooter={isMobile}
       mode="mypage"
       mainClassName="chat-workspace-page-layout"
       disableFooterPaddingOnDesktop
+      showBackButton={isMobile && !isChatListRoute}
+      backButtonLabel="チャット一覧に戻る"
+      onBackButtonClick={handleBackToList}
+      actionButtonLabel={
+        hasDetailAction
+          ? action?.label
+          : undefined
+      }
+      onActionButtonClick={
+        hasDetailAction
+          ? action?.onClick
+          : undefined
+      }
+      actionButtonDisabled={
+        hasDetailAction
+          ? action?.disabled
+          : false
+      }
+      footerProps={
+        hasDetailAction
+          ? {
+              variant: "default",
+              centerActionLabel: action.label,
+              centerActionDisabled: action.disabled ?? false,
+              onCenterActionClick: action.onClick,
+            }
+          : {
+              variant: "default",
+            }
+      }
     >
-      <div
-        className="chat-workspace-page"
-        style={workspaceStyle}
-      >
-        <aside
-          className="chat-workspace-page__list"
-          style={listPaneStyle}
-          aria-label="チャット一覧"
+      <div className={workspaceClassName}>
+        <div
+          className="chat-workspace-page__rail"
+          onTransitionEnd={handleRailTransitionEnd}
         >
-          <ChatListPane />
-        </aside>
+          <aside
+            className="chat-workspace-page__list"
+            aria-label="チャット一覧"
+            aria-hidden={
+              isMobile && mobilePane === "detail"
+                ? true
+                : undefined
+            }
+          >
+            <ChatListPane />
+          </aside>
 
-        <section
-          className="chat-workspace-page__detail"
-          style={detailPaneStyle}
-          aria-label="チャット詳細"
-        >
-          {isChatListRoute ? (
-            <div
-              className="chat-workspace-page__empty"
-              style={emptyPaneStyle}
-            >
-              <StatePanel
-                variant="empty"
-                title="チャットを選択してください。"
-              />
-            </div>
-          ) : (
-            <Outlet context={{ embedded: true }} />
-          )}
-        </section>
+          <section
+            className="chat-workspace-page__detail"
+            aria-label="チャット詳細"
+            aria-hidden={
+              isMobile && mobilePane === "list"
+                ? true
+                : undefined
+            }
+          >
+            {isChatListRoute ? (
+              <div className="chat-workspace-page__empty">
+                <StatePanel
+                  variant="empty"
+                  title="チャットを選択してください。"
+                />
+              </div>
+            ) : (
+              <Outlet />
+            )}
+          </section>
+        </div>
       </div>
     </Layout>
   );

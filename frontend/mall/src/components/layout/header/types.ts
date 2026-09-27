@@ -1,4 +1,4 @@
-// frontend/amol/src/components/layout/header/types.ts
+// frontend/mall/src/components/layout/header/types.ts
 
 export type HeaderProps = {
   title?: string;
@@ -8,6 +8,10 @@ export type HeaderProps = {
   hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
   hideAnnouncementButton?: boolean;
+
+  showBackButton?: boolean;
+  backButtonLabel?: string;
+  onBackButtonClick?: () => void | Promise<void>;
 
   actionButtonLabel?: string;
   onActionButtonClick?: () => void | Promise<void>;
