@@ -92,6 +92,10 @@ export type ReportTradeReturnDisputeParams = {
   detail: string;
 };
 
+export type FetchTradeReturnShipmentParams = {
+  tradeId: string;
+};
+
 type TradeRequestInit = Omit<RequestInit, "body"> & {
   json?: unknown;
   query?: ApiQueryParams;
@@ -152,7 +156,6 @@ function requireReturnConsultationReason(
     case "wrong_item":
     case "other":
       return reason;
-
     default:
       throw new Error("返品理由が不正です。");
   }
@@ -165,10 +168,7 @@ function requireReturnConsultationDetail(detail: string): string {
     throw new Error("返品についての詳細を入力してください。");
   }
 
-  if (
-    normalizedDetail.length >
-    MAX_RETURN_CONSULTATION_DETAIL_LENGTH
-  ) {
+  if (normalizedDetail.length > MAX_RETURN_CONSULTATION_DETAIL_LENGTH) {
     throw new Error(
       `詳細は${MAX_RETURN_CONSULTATION_DETAIL_LENGTH}文字以内で入力してください。`,
     );
@@ -200,7 +200,6 @@ function requireReturnAgreement(
     case "agree":
     case "disagree":
       return agreement;
-
     default:
       throw new Error("返品への回答が不正です。");
   }
@@ -213,7 +212,6 @@ function requireReturnRequirement(
     case "required":
     case "not_required":
       return returnRequirement;
-
     default:
       throw new Error("商品を返品してもらうか選択してください。");
   }
@@ -246,9 +244,7 @@ function buildMessageQuery(params: {
 }
 
 function buildTradePath(tradeId: string): string {
-  return `${TRADE_BASE_PATH}/${encodeURIComponent(
-    requireTradeId(tradeId),
-  )}`;
+  return `${TRADE_BASE_PATH}/${encodeURIComponent(requireTradeId(tradeId))}`;
 }
 
 function buildTradeReturnShipmentPath(tradeId: string): string {
@@ -267,8 +263,7 @@ async function fetchTradeWithAuth<T>(
     query,
     ...(json !== undefined ? { json } : {}),
     messages: {
-      requestErrorMessage:
-        "取引チャットのAPIリクエストに失敗しました。",
+      requestErrorMessage: "取引チャットのAPIリクエストに失敗しました。",
     },
   });
 }
@@ -276,13 +271,10 @@ async function fetchTradeWithAuth<T>(
 export async function fetchMyTradeChats(
   options: TradeRequestOptions = {},
 ): Promise<TradeChatListResponse> {
-  return fetchTradeWithAuth<TradeChatListResponse>(
-    TRADE_BASE_PATH,
-    {
-      method: "GET",
-      signal: options.signal,
-    },
-  );
+  return fetchTradeWithAuth<TradeChatListResponse>(TRADE_BASE_PATH, {
+    method: "GET",
+    signal: options.signal,
+  });
 }
 
 export async function fetchTradeByOrderItem(
@@ -290,21 +282,16 @@ export async function fetchTradeByOrderItem(
   options: TradeRequestOptions = {},
 ): Promise<TradeDetail> {
   const orderId = requireOrderId(params.orderId);
-  const orderItemIndex = requireOrderItemIndex(
-    params.orderItemIndex,
-  );
+  const orderItemIndex = requireOrderItemIndex(params.orderItemIndex);
 
-  const result =
-    await fetchTradeWithAuth<TradeDetailResponse>(
-      `${TRADE_BASE_PATH}/order-items/${encodeURIComponent(
-        orderId,
-      )}/${orderItemIndex}`,
-      {
-        method: "GET",
-        signal: options.signal,
-        query: buildMessageQuery(params),
-      },
-    );
+  const result = await fetchTradeWithAuth<TradeDetailResponse>(
+    `${TRADE_BASE_PATH}/order-items/${encodeURIComponent(orderId)}/${orderItemIndex}`,
+    {
+      method: "GET",
+      signal: options.signal,
+      query: buildMessageQuery(params),
+    },
+  );
 
   return result.data;
 }
@@ -313,15 +300,14 @@ export async function fetchTradeById(
   params: GetTradeByIDParams,
   options: TradeRequestOptions = {},
 ): Promise<TradeDetail> {
-  const result =
-    await fetchTradeWithAuth<TradeDetailResponse>(
-      buildTradePath(params.tradeId),
-      {
-        method: "GET",
-        signal: options.signal,
-        query: buildMessageQuery(params),
-      },
-    );
+  const result = await fetchTradeWithAuth<TradeDetailResponse>(
+    buildTradePath(params.tradeId),
+    {
+      method: "GET",
+      signal: options.signal,
+      query: buildMessageQuery(params),
+    },
+  );
 
   return result.data;
 }
@@ -330,14 +316,10 @@ export async function cancelTradeOrderItem(
   params: CancelTradeOrderItemParams,
 ): Promise<void> {
   const orderId = requireOrderId(params.orderId);
-  const orderItemIndex = requireOrderItemIndex(
-    params.orderItemIndex,
-  );
+  const orderItemIndex = requireOrderItemIndex(params.orderItemIndex);
 
   await fetchTradeWithAuth<unknown>(
-    `/mall/me/orders/${encodeURIComponent(
-      orderId,
-    )}/items/${orderItemIndex}/cancel`,
+    `/mall/me/orders/${encodeURIComponent(orderId)}/items/${orderItemIndex}/cancel`,
     {
       method: "PATCH",
     },
@@ -381,17 +363,11 @@ export async function createTradeReturnConsultation(
   params: CreateTradeReturnConsultationParams,
 ): Promise<void> {
   const tradeId = requireTradeId(params.tradeId);
-  const reason = requireReturnConsultationReason(
-    params.reason,
-  );
-  const detail = requireReturnConsultationDetail(
-    params.detail,
-  );
+  const reason = requireReturnConsultationReason(params.reason);
+  const detail = requireReturnConsultationDetail(params.detail);
 
   await fetchTradeWithAuth<unknown>(
-    `${buildTradePath(
-      tradeId,
-    )}/return-consultations`,
+    `${buildTradePath(tradeId)}/return-consultations`,
     {
       method: "POST",
       json: {
@@ -406,9 +382,7 @@ export async function createTradeReturnProposal(
   params: CreateTradeReturnProposalParams,
 ): Promise<void> {
   const tradeId = requireTradeId(params.tradeId);
-  const agreement = requireReturnAgreement(
-    params.agreement,
-  );
+  const agreement = requireReturnAgreement(params.agreement);
 
   if (agreement === "disagree") {
     await fetchTradeWithAuth<unknown>(
@@ -424,12 +398,8 @@ export async function createTradeReturnProposal(
     return;
   }
 
-  const returnRequirement = requireReturnRequirement(
-    params.returnRequirement,
-  );
-  const refundAmount = requireReturnProposalRefundAmount(
-    params.refundAmount,
-  );
+  const returnRequirement = requireReturnRequirement(params.returnRequirement);
+  const refundAmount = requireReturnProposalRefundAmount(params.refundAmount);
 
   await fetchTradeWithAuth<unknown>(
     `${buildTradePath(tradeId)}/return-proposals`,
@@ -451,11 +421,7 @@ export async function acceptTradeReturnProposal(
   const proposalId = requireProposalId(params.proposalId);
 
   await fetchTradeWithAuth<unknown>(
-    `${buildTradePath(
-      tradeId,
-    )}/return-proposals/${encodeURIComponent(
-      proposalId,
-    )}/accept`,
+    `${buildTradePath(tradeId)}/return-proposals/${encodeURIComponent(proposalId)}/accept`,
     {
       method: "POST",
     },
@@ -469,11 +435,7 @@ export async function rejectTradeReturnProposal(
   const proposalId = requireProposalId(params.proposalId);
 
   await fetchTradeWithAuth<unknown>(
-    `${buildTradePath(
-      tradeId,
-    )}/return-proposals/${encodeURIComponent(
-      proposalId,
-    )}/reject`,
+    `${buildTradePath(tradeId)}/return-proposals/${encodeURIComponent(proposalId)}/reject`,
     {
       method: "POST",
     },
@@ -483,13 +445,27 @@ export async function rejectTradeReturnProposal(
 export async function createTradeReturnShipment(
   params: CreateTradeReturnShipmentParams,
 ): Promise<TradeReturnShipment> {
-  const response =
-    await fetchTradeWithAuth<TradeReturnShipmentResponse>(
-      buildTradeReturnShipmentPath(params.tradeId),
-      {
-        method: "POST",
-      },
-    );
+  const response = await fetchTradeWithAuth<TradeReturnShipmentResponse>(
+    buildTradeReturnShipmentPath(params.tradeId),
+    {
+      method: "POST",
+    },
+  );
+
+  return response.data;
+}
+
+export async function fetchTradeReturnShipment(
+  params: FetchTradeReturnShipmentParams,
+  options: TradeRequestOptions = {},
+): Promise<TradeReturnShipment> {
+  const response = await fetchTradeWithAuth<TradeReturnShipmentResponse>(
+    buildTradeReturnShipmentPath(params.tradeId),
+    {
+      method: "GET",
+      signal: options.signal,
+    },
+  );
 
   return response.data;
 }
@@ -499,13 +475,12 @@ export async function receiveTradeReturn(
 ): Promise<ReceiveTradeReturnResult> {
   const tradeId = requireTradeId(params.tradeId);
 
-  const response =
-    await fetchTradeWithAuth<ReceiveTradeReturnResponse>(
-      `${buildTradePath(tradeId)}/receive-return`,
-      {
-        method: "POST",
-      },
-    );
+  const response = await fetchTradeWithAuth<ReceiveTradeReturnResponse>(
+    `${buildTradePath(tradeId)}/receive-return`,
+    {
+      method: "POST",
+    },
+  );
 
   return response.data;
 }
@@ -514,22 +489,19 @@ export async function createTradeMessage(
   params: CreateTradeMessageParams,
 ): Promise<TradeMessage> {
   const tradeId = requireTradeId(params.tradeId);
-  const content = requireMessageContent(
-    params.content,
-  );
+  const content = requireMessageContent(params.content);
 
   const request: CreateTradeMessageRequest = {
     content,
   };
 
-  const result =
-    await fetchTradeWithAuth<CreateTradeMessageResponse>(
-      `${buildTradePath(tradeId)}/messages`,
-      {
-        method: "POST",
-        json: request,
-      },
-    );
+  const result = await fetchTradeWithAuth<CreateTradeMessageResponse>(
+    `${buildTradePath(tradeId)}/messages`,
+    {
+      method: "POST",
+      json: request,
+    },
+  );
 
   return result.data;
 }

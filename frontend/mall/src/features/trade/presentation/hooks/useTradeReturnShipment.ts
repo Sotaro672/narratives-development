@@ -6,7 +6,10 @@ import type {
   TradeDetail,
   TradeReturnShipment,
 } from "../../../shared/types/trade";
-import { createTradeReturnShipment } from "../../infrastructure/tradeApi";
+import {
+  createTradeReturnShipment,
+  fetchTradeReturnShipment,
+} from "../../infrastructure/tradeApi";
 import { getErrorMessage } from "../util/tradeChatDetail";
 
 type UseTradeReturnShipmentInput = {
@@ -54,6 +57,21 @@ function canPrepareReturnShipment(
   );
 }
 
+function canOpenPersistedReturnShipment(
+  tradeId: string,
+  trade: TradeDetail | null,
+  blocked: boolean,
+): boolean {
+  return (
+    !blocked &&
+    tradeId.trim() !== "" &&
+    trade !== null &&
+    trade.viewerSide === "buyer" &&
+    !trade.isCancelled &&
+    trade.isDispatched
+  );
+}
+
 function isReadyReturnShipment(
   shipment: TradeReturnShipment | null,
 ): shipment is TradeReturnShipment & {
@@ -82,6 +100,11 @@ export function useTradeReturnShipment({
   const [loading, setLoading] = useState(false);
 
   const available = canPrepareReturnShipment(
+    tradeId,
+    trade,
+    blocked,
+  );
+  const persistedAvailable = canOpenPersistedReturnShipment(
     tradeId,
     trade,
     blocked,
@@ -127,7 +150,7 @@ export function useTradeReturnShipment({
 
         try {
           // ReturnShipment準備時にsystem messageが追加されるため、
-          // 最新の取引情報とメッセージ一覧を再取得する。
+          // 最新の取引情報と永続message一覧を再取得する。
           await reload();
         } catch (reloadError) {
           setError(
@@ -160,6 +183,60 @@ export function useTradeReturnShipment({
     ],
   );
 
+  const fetchPersisted = useCallback(
+    async (): Promise<TradeReturnShipment | null> => {
+      if (
+        loading ||
+        !canOpenPersistedReturnShipment(
+          tradeId,
+          trade,
+          blocked,
+        )
+      ) {
+        return null;
+      }
+
+      setLoading(true);
+      setError("");
+
+      try {
+        // 永続messageからQRを再表示する場合は新規作成せず、
+        // backendに保存済みのReturnShipmentをGETする。
+        const persistedShipment =
+          await fetchTradeReturnShipment({
+            tradeId,
+          });
+
+        setShipment(persistedShipment);
+
+        if (!isReadyReturnShipment(persistedShipment)) {
+          setError(
+            "保存済みの返品用QRを表示できる状態ではありません。",
+          );
+        }
+
+        return persistedShipment;
+      } catch (caught) {
+        setShipment(null);
+        setError(
+          getErrorMessage(
+            caught,
+            "保存済みの返品用QRを取得できませんでした。",
+          ),
+        );
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      blocked,
+      loading,
+      trade,
+      tradeId,
+    ],
+  );
+
   const openModal = useCallback(
     async (): Promise<void> => {
       if (
@@ -174,6 +251,7 @@ export function useTradeReturnShipment({
       }
 
       setOpen(true);
+      setShipment(null);
       setError("");
 
       await prepare();
@@ -182,6 +260,34 @@ export function useTradeReturnShipment({
       blocked,
       loading,
       prepare,
+      trade,
+      tradeId,
+    ],
+  );
+
+  const openPersistedShipment = useCallback(
+    async (): Promise<void> => {
+      if (
+        loading ||
+        !canOpenPersistedReturnShipment(
+          tradeId,
+          trade,
+          blocked,
+        )
+      ) {
+        return;
+      }
+
+      setOpen(true);
+      setShipment(null);
+      setError("");
+
+      await fetchPersisted();
+    },
+    [
+      blocked,
+      fetchPersisted,
+      loading,
       trade,
       tradeId,
     ],
@@ -207,6 +313,7 @@ export function useTradeReturnShipment({
     }
 
     setOpen(false);
+    setShipment(null);
     setError("");
   }, [loading]);
 
@@ -217,8 +324,10 @@ export function useTradeReturnShipment({
     error,
     loading,
     available,
+    persistedAvailable,
     ready,
     openModal,
+    openPersistedShipment,
     closeModal,
     retryPreparation,
   };

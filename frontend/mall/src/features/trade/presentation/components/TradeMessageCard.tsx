@@ -13,6 +13,7 @@ type TradeMessageCardProps = {
   trade: TradeDetail;
   onReport: (message: TradeMessage) => void;
   onOpenDispatchQr?: () => void;
+  onOpenReturnShipmentQr?: () => void;
 };
 
 type TradeSenderDisplay = {
@@ -25,6 +26,16 @@ function isDispatchSystemMessage(message: TradeMessage): boolean {
     message.senderSide === "system" &&
     message.senderType === "system" &&
     message.id.trim() === "dispatch"
+  );
+}
+
+function isReturnShipmentReadySystemMessage(
+  message: TradeMessage,
+): boolean {
+  return (
+    message.senderSide === "system" &&
+    message.senderType === "system" &&
+    message.id.trim().startsWith("return-shipment-ready-")
   );
 }
 
@@ -121,6 +132,7 @@ export default function TradeMessageCard({
   trade,
   onReport,
   onOpenDispatchQr,
+  onOpenReturnShipmentQr,
 }: TradeMessageCardProps) {
   const displaySenderSide = getDisplaySenderSide(message);
   const isSystem = displaySenderSide === "system";
@@ -134,11 +146,21 @@ export default function TradeMessageCard({
     trade,
   );
   const dispatchSystemMessage = isDispatchSystemMessage(message);
+  const returnShipmentReadySystemMessage =
+    isReturnShipmentReadySystemMessage(message);
 
   const canReport =
     message.senderType === "avatar" &&
     !isMine &&
     Boolean(message.id.trim());
+
+  const hasAfterContent =
+    Boolean(returnConsultationDetail) ||
+    (dispatchSystemMessage && Boolean(onOpenDispatchQr)) ||
+    (
+      returnShipmentReadySystemMessage &&
+      Boolean(onOpenReturnShipmentQr)
+    );
 
   return (
     <ChatMessageBubble
@@ -161,7 +183,7 @@ export default function TradeMessageCard({
         ) : undefined
       }
       afterContent={
-        returnConsultationDetail || (dispatchSystemMessage && onOpenDispatchQr) ? (
+        hasAfterContent ? (
           <>
             {returnConsultationDetail ? (
               <p className="chat-detail-page__content">
@@ -173,6 +195,16 @@ export default function TradeMessageCard({
               <TextLink
                 className="trade-chat-detail__dispatch-qr-link"
                 onClick={onOpenDispatchQr}
+              >
+                PUDO QRを表示
+              </TextLink>
+            ) : null}
+
+            {returnShipmentReadySystemMessage &&
+            onOpenReturnShipmentQr ? (
+              <TextLink
+                className="trade-chat-detail__dispatch-qr-link"
+                onClick={onOpenReturnShipmentQr}
               >
                 PUDO QRを表示
               </TextLink>

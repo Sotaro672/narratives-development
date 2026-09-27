@@ -375,6 +375,13 @@ export default function TradeChatDetail({
                         onOpenDispatchQr={() => {
                           setDispatchQrPreviewOpen(true);
                         }}
+                        onOpenReturnShipmentQr={
+                          thread.trade!.viewerSide === "buyer"
+                            ? () => {
+                                void returnShipmentFlow.openPersistedShipment();
+                              }
+                            : undefined
+                        }
                       />
                     ))}
 
