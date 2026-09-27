@@ -166,14 +166,15 @@ export default function HowToUseDetailPage() {
 
   return (
     <Layout
-      title={item.title}
-      titleClickable={false}
+      title="AMOL"
       mode="landing"
       hideAnnouncementButton
       hideSettingsButton
     >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
+          <h1 className="how-to-use-detail-page__title">{item.title}</h1>
+
           <HowToUseArticle description={item.description}>
             {renderGuide(category, slug)}
           </HowToUseArticle>
