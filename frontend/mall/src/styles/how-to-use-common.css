@@ -117,11 +117,13 @@
 .how-to-use-figure__video {
   object-fit: contain;
   opacity: 1;
+  cursor: pointer;
   transition: opacity 160ms ease;
 }
 
 .how-to-use-figure__video--loading {
   opacity: 0;
+  cursor: default;
 }
 
 .how-to-use-figure__loading {

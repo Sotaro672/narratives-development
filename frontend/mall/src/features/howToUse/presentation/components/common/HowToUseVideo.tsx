@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import Preview from "../../../../../components/ui/Preview";
 import TextState from "../../../../../components/ui/TextState";
 import { getHowToUseVideoUrl } from "../../../infrastructure/howToUseVideoUrl";
 
@@ -19,6 +20,7 @@ export default function HowToUseVideo({
   const src = getHowToUseVideoUrl(storagePath);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [loading, setLoading] = useState(true);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -26,7 +28,7 @@ export default function HowToUseVideo({
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
+        if (entry.isIntersecting && !previewOpen) {
           void video.play().catch(() => undefined);
           return;
         }
@@ -44,7 +46,12 @@ export default function HowToUseVideo({
       observer.disconnect();
       video.pause();
     };
-  }, [src]);
+  }, [src, previewOpen]);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    videoRef.current?.pause();
+  }, [previewOpen]);
 
   const figureClassName = [
     "how-to-use-figure",
@@ -57,34 +64,51 @@ export default function HowToUseVideo({
   ].filter(Boolean).join(" ");
 
   return (
-    <figure className={figureClassName}>
-      <div className={imageWrapClassName} aria-busy={loading}>
-        {loading ? (
-          <div className="how-to-use-figure__loading" aria-live="polite">
-            <TextState variant="loading">読み込み中...</TextState>
-          </div>
-        ) : null}
+    <>
+      <figure className={figureClassName}>
+        <div className={imageWrapClassName} aria-busy={loading}>
+          {loading ? (
+            <div className="how-to-use-figure__loading" aria-live="polite">
+              <TextState variant="loading">読み込み中...</TextState>
+            </div>
+          ) : null}
 
-        <video
-          ref={videoRef}
-          src={src}
-          aria-label={label}
-          className={[
-            "how-to-use-figure__video",
-            loading ? "how-to-use-figure__video--loading" : "",
-          ].filter(Boolean).join(" ")}
-          muted
-          loop
-          playsInline
-          preload="auto"
-          onCanPlay={() => {
-            setLoading(false);
-          }}
-          onError={() => {
-            setLoading(false);
-          }}
-        />
-      </div>
-    </figure>
+          <video
+            ref={videoRef}
+            src={src}
+            aria-label={label}
+            className={[
+              "how-to-use-figure__video",
+              loading ? "how-to-use-figure__video--loading" : "",
+            ].filter(Boolean).join(" ")}
+            muted
+            loop
+            playsInline
+            preload="auto"
+            onCanPlay={() => {
+              setLoading(false);
+            }}
+            onError={() => {
+              setLoading(false);
+            }}
+            onClick={() => {
+              if (!loading) {
+                setPreviewOpen(true);
+              }
+            }}
+          />
+        </div>
+      </figure>
+
+      <Preview
+        open={previewOpen}
+        src={src}
+        alt={label}
+        type="video"
+        onClose={() => {
+          setPreviewOpen(false);
+        }}
+      />
+    </>
   );
 }
