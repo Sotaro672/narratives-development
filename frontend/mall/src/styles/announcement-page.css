@@ -171,7 +171,6 @@
   font-size: 12px;
 }
 
-.announcement-page--list,
 .announcement-page--workspace {
   width: 100%;
   max-width: none;
@@ -183,23 +182,15 @@
 .announcement-page__list {
   width: 100%;
   overflow: hidden;
-  border-top: 1px solid rgba(15, 23, 42, 0.08);
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: #ffffff;
 }
 
-.announcement-page--workspace .announcement-page__list {
-  border-top: 0;
-}
-
-.announcement-page--list > .ui-state-panel,
 .announcement-page--workspace > .ui-state-panel {
   width: auto;
   margin: 16px;
 }
 
-.announcement-page--list > .ui-state-panel--loading,
-.announcement-page--list > .ui-state-panel--empty,
 .announcement-page--workspace > .ui-state-panel--loading,
 .announcement-page--workspace > .ui-state-panel--empty {
   background: #ffffff;
@@ -218,11 +209,6 @@
 }
 
 @media (max-width: 640px) {
-  .announcement-page--list,
-  .announcement-page--workspace {
-    max-width: none;
-  }
-
   .announcement-detail-page-layout .announcement-page {
     padding-right: 12px;
     padding-left: 12px;
@@ -230,15 +216,6 @@
 }
 
 @media (max-width: 520px) {
-  .announcement-page {
-    padding-top: 20px;
-  }
-
-  .announcement-page--list,
-  .announcement-page--workspace {
-    padding-top: 0;
-  }
-
   .announcement-detail-page-layout .announcement-page {
     padding-top: 16px;
   }

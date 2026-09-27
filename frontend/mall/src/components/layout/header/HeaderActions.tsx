@@ -35,6 +35,10 @@ function isChatPagePath(pathname: string): boolean {
   return pathname === "/chats" || pathname === "/chats/" || pathname.startsWith("/chats/");
 }
 
+function isAnnouncementPagePath(pathname: string): boolean {
+  return pathname === "/announcements" || pathname === "/announcements/" || pathname.startsWith("/announcements/");
+}
+
 export default function HeaderActions({ actions }: HeaderActionsProps) {
   const location = useLocation();
 
@@ -63,10 +67,12 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
   } = actions;
 
   const isChatPage = isChatPagePath(location.pathname);
+  const isAnnouncementPage = isAnnouncementPagePath(location.pathname);
   const shouldShowMessageButton = shouldShowAnnouncementButton && !isChatPage;
+  const shouldShowNotificationButton = shouldShowAnnouncementButton && !isAnnouncementPage;
 
   const { unreadCount: notificationUnreadCount } = useNotificationUnreadCount({
-    enabled: shouldShowAnnouncementButton,
+    enabled: shouldShowNotificationButton,
   });
 
   const { badgeCount: inquiryBadgeCount } = useInquiryBadgeCounter({
@@ -93,39 +99,29 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     safeTradeDispatchBadgeCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
-  const notificationUnreadBadgeLabel = formatBadgeLabel(
-    safeNotificationUnreadCount,
-  );
+  const notificationUnreadBadgeLabel = formatBadgeLabel(safeNotificationUnreadCount);
   const chatBadgeLabel = formatBadgeLabel(safeChatBadgeCount);
 
-  const shouldShowResaleDetailActions = isResaleDetailPagePath(
-    location.pathname,
-  );
+  const shouldShowResaleDetailActions = isResaleDetailPagePath(location.pathname);
 
   const primaryActionClassName = [
     "header__action-button",
     "header__add-to-cart-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
 
   const secondaryActionClassName = [
     "header__action-button",
     "header__secondary-action-button",
     "header__buy-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
 
   const tertiaryActionClassName = [
     "header__action-button",
     "header__tertiary-action-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
 
   return (
     <div className="header__right">
@@ -177,7 +173,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
         </Link>
       ) : null}
 
-      {shouldShowAnnouncementButton ? (
+      {shouldShowNotificationButton ? (
         <Link
           to="/announcements"
           className="header__settings-link header__cart-link"
