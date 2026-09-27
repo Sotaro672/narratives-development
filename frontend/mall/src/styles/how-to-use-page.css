@@ -70,7 +70,7 @@
   justify-content: space-between;
   gap: 12px;
   box-sizing: border-box;
-  padding: 16px 4px;
+  padding: 16px 4px 16px 12px;
   border: 0;
   background: #ffffff;
   color: inherit;
@@ -190,7 +190,7 @@
   }
 
   .how-to-use-item {
-    padding: 16px 2px;
+    padding: 16px 2px 16px 10px;
   }
 
   .how-to-use-item-sections {
