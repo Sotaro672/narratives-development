@@ -23,7 +23,8 @@ type ItemListProps = {
   selectedItem: SelectedHowToUseItem;
   selectedSectionId: string | null;
   expandedItemKey: string | null;
-  onItemToggle: (item: HowToUseItem) => void;
+  isMobile: boolean;
+  onItemClick: (item: HowToUseItem) => void;
   onSectionClick: (item: HowToUseItem, section: HowToUseSectionItem) => void;
 };
 
@@ -37,7 +38,8 @@ function ItemList({
   selectedItem,
   selectedSectionId,
   expandedItemKey,
-  onItemToggle,
+  isMobile,
+  onItemClick,
   onSectionClick,
 }: ItemListProps) {
   return (
@@ -48,7 +50,7 @@ function ItemList({
         {items.map((item) => {
           const itemKey = getItemKey(item);
           const selected = selectedItem?.category === item.category && selectedItem.slug === item.slug;
-          const expanded = expandedItemKey === itemKey;
+          const expanded = !isMobile && expandedItemKey === itemKey;
           const sectionListId = `how-to-use-sections-${itemKey}`;
 
           return (
@@ -57,17 +59,17 @@ function ItemList({
                 type="button"
                 className={["how-to-use-item", selected ? "how-to-use-item--selected" : "", expanded ? "how-to-use-item--expanded" : ""].filter(Boolean).join(" ")}
                 aria-current={selected ? "page" : undefined}
-                aria-expanded={expanded}
-                aria-controls={sectionListId}
+                aria-expanded={isMobile ? undefined : expanded}
+                aria-controls={isMobile ? undefined : sectionListId}
                 onClick={() => {
-                  onItemToggle(item);
+                  onItemClick(item);
                 }}
               >
                 <span className="how-to-use-item__title">{item.title}</span>
                 <span className="how-to-use-item__arrow" aria-hidden="true" />
               </button>
 
-              {expanded && (
+              {!isMobile && expanded && (
                 <div id={sectionListId} className="how-to-use-item-sections">
                   {item.sections.map((section) => {
                     const sectionSelected = selected && selectedSectionId === section.id;
@@ -104,17 +106,41 @@ export default function HowToUseListPane() {
   const selectedSectionId = getSelectedHowToUseSectionId(location.hash);
   const selectedItemKey = selectedItem ? getItemKey(selectedItem) : null;
   const [expandedItemKey, setExpandedItemKey] = useState<string | null>(selectedItemKey);
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 959px)").matches);
 
   useEffect(() => {
-    if (selectedItemKey) {
+    const mediaQuery = window.matchMedia("(max-width: 959px)");
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setIsMobile(event.matches);
+    };
+
+    setIsMobile(mediaQuery.matches);
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMobile && selectedItemKey) {
       setExpandedItemKey(selectedItemKey);
     }
-  }, [selectedItemKey]);
+  }, [isMobile, selectedItemKey]);
 
-  const handleItemToggle = useCallback((item: HowToUseItem) => {
-    const itemKey = getItemKey(item);
-    setExpandedItemKey((current) => current === itemKey ? null : itemKey);
-  }, []);
+  const handleItemClick = useCallback(
+    (item: HowToUseItem) => {
+      if (isMobile) {
+        navigate(`/how-to-use/${encodeURIComponent(item.category)}/${encodeURIComponent(item.slug)}`);
+        return;
+      }
+
+      const itemKey = getItemKey(item);
+      setExpandedItemKey((current) => current === itemKey ? null : itemKey);
+    },
+    [isMobile, navigate],
+  );
 
   const handleSectionClick = useCallback(
     (item: HowToUseItem, section: HowToUseSectionItem) => {
@@ -136,7 +162,8 @@ export default function HowToUseListPane() {
           selectedItem={selectedItem}
           selectedSectionId={selectedSectionId}
           expandedItemKey={expandedItemKey}
-          onItemToggle={handleItemToggle}
+          isMobile={isMobile}
+          onItemClick={handleItemClick}
           onSectionClick={handleSectionClick}
         />
 
@@ -146,7 +173,8 @@ export default function HowToUseListPane() {
           selectedItem={selectedItem}
           selectedSectionId={selectedSectionId}
           expandedItemKey={expandedItemKey}
-          onItemToggle={handleItemToggle}
+          isMobile={isMobile}
+          onItemClick={handleItemClick}
           onSectionClick={handleSectionClick}
         />
       </div>

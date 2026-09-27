@@ -99,6 +99,7 @@
 }
 
 .how-to-use-figure__image-wrap {
+  position: relative;
   width: 100%;
   overflow: hidden;
   border: 1px solid #e5e7eb;
@@ -115,6 +116,29 @@
 
 .how-to-use-figure__video {
   object-fit: contain;
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.how-to-use-figure__video--loading {
+  opacity: 0;
+}
+
+.how-to-use-figure__loading {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 16px;
+  background: #f8fafc;
+  text-align: center;
+}
+
+.how-to-use-figure__loading .ui-text-state {
+  margin: 0;
 }
 
 .how-to-use-figure__caption {
@@ -295,5 +319,11 @@
   .how-to-use-note {
     border-color: #cccccc;
     background: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-to-use-figure__video {
+    transition: none;
   }
 }

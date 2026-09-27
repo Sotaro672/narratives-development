@@ -1,5 +1,8 @@
 // frontend/mall/src/features/howToUse/presentation/components/common/HowToUseVideo.tsx
 
+import { useEffect, useRef, useState } from "react";
+
+import TextState from "../../../../../components/ui/TextState";
 import { getHowToUseVideoUrl } from "../../../infrastructure/howToUseVideoUrl";
 
 type HowToUseVideoProps = {
@@ -14,6 +17,34 @@ export default function HowToUseVideo({
   variant = "default",
 }: HowToUseVideoProps) {
   const src = getHowToUseVideoUrl(storagePath);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          void video.play().catch(() => undefined);
+          return;
+        }
+
+        video.pause();
+      },
+      {
+        threshold: 0.35,
+      },
+    );
+
+    observer.observe(video);
+
+    return () => {
+      observer.disconnect();
+      video.pause();
+    };
+  }, [src]);
 
   const figureClassName = [
     "how-to-use-figure",
@@ -27,16 +58,31 @@ export default function HowToUseVideo({
 
   return (
     <figure className={figureClassName}>
-      <div className={imageWrapClassName}>
+      <div className={imageWrapClassName} aria-busy={loading}>
+        {loading ? (
+          <div className="how-to-use-figure__loading" aria-live="polite">
+            <TextState variant="loading">読み込み中...</TextState>
+          </div>
+        ) : null}
+
         <video
+          ref={videoRef}
           src={src}
           aria-label={label}
-          className="how-to-use-figure__video"
-          autoPlay
+          className={[
+            "how-to-use-figure__video",
+            loading ? "how-to-use-figure__video--loading" : "",
+          ].filter(Boolean).join(" ")}
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
+          onCanPlay={() => {
+            setLoading(false);
+          }}
+          onError={() => {
+            setLoading(false);
+          }}
         />
       </div>
     </figure>
