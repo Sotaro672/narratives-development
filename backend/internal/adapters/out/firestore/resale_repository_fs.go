@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
+	applicationport "narratives/internal/application/port"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -27,15 +28,16 @@ import (
 // - Image URL is resolved from /resales/{resaleId}/conditionImages/{imageId}.
 // - image_id is not a URL.
 //
-// Duplicate prevention policy:
-// - 1 product_id can have only 1 resale document.
-// - resale_product_locks/{productId} is created in the same transaction.
-// - Existing resales with the same product_id are also checked defensively.
+// Active listing lock policy:
+// - One product_id may have multiple historical sold resale documents.
+// - At most one active resale (listing or suspended) may exist for one product_id.
+// - resale_product_locks/{productId} identifies the currently active resale.
+// - The lock is released when the resale ownership transfer completes.
 //
 // Delete policy:
 // - Delete physically deletes the resale document.
 // - Delete also deletes child condition image records.
-// - Delete also removes resale_product_locks/{productId}, so re-listing becomes possible.
+// - Delete removes resale_product_locks/{productId} only when the lock belongs to the deleted resale.
 type ResaleRepositoryFS struct {
 	Client *gfs.Client
 }
@@ -58,6 +60,7 @@ const (
 )
 
 var _ resaledom.Repository = (*ResaleRepositoryFS)(nil)
+var _ applicationport.ResaleProductListingLockReleaser = (*ResaleRepositoryFS)(nil)
 
 // ============================================================
 // Queries
@@ -389,25 +392,34 @@ func (r *ResaleRepositoryFS) Create(
 	productLockRef := r.productLockRef(item.ProductID)
 
 	err := r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		// Defensive check for already-existing data.
-		// This blocks duplicates created before resale_product_locks was introduced.
+		// Historical sold resales may share the same product_id.
+		// Only a currently active resale blocks creation.
 		it := tx.Documents(
-			r.col().
-				Where("product_id", "==", item.ProductID).
-				Limit(1),
+			r.col().Where("product_id", "==", item.ProductID),
 		)
 		defer it.Stop()
 
-		existingDoc, err := it.Next()
-		if err == nil && existingDoc != nil {
-			return resaledom.ErrConflict
+		for {
+			existingDoc, err := it.Next()
+			if errors.Is(err, iterator.Done) {
+				break
+			}
+
+			if err != nil {
+				return err
+			}
+
+			existing, err := decodeResaleDoc(existingDoc)
+			if err != nil {
+				return err
+			}
+
+			if isActiveResaleListingStatus(existing.Status) {
+				return resaledom.ErrConflict
+			}
 		}
 
-		if err != nil && !errors.Is(err, iterator.Done) {
-			return err
-		}
-
-		_, err = tx.Get(ref)
+		_, err := tx.Get(ref)
 		if err == nil {
 			return resaledom.ErrConflict
 		}
@@ -449,6 +461,54 @@ func (r *ResaleRepositoryFS) Create(
 	}
 
 	return r.GetByID(ctx, item.ID)
+}
+
+// ReleaseProductListingLock releases the product listing lock only when the
+// current lock belongs to resaleID.
+//
+// Missing locks and locks owned by another resale are successful no-ops.
+// This keeps the operation idempotent and prevents a delayed completion call
+// from deleting a lock owned by a newer resale.
+func (r *ResaleRepositoryFS) ReleaseProductListingLock(
+	ctx context.Context,
+	productID string,
+	resaleID string,
+) error {
+	if r == nil || r.Client == nil {
+		return errors.New("firestore client is nil")
+	}
+
+	if productID == "" {
+		return resaledom.ErrInvalidProductID
+	}
+
+	if resaleID == "" {
+		return resaledom.ErrInvalidID
+	}
+
+	lockRef := r.productLockRef(productID)
+
+	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
+		snapshot, err := tx.Get(lockRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return nil
+			}
+
+			return err
+		}
+
+		lock, err := decodeResaleProductLock(snapshot)
+		if err != nil {
+			return err
+		}
+
+		if lock.ProductID != productID || lock.ResaleID != resaleID {
+			return nil
+		}
+
+		return tx.Delete(lockRef)
+	})
 }
 
 func (r *ResaleRepositoryFS) Update(
@@ -604,6 +664,27 @@ func (r *ResaleRepositoryFS) Delete(
 			return err
 		}
 
+		shouldDeleteProductLock := false
+		var productLockRef *gfs.DocumentRef
+
+		if item.ProductID != "" {
+			productLockRef = r.productLockRef(item.ProductID)
+
+			lockSnapshot, err := tx.Get(productLockRef)
+			if err == nil {
+				lock, err := decodeResaleProductLock(lockSnapshot)
+				if err != nil {
+					return err
+				}
+
+				shouldDeleteProductLock =
+					lock.ProductID == item.ProductID &&
+						lock.ResaleID == id
+			} else if status.Code(err) != codes.NotFound {
+				return err
+			}
+		}
+
 		itImages := ref.Collection(resaleConditionImagesSub).Documents(ctx)
 		defer itImages.Stop()
 
@@ -622,8 +703,8 @@ func (r *ResaleRepositoryFS) Delete(
 			}
 		}
 
-		if item.ProductID != "" {
-			if err := tx.Delete(r.productLockRef(item.ProductID)); err != nil {
+		if shouldDeleteProductLock {
+			if err := tx.Delete(productLockRef); err != nil {
 				return err
 			}
 		}
@@ -639,6 +720,39 @@ func (r *ResaleRepositoryFS) Delete(
 	}
 
 	return nil
+}
+
+// ============================================================
+// Firestore encode/decode - resale product lock
+// ============================================================
+
+type resaleProductLockDocument struct {
+	ProductID string `firestore:"product_id"`
+	ResaleID  string `firestore:"resale_id"`
+}
+
+func decodeResaleProductLock(
+	doc *gfs.DocumentSnapshot,
+) (resaleProductLockDocument, error) {
+	if doc == nil || doc.Ref == nil || doc.Ref.ID == "" {
+		return resaleProductLockDocument{}, resaledom.ErrConflict
+	}
+
+	var lock resaleProductLockDocument
+	if err := doc.DataTo(&lock); err != nil {
+		return resaleProductLockDocument{}, err
+	}
+
+	if lock.ProductID == "" || lock.ResaleID == "" {
+		return resaleProductLockDocument{}, resaledom.ErrConflict
+	}
+
+	return lock, nil
+}
+
+func isActiveResaleListingStatus(status resaledom.ResaleStatus) bool {
+	return status == resaledom.StatusListing ||
+		status == resaledom.StatusSuspended
 }
 
 // ============================================================
@@ -740,36 +854,49 @@ func decodeResaleDoc(doc *gfs.DocumentSnapshot) (resaledom.Resale, error) {
 // Filter / sort helpers
 // ============================================================
 
-func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
+func matchesResaleFilter(
+	item resaledom.Resale,
+	filter resaledom.Filter,
+) bool {
 	if len(filter.IDs) > 0 && !stringIn(item.ID, filter.IDs) {
 		return false
 	}
 
-	if len(filter.AssetIDs) > 0 && !stringIn(item.AssetID, filter.AssetIDs) {
+	if len(filter.AssetIDs) > 0 &&
+		!stringIn(item.AssetID, filter.AssetIDs) {
 		return false
 	}
 
-	if len(filter.TokenBlueprintIDs) > 0 && !stringIn(item.TokenBlueprintID, filter.TokenBlueprintIDs) {
+	if len(filter.TokenBlueprintIDs) > 0 &&
+		!stringIn(item.TokenBlueprintID, filter.TokenBlueprintIDs) {
 		return false
 	}
 
-	if len(filter.ProductIDs) > 0 && !stringIn(item.ProductID, filter.ProductIDs) {
+	if len(filter.ProductIDs) > 0 &&
+		!stringIn(item.ProductID, filter.ProductIDs) {
 		return false
 	}
 
-	if len(filter.BrandIDs) > 0 && !stringIn(item.BrandID, filter.BrandIDs) {
+	if len(filter.BrandIDs) > 0 &&
+		!stringIn(item.BrandID, filter.BrandIDs) {
 		return false
 	}
 
-	if len(filter.ProductBlueprintIDs) > 0 && !stringIn(item.ProductBlueprintID, filter.ProductBlueprintIDs) {
+	if len(filter.ProductBlueprintIDs) > 0 &&
+		!stringIn(
+			item.ProductBlueprintID,
+			filter.ProductBlueprintIDs,
+		) {
 		return false
 	}
 
-	if len(filter.AvatarIDs) > 0 && !stringIn(item.AvatarID, filter.AvatarIDs) {
+	if len(filter.AvatarIDs) > 0 &&
+		!stringIn(item.AvatarID, filter.AvatarIDs) {
 		return false
 	}
 
-	if len(filter.ExcludeAvatarIDs) > 0 && stringIn(item.AvatarID, filter.ExcludeAvatarIDs) {
+	if len(filter.ExcludeAvatarIDs) > 0 &&
+		stringIn(item.AvatarID, filter.ExcludeAvatarIDs) {
 		return false
 	}
 
@@ -777,15 +904,18 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 		return false
 	}
 
-	if len(filter.Statuses) > 0 && !statusIn(item.Status, filter.Statuses) {
+	if len(filter.Statuses) > 0 &&
+		!statusIn(item.Status, filter.Statuses) {
 		return false
 	}
 
-	if filter.Condition != nil && item.Condition != *filter.Condition {
+	if filter.Condition != nil &&
+		item.Condition != *filter.Condition {
 		return false
 	}
 
-	if len(filter.Conditions) > 0 && !conditionIn(item.Condition, filter.Conditions) {
+	if len(filter.Conditions) > 0 &&
+		!conditionIn(item.Condition, filter.Conditions) {
 		return false
 	}
 
@@ -799,18 +929,23 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 
 	q := strings.ToLower(filter.SearchQuery)
 	if q != "" {
-		haystack := strings.ToLower(strings.Join([]string{
-			item.ID,
-			item.AssetID,
-			item.TokenBlueprintID,
-			item.ProductID,
-			item.BrandID,
-			item.ProductBlueprintID,
-			item.AvatarID,
-			item.Description,
-			string(item.Status),
-			string(item.Condition),
-		}, " "))
+		haystack := strings.ToLower(
+			strings.Join(
+				[]string{
+					item.ID,
+					item.AssetID,
+					item.TokenBlueprintID,
+					item.ProductID,
+					item.BrandID,
+					item.ProductBlueprintID,
+					item.AvatarID,
+					item.Description,
+					string(item.Status),
+					string(item.Condition),
+				},
+				" ",
+			),
+		)
 
 		if !strings.Contains(haystack, q) {
 			return false
@@ -820,7 +955,10 @@ func matchesResaleFilter(item resaledom.Resale, filter resaledom.Filter) bool {
 	return true
 }
 
-func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
+func sortResales(
+	items []resaledom.Resale,
+	sortSpec resaledom.Sort,
+) {
 	column := sortSpec.Column
 	order := sortSpec.Order
 
@@ -857,6 +995,7 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 		case "updatedAt", "updated_at":
 			at := timeOrZero(a.UpdatedAt)
 			bt := timeOrZero(b.UpdatedAt)
+
 			if at.Equal(bt) {
 				if a.CreatedAt.Equal(b.CreatedAt) {
 					return a.ID < b.ID
@@ -870,6 +1009,7 @@ func sortResales(items []resaledom.Resale, sortSpec resaledom.Sort) {
 		default:
 			at := timeOrZero(a.UpdatedAt)
 			bt := timeOrZero(b.UpdatedAt)
+
 			if at.Equal(bt) {
 				if a.CreatedAt.Equal(b.CreatedAt) {
 					return a.ID < b.ID
@@ -901,7 +1041,10 @@ func stringIn(value string, values []string) bool {
 	return false
 }
 
-func statusIn(value resaledom.ResaleStatus, values []resaledom.ResaleStatus) bool {
+func statusIn(
+	value resaledom.ResaleStatus,
+	values []resaledom.ResaleStatus,
+) bool {
 	for _, v := range values {
 		if value == v {
 			return true
@@ -911,7 +1054,10 @@ func statusIn(value resaledom.ResaleStatus, values []resaledom.ResaleStatus) boo
 	return false
 }
 
-func conditionIn(value resaledom.ResaleCondition, values []resaledom.ResaleCondition) bool {
+func conditionIn(
+	value resaledom.ResaleCondition,
+	values []resaledom.ResaleCondition,
+) bool {
 	for _, v := range values {
 		if value == v {
 			return true

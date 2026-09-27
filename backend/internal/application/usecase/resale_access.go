@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	resaledom "narratives/internal/domain/resale"
+	tokendom "narratives/internal/domain/token"
 )
 
 var (
@@ -45,6 +46,36 @@ type AvatarResaleAccessChecker interface {
 		ctx context.Context,
 		avatarID string,
 	) (bool, error)
+}
+
+// ResaleAssetOwnershipResolver は、新規Resale出品時に
+// assetの現在所有権とtoken identityを検証するためのread-side port。
+//
+// 所有権判定ではFirestore wallet.assetIdsを正とせず、
+// on-chain上の現在所有者を正とする。
+//
+// 実装は以下を提供する:
+// - avatarがassetIdを現在所有していることの確認
+// - assetIdからcanonical token情報の解決
+// - tokenBlueprintIdに属するassetId一覧の解決
+//
+// WalletUsecaseがこのinterfaceを実装する。
+type ResaleAssetOwnershipResolver interface {
+	EnsureAvatarOwnsAssetID(
+		ctx context.Context,
+		avatarID string,
+		assetID string,
+	) error
+
+	ResolveTokenByAssetID(
+		ctx context.Context,
+		assetID string,
+	) (tokendom.ResolveTokenByAssetIDResult, error)
+
+	ListAssetIDsByTokenBlueprintID(
+		ctx context.Context,
+		tokenBlueprintID string,
+	) (tokendom.ListAssetIDsByTokenBlueprintIDResult, error)
 }
 
 // GetOwned は、対象Resaleを取得し、指定Avatarが所有者であることを検証する。
@@ -114,6 +145,92 @@ func checkAvatarResaleAccess(
 	}
 
 	return nil
+}
+
+// checkResaleAssetOwnership は、新規Resale出品対象assetについて
+// 現在所有権とcanonical token identityを検証する。
+//
+// 検証順:
+// 1. avatarがassetIdをon-chain上で現在所有していること
+// 2. assetIdから解決したcanonical productIdが入力値と一致すること
+// 3. assetIdが入力されたtokenBlueprintIdに属すること
+//
+// resolver未設定時はDI漏れを許可しないためfail-closedとする。
+func checkResaleAssetOwnership(
+	ctx context.Context,
+	resolver ResaleAssetOwnershipResolver,
+	avatarID string,
+	assetID string,
+	productID string,
+	tokenBlueprintID string,
+) error {
+	if avatarID == "" {
+		return resaledom.ErrInvalidAvatarID
+	}
+	if assetID == "" {
+		return resaledom.ErrInvalidAssetID
+	}
+	if productID == "" {
+		return resaledom.ErrInvalidProductID
+	}
+	if tokenBlueprintID == "" {
+		return resaledom.ErrInvalidTokenBlueprintID
+	}
+	if resolver == nil {
+		return ErrNotSupported(
+			"Resale.ResaleAssetOwnershipResolver",
+		)
+	}
+
+	if err := resolver.EnsureAvatarOwnsAssetID(
+		ctx,
+		avatarID,
+		assetID,
+	); err != nil {
+		if errors.Is(err, ErrWalletAssetIDNotOwned) ||
+			errors.Is(err, ErrResaleAccessDenied) {
+			return ErrResaleAccessDenied
+		}
+
+		return err
+	}
+
+	resolvedToken, err := resolver.ResolveTokenByAssetID(
+		ctx,
+		assetID,
+	)
+	if err != nil {
+		return err
+	}
+
+	if resolvedToken.AssetID == "" ||
+		resolvedToken.AssetID != assetID {
+		return resaledom.ErrInvalidAssetID
+	}
+	if resolvedToken.ProductID == "" ||
+		resolvedToken.ProductID != productID {
+		return resaledom.ErrInvalidProductID
+	}
+
+	blueprintAssets, err := resolver.ListAssetIDsByTokenBlueprintID(
+		ctx,
+		tokenBlueprintID,
+	)
+	if err != nil {
+		return err
+	}
+	if blueprintAssets.TokenBlueprintID != "" &&
+		blueprintAssets.TokenBlueprintID != tokenBlueprintID {
+		return resaledom.ErrInvalidTokenBlueprintID
+	}
+
+	for _, candidateAssetID := range blueprintAssets.AssetIDs {
+		if candidateAssetID == assetID {
+			return nil
+		}
+	}
+
+	return resaledom.ErrInvalidTokenBlueprintID
 }
 
 // IsResaleServiceSuspended は、HTTP adapter等で

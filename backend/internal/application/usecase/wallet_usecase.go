@@ -86,6 +86,7 @@ func NewWalletUsecase(
 
 var _ applicationport.OwnedProductResolver = (*WalletUsecase)(nil)
 var _ applicationport.ReportTokenAccessResolver = (*WalletUsecase)(nil)
+var _ ResaleAssetOwnershipResolver = (*WalletUsecase)(nil)
 
 var (
 	ErrWalletUsecaseNotConfigured     = errors.New("wallet usecase: not configured")
@@ -253,10 +254,7 @@ func (uc *WalletUsecase) CanReportTokenBlueprint(
 		return false, nil
 	}
 
-	target, err := uc.tokenQuery.ListAssetIDsByTokenBlueprintID(
-		ctx,
-		tokenBlueprintID,
-	)
+	target, err := uc.tokenQuery.ListAssetIDsByTokenBlueprintID(ctx, tokenBlueprintID)
 	if err != nil {
 		return false, err
 	}
@@ -529,6 +527,28 @@ func (uc *WalletUsecase) ResolveTokenByAssetID(
 	}
 
 	return uc.tokenQuery.ResolveTokenByAssetID(ctx, assetID)
+}
+
+// ListAssetIDsByTokenBlueprintID は tokenBlueprintId に紐づく
+// canonical assetId 一覧を token query から取得します。
+//
+// Resale出品時の tokenBlueprintId 検証を含む、application layer の
+// ownership / token identity 判定から利用します。
+func (uc *WalletUsecase) ListAssetIDsByTokenBlueprintID(
+	ctx context.Context,
+	tokenBlueprintID string,
+) (tokendom.ListAssetIDsByTokenBlueprintIDResult, error) {
+	if uc == nil {
+		return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, ErrWalletUsecaseNotConfigured
+	}
+	if uc.tokenQuery == nil {
+		return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, ErrWalletTokenQueryNotConfigured
+	}
+	if tokenBlueprintID == "" {
+		return tokendom.ListAssetIDsByTokenBlueprintIDResult{}, tokendom.ErrInvalidTokenBlueprintID
+	}
+
+	return uc.tokenQuery.ListAssetIDsByTokenBlueprintID(ctx, tokenBlueprintID)
 }
 
 // ============================================================
