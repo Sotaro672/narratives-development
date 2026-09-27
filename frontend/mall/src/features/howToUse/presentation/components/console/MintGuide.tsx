@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function MintGuide() {
   return (
     <>
-      <HowToUseSection title="ミント申請">
+      <HowToUseSection id="mint-request" title="ミント申請">
         <HowToUseStepList>
           <HowToUseStep>サイドバーの「トークン」「ミント」、該当する生産計画行の順でミント申請画面を開いてください。</HowToUseStep>
           <HowToUseStep>ブランド選択、ミントするトークン設計を選んでください。</HowToUseStep>

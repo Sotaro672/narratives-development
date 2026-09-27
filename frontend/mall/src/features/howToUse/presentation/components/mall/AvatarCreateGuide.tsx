@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function AvatarCreateGuide() {
   return (
     <>
-      <HowToUseSection title="Mallアカウントの作成">
+      <HowToUseSection id="avatar-registration-account" title="Mallアカウントの作成">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="mall/avatar/sign-up-mall.mp4" label="Mallでアカウントを作成する手順" variant="iphone-12-pro" />
 
@@ -24,7 +24,7 @@ export default function AvatarCreateGuide() {
         <HowToUseNote title="認証メール">認証メールが送られるので、メールに記載されているリンクからサインインしてください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="アバターの作成">
+      <HowToUseSection id="avatar-registration-avatar" title="アバターの作成">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="mall/avatar/create-avatar.mp4" label="Mallでアバター情報を入力してアバターを作成する手順" variant="iphone-12-pro" />
 

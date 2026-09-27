@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function TokenBlueprintGuide() {
   return (
     <>
-      <HowToUseSection title="トークン設計画面の開け方">
+      <HowToUseSection id="token-design-open" title="トークン設計画面の開け方">
         <HowToUseStepList>
           <HowToUseStep>サイドバーからトークン設計の管理画面を開いてください。</HowToUseStep>
           <HowToUseStep>トークン設計一覧の「トークン設計を作成」をクリックしてください。</HowToUseStep>
@@ -18,7 +18,7 @@ export default function TokenBlueprintGuide() {
         <HowToUseVideo storagePath="console/token-blueprint/go-to-tokenBlueprint-registration.mp4" label="トークン設計一覧を開き、トークン設計を作成ボタンからトークン設計画面へ移動する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="トークン設計手順">
+      <HowToUseSection id="token-design-create" title="トークン設計手順">
         <HowToUseStepList>
           <HowToUseStep>トークンを発行するブランドを選択してください。</HowToUseStep>
           <HowToUseStep>トークン名とシンボルを入力してください。</HowToUseStep>

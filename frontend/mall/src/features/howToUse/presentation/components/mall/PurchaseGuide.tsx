@@ -9,13 +9,9 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function PurchaseGuide() {
   return (
     <>
-      <HowToUseSection title="商品の購入">
+      <HowToUseSection id="purchase-order" title="商品の購入">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/purchase/purchase.mp4"
-            label="Mallで商品を選択し、購入手続きを行う手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/purchase/purchase.mp4" label="Mallで商品を選択し、購入手続きを行う手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>購入する商品を開いてください。</HowToUseStep>
@@ -28,13 +24,9 @@ export default function PurchaseGuide() {
         <HowToUseNote title="注文確定メール">注文確定後、登録しているメールアドレス宛に注文確定メールが送信されます。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="トークンの受け取り">
+      <HowToUseSection id="purchase-token-transfer" title="トークンの受け取り">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/purchase/token-transfer.mp4"
-            label="購入した商品のトークンをウォレットへ受け取る手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/purchase/token-transfer.mp4" label="購入した商品のトークンをウォレットへ受け取る手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>商品到着後、商品のQRコードをスキャンしてください。</HowToUseStep>
@@ -43,9 +35,7 @@ export default function PurchaseGuide() {
           </HowToUseStepList>
         </div>
 
-        <HowToUseNote title="所有者のみコンテンツ閲覧が可能">
-          トークンコンテンツはトークン所有者のみ閲覧できるようにしています。
-        </HowToUseNote>
+        <HowToUseNote title="所有者のみコンテンツ閲覧が可能">トークンコンテンツはトークン所有者のみ閲覧できるようにしています。</HowToUseNote>
       </HowToUseSection>
     </>
   );

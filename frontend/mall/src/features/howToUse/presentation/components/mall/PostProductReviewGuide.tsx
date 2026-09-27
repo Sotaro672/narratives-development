@@ -8,28 +8,20 @@ import HowToUseVideo from "../common/HowToUseVideo";
 
 export default function PostProductReviewGuide() {
   return (
-    <HowToUseSection title="レビュー投稿">
+    <HowToUseSection id="review-post" title="レビュー投稿">
       <div className="how-to-use-mobile-guide">
-        <HowToUseVideo
-          storagePath="mall/review/post-product-review.mp4"
-          label="購入した商品のレビューを投稿する手順"
-          variant="iphone-12-pro"
-        />
+        <HowToUseVideo storagePath="mall/review/post-product-review.mp4" label="購入した商品のレビューを投稿する手順" variant="iphone-12-pro" />
 
         <HowToUseStepList>
           <HowToUseStep>トークンコンテンツ画面の商品名タブを押してスキャン画面へ移動してください。またはスキャン画面でQRコードをスキャンしてください。</HowToUseStep>
           <HowToUseStep>スキャン画面にて商品に対する感想を投稿してください。</HowToUseStep>
         </HowToUseStepList>
-  </div>
-        <HowToUseNote title="購入者のみレビュー投稿が可能">
-        商品レビューは、その商品を購入したユーザーのみ投稿できます。
-      </HowToUseNote>
-     <div className="how-to-use-mobile-guide">
-        <HowToUseVideo
-          storagePath="mall/review/view-review-on-catalog-page.mp4"
-          label="カタログ詳細画面で商品のレビューを確認する手順"
-          variant="iphone-12-pro"
-        />
+      </div>
+
+      <HowToUseNote title="購入者のみレビュー投稿が可能">商品レビューは、その商品を購入したユーザーのみ投稿できます。</HowToUseNote>
+
+      <div className="how-to-use-mobile-guide">
+        <HowToUseVideo storagePath="mall/review/view-review-on-catalog-page.mp4" label="カタログ詳細画面で商品のレビューを確認する手順" variant="iphone-12-pro" />
 
         <HowToUseStepList>
           <HowToUseStep>商品のカタログ詳細画面を開いてください。</HowToUseStep>

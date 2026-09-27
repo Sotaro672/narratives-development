@@ -1,6 +1,6 @@
 // frontend/mall/src/features/howToUse/presentation/components/HowToUseListPane.tsx
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import {
@@ -9,6 +9,7 @@ import {
   mallItems,
   type HowToUseCategory,
   type HowToUseItem,
+  type HowToUseSectionItem,
 } from "../../application/howToUseSteps";
 
 type SelectedHowToUseItem = {
@@ -20,14 +21,24 @@ type ItemListProps = {
   title: string;
   items: HowToUseItem[];
   selectedItem: SelectedHowToUseItem;
-  onDetailClick: (item: HowToUseItem) => void;
+  selectedSectionId: string | null;
+  expandedItemKey: string | null;
+  onItemToggle: (item: HowToUseItem) => void;
+  onSectionClick: (item: HowToUseItem, section: HowToUseSectionItem) => void;
 };
+
+function getItemKey(item: Pick<HowToUseItem, "category" | "slug">): string {
+  return `${item.category}-${item.slug}`;
+}
 
 function ItemList({
   title,
   items,
   selectedItem,
-  onDetailClick,
+  selectedSectionId,
+  expandedItemKey,
+  onItemToggle,
+  onSectionClick,
 }: ItemListProps) {
   return (
     <section className="how-to-use-section">
@@ -35,26 +46,49 @@ function ItemList({
 
       <div className="how-to-use-section__items">
         {items.map((item) => {
-          const selected =
-            selectedItem?.category === item.category &&
-            selectedItem.slug === item.slug;
+          const itemKey = getItemKey(item);
+          const selected = selectedItem?.category === item.category && selectedItem.slug === item.slug;
+          const expanded = expandedItemKey === itemKey;
+          const sectionListId = `how-to-use-sections-${itemKey}`;
 
           return (
-            <button
-              key={`${item.category}-${item.slug}`}
-              type="button"
-              className={[
-                "how-to-use-item",
-                selected ? "how-to-use-item--selected" : "",
-              ].filter(Boolean).join(" ")}
-              aria-current={selected ? "page" : undefined}
-              onClick={() => {
-                onDetailClick(item);
-              }}
-            >
-              <span className="how-to-use-item__title">{item.title}</span>
-              <span className="how-to-use-item__arrow" aria-hidden="true" />
-            </button>
+            <div key={itemKey} className={["how-to-use-item-group", expanded ? "how-to-use-item-group--expanded" : ""].filter(Boolean).join(" ")}>
+              <button
+                type="button"
+                className={["how-to-use-item", selected ? "how-to-use-item--selected" : "", expanded ? "how-to-use-item--expanded" : ""].filter(Boolean).join(" ")}
+                aria-current={selected ? "page" : undefined}
+                aria-expanded={expanded}
+                aria-controls={sectionListId}
+                onClick={() => {
+                  onItemToggle(item);
+                }}
+              >
+                <span className="how-to-use-item__title">{item.title}</span>
+                <span className="how-to-use-item__arrow" aria-hidden="true" />
+              </button>
+
+              {expanded && (
+                <div id={sectionListId} className="how-to-use-item-sections">
+                  {item.sections.map((section) => {
+                    const sectionSelected = selected && selectedSectionId === section.id;
+
+                    return (
+                      <button
+                        key={section.id}
+                        type="button"
+                        className={["how-to-use-item-section", sectionSelected ? "how-to-use-item-section--selected" : ""].filter(Boolean).join(" ")}
+                        aria-current={sectionSelected ? "location" : undefined}
+                        onClick={() => {
+                          onSectionClick(item, section);
+                        }}
+                      >
+                        {section.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -67,12 +101,28 @@ export default function HowToUseListPane() {
   const navigate = useNavigate();
 
   const selectedItem = getSelectedHowToUseItem(location.pathname);
+  const selectedSectionId = getSelectedHowToUseSectionId(location.hash);
+  const selectedItemKey = selectedItem ? getItemKey(selectedItem) : null;
+  const [expandedItemKey, setExpandedItemKey] = useState<string | null>(selectedItemKey);
 
-  const handleDetailClick = useCallback(
-    (item: HowToUseItem) => {
-      navigate(
-        `/how-to-use/${encodeURIComponent(item.category)}/${encodeURIComponent(item.slug)}`,
-      );
+  useEffect(() => {
+    if (selectedItemKey) {
+      setExpandedItemKey(selectedItemKey);
+    }
+  }, [selectedItemKey]);
+
+  const handleItemToggle = useCallback((item: HowToUseItem) => {
+    const itemKey = getItemKey(item);
+    setExpandedItemKey((current) => current === itemKey ? null : itemKey);
+  }, []);
+
+  const handleSectionClick = useCallback(
+    (item: HowToUseItem, section: HowToUseSectionItem) => {
+      setExpandedItemKey(getItemKey(item));
+      navigate({
+        pathname: `/how-to-use/${encodeURIComponent(item.category)}/${encodeURIComponent(item.slug)}`,
+        hash: `#${encodeURIComponent(section.id)}`,
+      });
     },
     [navigate],
   );
@@ -84,14 +134,20 @@ export default function HowToUseListPane() {
           title="出品者 Console"
           items={consoleItems}
           selectedItem={selectedItem}
-          onDetailClick={handleDetailClick}
+          selectedSectionId={selectedSectionId}
+          expandedItemKey={expandedItemKey}
+          onItemToggle={handleItemToggle}
+          onSectionClick={handleSectionClick}
         />
 
         <ItemList
           title="購入者 Mall"
           items={mallItems}
           selectedItem={selectedItem}
-          onDetailClick={handleDetailClick}
+          selectedSectionId={selectedSectionId}
+          expandedItemKey={expandedItemKey}
+          onItemToggle={handleItemToggle}
+          onSectionClick={handleSectionClick}
         />
       </div>
     </main>
@@ -99,10 +155,7 @@ export default function HowToUseListPane() {
 }
 
 function getSelectedHowToUseItem(pathname: string): SelectedHowToUseItem {
-  const segments = pathname
-    .split("/")
-    .filter(Boolean)
-    .map(decodePathSegment);
+  const segments = pathname.split("/").filter(Boolean).map(decodePathSegment);
 
   if (segments[0] !== "how-to-use" || segments.length !== 3) {
     return null;
@@ -119,6 +172,16 @@ function getSelectedHowToUseItem(pathname: string): SelectedHowToUseItem {
     category,
     slug,
   };
+}
+
+function getSelectedHowToUseSectionId(hash: string): string | null {
+  const value = hash.startsWith("#") ? hash.slice(1) : hash;
+
+  if (!value) {
+    return null;
+  }
+
+  return decodePathSegment(value);
 }
 
 function decodePathSegment(value: string): string {

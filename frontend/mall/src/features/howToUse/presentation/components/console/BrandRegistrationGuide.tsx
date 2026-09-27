@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function BrandRegistrationGuide() {
   return (
     <>
-      <HowToUseSection title="ブランド登録画面の開け方">
+      <HowToUseSection id="brand-registration-open" title="ブランド登録画面の開け方">
         <HowToUseStepList>
           <HowToUseStep>サイドバーの「組織」をクリックしてください。</HowToUseStep>
           <HowToUseStep>「組織」をクリックした際に表示される「ブランド」をクリックしてください。</HowToUseStep>
@@ -19,7 +19,7 @@ export default function BrandRegistrationGuide() {
         <HowToUseVideo storagePath="console/brand/go-to-brand-registration.mp4" label="サイドバーから組織、ブランドを選択し、ブランド追加ボタンをクリックしてブランド登録画面へ移動する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="ブランド登録手順">
+      <HowToUseSection id="brand-registration-create" title="ブランド登録手順">
         <HowToUseStepList>
           <HowToUseStep>ブランド担当者を選択してください。</HowToUseStep>
           <HowToUseStep>ブランド売上振込口座を選択してください。開発環境ではテスト口座で固定されています。</HowToUseStep>

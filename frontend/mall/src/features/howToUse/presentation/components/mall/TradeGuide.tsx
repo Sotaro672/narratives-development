@@ -9,13 +9,9 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function TradeGuide() {
   return (
     <>
-      <HowToUseSection title="商品を発送する">
+      <HowToUseSection id="trade-dispatch" title="商品を発送する">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/trade/dispatch-trade.mp4"
-            label="フリマ取引で配送会社と箱サイズを選択し、商品を発送する手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/trade/dispatch-trade.mp4" label="フリマ取引で配送会社と箱サイズを選択し、商品を発送する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>成立した取引を開き、発送画面へ進んでください。</HowToUseStep>
@@ -27,9 +23,7 @@ export default function TradeGuide() {
           </HowToUseStepList>
         </div>
 
-        <HowToUseNote title="配送料について">
-          配送料は配送先にかかわらず全国一律で、選択した箱サイズによって決まります。日本郵便とヤマト運輸のどちらを選択しても、同じ箱サイズであれば配送料は同額です。
-        </HowToUseNote>
+        <HowToUseNote title="配送料について">配送料は配送先にかかわらず全国一律で、選択した箱サイズによって決まります。日本郵便とヤマト運輸のどちらを選択しても、同じ箱サイズであれば配送料は同額です。</HowToUseNote>
       </HowToUseSection>
     </>
   );

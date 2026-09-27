@@ -9,13 +9,9 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function ListMarketGuide() {
   return (
     <>
-      <HowToUseSection title="フリマ出品画面を開く">
+      <HowToUseSection id="resale-open" title="フリマ出品画面を開く">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/resale/go-to-resale-create-page.mp4"
-            label="Mallで所有しているトークンを選択し、フリマ出品画面を開く手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/resale/go-to-resale-create-page.mp4" label="Mallで所有しているトークンを選択し、フリマ出品画面を開く手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>マイページから「トークン」を開いてください。</HowToUseStep>
@@ -30,13 +26,9 @@ export default function ListMarketGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="フリマへ出品する">
+      <HowToUseSection id="resale-create" title="フリマへ出品する">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/resale/list-on-market.mp4"
-            label="Mallのフリマ出品画面で商品状態の写真、販売価格、商品の状態、説明文を入力して出品する手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/resale/list-on-market.mp4" label="Mallのフリマ出品画面で商品状態の写真、販売価格、商品の状態、説明文を入力して出品する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>商品の現在の状態が分かる写真を追加してください。</HowToUseStep>
@@ -50,13 +42,9 @@ export default function ListMarketGuide() {
         </div>
       </HowToUseSection>
 
-      <HowToUseSection title="出品内容を編集する">
+      <HowToUseSection id="resale-edit" title="出品内容を編集する">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/resale/edit-resale.mp4"
-            label="Mallの出品詳細画面から販売価格、商品の状態、公開状態、商品状態の写真、説明文を編集する手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/resale/edit-resale.mp4" label="Mallの出品詳細画面から販売価格、商品の状態、公開状態、商品状態の写真、説明文を編集する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>ウォレットページから出品パネルを開いてください。</HowToUseStep>

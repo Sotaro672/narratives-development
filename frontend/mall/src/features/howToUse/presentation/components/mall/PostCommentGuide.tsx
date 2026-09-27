@@ -7,13 +7,9 @@ import HowToUseVideo from "../common/HowToUseVideo";
 
 export default function PostCommentGuide() {
   return (
-    <HowToUseSection title="コメント投稿">
+    <HowToUseSection id="comment-post" title="コメント投稿">
       <div className="how-to-use-mobile-guide">
-        <HowToUseVideo
-          storagePath="mall/comment/post-comment-on-tokenBlueprint.mp4"
-          label="所有しているトークンのコンテンツにコメントを投稿する手順"
-          variant="iphone-12-pro"
-        />
+        <HowToUseVideo storagePath="mall/comment/post-comment-on-tokenBlueprint.mp4" label="所有しているトークンのコンテンツにコメントを投稿する手順" variant="iphone-12-pro" />
 
         <HowToUseStepList>
           <HowToUseStep>ウォレットからコメントを投稿するトークンを開いてください。</HowToUseStep>

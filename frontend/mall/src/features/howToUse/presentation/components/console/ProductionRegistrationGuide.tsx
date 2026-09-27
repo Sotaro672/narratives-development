@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function ProductionRegistrationGuide() {
   return (
     <>
-      <HowToUseSection title="生産計画作成画面の開け方">
+      <HowToUseSection id="production-open" title="生産計画作成画面の開け方">
         <HowToUseStepList>
           <HowToUseStep>サイドバーから「商品生産」を開いてください。</HowToUseStep>
           <HowToUseStep>商品生産一覧の「生産計画を作成」をクリックしてください。</HowToUseStep>
@@ -18,7 +18,7 @@ export default function ProductionRegistrationGuide() {
         <HowToUseVideo storagePath="console/production/go-to-production-registration.mp4" label="商品生産一覧を開き、生産計画を作成ボタンから生産計画作成画面へ移動する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="生産数の入力">
+      <HowToUseSection id="production-quantity" title="生産数の入力">
         <HowToUseStepList>
           <HowToUseStep>生産計画の担当者を選択してください。</HowToUseStep>
           <HowToUseStep>生産する商品のブランドを選択してください。</HowToUseStep>
@@ -30,7 +30,7 @@ export default function ProductionRegistrationGuide() {
         <HowToUseVideo storagePath="console/production/enter-production-quantity.mp4" label="ブランドと商品設計を選択し、モデル別生産数一覧で各モデルの生産数を入力する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="商品の印刷">
+      <HowToUseSection id="production-print" title="商品の印刷">
         <HowToUseStepList>
           <HowToUseStep>保存した生産計画を開いてください。</HowToUseStep>
           <HowToUseStep>画面上部の印刷ボタンをクリックしてください。</HowToUseStep>
@@ -42,7 +42,7 @@ export default function ProductionRegistrationGuide() {
         <HowToUseVideo storagePath="console/production/print-product.mp4" label="保存した生産計画から商品の印刷を実行する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="印刷結果の確認">
+      <HowToUseSection id="production-print-result" title="印刷結果の確認">
         <HowToUseStepList>
           <HowToUseStep>商品の印刷後、生産計画の画面を開いてください。</HowToUseStep>
           <HowToUseStep>印刷結果はQRコードとCSV出力が可能です。</HowToUseStep>

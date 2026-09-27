@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function InspectionGuide() {
   return (
     <>
-      <HowToUseSection title="検品スキャナーの開き方">
+      <HowToUseSection id="inspection-open" title="検品スキャナーの開き方">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="console/inspection/go-to-inspector.mp4" label="AMOLのサービス選択画面から検品スキャナーを開く手順" variant="iphone-12-pro" />
 
@@ -21,7 +21,7 @@ export default function InspectionGuide() {
         </div>
       </HowToUseSection>
 
-      <HowToUseSection title="検品手順">
+      <HowToUseSection id="inspection-process" title="検品手順">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="console/inspection/enter-inspection.mp4" label="商品のQRコードを読み取り、検品結果を入力する手順" variant="iphone-12-pro" />
 
@@ -35,7 +35,7 @@ export default function InspectionGuide() {
         <HowToUseNote title="検品はネガティブ登録制">この検品はネガティブ登録制です。「不合格」「未製造」の商品IDをミント対象から弾くことを目的とします。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="検品の完了">
+      <HowToUseSection id="inspection-complete" title="検品の完了">
         <HowToUseStepList>
           <HowToUseStep>コンソール画面に戻り、トークン、ミント、対象生産計画行を押してミント申請画面を開いてください。</HowToUseStep>
           <HowToUseStep>検品内容を確認し、「検品完了」ボタンをクリックしてください。</HowToUseStep>

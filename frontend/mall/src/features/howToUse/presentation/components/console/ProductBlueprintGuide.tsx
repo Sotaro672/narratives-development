@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function ProductBlueprintGuide() {
   return (
     <>
-      <HowToUseSection title="商品設計画面の開け方">
+      <HowToUseSection id="product-design-open" title="商品設計画面の開け方">
         <HowToUseStepList>
           <HowToUseStep>サイドバーから商品設計の管理画面を開いてください。</HowToUseStep>
           <HowToUseStep>商品設計一覧の「商品設計を作成」をクリックしてください。</HowToUseStep>
@@ -18,7 +18,7 @@ export default function ProductBlueprintGuide() {
         <HowToUseVideo storagePath="console/product_blueprint/go-to-productBlueprint-registration.mp4" label="商品設計一覧を開き、商品設計を作成ボタンから商品設計画面へ移動する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="商品カテゴリの選択">
+      <HowToUseSection id="product-design-category" title="商品カテゴリの選択">
         <HowToUseStepList>
           <HowToUseStep>商品設計の担当者を選択してください。</HowToUseStep>
           <HowToUseStep>商品を販売するブランドを選択してください。</HowToUseStep>
@@ -32,7 +32,7 @@ export default function ProductBlueprintGuide() {
         <HowToUseNote title="商品カテゴリ">商品設計で入力する項目は選択した商品カテゴリによって変わります。商品に該当するカテゴリを選択してから、表示された項目を入力してください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="カテゴリ固有情報の入力（衣類）">
+      <HowToUseSection id="product-design-category-fields" title="カテゴリ固有情報の入力（衣類）">
         <HowToUseStepList>
           <HowToUseStep>商品の重さを入力してください。</HowToUseStep>
           <HowToUseStep>商品のフィットを選択してください。</HowToUseStep>
@@ -45,7 +45,7 @@ export default function ProductBlueprintGuide() {
         <HowToUseNote title="カテゴリ固有情報">重さ、フィット、素材、品質保証などの商品情報は、選択した商品カテゴリに応じて表示されます。実際の商品情報に合わせて入力してください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="カラーの登録（衣類）">
+      <HowToUseSection id="product-design-colors" title="カラーの登録（衣類）">
         <HowToUseStepList>
           <HowToUseStep>商品のカラーバリエーションを追加してください。</HowToUseStep>
           <HowToUseStep>カラー名と商品の実際の色に対応するカラー情報を入力してください。</HowToUseStep>
@@ -57,7 +57,7 @@ export default function ProductBlueprintGuide() {
         <HowToUseNote title="カラーバリエーション">商品に複数のカラーがある場合は、それぞれを個別のカラーバリエーションとして登録してください。登録したカラーはサイズとの組み合わせによりモデルを構成します。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="サイズ・採寸の登録（衣類）">
+      <HowToUseSection id="product-design-sizes" title="サイズ・採寸の登録（衣類）">
         <HowToUseStepList>
           <HowToUseStep>商品のサイズバリエーションを追加してください。</HowToUseStep>
           <HowToUseStep>登録するサイズを選択してください。</HowToUseStep>
@@ -70,7 +70,7 @@ export default function ProductBlueprintGuide() {
         <HowToUseNote title="サイズと採寸">採寸情報はサイズごとに登録してください。登録したサイズはカラーとの組み合わせによりモデルを構成します。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="型番の登録">
+      <HowToUseSection id="product-design-model-numbers" title="型番の登録">
         <HowToUseStepList>
           <HowToUseStep>登録したカラーとサイズの組み合わせを確認してください。</HowToUseStep>
           <HowToUseStep>各モデルに対応する型番を入力してください。</HowToUseStep>
@@ -82,7 +82,7 @@ export default function ProductBlueprintGuide() {
         <HowToUseNote title="型番">型番はカラーとサイズの組み合わせによって作成される各モデルを識別するために使用します。それぞれのモデルに対応する型番を登録してください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="配送時の梱包情報の登録">
+      <HowToUseSection id="product-design-shipping-package" title="配送時の梱包情報の登録">
         <HowToUseStepList>
           <HowToUseStep>各モデルの配送時の重量を入力してください。</HowToUseStep>
           <HowToUseStep>梱包後の横、縦、高さを入力してください。</HowToUseStep>
@@ -94,7 +94,7 @@ export default function ProductBlueprintGuide() {
         <HowToUseNote title="配送時の梱包情報">配送時の重量と梱包寸法は、配送料の計算に使用する情報です。商品単体の寸法ではなく、配送時に梱包した状態の重量と横、縦、高さを登録してください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="商品設計の保存">
+      <HowToUseSection id="product-design-save" title="商品設計の保存">
         <HowToUseStepList>
           <HowToUseStep>すべての入力内容を確認してください。</HowToUseStep>
           <HowToUseStep>画面上部の「保存」をクリックして商品設計を登録してください。</HowToUseStep>

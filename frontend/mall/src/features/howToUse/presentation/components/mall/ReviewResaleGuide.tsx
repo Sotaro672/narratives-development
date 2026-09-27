@@ -8,13 +8,9 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function ReviewResaleGuide() {
   return (
     <>
-      <HowToUseSection title="マーケットを見る">
+      <HowToUseSection id="market-browse" title="マーケットを見る">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/market/view-market.mp4"
-            label="Mallのマーケット一覧から出品商品を選択し、商品詳細を確認する手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/market/view-market.mp4" label="Mallのマーケット一覧から出品商品を選択し、商品詳細を確認する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>Mallのマーケットを開いてください。</HowToUseStep>
@@ -26,13 +22,9 @@ export default function ReviewResaleGuide() {
         </div>
       </HowToUseSection>
 
-      <HowToUseSection title="出品者とチャットする">
+      <HowToUseSection id="market-chat" title="出品者とチャットする">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/market/post-review-on-resale.mp4"
-            label="Mallのマーケット出品詳細から値下げコメントを投稿する手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/market/post-review-on-resale.mp4" label="Mallのマーケット出品詳細から値下げコメントを投稿する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>マーケット出品画面にあるメッセージアイコンを押してください。</HowToUseStep>
@@ -41,13 +33,9 @@ export default function ReviewResaleGuide() {
         </div>
       </HowToUseSection>
 
-      <HowToUseSection title="出品者から返信">
+      <HowToUseSection id="market-reply" title="出品者から返信">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/market/chat-on-resale-review.mp4"
-            label="出品者から届いた返信を確認し、チャットを続ける手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/market/chat-on-resale-review.mp4" label="出品者から届いた返信を確認し、チャットを続ける手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>メッセージが届くとウォレットページのメッセージアイコンに未読数が更新されます。</HowToUseStep>

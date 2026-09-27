@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function MemberInvitationGuide() {
   return (
     <>
-      <HowToUseSection title="メンバー登録画面の開け方">
+      <HowToUseSection id="member-invite-open" title="メンバー登録画面の開け方">
         <HowToUseStepList>
           <HowToUseStep>サイドバーの「組織」をクリックしてください。</HowToUseStep>
           <HowToUseStep>「組織」をクリックした際に表示される「メンバー」をクリックしてください。</HowToUseStep>
@@ -19,7 +19,7 @@ export default function MemberInvitationGuide() {
         <HowToUseVideo storagePath="console/member/go-to-member-registration.mp4" label="サイドバーから組織、メンバーを選択し、メンバー追加ボタンをクリックしてメンバー登録画面へ移動する手順" />
       </HowToUseSection>
 
-      <HowToUseSection title="メンバー招待手順">
+      <HowToUseSection id="member-invite-send" title="メンバー招待手順">
         <HowToUseStepList>
           <HowToUseStep>招待するメンバーのメールアドレスを入力してください。</HowToUseStep>
           <HowToUseStep>メンバーへ割り当てるブランドを選択してください。</HowToUseStep>
@@ -34,7 +34,7 @@ export default function MemberInvitationGuide() {
         <HowToUseNote title="ブランドの割り当て">メンバーがConsoleで操作できる対象は、招待時に割り当てられたブランドに基づきます。担当するブランドを確認してから招待してください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="招待の受諾">
+      <HowToUseSection id="member-invite-accept" title="招待の受諾">
         <HowToUseStepList>
           <HowToUseStep>届いた招待からメンバー登録画面を開いてください。</HowToUseStep>
           <HowToUseStep>表示されている会社名と割り当てブランドを確認してください。</HowToUseStep>
@@ -49,7 +49,7 @@ export default function MemberInvitationGuide() {
         <HowToUseNote title="招待内容の確認">登録する前に、表示されている会社名と割り当てブランドが正しいことを確認してください。内容に誤りがある場合は登録を進めず、招待した管理者へ確認してください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="招待の取り消し">
+      <HowToUseSection id="member-invite-cancel" title="招待の取り消し">
         <HowToUseStepList>
           <HowToUseStep>メンバー管理画面から、取り消したい招待を選択してください。</HowToUseStep>
           <HowToUseStep>招待内容を確認し、招待を削除してください。</HowToUseStep>

@@ -9,13 +9,9 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function CancelOderGuide() {
   return (
     <>
-      <HowToUseSection title="注文のキャンセル">
+      <HowToUseSection id="cancel-order" title="注文のキャンセル">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/cancel/cancel-order.mp4"
-            label="Mallで注文内容を確認し、注文をキャンセルする手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/cancel/cancel-order.mp4" label="Mallで注文内容を確認し、注文をキャンセルする手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>ウォレットページへ移動し、取引履歴を開けてください。</HowToUseStep>
@@ -28,13 +24,9 @@ export default function CancelOderGuide() {
         </HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="フリマ取引のキャンセル">
+      <HowToUseSection id="cancel-resale-trade" title="フリマ取引のキャンセル">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo
-            storagePath="mall/cancel/cancel-trade.mp4"
-            label="Mallでフリマ取引の内容を確認し、取引をキャンセルする手順"
-            variant="iphone-12-pro"
-          />
+          <HowToUseVideo storagePath="mall/cancel/cancel-trade.mp4" label="Mallでフリマ取引の内容を確認し、取引をキャンセルする手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>ウォレットページへ移動し、キャンセルする取引履歴を開いてください。</HowToUseStep>

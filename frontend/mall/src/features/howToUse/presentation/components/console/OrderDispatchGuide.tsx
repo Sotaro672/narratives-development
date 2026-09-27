@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function OrderDispatchGuide() {
   return (
     <>
-      <HowToUseSection title="商品の発送">
+      <HowToUseSection id="orders-dispatch" title="商品の発送">
         <HowToUseStepList>
           <HowToUseStep>サイドバーから「注文」を開いてください。</HowToUseStep>
           <HowToUseStep>発送する注文を選択してください。</HowToUseStep>

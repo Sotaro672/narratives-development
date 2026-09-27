@@ -8,7 +8,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function ShippingAddressRegistrationGuide() {
   return (
     <>
-      <HowToUseSection title="配送先住所の登録画面を開く">
+      <HowToUseSection id="shipping-address-open" title="配送先住所の登録画面を開く">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="mall/shipping-address/go-to-shipping-address-registration.mp4" label="Mallから配送先住所の登録画面を開く手順" variant="iphone-12-pro" />
 

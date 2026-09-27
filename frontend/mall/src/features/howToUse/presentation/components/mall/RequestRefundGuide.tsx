@@ -9,7 +9,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function RequestRefundGuide() {
   return (
     <>
-      <HowToUseSection title="返品申請">
+      <HowToUseSection id="return-request" title="返品申請">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="mall/refund/request-refund.mp4" label="Mallの注文詳細から返品を申請する手順" variant="iphone-12-pro" />
 
@@ -24,7 +24,7 @@ export default function RequestRefundGuide() {
         <HowToUseNote title="未開封商品の返品について">未開封として返品申請した後に商品のQRコードをスキャンすると、開封後での返品として自動的に更新されます。ご注意ください。</HowToUseNote>
       </HowToUseSection>
 
-      <HowToUseSection title="返信入力">
+      <HowToUseSection id="return-reply" title="返信入力">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="mall/refund/refund-from-mall.mp4" label="ブランドから届いた返品申請への返信を確認し、Mallから返信する手順" variant="iphone-12-pro" />
 
@@ -36,7 +36,7 @@ export default function RequestRefundGuide() {
         </div>
       </HowToUseSection>
 
-      <HowToUseSection title="お問い合わせの終了">
+      <HowToUseSection id="return-close" title="お問い合わせの終了">
         <div className="how-to-use-mobile-guide">
           <HowToUseVideo storagePath="mall/refund/close-inquiry.mp4" label="返品申請に関するやり取りを確認し、お問い合わせを終了する手順" variant="iphone-12-pro" />
 

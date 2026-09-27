@@ -8,7 +8,7 @@ import HowToUseVideo from "../common/HowToUseVideo";
 export default function SetTranspportationFee() {
   return (
     <>
-      <HowToUseSection title="配送料金体系の設定">
+      <HowToUseSection id="shipping-fee" title="配送料金体系の設定">
         <HowToUseStepList>
           <HowToUseStep>サイドバーから「配送」「配送料金」「配送料金を作成」を開いてください。</HowToUseStep>
           <HowToUseStep>料金設定画面に地域・都道府県・島嶼部への配送料金を入力してください。</HowToUseStep>

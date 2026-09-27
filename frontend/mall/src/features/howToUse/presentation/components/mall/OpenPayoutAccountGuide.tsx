@@ -8,13 +8,9 @@ import HowToUseVideo from "../common/HowToUseVideo";
 
 export default function OpenPayoutAccountGuide() {
   return (
-    <HowToUseSection title="売上受取口座">
+    <HowToUseSection id="payout-account" title="売上受取口座">
       <div className="how-to-use-mobile-guide">
-        <HowToUseVideo
-          storagePath="mall/payout/open-payout-account.mp4"
-          label="フリマの売上を受け取るための口座を登録する手順"
-          variant="iphone-12-pro"
-        />
+        <HowToUseVideo storagePath="mall/payout/open-payout-account.mp4" label="フリマの売上を受け取るための口座を登録する手順" variant="iphone-12-pro" />
 
         <HowToUseStepList>
           <HowToUseStep>ウォレット画面から売上受取口座の設定画面を開いてください。</HowToUseStep>
@@ -23,9 +19,7 @@ export default function OpenPayoutAccountGuide() {
         </HowToUseStepList>
       </div>
 
-      <HowToUseNote title="フリマの売上受取">
-        フリマで商品が売れた際の売上金を受け取るため、事前に売上受取口座を登録してください。
-      </HowToUseNote>
+      <HowToUseNote title="フリマの売上受取">フリマで商品が売れた際の売上金を受け取るため、事前に売上受取口座を登録してください。</HowToUseNote>
     </HowToUseSection>
   );
 }
