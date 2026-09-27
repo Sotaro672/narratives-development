@@ -27,10 +27,7 @@ const MOBILE_SLIDE_DURATION_MS = 320;
 type MobilePane = "list" | "detail";
 
 function isAnnouncementListPath(pathname: string): boolean {
-  return (
-    pathname === "/announcements" ||
-    pathname === "/announcements/"
-  );
+  return pathname === "/announcements" || pathname === "/announcements/";
 }
 
 function useMobileAnnouncementViewport(): boolean {
@@ -39,9 +36,7 @@ function useMobileAnnouncementViewport(): boolean {
       return false;
     }
 
-    return window.matchMedia(
-      MOBILE_ANNOUNCEMENT_MEDIA_QUERY,
-    ).matches;
+    return window.matchMedia(MOBILE_ANNOUNCEMENT_MEDIA_QUERY).matches;
   });
 
   useEffect(() => {
@@ -49,9 +44,7 @@ function useMobileAnnouncementViewport(): boolean {
       return;
     }
 
-    const mediaQuery = window.matchMedia(
-      MOBILE_ANNOUNCEMENT_MEDIA_QUERY,
-    );
+    const mediaQuery = window.matchMedia(MOBILE_ANNOUNCEMENT_MEDIA_QUERY);
 
     const handleChange = (): void => {
       setIsMobile(mediaQuery.matches);
@@ -82,9 +75,7 @@ export default function AnnouncementWorkspacePage() {
   const navigate = useNavigate();
   const isMobile = useMobileAnnouncementViewport();
 
-  const isAnnouncementListRoute = isAnnouncementListPath(
-    location.pathname,
-  );
+  const isAnnouncementListRoute = isAnnouncementListPath(location.pathname);
 
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
     isAnnouncementListRoute ? "list" : "detail",
@@ -110,18 +101,13 @@ export default function AnnouncementWorkspacePage() {
     pendingBackNavigationRef.current = false;
     clearBackNavigationTimer();
     navigate("/announcements", { replace: true });
-  }, [
-    clearBackNavigationTimer,
-    navigate,
-  ]);
+  }, [clearBackNavigationTimer, navigate]);
 
   useEffect(() => {
     if (!isMobile) {
       pendingBackNavigationRef.current = false;
       clearBackNavigationTimer();
-      setMobilePane(
-        isAnnouncementListRoute ? "list" : "detail",
-      );
+      setMobilePane(isAnnouncementListRoute ? "list" : "detail");
       return;
     }
 
@@ -129,9 +115,7 @@ export default function AnnouncementWorkspacePage() {
       return;
     }
 
-    setMobilePane(
-      isAnnouncementListRoute ? "list" : "detail",
-    );
+    setMobilePane(isAnnouncementListRoute ? "list" : "detail");
   }, [
     clearBackNavigationTimer,
     isAnnouncementListRoute,
@@ -164,9 +148,7 @@ export default function AnnouncementWorkspacePage() {
 
     const prefersReducedMotion =
       typeof window !== "undefined" &&
-      window.matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (prefersReducedMotion) {
       completeBackNavigation();
@@ -214,15 +196,12 @@ export default function AnnouncementWorkspacePage() {
 
   return (
     <Layout
-      title="通知"
+      title="AMOL"
       showFooter={isMobile}
       mode="mypage"
       mainClassName="announcement-workspace-page-layout"
       disableFooterPaddingOnDesktop
-      showBackButton={
-        isMobile &&
-        !isAnnouncementListRoute
-      }
+      showBackButton={isMobile && !isAnnouncementListRoute}
       backButtonLabel="通知一覧に戻る"
       onBackButtonClick={handleBackToList}
       footerProps={{
