@@ -49,15 +49,16 @@ type TransferTargetItem struct {
 //
 //  1. canonical Order item transferred=true,
 //  2. orderTransferItems projection transferred=true,
-//  3. matching SalesReceivable lifecycle state.
+//  3. matching SalesReceivable pending -> available,
+//  4. matching resale_product_locks/{productId} deletion.
 //
-// SalesReceivable is aggregated by PaymentID + PayoutAccountID. When multiple
-// active resale items belonging to the same seller are represented by one
-// receivable, the receivable must remain pending until the final active item has
-// been transferred. Only then may it transition pending -> available.
+// One resale Order item maps to exactly one SalesReceivable identified by
+// PaymentID + OrderItemIndex.
 //
 // These writes must commit in one persistence transaction so seller proceeds can
-// never become payout-eligible independently from the Order transfer state.
+// never become payout-eligible independently from the Order transfer state and
+// the same physical product cannot become eligible for a new resale listing
+// before ownership transfer fulfillment has completed.
 type OrderRepoForTransfer interface {
 	// FindEligibleTransferItem returns orderdom.ErrNotFound when no paid,
 	// untransferred item exactly matches the input.
@@ -92,7 +93,8 @@ type OrderRepoForTransfer interface {
 	// MarkTransferredItem completes a primary List transfer.
 	//
 	// Resale transfers must use CompleteResaleReceivableFulfillment so Order
-	// transfer state and SalesReceivable availability are committed atomically.
+	// transfer state, SalesReceivable availability, and resale product lock
+	// release are committed atomically.
 	MarkTransferredItem(
 		ctx context.Context,
 		orderID string,
@@ -101,7 +103,8 @@ type OrderRepoForTransfer interface {
 	) error
 
 	// CompleteResaleReceivableFulfillment atomically completes one successfully
-	// executed resale token transfer and updates its SalesReceivable.
+	// executed resale token transfer, makes its SalesReceivable payout-eligible,
+	// and releases the active resale listing lock for the transferred product.
 	//
 	// Implementations must validate that:
 	//
@@ -112,19 +115,27 @@ type OrderRepoForTransfer interface {
 	// - Item has no active or completed return.
 	// - Item has not already been transferred.
 	// - tokenTransferVerifiedAt exists.
-	// - SalesReceivable belongs to the same Order / Payment.
+	// - productID identifies the exact transferred physical product.
+	// - SalesReceivable belongs to the same Order / Payment and item index.
+	// - SalesReceivable resaleId matches the Order item's resaleId.
 	// - SalesReceivable seller identity matches the item's SellerSnapshot.
 	// - SalesReceivable immutable allocation matches the persisted document.
 	// - SalesReceivable status is pending.
+	// - resale_product_locks/{productId} exists.
+	// - the resale product lock product_id matches productID.
+	// - the resale product lock resale_id matches the Order item's resaleId.
 	//
 	// On success the same persistence transaction must:
 	//
 	// - mark the canonical Order item transferred,
 	// - mark the orderTransferItems projection transferred,
 	// - clear the transfer lock,
-	// - keep SalesReceivable pending when another active resale item represented
-	//   by the same receivable remains untransferred,
-	// - otherwise transition SalesReceivable pending -> available.
+	// - transition SalesReceivable pending -> available,
+	// - delete resale_product_locks/{productId}.
+	//
+	// Missing or mismatched resale product locks are persistence inconsistencies
+	// and must fail the transaction. Implementations must not repair legacy or
+	// stale lock data as part of this operation.
 	//
 	// The returned SalesReceivable must represent the persisted state after the
 	// transaction.
@@ -132,6 +143,7 @@ type OrderRepoForTransfer interface {
 		ctx context.Context,
 		orderID string,
 		itemIndex int,
+		productID string,
 		receivable salesreceivabledom.SalesReceivable,
 		at time.Time,
 	) (salesreceivabledom.SalesReceivable, error)

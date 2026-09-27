@@ -270,6 +270,8 @@ func buildMallUsecases(
 		r.productBlueprintRepoFS,
 	)
 
+	resaleUC.WithResaleAssetOwnershipResolver(walletUC)
+
 	productBlueprintReviewUC := usecase.NewProductBlueprintReviewUsecase(
 		r.productBlueprintReviewRepo,
 		r.productBlueprintRepoFS,

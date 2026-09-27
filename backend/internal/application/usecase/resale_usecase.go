@@ -15,15 +15,16 @@ import (
 )
 
 type ResaleUsecase struct {
-	resaleRepo                resaledom.Repository
-	imageRepo                 resaledom.ImageRepository
-	imageStorage              applicationport.ResaleImageStorage
-	reviewCleanup             resalereview.CleanupRepository
-	cartItemCleanup           CartItemCleanup
-	productRepo               productdom.Repository
-	productBlueprintRepo      productblueprintdom.Repository
-	avatarResaleAccessChecker AvatarResaleAccessChecker
-	now                       func() time.Time
+	resaleRepo                   resaledom.Repository
+	imageRepo                    resaledom.ImageRepository
+	imageStorage                 applicationport.ResaleImageStorage
+	reviewCleanup                resalereview.CleanupRepository
+	cartItemCleanup              CartItemCleanup
+	productRepo                  productdom.Repository
+	productBlueprintRepo         productblueprintdom.Repository
+	avatarResaleAccessChecker    AvatarResaleAccessChecker
+	resaleAssetOwnershipResolver ResaleAssetOwnershipResolver
+	now                          func() time.Time
 }
 
 func NewResaleUsecase(
@@ -86,6 +87,17 @@ func (uc *ResaleUsecase) WithAvatarResaleAccessChecker(
 	return uc
 }
 
+func (uc *ResaleUsecase) WithResaleAssetOwnershipResolver(
+	resolver ResaleAssetOwnershipResolver,
+) *ResaleUsecase {
+	if uc == nil {
+		return nil
+	}
+
+	uc.resaleAssetOwnershipResolver = resolver
+	return uc
+}
+
 func (uc *ResaleUsecase) nowUTC() time.Time {
 	if uc == nil || uc.now == nil {
 		return time.Now().UTC()
@@ -115,6 +127,17 @@ func (uc *ResaleUsecase) Create(
 		ctx,
 		uc.avatarResaleAccessChecker,
 		item.AvatarID,
+	); err != nil {
+		return resaledom.Resale{}, err
+	}
+
+	if err := checkResaleAssetOwnership(
+		ctx,
+		uc.resaleAssetOwnershipResolver,
+		item.AvatarID,
+		item.AssetID,
+		item.ProductID,
+		item.TokenBlueprintID,
 	); err != nil {
 		return resaledom.Resale{}, err
 	}

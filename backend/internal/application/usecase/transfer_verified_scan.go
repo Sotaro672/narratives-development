@@ -350,6 +350,7 @@ func (u *TransferUsecase) TransferToAvatarByVerifiedScan(
 				ctx,
 				target.OrderID,
 				target.ItemIndex,
+				productID,
 				resaleReceivable,
 				now,
 			)

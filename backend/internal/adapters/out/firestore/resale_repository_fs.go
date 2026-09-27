@@ -14,7 +14,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	fscommon "narratives/internal/adapters/out/firestore/common"
-	applicationport "narratives/internal/application/port"
 	resaledom "narratives/internal/domain/resale"
 )
 
@@ -32,7 +31,7 @@ import (
 // - One product_id may have multiple historical sold resale documents.
 // - At most one active resale (listing or suspended) may exist for one product_id.
 // - resale_product_locks/{productId} identifies the currently active resale.
-// - The lock is released when the resale ownership transfer completes.
+// - The lock is released atomically when resale ownership transfer fulfillment completes.
 //
 // Delete policy:
 // - Delete physically deletes the resale document.
@@ -60,7 +59,6 @@ const (
 )
 
 var _ resaledom.Repository = (*ResaleRepositoryFS)(nil)
-var _ applicationport.ResaleProductListingLockReleaser = (*ResaleRepositoryFS)(nil)
 
 // ============================================================
 // Queries
@@ -461,54 +459,6 @@ func (r *ResaleRepositoryFS) Create(
 	}
 
 	return r.GetByID(ctx, item.ID)
-}
-
-// ReleaseProductListingLock releases the product listing lock only when the
-// current lock belongs to resaleID.
-//
-// Missing locks and locks owned by another resale are successful no-ops.
-// This keeps the operation idempotent and prevents a delayed completion call
-// from deleting a lock owned by a newer resale.
-func (r *ResaleRepositoryFS) ReleaseProductListingLock(
-	ctx context.Context,
-	productID string,
-	resaleID string,
-) error {
-	if r == nil || r.Client == nil {
-		return errors.New("firestore client is nil")
-	}
-
-	if productID == "" {
-		return resaledom.ErrInvalidProductID
-	}
-
-	if resaleID == "" {
-		return resaledom.ErrInvalidID
-	}
-
-	lockRef := r.productLockRef(productID)
-
-	return r.Client.RunTransaction(ctx, func(ctx context.Context, tx *gfs.Transaction) error {
-		snapshot, err := tx.Get(lockRef)
-		if err != nil {
-			if status.Code(err) == codes.NotFound {
-				return nil
-			}
-
-			return err
-		}
-
-		lock, err := decodeResaleProductLock(snapshot)
-		if err != nil {
-			return err
-		}
-
-		if lock.ProductID != productID || lock.ResaleID != resaleID {
-			return nil
-		}
-
-		return tx.Delete(lockRef)
-	})
 }
 
 func (r *ResaleRepositoryFS) Update(

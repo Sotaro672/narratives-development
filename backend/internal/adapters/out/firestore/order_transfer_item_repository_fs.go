@@ -32,6 +32,7 @@ var (
 	ErrTransferItemTransferred            = errors.New("order_transfer_item_repo_fs: item already transferred")
 	ErrTransferItemLocked                 = errors.New("order_transfer_item_repo_fs: item is locked")
 	ErrTransferItemProjectionMismatch     = errors.New("order_transfer_item_repo_fs: order and projection do not match")
+	ErrResaleProductListingLockMismatch   = errors.New("order_transfer_item_repo_fs: resale product listing lock mismatch")
 )
 
 const defaultTransferLockTTL = 10 * time.Minute
@@ -570,21 +571,22 @@ func (r *OrderRepoForTransferFS) MarkTransferredItem(ctx context.Context, orderI
 }
 
 // CompleteResaleReceivableFulfillment atomically completes one successfully
-// executed resale token transfer and makes that exact item's SalesReceivable
-// available for a future BankPayout.
+// executed resale token transfer, makes that exact item's SalesReceivable
+// available for a future BankPayout, and releases the active resale product
+// listing lock.
 //
 // One resale Order item maps to exactly one SalesReceivable identified by
 // PaymentID + OrderItemIndex. The canonical Order item, orderTransferItems
-// projection, and SalesReceivable pending -> available transition are committed
-// in the same Firestore transaction.
+// projection, SalesReceivable pending -> available transition, and
+// resale_product_locks/{productId} deletion are committed in the same Firestore
+// transaction.
 //
-// No other resale item belonging to the same seller participates in this
-// fulfillment boundary. No Stripe Settlement or Stripe Transfer state is
-// touched by this operation.
+// No Stripe Settlement or Stripe Transfer state is touched by this operation.
 func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 	ctx context.Context,
 	orderID string,
 	itemIndex int,
+	productID string,
 	expected salesreceivabledom.SalesReceivable,
 	at time.Time,
 ) (salesreceivabledom.SalesReceivable, error) {
@@ -596,6 +598,9 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 	}
 	if itemIndex < 0 {
 		return salesreceivabledom.SalesReceivable{}, ErrInvalidTransferItemIndex
+	}
+	if productID == "" {
+		return salesreceivabledom.SalesReceivable{}, ErrInvalidTransferProductID
 	}
 	if at.IsZero() {
 		return salesreceivabledom.SalesReceivable{}, transferdom.ErrInvalidTransferredAt
@@ -623,6 +628,7 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 	projectionRef := r.transferItemDoc(orderID, itemIndex)
 	orderRef := r.ordersCol().Doc(orderID)
 	receivableRef := r.Client.Collection(salesReceivablesCollection).Doc(expected.ID)
+	productLockRef := r.Client.Collection(resaleProductLocksCol).Doc(productID)
 	var result salesreceivabledom.SalesReceivable
 
 	err = r.Client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
@@ -645,6 +651,13 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 			}
 			return err
 		}
+		productLockSnap, err := tx.Get(productLockRef)
+		if err != nil {
+			if status.Code(err) == codes.NotFound {
+				return ErrResaleProductListingLockMismatch
+			}
+			return err
+		}
 
 		projection, err := orderTransferItemFromSnapshot(projectionSnap)
 		if err != nil {
@@ -653,7 +666,8 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		if projection.OrderID != orderID ||
 			projection.ItemIndex != itemIndex ||
 			projection.ItemType != orderdom.OrderItemTypeResale ||
-			projection.ResaleID != expected.ResaleID {
+			projection.ResaleID != expected.ResaleID ||
+			projection.ProductID != productID {
 			return ErrTransferItemProjectionMismatch
 		}
 		if !projection.Paid {
@@ -686,6 +700,7 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 		item := order.Items[itemIndex]
 		if item.Type != orderdom.OrderItemTypeResale ||
 			item.ResaleID != expected.ResaleID ||
+			item.ProductID != productID ||
 			item.Qty != 1 ||
 			item.Price <= 0 ||
 			item.Price != expected.MerchandiseAmount {
@@ -728,6 +743,15 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 			return salesreceivabledom.ErrConflict
 		}
 
+		productLock, err := decodeResaleProductLock(productLockSnap)
+		if err != nil {
+			return ErrResaleProductListingLockMismatch
+		}
+		if productLock.ProductID != productID ||
+			productLock.ResaleID != item.ResaleID {
+			return ErrResaleProductListingLockMismatch
+		}
+
 		if err := order.UpdateItemTransferred(itemIndex, true, at); err != nil {
 			return err
 		}
@@ -762,6 +786,9 @@ func (r *OrderRepoForTransferFS) CompleteResaleReceivableFulfillment(
 			return err
 		}
 		if err := tx.Set(receivableRef, receivable); err != nil {
+			return err
+		}
+		if err := tx.Delete(productLockRef); err != nil {
 			return err
 		}
 
