@@ -47,7 +47,7 @@ import DispatchPage from "../pages/DispatchPage";
 import WalletPage from "../pages/WalletPage";
 import PublicWalletPage from "../pages/PublicWalletPage";
 import ContentsPage from "../pages/ContentsPage";
-import AnnouncementPage from "../pages/AnnouncementPage";
+import AnnouncementWorkspacePage from "../pages/AnnouncementWorkspacePage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
 import HowToUsePage from "../pages/HowToUsePage";
@@ -266,33 +266,23 @@ export const router = createBrowserRouter([
     path: "/announcements",
     element: (
       <ProtectedRoute>
-        <AnnouncementPage />
+        <AnnouncementWorkspacePage />
       </ProtectedRoute>
     ),
-  },
-  {
-    path: "/announcements/news/:newsId",
-    element: (
-      <ProtectedRoute>
-        <AnnouncementDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/announcements/report-decisions/:notificationId",
-    element: (
-      <ProtectedRoute>
-        <AnnouncementDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/announcements/:announcementId",
-    element: (
-      <ProtectedRoute>
-        <AnnouncementDetailPage />
-      </ProtectedRoute>
-    ),
+    children: [
+      {
+        path: "news/:newsId",
+        element: <AnnouncementDetailPage />,
+      },
+      {
+        path: "report-decisions/:notificationId",
+        element: <AnnouncementDetailPage />,
+      },
+      {
+        path: ":announcementId",
+        element: <AnnouncementDetailPage />,
+      },
+    ],
   },
   {
     path: "/chats",

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 
-import type { AnnouncementListItem } from "../../shared/types/announcements";
+import type { AnnouncementListItem } from "../../../shared/types/announcements";
 import {
   useAnnouncementsQuery,
   useMarkAnnouncementReadMutation,

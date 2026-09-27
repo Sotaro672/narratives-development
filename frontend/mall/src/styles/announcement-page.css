@@ -5,6 +5,25 @@
   max-width: 760px;
   margin: 0 auto;
   align-items: stretch;
+  box-sizing: border-box;
+}
+
+.announcement-detail-page-layout {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: #f8fafc;
+}
+
+.announcement-detail-page-layout .announcement-page {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 100%;
+  margin: 0;
+  box-sizing: border-box;
+  padding: 24px;
 }
 
 .announcement-page__error {
@@ -41,6 +60,12 @@
 .announcement-page__date {
   color: #6b7280;
   font-size: 12px;
+}
+
+.announcement-page__detail {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .announcement-page__detail-title {
@@ -146,12 +171,12 @@
   font-size: 12px;
 }
 
-.announcement-list-page-layout {
-  background: #f8fafc;
-}
-
-.announcement-page--list {
-  max-width: 720px;
+.announcement-page--list,
+.announcement-page--workspace {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
   padding: 0;
 }
 
@@ -163,20 +188,44 @@
   background: #ffffff;
 }
 
-.announcement-page--list > .ui-state-panel {
+.announcement-page--workspace .announcement-page__list {
+  border-top: 0;
+}
+
+.announcement-page--list > .ui-state-panel,
+.announcement-page--workspace > .ui-state-panel {
   width: auto;
   margin: 16px;
 }
 
 .announcement-page--list > .ui-state-panel--loading,
-.announcement-page--list > .ui-state-panel--empty {
+.announcement-page--list > .ui-state-panel--empty,
+.announcement-page--workspace > .ui-state-panel--loading,
+.announcement-page--workspace > .ui-state-panel--empty {
   background: #ffffff;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
 
+@media (max-width: 959px) {
+  .announcement-detail-page-layout .announcement-page {
+    padding: 20px 16px 24px;
+  }
+
+  .announcement-page--workspace {
+    min-height: 100%;
+    padding: 0;
+  }
+}
+
 @media (max-width: 640px) {
-  .announcement-page--list {
+  .announcement-page--list,
+  .announcement-page--workspace {
     max-width: none;
+  }
+
+  .announcement-detail-page-layout .announcement-page {
+    padding-right: 12px;
+    padding-left: 12px;
   }
 }
 
@@ -185,8 +234,13 @@
     padding-top: 20px;
   }
 
-  .announcement-page--list {
+  .announcement-page--list,
+  .announcement-page--workspace {
     padding-top: 0;
+  }
+
+  .announcement-detail-page-layout .announcement-page {
+    padding-top: 16px;
   }
 
   .announcement-page__detail-title {

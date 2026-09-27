@@ -1,8 +1,8 @@
 //frontend\amol\src\features\announcement\hooks\useAnnouncementUnreadCount.ts
 import { useEffect, useMemo, useState } from "react";
 
-import { fetchMeAnnouncements } from "../api/announcementApi";
-import type { AnnouncementListItem } from "../../shared/types/announcements";
+import { fetchMeAnnouncements } from "../../api/announcementApi";
+import type { AnnouncementListItem } from "../../../shared/types/announcements";
 
 type UseAnnouncementUnreadCountParams = {
   enabled?: boolean;

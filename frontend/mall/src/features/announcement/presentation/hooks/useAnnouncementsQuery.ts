@@ -9,12 +9,12 @@ import {
 import {
   fetchMeAnnouncements,
   markMeAnnouncementRead,
-} from "../api/announcementApi";
+} from "../../api/announcementApi";
 
 import type {
   AnnouncementListItem,
   AnnouncementListResult,
-} from "../../shared/types/announcements";
+} from "../../../shared/types/announcements";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_PER_PAGE = 100;

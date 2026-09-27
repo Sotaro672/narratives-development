@@ -3,16 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
-import MediaGallery, {
-  type MediaGalleryItem,
-} from "../components/ui/MediaGallery";
+import MediaGallery, { type MediaGalleryItem } from "../components/ui/MediaGallery";
 import SectionHeader from "../components/ui/SectionHeader";
 import TextState from "../components/ui/TextState";
 import { formatDateTime } from "../components/utils/date";
 
-import { useAnnouncementDetail } from "../features/announcement/hooks/useAnnouncementDetail";
+import { useAnnouncementDetail } from "../features/announcement/presentation/hooks/useAnnouncementDetail";
 import {
   useMarkNewsReadMutation,
   useNewsQuery,
@@ -318,11 +315,9 @@ export default function AnnouncementDetailPage() {
 
   return (
     <>
-      <Layout
-        title={isNewsDetail ? "システム通知" : "お知らせ"}
-        showFooter
-        mode="mypage"
-        mainClassName="announcement-page-layout"
+      <div
+        className="announcement-detail-page-layout"
+        data-announcement-detail
       >
         <section className="page-section content-page-section announcement-page">
           {error ? (
@@ -499,7 +494,7 @@ export default function AnnouncementDetailPage() {
             </article>
           ) : null}
         </section>
-      </Layout>
+      </div>
 
       <ReportModal
         open={report.isOpen}

@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 
-import { useAnnouncementsQuery } from "../../../announcement/hooks/useAnnouncementsQuery";
+import { useAnnouncementsQuery } from "../../../announcement/presentation/hooks/useAnnouncementsQuery";
 import { useNewsUnreadCountQuery } from "../../../news/hooks/useNewsQuery";
 import { useReportDecisionNotificationUnreadCountQuery } from "./useReportDecisionNotificationsQuery";
 
