@@ -375,10 +375,17 @@ export default function TradeChatDetail({
 
                     {thread.trade.transferredAt ? (
                       <ChatMessageBubble
-                        senderName="AMOL"
+                        senderName={
+                          thread.trade.buyerAvatarName || "購入者"
+                        }
+                        senderIcon={thread.trade.buyerAvatarIcon}
                         createdAt={thread.trade.transferredAt}
-                        content="購入者がトークンを受け取りました。"
-                        isSystem
+                        content={`${
+                          thread.trade.buyerAvatarName || "購入者"
+                        }さんがトークンを受け取りました。`}
+                        isMine={
+                          thread.trade.viewerSide === "buyer"
+                        }
                       />
                     ) : null}
 

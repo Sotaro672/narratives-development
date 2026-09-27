@@ -31,6 +31,10 @@ function isResaleDetailPagePath(pathname: string): boolean {
   return /^\/resales\/[^/]+\/?$/.test(pathname);
 }
 
+function isChatPagePath(pathname: string): boolean {
+  return pathname === "/chats" || pathname === "/chats/" || pathname.startsWith("/chats/");
+}
+
 export default function HeaderActions({ actions }: HeaderActionsProps) {
   const location = useLocation();
 
@@ -58,20 +62,23 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     toggleSettings,
   } = actions;
 
+  const isChatPage = isChatPagePath(location.pathname);
+  const shouldShowMessageButton = shouldShowAnnouncementButton && !isChatPage;
+
   const { unreadCount: notificationUnreadCount } = useNotificationUnreadCount({
     enabled: shouldShowAnnouncementButton,
   });
 
   const { badgeCount: inquiryBadgeCount } = useInquiryBadgeCounter({
-    enabled: shouldShowAnnouncementButton,
+    enabled: shouldShowMessageButton,
   });
 
   const { badgeCount: resaleChatBadgeCount } = useResaleChatBadgeCounter({
-    enabled: shouldShowAnnouncementButton,
+    enabled: shouldShowMessageButton,
   });
 
   const { badgeCount: tradeDispatchBadgeCount } = useTradeDispatchBadgeCounter({
-    enabled: shouldShowAnnouncementButton,
+    enabled: shouldShowMessageButton,
   });
 
   const safeCartItemCount = normalizeCount(cartItemCount);
@@ -194,7 +201,7 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
         </Link>
       ) : null}
 
-      {shouldShowAnnouncementButton ? (
+      {shouldShowMessageButton ? (
         <Link
           to="/chats"
           className="header__settings-link header__cart-link"
