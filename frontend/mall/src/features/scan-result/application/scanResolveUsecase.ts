@@ -174,6 +174,7 @@ export async function resolveScanResult(
             productId,
             assetId,
             operationId: storedOperationId,
+            headers,
           },
         );
 
@@ -191,7 +192,8 @@ export async function resolveScanResult(
           transferResult: recovery.transferResult,
           transferError: null,
           transferModalError: null,
-          shouldOpenTransferModal: true,
+          shouldOpenTransferModal:
+            recovery.transferResult.matched,
           requiresTransferConfirmation: false,
           operationId: recovery.operationId,
         };

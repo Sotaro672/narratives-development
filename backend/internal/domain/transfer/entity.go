@@ -4,6 +4,8 @@ package transfer
 import (
 	"errors"
 	"time"
+
+	orderdom "narratives/internal/domain/order"
 )
 
 /*
@@ -11,6 +13,8 @@ import (
 - Bubblegum V2 cNFT transferの実行結果を永続化するためのドメインエンティティ。
 - カスタマーサポート、監査、再実行のために、成功・失敗、エラー種別、
   tx署名、対象assetId、移譲元識別子を保持する。
+- Transfer対象のorderId、orderItemIndex、orderItemTypeを保持し、
+  idempotency recovery時にも元の購入取引を復元できるようにする。
 - FirestoreのdocIdは"<productId>__<attempt>"を想定し、
   Transfer自体にはIDフィールドを持たせない。
 - 同一productIdに対する複数試行を扱うため、Attemptを保持する。
@@ -23,6 +27,7 @@ import (
   ResolveTransferredAtByAssetIDResultとして返す。
 - cNFTの識別子はassetIdを正とする。
 - OperationIDはTransfer作成後に変更しない。
+- OrderID、OrderItemIndex、OrderItemTypeはTransfer作成後に変更しない。
 - AvatarIDは移譲先avatarIdを表す。
 - ブランドからavatarへの移譲ではFromBrandIDを保持する。
 - resale等のavatar間移譲ではFromAvatarIDを保持する。
@@ -69,6 +74,8 @@ var (
 	ErrInvalidProductID       = errors.New("transfer: invalid productId")
 	ErrInvalidOperationID     = errors.New("transfer: invalid operationId")
 	ErrInvalidOrderID         = errors.New("transfer: invalid orderId")
+	ErrInvalidOrderItemIndex  = errors.New("transfer: invalid orderItemIndex")
+	ErrInvalidOrderItemType   = errors.New("transfer: invalid orderItemType")
 	ErrInvalidAvatarID        = errors.New("transfer: invalid avatarId")
 	ErrInvalidToWalletAddress = errors.New("transfer: invalid toWalletAddress")
 	ErrInvalidAssetID         = errors.New("transfer: invalid assetId")
@@ -84,10 +91,15 @@ type Transfer struct {
 	// Attempt is monotonically increased for the same ProductID.
 	Attempt int `json:"attempt"`
 
-	// Identifiers
+	// Identifiers.
 	ProductID   string `json:"productId"`
 	OperationID string `json:"operationId"`
 	OrderID     string `json:"orderId"`
+
+	// Immutable Order item identity used to restore the original transaction
+	// when the same logical Transfer is recovered by OperationID.
+	OrderItemIndex int                    `json:"orderItemIndex"`
+	OrderItemType  orderdom.OrderItemType `json:"orderItemType"`
 
 	// AvatarID is the destination avatar.
 	AvatarID string `json:"avatarId"`
@@ -98,14 +110,14 @@ type Transfer struct {
 	FromAvatarID string `json:"fromAvatarId,omitempty"`
 	FromBrandID  string `json:"fromBrandId,omitempty"`
 
-	// Bubblegum V2 cNFT information
+	// Bubblegum V2 cNFT information.
 	AssetID string `json:"assetId"`
 
-	// Destination and execution result
+	// Destination and execution result.
 	ToWalletAddress string  `json:"toWalletAddress"`
 	TxSignature     *string `json:"txSignature,omitempty"`
 
-	// Status and error details
+	// Status and error details.
 	Status    Status     `json:"status"`
 	ErrorType *ErrorType `json:"errorType,omitempty"`
 	ErrorMsg  *string    `json:"errorMsg,omitempty"`
@@ -132,9 +144,9 @@ type ResolveTransferredAtByAssetIDResult struct {
 // TransferPatch represents a partial Transfer update.
 // A nil field means no change.
 //
-// OperationID and sender identifiers are intentionally excluded because
-// the idempotency key and logical sender must not change after the
-// Transfer attempt has been created.
+// OperationID, OrderID, OrderItemIndex, OrderItemType and sender identifiers
+// are intentionally excluded because the logical Transfer identity must not
+// change after the Transfer attempt has been created.
 type TransferPatch struct {
 	Status          *Status
 	ErrorType       *ErrorType
@@ -150,6 +162,8 @@ func NewPending(
 	productID string,
 	operationID string,
 	orderID string,
+	orderItemIndex int,
+	orderItemType orderdom.OrderItemType,
 	avatarID string,
 	fromAvatarID string,
 	fromBrandID string,
@@ -162,6 +176,8 @@ func NewPending(
 		ProductID:       productID,
 		OperationID:     operationID,
 		OrderID:         orderID,
+		OrderItemIndex:  orderItemIndex,
+		OrderItemType:   orderItemType,
 		AvatarID:        avatarID,
 		FromAvatarID:    fromAvatarID,
 		FromBrandID:     fromBrandID,
@@ -279,6 +295,16 @@ func (t Transfer) validate() error {
 	if t.OrderID == "" {
 		return ErrInvalidOrderID
 	}
+	if t.OrderItemIndex < 0 {
+		return ErrInvalidOrderItemIndex
+	}
+
+	switch t.OrderItemType {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+	default:
+		return ErrInvalidOrderItemType
+	}
+
 	if t.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}

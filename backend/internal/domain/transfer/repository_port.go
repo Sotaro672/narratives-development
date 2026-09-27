@@ -4,6 +4,8 @@ package transfer
 import (
 	"context"
 	"time"
+
+	orderdom "narratives/internal/domain/order"
 )
 
 /*
@@ -15,6 +17,7 @@ import (
   - productId単位で全試行履歴を取得できる
   - assetIdから成功したtransferの実行日時を取得できる
   - operationId単位で同一の論理transferを識別・取得できる
+  - orderId、orderItemIndex、orderItemTypeから元の取引を復元できる
   - 次のAttempt採番とpending Transfer作成を原子的に実行できる
   - 同一operationIdの再実行では新しいAttemptを作成せず既存Transferを返す
 - Firestore実装ではdocId="<productId>__<attempt>"のフラット保存を想定するが、
@@ -29,6 +32,7 @@ import (
 - Firestoreでは正規フィールド名"assetId"と"transferredAt"だけを使用する。
 - OperationIDは1回の論理transferを識別するidempotency keyとして扱う。
 - 同一OperationIDに対して複数のTransfer attemptを作成しない。
+- OrderID、OrderItemIndex、OrderItemTypeは論理transferの不変な取引識別情報として保持する。
 - ブランドからavatarへの移譲ではFromBrandIDを保持する。
 - resale等のavatar間移譲ではFromAvatarIDを保持する。
 */
@@ -42,10 +46,17 @@ import (
 //
 // OperationID is the stable idempotency key for one logical transfer.
 // The same logical retry must always reuse the exact same OperationID.
+//
+// OrderID, OrderItemIndex and OrderItemType identify the immutable Order item
+// associated with the logical transfer. They are persisted so a successful
+// transfer can be recovered without searching only untransferred Order items.
 type CreateAttemptInput struct {
-	ProductID       string
-	OperationID     string
-	OrderID         string
+	ProductID      string
+	OperationID    string
+	OrderID        string
+	OrderItemIndex int
+	OrderItemType  orderdom.OrderItemType
+
 	AvatarID        string
 	FromAvatarID    string
 	FromBrandID     string
@@ -57,7 +68,7 @@ type CreateAttemptInput struct {
 // Validate validates the input before repository processing.
 //
 // FromAvatarID / FromBrandID are intentionally not required here so that
-// existing Transfer records and callers can remain backward compatible.
+// transfer source validation can remain the responsibility of the caller.
 // New transfer flows should populate exactly the sender identifier applicable
 // to the transfer source.
 func (in CreateAttemptInput) Validate() error {
@@ -70,6 +81,16 @@ func (in CreateAttemptInput) Validate() error {
 	if in.OrderID == "" {
 		return ErrInvalidOrderID
 	}
+	if in.OrderItemIndex < 0 {
+		return ErrInvalidOrderItemIndex
+	}
+
+	switch in.OrderItemType {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+	default:
+		return ErrInvalidOrderItemType
+	}
+
 	if in.AvatarID == "" {
 		return ErrInvalidAvatarID
 	}
@@ -98,6 +119,8 @@ func (in CreateAttemptInput) NewTransfer(attempt int) (Transfer, error) {
 		in.ProductID,
 		in.OperationID,
 		in.OrderID,
+		in.OrderItemIndex,
+		in.OrderItemType,
 		in.AvatarID,
 		in.FromAvatarID,
 		in.FromBrandID,
@@ -133,6 +156,9 @@ type RepositoryPort interface {
 	// idempotency key for one logical transfer.
 	//
 	// The same OperationID must resolve to the same Transfer attempt.
+	// The returned Transfer includes OrderID, OrderItemIndex and OrderItemType
+	// so the original transaction can be restored after a completed transfer.
+	//
 	// It returns ErrNotFound when no Transfer exists for the OperationID.
 	GetByOperationID(
 		ctx context.Context,
@@ -166,12 +192,14 @@ type RepositoryPort interface {
 	// When OperationID has not been used:
 	// - atomically allocate the next Attempt number for ProductID
 	// - create a pending Transfer
+	// - persist OrderID, OrderItemIndex and OrderItemType with the Transfer
 	// - persist the Transfer and OperationID mapping in the same transaction
 	//
 	// When the same OperationID already exists:
 	// - do not allocate a new Attempt
 	// - do not create another Transfer
 	// - return the existing Transfer
+	// - the existing immutable transaction identity must be preserved
 	//
 	// Attempt allocation, Transfer persistence, and OperationID reservation
 	// must be completed atomically. If persistence fails, neither the Attempt
@@ -185,7 +213,8 @@ type RepositoryPort interface {
 	//
 	// The Transfer must be valid before it is written.
 	// Save must not allocate or change Attempt.
-	// Save must not change OperationID or sender identifiers.
+	// Save must not change OperationID, OrderID, OrderItemIndex, OrderItemType
+	// or sender identifiers.
 	Save(
 		ctx context.Context,
 		t Transfer,
@@ -196,8 +225,8 @@ type RepositoryPort interface {
 	// entity.
 	//
 	// A nil field in TransferPatch means no change.
-	// OperationID and sender identifiers are immutable and cannot be changed
-	// through Patch.
+	// OperationID, OrderID, OrderItemIndex, OrderItemType and sender identifiers
+	// are immutable and cannot be changed through Patch.
 	Patch(
 		ctx context.Context,
 		productID string,

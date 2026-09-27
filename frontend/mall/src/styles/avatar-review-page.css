@@ -63,3 +63,157 @@
 .avatar-review-page__message {
   margin: 24px 0;
 }
+
+.avatar-review-page form {
+  display: grid;
+  gap: 24px;
+}
+
+.avatar-review-page fieldset {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  min-width: 0;
+}
+
+.avatar-review-page fieldset legend {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--color-text, #111827);
+}
+
+.avatar-review-page fieldset .ui-radio {
+  min-width: 0;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  background: var(--color-surface, #ffffff);
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.avatar-review-page fieldset .ui-radio:hover:not(.ui-radio--disabled) {
+  border-color: #9ca3af;
+}
+
+.avatar-review-page fieldset .ui-radio:has(.ui-radio__input:checked) {
+  border-color: var(--color-text, #111827);
+  background: var(--color-surface-subtle, #f9fafb);
+  box-shadow: 0 0 0 1px var(--color-text, #111827);
+}
+
+.avatar-review-page fieldset .ui-radio__label {
+  width: 100%;
+  min-height: 52px;
+  padding: 14px 16px;
+  box-sizing: border-box;
+  align-items: center;
+  cursor: pointer;
+}
+
+.avatar-review-page fieldset .ui-radio__content {
+  min-width: 0;
+}
+
+.avatar-review-page fieldset:disabled .ui-radio {
+  opacity: 0.6;
+}
+
+.avatar-review-page form > div {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.avatar-review-page form > div > label {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--color-text, #111827);
+}
+
+.avatar-review-page textarea {
+  display: block;
+  width: 100%;
+  min-height: 144px;
+  resize: vertical;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #111827);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+  box-sizing: border-box;
+  outline: none;
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.avatar-review-page textarea::placeholder {
+  color: #9ca3af;
+}
+
+.avatar-review-page textarea:hover:not(:disabled) {
+  border-color: #9ca3af;
+}
+
+.avatar-review-page textarea:focus {
+  border-color: var(--color-text, #111827);
+  box-shadow: 0 0 0 1px var(--color-text, #111827);
+}
+
+.avatar-review-page textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background: var(--color-surface-subtle, #f9fafb);
+}
+
+.avatar-review-page textarea + .ui-text-state {
+  justify-self: end;
+  margin: 0;
+  font-size: 12px;
+}
+
+.avatar-review-page .ui-section-card {
+  min-width: 0;
+}
+
+.avatar-review-page .ui-section-card > .ui-text-state + .button,
+.avatar-review-page .ui-section-card > .ui-text-state + button {
+  margin-top: 20px;
+}
+
+@media (max-width: 640px) {
+  .avatar-review-page__header {
+    margin-bottom: 20px;
+  }
+
+  .avatar-review-page__title {
+    margin-bottom: 12px;
+    font-size: 20px;
+  }
+
+  .avatar-review-page__summary {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-review-page form {
+    gap: 20px;
+  }
+
+  .avatar-review-page fieldset {
+    grid-template-columns: 1fr;
+  }
+
+  .avatar-review-page textarea {
+    min-height: 132px;
+  }
+}

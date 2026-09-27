@@ -41,6 +41,35 @@ import type { ProductBlueprintReviewPage } from "../../../shared/types/review";
 
 import { useScanProductIdFromUrl } from "./useScanProductIdFromUrl";
 
+function getAvatarReviewCreatePath(
+  transferResult: MallScanTransferResponse | null,
+): string | null {
+  if (
+    transferResult?.matched !== true ||
+    transferResult.matchedItemType !== "resale"
+  ) {
+    return null;
+  }
+
+  const matchedOrderId =
+    transferResult.matchedOrderId?.trim() ?? "";
+  const matchedItemIndex =
+    transferResult.matchedItemIndex;
+
+  if (
+    !matchedOrderId ||
+    typeof matchedItemIndex !== "number" ||
+    !Number.isInteger(matchedItemIndex) ||
+    matchedItemIndex < 0
+  ) {
+    return null;
+  }
+
+  return `/avatar-reviews/order-items/${encodeURIComponent(
+    matchedOrderId,
+  )}/${matchedItemIndex}/new`;
+}
+
 export function useScanResultPage() {
   const navigate = useNavigate();
   const productId = useScanProductIdFromUrl();
@@ -194,6 +223,18 @@ export function useScanResultPage() {
       setTransferConfirmModalOpen(
         result.requiresTransferConfirmation,
       );
+
+      const avatarReviewCreatePath =
+        result.shouldOpenTransferModal
+          ? getAvatarReviewCreatePath(result.transferResult)
+          : null;
+
+      if (avatarReviewCreatePath) {
+        setTransferModalOpen(false);
+        navigate(avatarReviewCreatePath);
+        return;
+      }
+
       setTransferModalOpen(result.shouldOpenTransferModal);
     } catch (caughtError) {
       if (
@@ -218,7 +259,7 @@ export function useScanResultPage() {
         setBusyTransfer(false);
       }
     }
-  }, [productId]);
+  }, [navigate, productId]);
 
   const confirmTransfer = useCallback(async () => {
     const pid = productId.trim();
@@ -345,23 +386,11 @@ export function useScanResultPage() {
         setTransferConfirmationRequired(false);
         setTransferConfirmModalOpen(false);
 
-        const matchedOrderId =
-          transfer.transferResult?.matchedOrderId?.trim() ?? "";
-        const matchedItemIndex =
-          transfer.transferResult?.matchedItemIndex;
+        const avatarReviewCreatePath =
+          getAvatarReviewCreatePath(transfer.transferResult);
 
-        if (
-          transfer.transferResult?.matchedItemType === "resale" &&
-          matchedOrderId &&
-          typeof matchedItemIndex === "number" &&
-          Number.isInteger(matchedItemIndex) &&
-          matchedItemIndex >= 0
-        ) {
-          navigate(
-            `/avatar-reviews/order-items/${encodeURIComponent(
-              matchedOrderId,
-            )}/${matchedItemIndex}/new`,
-          );
+        if (avatarReviewCreatePath) {
+          navigate(avatarReviewCreatePath);
           return;
         }
 

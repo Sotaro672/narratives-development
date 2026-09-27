@@ -43,6 +43,7 @@ export type RecoverScanTransferInput = {
   productId: string;
   assetId: string;
   operationId: string;
+  headers: HeadersInit;
 };
 
 export type RecoverScanTransferResult = {
@@ -97,6 +98,34 @@ function readErrorStatus(error: unknown): number | null {
     : null;
 }
 
+function isRecoveredTransferResultValid(
+  transferResult: MallScanTransferResponse,
+  productId: string,
+  assetId: string,
+): boolean {
+  if (!transferResult.matched) {
+    return false;
+  }
+
+  if (
+    transferResult.productId.trim() &&
+    transferResult.productId.trim() !== productId
+  ) {
+    return false;
+  }
+
+  const returnedAssetId = transferResult.assetId?.trim() ?? "";
+
+  if (
+    returnedAssetId &&
+    returnedAssetId !== assetId
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
 export function isRetryableScanTransferError(
   error: unknown,
   isReturnInProgressOpenedError: (
@@ -116,28 +145,6 @@ export function isRetryableScanTransferError(
   return error instanceof TypeError;
 }
 
-// Recovery path does not reconstruct order/item identity.
-// Therefore this result must never be used to enable Avatar Review.
-export function createRecoveredScanTransferResult(
-  previewState: PreviewState,
-  assetId: string,
-): MallScanTransferResponse | null {
-  const normalizedAssetId = assetId.trim();
-
-  if (!normalizedAssetId) {
-    return null;
-  }
-
-  return {
-    avatarId: previewState.raw.owner?.avatarId ?? "",
-    productId: previewState.raw.productId,
-    matched: true,
-    txSignature: "",
-    updatedToAddress: true,
-    assetId: normalizedAssetId,
-  };
-}
-
 export async function recoverScanTransferAfterOwnershipConfirmed(
   deps: ScanTransferUsecaseDeps,
   input: RecoverScanTransferInput,
@@ -146,7 +153,11 @@ export async function recoverScanTransferAfterOwnershipConfirmed(
   const normalizedAssetId = input.assetId.trim();
   const operationId = input.operationId.trim();
 
-  if (!normalizedProductId || !normalizedAssetId) {
+  if (
+    !normalizedProductId ||
+    !normalizedAssetId ||
+    !operationId
+  ) {
     return {
       recovered: false,
       previewState: null,
@@ -163,21 +174,35 @@ export async function recoverScanTransferAfterOwnershipConfirmed(
     attempt += 1
   ) {
     try {
-      const previewState =
-        await deps.loadPreviewState(normalizedProductId);
+      const transferResult = await deps.transferScanPurchased({
+        productId: normalizedProductId,
+        operationId,
+        headers: input.headers,
+      });
 
-      const transferResult = createRecoveredScanTransferResult(
-        previewState,
-        normalizedAssetId,
-      );
+      if (
+        !isRecoveredTransferResultValid(
+          transferResult,
+          normalizedProductId,
+          normalizedAssetId,
+        )
+      ) {
+        return {
+          recovered: false,
+          previewState: null,
+          transferResult: null,
+          operationId,
+        };
+      }
 
-      if (transferResult) {
-        if (operationId) {
-          deps.clearStoredTransferOperationId(
-            normalizedProductId,
-            operationId,
-          );
-        }
+      try {
+        const previewState =
+          await deps.loadPreviewState(normalizedProductId);
+
+        deps.clearStoredTransferOperationId(
+          normalizedProductId,
+          operationId,
+        );
 
         return {
           recovered: true,
@@ -185,10 +210,28 @@ export async function recoverScanTransferAfterOwnershipConfirmed(
           transferResult,
           operationId: "",
         };
+      } catch {
+        // Transfer APIから成功済みの完全な取引情報は取得できているが、
+        // Preview BFFの反映が遅れている可能性があるため再試行する。
       }
-    } catch {
-      // Transfer 自体は完了している可能性があるため、
-      // Preview BFF の反映を待って再試行する。
+    } catch (caughtError) {
+      if (
+        deps.isReturnInProgressOpenedError(caughtError) ||
+        !isRetryableScanTransferError(
+          caughtError,
+          deps.isReturnInProgressOpenedError,
+        )
+      ) {
+        return {
+          recovered: false,
+          previewState: null,
+          transferResult: null,
+          operationId,
+        };
+      }
+
+      // 同一operationIdの再実行はBackendでidempotentに処理されるため、
+      // HTTP timeoutや一時的な5xxでは同じoperationIdのまま再試行する。
     }
 
     if (attempt < TRANSFER_PREVIEW_RECOVERY_ATTEMPTS) {
@@ -338,6 +381,7 @@ export async function executeScanTransfer(
               productId: normalizedProductId,
               assetId: normalizedAssetId,
               operationId,
+              headers: input.headers,
             },
           );
 
@@ -352,7 +396,8 @@ export async function executeScanTransfer(
             ownedByWalletError: null,
             transferError: null,
             transferModalError: null,
-            shouldOpenTransferModal: true,
+            shouldOpenTransferModal:
+              recovery.transferResult.matched,
             operationId: recovery.operationId,
             recovered: true,
           };

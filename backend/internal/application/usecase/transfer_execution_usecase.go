@@ -8,6 +8,7 @@ import (
 	"time"
 
 	applicationport "narratives/internal/application/port"
+	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
 	walletdom "narratives/internal/domain/wallet"
 )
@@ -123,6 +124,14 @@ var (
 		"token_transfer_execution_uc: attempt reference is empty",
 	)
 
+	ErrTokenTransferExecutionOrderItemIndexInvalid = errors.New(
+		"token_transfer_execution_uc: orderItemIndex is invalid",
+	)
+
+	ErrTokenTransferExecutionOrderItemTypeInvalid = errors.New(
+		"token_transfer_execution_uc: orderItemType is invalid",
+	)
+
 	ErrTokenTransferExecutionFromAvatarIDEmpty = errors.New(
 		"token_transfer_execution_uc: fromAvatarId is empty",
 	)
@@ -210,6 +219,13 @@ type TokenTransferExecutionInput struct {
 	//
 	// TransferUsecase passes the actual Order ID.
 	AttemptReference string
+
+	// OrderItemIndex / OrderItemType identify the immutable Order item associated
+	// with this logical transfer. They are persisted with the Transfer attempt so
+	// an idempotent recovery can restore the original transaction after the item
+	// has already been marked transferred.
+	OrderItemIndex int
+	OrderItemType  orderdom.OrderItemType
 
 	// Exactly one of FromAvatarID / FromBrandID identifies the logical sender.
 	// The Bubblegum service resolves the corresponding signer securely.
@@ -309,6 +325,18 @@ func (u *TokenTransferExecutionUsecase) Execute(
 			ErrTokenTransferExecutionAttemptReferenceEmpty
 	}
 
+	if in.OrderItemIndex < 0 {
+		return TokenTransferExecutionResult{},
+			ErrTokenTransferExecutionOrderItemIndexInvalid
+	}
+
+	switch in.OrderItemType {
+	case orderdom.OrderItemTypeList, orderdom.OrderItemTypeResale:
+	default:
+		return TokenTransferExecutionResult{},
+			ErrTokenTransferExecutionOrderItemTypeInvalid
+	}
+
 	if in.ToAvatarID == "" {
 		return TokenTransferExecutionResult{},
 			ErrTokenTransferExecutionToAvatarIDEmpty
@@ -356,10 +384,15 @@ func (u *TokenTransferExecutionUsecase) Execute(
 	createdTransfer, err := u.transferRepo.CreateAttempt(
 		ctx,
 		transferdom.CreateAttemptInput{
-			ProductID:       in.ProductID,
-			OperationID:     in.OperationID,
-			OrderID:         in.AttemptReference,
+			ProductID:      in.ProductID,
+			OperationID:    in.OperationID,
+			OrderID:        in.AttemptReference,
+			OrderItemIndex: in.OrderItemIndex,
+			OrderItemType:  in.OrderItemType,
+
 			AvatarID:        in.ToAvatarID,
+			FromAvatarID:    in.FromAvatarID,
+			FromBrandID:     in.FromBrandID,
 			ToWalletAddress: in.ToWallet,
 			AssetID:         in.AssetID,
 			CreatedAt:       now,

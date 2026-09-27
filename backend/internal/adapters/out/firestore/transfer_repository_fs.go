@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	orderdom "narratives/internal/domain/order"
 	transferdom "narratives/internal/domain/transfer"
 )
 
@@ -296,8 +297,8 @@ func (r *TransferRepositoryFS) CreateAttempt(ctx context.Context, in transferdom
 	// すでに同一operationIdのmappingが存在する場合は再利用する。
 	existing, err := r.GetByOperationID(ctx, in.OperationID)
 	if err == nil {
-		if existing.ProductID != in.ProductID {
-			return nil, transferdom.ErrInvalidProductID
+		if err := validateExistingTransferAttempt(existing, in); err != nil {
+			return nil, err
 		}
 		return existing, nil
 	}
@@ -340,7 +341,11 @@ func (r *TransferRepositoryFS) CreateAttempt(ctx context.Context, in transferdom
 				return ErrInvalidTransferData
 			}
 
-			transferSnap, err := tx.Get(r.transfersCol().Doc(r.transferDocID(productID, int(rawAttempt))))
+			transferSnap, err := tx.Get(
+				r.transfersCol().Doc(
+					r.transferDocID(productID, int(rawAttempt)),
+				),
+			)
 			if err != nil {
 				if status.Code(err) == codes.NotFound {
 					return transferdom.ErrNotFound
@@ -352,8 +357,8 @@ func (r *TransferRepositoryFS) CreateAttempt(ctx context.Context, in transferdom
 			if err != nil {
 				return err
 			}
-			if existing.OperationID != in.OperationID {
-				return ErrInvalidTransferData
+			if err := validateExistingTransferAttempt(existing, in); err != nil {
+				return err
 			}
 
 			created = *existing
@@ -401,7 +406,9 @@ func (r *TransferRepositoryFS) CreateAttempt(ctx context.Context, in transferdom
 			return err
 		}
 
-		transferRef := r.transfersCol().Doc(r.transferDocID(t.ProductID, t.Attempt))
+		transferRef := r.transfersCol().Doc(
+			r.transferDocID(t.ProductID, t.Attempt),
+		)
 
 		if counterExists {
 			if err := tx.Set(counterRef, map[string]any{
@@ -463,7 +470,9 @@ func (r *TransferRepositoryFS) Save(ctx context.Context, t transferdom.Transfer)
 		doc["transferredAt"] = now
 	}
 
-	_, err = r.transfersCol().Doc(r.transferDocID(t.ProductID, t.Attempt)).Set(ctx, doc)
+	_, err = r.transfersCol().
+		Doc(r.transferDocID(t.ProductID, t.Attempt)).
+		Set(ctx, doc)
 	if err != nil {
 		return nil, err
 	}
@@ -545,6 +554,41 @@ func (r *TransferRepositoryFS) Patch(ctx context.Context, productID string, atte
 	return &updated, nil
 }
 
+func validateExistingTransferAttempt(
+	existing *transferdom.Transfer,
+	in transferdom.CreateAttemptInput,
+) error {
+	if existing == nil {
+		return ErrInvalidTransferData
+	}
+	if existing.OperationID != in.OperationID {
+		return transferdom.ErrInvalidOperationID
+	}
+	if existing.ProductID != in.ProductID {
+		return transferdom.ErrInvalidProductID
+	}
+	if existing.OrderID != in.OrderID {
+		return transferdom.ErrInvalidOrderID
+	}
+	if existing.OrderItemIndex != in.OrderItemIndex {
+		return transferdom.ErrInvalidOrderItemIndex
+	}
+	if existing.OrderItemType != in.OrderItemType {
+		return transferdom.ErrInvalidOrderItemType
+	}
+	if existing.AvatarID != in.AvatarID {
+		return transferdom.ErrInvalidAvatarID
+	}
+	if existing.AssetID != in.AssetID {
+		return transferdom.ErrInvalidAssetID
+	}
+	if existing.ToWalletAddress != in.ToWalletAddress {
+		return transferdom.ErrInvalidToWalletAddress
+	}
+
+	return nil
+}
+
 // ============================================================
 // Transfer helpers
 // ============================================================
@@ -579,6 +623,21 @@ func transferFromSnapshot(snap *firestore.DocumentSnapshot) (*transferdom.Transf
 		return nil, ErrInvalidTransferData
 	}
 
+	rawOrderItemIndex, ok := raw["orderItemIndex"].(int64)
+	if !ok || rawOrderItemIndex < 0 {
+		return nil, ErrInvalidTransferData
+	}
+
+	rawOrderItemType, ok := raw["orderItemType"].(string)
+	if !ok || rawOrderItemType == "" {
+		return nil, ErrInvalidTransferData
+	}
+	orderItemType := orderdom.OrderItemType(rawOrderItemType)
+	if orderItemType != orderdom.OrderItemTypeList &&
+		orderItemType != orderdom.OrderItemTypeResale {
+		return nil, ErrInvalidTransferData
+	}
+
 	avatarID, ok := raw["avatarId"].(string)
 	if !ok || avatarID == "" {
 		return nil, ErrInvalidTransferData
@@ -609,6 +668,8 @@ func transferFromSnapshot(snap *firestore.DocumentSnapshot) (*transferdom.Transf
 		ProductID:       productID,
 		OperationID:     operationID,
 		OrderID:         orderID,
+		OrderItemIndex:  int(rawOrderItemIndex),
+		OrderItemType:   orderItemType,
 		AvatarID:        avatarID,
 		AssetID:         assetID,
 		ToWalletAddress: toWalletAddress,
@@ -682,6 +743,8 @@ func transferDocument(t transferdom.Transfer, updatedAt time.Time) (map[string]a
 		"errorType":       t.ErrorType,
 		"operationId":     t.OperationID,
 		"orderId":         t.OrderID,
+		"orderItemIndex":  int64(t.OrderItemIndex),
+		"orderItemType":   string(t.OrderItemType),
 		"productId":       t.ProductID,
 		"status":          t.Status,
 		"toWalletAddress": t.ToWalletAddress,
