@@ -15,6 +15,11 @@ import {
 
 import Layout from "../components/layout/Layout";
 import StatePanel from "../components/ui/StatePanel";
+import {
+  findHowToUseItem,
+  isHowToUseCategory,
+  type HowToUseItem,
+} from "../features/howToUse/application/howToUseSteps";
 import HowToUseListPane from "../features/howToUse/presentation/components/HowToUseListPane";
 
 import "../styles/page-layout.css";
@@ -28,6 +33,45 @@ type MobilePane = "list" | "detail";
 
 function isHowToUseListPath(pathname: string): boolean {
   return pathname === "/how-to-use" || pathname === "/how-to-use/";
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function decodeHash(hash: string): string | null {
+  const value = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!value) return null;
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function getHowToUseItemFromPath(pathname: string): HowToUseItem | undefined {
+  const segments = pathname
+    .split("/")
+    .filter(Boolean)
+    .map(decodePathSegment);
+
+  if (segments[0] !== "how-to-use" || segments.length !== 3) {
+    return undefined;
+  }
+
+  const category = segments[1];
+  const slug = segments[2];
+
+  if (!isHowToUseCategory(category) || !slug) {
+    return undefined;
+  }
+
+  return findHowToUseItem(category, slug);
 }
 
 function useMobileHowToUseViewport(): boolean {
@@ -76,6 +120,8 @@ export default function HowToUseWorkspacePage() {
   const isMobile = useMobileHowToUseViewport();
 
   const isHowToUseListRoute = isHowToUseListPath(location.pathname);
+  const howToUseItem = getHowToUseItemFromPath(location.pathname);
+  const selectedSectionId = decodeHash(location.hash);
 
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
     isHowToUseListRoute ? "list" : "detail",
@@ -167,6 +213,16 @@ export default function HowToUseWorkspacePage() {
     navigate,
   ]);
 
+  const handleSectionClick = useCallback(
+    (sectionId: string) => {
+      navigate({
+        pathname: location.pathname,
+        hash: `#${encodeURIComponent(sectionId)}`,
+      });
+    },
+    [location.pathname, navigate],
+  );
+
   const handleRailTransitionEnd = useCallback(
     (event: TransitionEvent<HTMLDivElement>) => {
       if (
@@ -194,12 +250,50 @@ export default function HowToUseWorkspacePage() {
     .filter(Boolean)
     .join(" ");
 
+  const headerMobileContent =
+    isMobile &&
+    !isHowToUseListRoute &&
+    howToUseItem ? (
+      <nav
+        className="how-to-use-header-nav"
+        aria-label={`${howToUseItem.title}の項目`}
+      >
+        {howToUseItem.sections.map((section, index) => {
+          const selected =
+            selectedSectionId === section.id ||
+            (!selectedSectionId && index === 0);
+
+          return (
+            <button
+              key={section.id}
+              type="button"
+              className={[
+                "how-to-use-header-nav__item",
+                selected
+                  ? "how-to-use-header-nav__item--selected"
+                  : "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              aria-current={selected ? "location" : undefined}
+              onClick={() => {
+                handleSectionClick(section.id);
+              }}
+            >
+              {section.title}
+            </button>
+          );
+        })}
+      </nav>
+    ) : undefined;
+
   return (
     <Layout
       title="AMOL"
       mode="landing"
       hideAnnouncementButton
       hideSettingsButton={!isHowToUseListRoute}
+      headerMobileContent={headerMobileContent}
       mainClassName="how-to-use-workspace-page-layout"
       disableFooterPaddingOnDesktop
       showBackButton={isMobile && !isHowToUseListRoute}

@@ -1,7 +1,12 @@
 // frontend/mall/src/pages/HowToUseDetailPage.tsx
 
 import { useEffect } from "react";
-import { Navigate, useLocation, useParams } from "react-router-dom";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useParams,
+} from "react-router-dom";
 
 import {
   findHowToUseItem,
@@ -82,6 +87,7 @@ function decodeHash(hash: string): string | null {
 
 export default function HowToUseDetailPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { category, slug = "" } = useParams<{
     category?: string;
     slug?: string;
@@ -89,6 +95,7 @@ export default function HowToUseDetailPage() {
 
   const validCategory = isHowToUseCategory(category) ? category : null;
   const item = validCategory && slug ? findHowToUseItem(validCategory, slug) : undefined;
+  const selectedSectionId = decodeHash(location.hash);
 
   useEffect(() => {
     if (!item) return;
@@ -116,11 +123,43 @@ export default function HowToUseDetailPage() {
     return <Navigate to="/how-to-use" replace />;
   }
 
+  const handleSectionClick = (sectionId: string): void => {
+    navigate({
+      pathname: location.pathname,
+      hash: `#${encodeURIComponent(sectionId)}`,
+    });
+  };
+
   return (
     <div className="how-to-use-detail-page-layout" data-how-to-use-detail>
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
           <h1 className="how-to-use-detail-page__title">{item.title}</h1>
+
+          <nav className="how-to-use-detail-page__section-nav" aria-label={`${item.title}の項目`}>
+            <div className="how-to-use-detail-page__section-nav-track">
+              {item.sections.map((section) => {
+                const selected = selectedSectionId === section.id;
+
+                return (
+                  <button
+                    key={section.id}
+                    type="button"
+                    className={[
+                      "how-to-use-detail-page__section-nav-item",
+                      selected ? "how-to-use-detail-page__section-nav-item--selected" : "",
+                    ].filter(Boolean).join(" ")}
+                    aria-current={selected ? "location" : undefined}
+                    onClick={() => {
+                      handleSectionClick(section.id);
+                    }}
+                  >
+                    {section.title}
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
 
           <HowToUseArticle description={item.description}>
             {renderGuide(validCategory, slug)}

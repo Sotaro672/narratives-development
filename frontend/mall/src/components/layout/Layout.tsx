@@ -78,6 +78,7 @@ type LayoutProps = {
   hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
   hideAnnouncementButton?: boolean;
+  headerMobileContent?: ReactNode;
   mainClassName?: string;
   disableFooterPaddingOnDesktop?: boolean;
 
@@ -116,6 +117,7 @@ export default function Layout({
   hideHamburgerMenu = false,
   hideSettingsButton = false,
   hideAnnouncementButton = false,
+  headerMobileContent,
   mainClassName,
   disableFooterPaddingOnDesktop = false,
 
@@ -169,6 +171,7 @@ export default function Layout({
           hideHamburgerMenu={hideHamburgerMenu}
           hideSettingsButton={hideSettingsButton}
           hideAnnouncementButton={hideAnnouncementButton}
+          mobileContent={headerMobileContent}
           showBackButton={showBackButton}
           backButtonLabel={backButtonLabel}
           onBackButtonClick={onBackButtonClick}

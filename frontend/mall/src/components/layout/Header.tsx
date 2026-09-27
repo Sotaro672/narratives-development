@@ -29,6 +29,8 @@ export default function Header(props: HeaderProps) {
     props.showBackButton === true &&
     typeof props.onBackButtonClick === "function";
 
+  const hasMobileContent = props.mobileContent != null;
+
   const mergedActions = {
     ...actions,
     hasActionButton: actions.hasActionButton || hasDirectActionButton,
@@ -44,8 +46,13 @@ export default function Header(props: HeaderProps) {
   const shouldRenderSettingsPanel =
     shouldShowSettingsButton && !hasDirectActionButton;
 
+  const headerClassName = [
+    "header",
+    hasMobileContent ? "header--with-mobile-content" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <header className="header">
+    <header className={headerClassName}>
       <div className="header__inner">
         <div className="header__left">
           {hasBackButton ? (
@@ -67,19 +74,27 @@ export default function Header(props: HeaderProps) {
             </button>
           ) : null}
 
-          {props.titleClickable === false ? (
-            <span className="header__title header__title-text">
-              {displayTitle}
-            </span>
-          ) : (
-            <button
-              type="button"
-              className="header__title header__title-button"
-              onClick={handleTitleClick}
-            >
-              {displayTitle}
-            </button>
-          )}
+          <div className="header__title-container">
+            {props.titleClickable === false ? (
+              <span className="header__title header__title-text">
+                {displayTitle}
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="header__title header__title-button"
+                onClick={handleTitleClick}
+              >
+                {displayTitle}
+              </button>
+            )}
+          </div>
+
+          {hasMobileContent ? (
+            <div className="header__mobile-content">
+              {props.mobileContent}
+            </div>
+          ) : null}
         </div>
 
         <HeaderDesktopNavigation

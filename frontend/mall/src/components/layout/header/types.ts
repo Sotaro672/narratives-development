@@ -1,5 +1,7 @@
 // frontend/mall/src/components/layout/header/types.ts
 
+import type { ReactNode } from "react";
+
 export type HeaderProps = {
   title?: string;
   titleClickable?: boolean;
@@ -8,6 +10,7 @@ export type HeaderProps = {
   hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
   hideAnnouncementButton?: boolean;
+  mobileContent?: ReactNode;
 
   showBackButton?: boolean;
   backButtonLabel?: string;
