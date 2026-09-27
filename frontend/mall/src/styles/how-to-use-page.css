@@ -40,7 +40,13 @@
 }
 
 .how-to-use-section__title {
-  margin: 0 0 14px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 12px 8px 14px 12px;
+  box-sizing: border-box;
+  background: #ffffff;
   color: var(--color-text);
   font-size: 18px;
   font-weight: 800;
@@ -52,16 +58,6 @@
 }
 
 .how-to-use-item {
-  border-bottom: 1px solid #e5e7eb;
-  background: #ffffff;
-  transition: background-color 160ms ease;
-}
-
-.how-to-use-item--selected {
-  background: #f3f4f6;
-}
-
-.how-to-use-item__summary {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -70,34 +66,38 @@
   gap: 12px;
   box-sizing: border-box;
   padding: 16px 4px;
+  border: 0;
+  border-bottom: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
-  list-style: none;
-  user-select: none;
+  transition: background-color 160ms ease;
 }
 
-.how-to-use-item__summary::-webkit-details-marker {
-  display: none;
-}
-
-.how-to-use-item__summary::marker {
-  content: "";
-}
-
-.how-to-use-item__summary:hover {
+.how-to-use-item:hover {
   background: #f8fafc;
 }
 
-.how-to-use-item--selected .how-to-use-item__summary:hover {
-  background: #eef0f2;
-}
-
-.how-to-use-item__summary:focus-visible {
+.how-to-use-item:focus-visible {
+  position: relative;
+  z-index: 1;
   outline: 2px solid var(--color-primary, #2563eb);
   outline-offset: -2px;
 }
 
+.how-to-use-item--selected {
+  background: #f3f4f6;
+}
+
+.how-to-use-item--selected:hover {
+  background: #eef0f2;
+}
+
 .how-to-use-item__title {
   min-width: 0;
+  flex: 1;
   color: var(--color-text);
   font-size: 15px;
   font-weight: 700;
@@ -109,57 +109,13 @@
   width: 20px;
   flex: 0 0 20px;
   color: #64748b;
-  font-size: 16px;
+  font-size: 20px;
   line-height: 1;
   text-align: center;
 }
 
 .how-to-use-item__arrow::before {
-  content: "↓";
-}
-
-.how-to-use-item[open] .how-to-use-item__arrow::before {
-  content: "↑";
-}
-
-.how-to-use-item__content {
-  padding: 0 4px 16px;
-}
-
-.how-to-use-item__description {
-  margin: 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-
-.how-to-use-item__detail-link {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 12px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--color-primary, #2563eb);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.how-to-use-item__detail-link:hover {
-  text-decoration: underline;
-}
-
-.how-to-use-item__detail-link:focus-visible {
-  outline: 2px solid var(--color-primary, #2563eb);
-  outline-offset: 4px;
-  border-radius: 2px;
-}
-
-.how-to-use-item__detail-link[aria-current="page"] {
-  color: var(--color-text);
+  content: "›";
 }
 
 @media (max-width: 959px) {
@@ -177,20 +133,12 @@
   }
 
   .how-to-use-section__title {
-    margin-bottom: 12px;
+    padding: 12px 8px 12px 12px;
     font-size: 18px;
   }
 
-  .how-to-use-item__summary {
+  .how-to-use-item {
     padding: 16px 2px;
-  }
-
-  .how-to-use-item__content {
-    padding: 0 2px 16px;
-  }
-
-  .how-to-use-item__description {
-    font-size: 14px;
   }
 }
 
@@ -205,10 +153,11 @@
   }
 
   .how-to-use-section__title {
+    padding: 11px 6px 11px 10px;
     font-size: 17px;
   }
 
-  .how-to-use-item__summary {
+  .how-to-use-item {
     padding-top: 15px;
     padding-bottom: 15px;
   }
