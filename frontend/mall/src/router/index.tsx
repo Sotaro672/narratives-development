@@ -50,7 +50,7 @@ import ContentsPage from "../pages/ContentsPage";
 import AnnouncementWorkspacePage from "../pages/AnnouncementWorkspacePage";
 import AnnouncementDetailPage from "../pages/AnnouncementDetailPage";
 import TermsPage from "../pages/TermsPage";
-import HowToUsePage from "../pages/HowToUsePage";
+import HowToUseWorkspacePage from "../pages/HowToUseWorkspacePage";
 import HowToUseDetailPage from "../pages/HowToUseDetailPage";
 import ResaleCreatePage from "../pages/ResaleCreatePage";
 import ResaleDetailPage from "../pages/ResaleDetailPage";
@@ -120,11 +120,13 @@ export const router = createBrowserRouter([
   },
   {
     path: "/how-to-use",
-    element: <HowToUsePage />,
-  },
-  {
-    path: "/how-to-use/:category/:slug",
-    element: <HowToUseDetailPage />,
+    element: <HowToUseWorkspacePage />,
+    children: [
+      {
+        path: ":category/:slug",
+        element: <HowToUseDetailPage />,
+      },
+    ],
   },
   {
     path: "/resale",

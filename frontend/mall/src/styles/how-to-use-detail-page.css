@@ -1,13 +1,27 @@
 /* frontend/mall/src/styles/how-to-use-detail-page.css */
 
+.how-to-use-detail-page-layout {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  box-sizing: border-box;
+  background: #f8fafc;
+}
+
 .how-to-use-detail-page {
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  box-sizing: border-box;
   padding: 56px 32px 72px;
 }
 
 .how-to-use-detail-page__inner {
   width: 100%;
   max-width: 760px;
+  min-width: 0;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .how-to-use-detail-page__description {
@@ -18,7 +32,7 @@
   overflow-wrap: anywhere;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 959px) {
   .how-to-use-detail-page {
     padding: 40px 16px 56px;
   }
@@ -29,8 +43,22 @@
   }
 }
 
-@media print {
+@media (max-width: 640px) {
   .how-to-use-detail-page {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+}
+
+@media print {
+  .how-to-use-detail-page-layout {
+    width: 100%;
+    min-height: 0;
+    background: transparent;
+  }
+
+  .how-to-use-detail-page {
+    min-height: 0;
     padding: 0;
   }
 

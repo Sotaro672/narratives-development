@@ -2,7 +2,6 @@
 
 import { Navigate, useParams } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
 import {
   findHowToUseItem,
   isHowToUseCategory,
@@ -36,7 +35,6 @@ import ReviewResaleGuide from "../features/howToUse/presentation/components/mall
 import ShippingAddressRegistrationGuide from "../features/howToUse/presentation/components/mall/ShippingAddressRegistrationGuide";
 import TradeGuide from "../features/howToUse/presentation/components/mall/TradeGuide";
 
-import "../styles/page-layout.css";
 import "../styles/how-to-use-detail-page.css";
 import "../styles/how-to-use-common.css";
 
@@ -165,21 +163,21 @@ export default function HowToUseDetailPage() {
   }
 
   return (
-    <Layout
-      title="AMOL"
-      mode="landing"
-      hideAnnouncementButton
-      hideSettingsButton
+    <div
+      className="how-to-use-detail-page-layout"
+      data-how-to-use-detail
     >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
-          <h1 className="how-to-use-detail-page__title">{item.title}</h1>
+          <h1 className="how-to-use-detail-page__title">
+            {item.title}
+          </h1>
 
           <HowToUseArticle description={item.description}>
             {renderGuide(category, slug)}
           </HowToUseArticle>
         </div>
       </main>
-    </Layout>
+    </div>
   );
 }

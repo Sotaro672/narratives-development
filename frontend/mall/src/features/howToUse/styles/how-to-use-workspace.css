@@ -1,0 +1,186 @@
+/* frontend/mall/src/features/howToUse/styles/how-to-use-workspace.css */
+
+.how-to-use-workspace-page-layout {
+  height: 100dvh;
+  min-height: 0;
+  max-height: 100dvh;
+  overflow: hidden;
+  padding-bottom: 0;
+  background: #f8fafc;
+}
+
+.how-to-use-workspace-page {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.how-to-use-workspace-page__rail {
+  display: grid;
+  grid-template-columns: minmax(320px, 380px) minmax(0, 1fr);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.how-to-use-workspace-page__list,
+.how-to-use-workspace-page__detail {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.how-to-use-workspace-page__list {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  border-right: 1px solid rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+}
+
+.how-to-use-workspace-page__detail {
+  position: relative;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  background: #f8fafc;
+}
+
+.how-to-use-workspace-page__empty {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  place-items: center;
+  box-sizing: border-box;
+  padding: 24px;
+}
+
+.how-to-use-workspace-page__detail > .how-to-use-detail-page,
+.how-to-use-workspace-page__detail > .how-to-use-detail-page-layout,
+.how-to-use-workspace-page__detail > [data-how-to-use-detail] {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  min-height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+}
+
+.how-to-use-page--workspace {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.how-to-use-page--workspace .how-to-use-page__inner {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+@media (max-width: 959px) {
+  .how-to-use-workspace-page-layout {
+    height: 100dvh;
+    min-height: 0;
+    max-height: 100dvh;
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  .how-to-use-workspace-page__rail {
+    display: flex;
+    width: 200%;
+    height: 100%;
+    min-width: 200%;
+    min-height: 0;
+    transform: translate3d(0, 0, 0);
+    transition: transform 280ms ease;
+    will-change: transform;
+  }
+
+  .how-to-use-workspace-page--list .how-to-use-workspace-page__rail {
+    transform: translate3d(0, 0, 0);
+  }
+
+  .how-to-use-workspace-page--detail .how-to-use-workspace-page__rail {
+    transform: translate3d(-50%, 0, 0);
+  }
+
+  .how-to-use-workspace-page__list,
+  .how-to-use-workspace-page__detail {
+    width: 50%;
+    max-width: 50%;
+    flex: 0 0 50%;
+  }
+
+  .how-to-use-workspace-page__list {
+    border-right: none;
+    scrollbar-gutter: auto;
+    touch-action: pan-y;
+  }
+
+  .how-to-use-workspace-page__detail {
+    scrollbar-gutter: auto;
+    touch-action: pan-y;
+  }
+
+  .how-to-use-workspace-page__empty {
+    padding: 16px;
+  }
+
+  .how-to-use-page--workspace {
+    min-height: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .how-to-use-workspace-page__empty {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-to-use-workspace-page__rail {
+    transition: none;
+  }
+}
+
+@media print {
+  .how-to-use-workspace-page-layout,
+  .how-to-use-workspace-page,
+  .how-to-use-workspace-page__rail,
+  .how-to-use-workspace-page__detail {
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .how-to-use-workspace-page__rail {
+    display: block;
+    transform: none;
+  }
+
+  .how-to-use-workspace-page__list,
+  .how-to-use-workspace-page__empty {
+    display: none;
+  }
+
+  .how-to-use-workspace-page__detail {
+    max-width: none;
+  }
+}
