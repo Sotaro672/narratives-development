@@ -1,6 +1,7 @@
 // frontend/mall/src/pages/HowToUseDetailPage.tsx
 
-import { Navigate, useParams } from "react-router-dom";
+import { useEffect } from "react";
+import { Navigate, useLocation, useParams } from "react-router-dom";
 
 import {
   findHowToUseItem,
@@ -39,142 +40,90 @@ import "../styles/how-to-use-detail-page.css";
 import "../styles/how-to-use-common.css";
 
 function renderGuide(category: HowToUseCategory, slug: string) {
-  if (category === "console" && slug === "brand-registration") {
-    return <BrandRegistrationGuide />;
-  }
-
-  if (category === "console" && slug === "member-invite") {
-    return <MemberInvitationGuide />;
-  }
-
-  if (category === "console" && slug === "product-design") {
-    return <ProductBlueprintGuide />;
-  }
-
-  if (category === "console" && slug === "token-design") {
-    return <TokenBlueprintGuide />;
-  }
-
-  if (category === "console" && slug === "production") {
-    return <ProductionRegistrationGuide />;
-  }
-
-  if (category === "console" && slug === "inspection") {
-    return <InspectionGuide />;
-  }
-
-  if (category === "console" && slug === "mint") {
-    return <MintGuide />;
-  }
-
-  if (category === "console" && slug === "inventory") {
-    return <SetLocationGuide />;
-  }
-
-  if (category === "console" && slug === "shipping") {
-    return <SetTranspportationFee />;
-  }
-
-  if (category === "console" && slug === "listing") {
-    return <ListGuide />;
-  }
-
-  if (category === "console" && slug === "orders") {
-    return <OrderDispatchGuide />;
-  }
-
-  if (category === "console" && slug === "inquiry") {
-    return <InquiryGuide />;
-  }
-
-  if (category === "console" && slug === "comment-reply") {
-    return <ReplyTokenCommentGuide />;
-  }
-
-  if (category === "console" && slug === "reviews") {
-    return <ViewProductReviewGuide />;
-  }
-
-  if (category === "console" && slug === "announcement") {
-    return <BroadcastAnnounceGuide />;
-  }
-
-  if (category === "mall" && slug === "avatar-registration") {
-    return <AvatarCreateGuide />;
-  }
-
-  if (category === "mall" && slug === "shipping-address") {
-    return <ShippingAddressRegistrationGuide />;
-  }
-
-  if (category === "mall" && slug === "purchase") {
-    return <PurchaseGuide />;
-  }
-
-  if (category === "mall" && slug === "comment") {
-    return <PostCommentGuide />;
-  }
-
-  if (category === "mall" && slug === "cancel") {
-    return <CancelOderGuide />;
-  }
-
-  if (category === "mall" && slug === "return") {
-    return <RequestRefundGuide />;
-  }
-
-  if (category === "mall" && slug === "review") {
-    return <PostProductReviewGuide />;
-  }
-
-  if (category === "mall" && slug === "payout-account") {
-    return <OpenPayoutAccountGuide />;
-  }
-
-  if (category === "mall" && slug === "resale") {
-    return <ListMarketGuide />;
-  }
-
-  if (category === "mall" && slug === "market") {
-    return <ReviewResaleGuide />;
-  }
-
-  if (category === "mall" && slug === "trade") {
-    return <TradeGuide />;
-  }
-
+  if (category === "console" && slug === "brand-registration") return <BrandRegistrationGuide />;
+  if (category === "console" && slug === "member-invite") return <MemberInvitationGuide />;
+  if (category === "console" && slug === "product-design") return <ProductBlueprintGuide />;
+  if (category === "console" && slug === "token-design") return <TokenBlueprintGuide />;
+  if (category === "console" && slug === "production") return <ProductionRegistrationGuide />;
+  if (category === "console" && slug === "inspection") return <InspectionGuide />;
+  if (category === "console" && slug === "mint") return <MintGuide />;
+  if (category === "console" && slug === "inventory") return <SetLocationGuide />;
+  if (category === "console" && slug === "shipping") return <SetTranspportationFee />;
+  if (category === "console" && slug === "listing") return <ListGuide />;
+  if (category === "console" && slug === "orders") return <OrderDispatchGuide />;
+  if (category === "console" && slug === "inquiry") return <InquiryGuide />;
+  if (category === "console" && slug === "comment-reply") return <ReplyTokenCommentGuide />;
+  if (category === "console" && slug === "reviews") return <ViewProductReviewGuide />;
+  if (category === "console" && slug === "announcement") return <BroadcastAnnounceGuide />;
+  if (category === "mall" && slug === "avatar-registration") return <AvatarCreateGuide />;
+  if (category === "mall" && slug === "shipping-address") return <ShippingAddressRegistrationGuide />;
+  if (category === "mall" && slug === "purchase") return <PurchaseGuide />;
+  if (category === "mall" && slug === "comment") return <PostCommentGuide />;
+  if (category === "mall" && slug === "cancel") return <CancelOderGuide />;
+  if (category === "mall" && slug === "return") return <RequestRefundGuide />;
+  if (category === "mall" && slug === "review") return <PostProductReviewGuide />;
+  if (category === "mall" && slug === "payout-account") return <OpenPayoutAccountGuide />;
+  if (category === "mall" && slug === "resale") return <ListMarketGuide />;
+  if (category === "mall" && slug === "market") return <ReviewResaleGuide />;
+  if (category === "mall" && slug === "trade") return <TradeGuide />;
   return null;
 }
 
+function decodeHash(hash: string): string | null {
+  const value = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!value) return null;
+
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export default function HowToUseDetailPage() {
+  const location = useLocation();
   const { category, slug = "" } = useParams<{
     category?: string;
     slug?: string;
   }>();
 
-  if (!isHowToUseCategory(category) || !slug) {
-    return <Navigate to="/how-to-use" replace />;
-  }
+  const validCategory = isHowToUseCategory(category) ? category : null;
+  const item = validCategory && slug ? findHowToUseItem(validCategory, slug) : undefined;
 
-  const item = findHowToUseItem(category, slug);
+  useEffect(() => {
+    if (!item) return;
 
-  if (!item) {
+    const sectionId = decodeHash(location.hash);
+    if (!sectionId || !item.sections.some((section) => section.id === sectionId)) return;
+
+    const frameId = window.requestAnimationFrame(() => {
+      const target = document.getElementById(sectionId);
+      if (!target) return;
+
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      target.scrollIntoView({
+        behavior: prefersReducedMotion ? "auto" : "smooth",
+        block: "start",
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
+  }, [item, location.hash]);
+
+  if (!validCategory || !slug || !item) {
     return <Navigate to="/how-to-use" replace />;
   }
 
   return (
-    <div
-      className="how-to-use-detail-page-layout"
-      data-how-to-use-detail
-    >
+    <div className="how-to-use-detail-page-layout" data-how-to-use-detail>
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
-          <h1 className="how-to-use-detail-page__title">
-            {item.title}
-          </h1>
+          <h1 className="how-to-use-detail-page__title">{item.title}</h1>
 
           <HowToUseArticle description={item.description}>
-            {renderGuide(category, slug)}
+            {renderGuide(validCategory, slug)}
           </HowToUseArticle>
         </div>
       </main>

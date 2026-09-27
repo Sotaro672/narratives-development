@@ -22,6 +22,7 @@
 
 .how-to-use-article-section {
   min-width: 0;
+  scroll-margin-top: 24px;
 }
 
 .how-to-use-article-section__title {
@@ -202,6 +203,10 @@
     margin-top: 36px;
   }
 
+  .how-to-use-article-section {
+    scroll-margin-top: 20px;
+  }
+
   .how-to-use-article-section__title {
     font-size: 21px;
   }
@@ -267,6 +272,10 @@
   .how-to-use-article__content {
     gap: 32px;
     margin-top: 32px;
+  }
+
+  .how-to-use-article-section {
+    scroll-margin-top: 0;
   }
 
   .how-to-use-article-section__title {

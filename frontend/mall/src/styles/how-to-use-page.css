@@ -57,6 +57,11 @@
   border-top: 1px solid #e5e7eb;
 }
 
+.how-to-use-item-group {
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+}
+
 .how-to-use-item {
   display: flex;
   width: 100%;
@@ -67,7 +72,6 @@
   box-sizing: border-box;
   padding: 16px 4px;
   border: 0;
-  border-bottom: 1px solid #e5e7eb;
   background: #ffffff;
   color: inherit;
   font: inherit;
@@ -80,7 +84,8 @@
   background: #f8fafc;
 }
 
-.how-to-use-item:focus-visible {
+.how-to-use-item:focus-visible,
+.how-to-use-item-section:focus-visible {
   position: relative;
   z-index: 1;
   outline: 2px solid var(--color-primary, #2563eb);
@@ -112,10 +117,57 @@
   font-size: 20px;
   line-height: 1;
   text-align: center;
+  transform: rotate(0deg);
+  transition: transform 160ms ease;
 }
 
 .how-to-use-item__arrow::before {
   content: "›";
+}
+
+.how-to-use-item--expanded .how-to-use-item__arrow {
+  transform: rotate(90deg);
+}
+
+.how-to-use-item-sections {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 8px;
+  background: #ffffff;
+}
+
+.how-to-use-item-section {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 10px 32px 10px 20px;
+  border: 0;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.how-to-use-item-section:hover {
+  background: #f8fafc;
+  color: var(--color-text);
+}
+
+.how-to-use-item-section--selected {
+  background: #f1f5f9;
+  color: var(--color-text);
+  font-weight: 700;
+}
+
+.how-to-use-item-section--selected:hover {
+  background: #eef2f6;
 }
 
 @media (max-width: 959px) {
@@ -139,6 +191,10 @@
 
   .how-to-use-item {
     padding: 16px 2px;
+  }
+
+  .how-to-use-item-section {
+    padding: 10px 28px 10px 18px;
   }
 }
 
@@ -164,5 +220,18 @@
 
   .how-to-use-item__title {
     font-size: 15px;
+  }
+
+  .how-to-use-item-section {
+    padding: 10px 24px 10px 16px;
+    font-size: 13px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .how-to-use-item,
+  .how-to-use-item__arrow,
+  .how-to-use-item-section {
+    transition: none;
   }
 }
