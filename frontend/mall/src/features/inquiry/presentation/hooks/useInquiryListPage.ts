@@ -1,4 +1,4 @@
-// frontend/amol/src/features/inquiry/presentation/hooks/useInquiryListPage.ts
+// frontend/mall/src/features/inquiry/presentation/hooks/useInquiryListPage.ts
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,24 +8,17 @@ import {
   markInquiryAsRead,
   type InquiryListItem,
 } from "../../api/inquiryApi";
-
 import {
   fetchMyResaleChats,
   markMyResaleCommentsAsRead,
 } from "../../../resale/api/resaleReviewApi";
-import {
-  updateResaleChatBadgeCount,
-} from "../../../resale/presentation/resaleChatBadgeEvents";
-
+import { updateResaleChatBadgeCount } from "../../../resale/presentation/resaleChatBadgeEvents";
 import {
   fetchMyTradeChats,
   markTradeMessagesAsRead,
   type TradeChatListItem as TradeChatListItemDTO,
 } from "../../../trade/infrastructure/tradeApi";
-
-import type {
-  ResaleChatListItem as ResaleChatListItemDTO,
-} from "../../../shared/types/resaleReview";
+import type { ResaleChatListItem as ResaleChatListItemDTO } from "../../../shared/types/resaleReview";
 
 export type InquiryChatListItem = InquiryListItem & {
   chatKind: "inquiry";
@@ -57,21 +50,16 @@ function getChatId(item: ChatListItem): string {
   switch (item.chatKind) {
     case "inquiry":
       return item.id;
-
     case "resale":
       return item.resaleId;
-
     case "trade":
       return item.id;
-
     default:
       return "";
   }
 }
 
-async function loadInquiryItems(
-  signal?: AbortSignal,
-): Promise<InquiryChatListItem[]> {
+async function loadInquiryItems(signal?: AbortSignal): Promise<InquiryChatListItem[]> {
   const result = await listMeInquiries({
     page: 1,
     perPage: 100,
@@ -88,8 +76,12 @@ async function loadInquiryItems(
   }));
 }
 
-async function loadResaleItems(): Promise<ResaleChatListItem[]> {
+async function loadResaleItems(signal?: AbortSignal): Promise<ResaleChatListItem[]> {
   const result = await fetchMyResaleChats();
+
+  if (signal?.aborted) {
+    return [];
+  }
 
   return result.items.map((resale) => ({
     ...resale,
@@ -97,12 +89,8 @@ async function loadResaleItems(): Promise<ResaleChatListItem[]> {
   }));
 }
 
-async function loadTradeItems(
-  signal?: AbortSignal,
-): Promise<TradeChatListItem[]> {
-  const result = await fetchMyTradeChats({
-    signal,
-  });
+async function loadTradeItems(signal?: AbortSignal): Promise<TradeChatListItem[]> {
+  const result = await fetchMyTradeChats({ signal });
 
   if (signal?.aborted) {
     return [];
@@ -135,13 +123,9 @@ export function useInquiryListPage() {
     setError("");
 
     try {
-      const [
-        inquiryItems,
-        resaleItems,
-        tradeItems,
-      ] = await Promise.all([
+      const [inquiryItems, resaleItems, tradeItems] = await Promise.all([
         loadInquiryItems(signal),
-        loadResaleItems(),
+        loadResaleItems(signal),
         loadTradeItems(signal),
       ]);
 
@@ -182,177 +166,163 @@ export function useInquiryListPage() {
     };
   }, [loadChats]);
 
-  const handleOpenInquiryChat = useCallback(
-    async (item: InquiryChatListItem) => {
-      const inquiryId = item.id;
-      let nextItem: InquiryChatListItem = item;
+  const handleOpenInquiryChat = useCallback(async (item: InquiryChatListItem) => {
+    const inquiryId = item.id;
+    let nextItem: InquiryChatListItem = item;
 
-      if (item.unreadReplyCount > 0) {
-        const updatedInquiry = await markInquiryAsRead(inquiryId);
+    if (item.unreadReplyCount > 0) {
+      const updatedInquiry = await markInquiryAsRead(inquiryId);
 
-        nextItem = {
-          ...item,
-          ...updatedInquiry,
-          unreadReplyCount: 0,
-          chatKind: "inquiry",
-        };
+      nextItem = {
+        ...item,
+        ...updatedInquiry,
+        unreadReplyCount: 0,
+        chatKind: "inquiry",
+      };
 
-        setItems((currentItems) =>
-          currentItems.map((currentItem) => {
-            if (
-              currentItem.chatKind === "inquiry" &&
-              currentItem.id === inquiryId
-            ) {
-              return nextItem;
-            }
+      setItems((currentItems) =>
+        currentItems.map((currentItem) => {
+          if (
+            currentItem.chatKind === "inquiry" &&
+            currentItem.id === inquiryId
+          ) {
+            return nextItem;
+          }
 
-            return currentItem;
-          }),
-        );
-      }
+          return currentItem;
+        }),
+      );
+    }
 
-      navigate(`/chats/${encodeURIComponent(inquiryId)}`, {
-        state: {
-          inquiry: nextItem,
-        },
+    navigate(`/chats/${encodeURIComponent(inquiryId)}`, {
+      state: {
+        inquiry: nextItem,
+      },
+    });
+  }, [navigate]);
+
+  const handleOpenResaleChat = useCallback(async (item: ResaleChatListItem) => {
+    const resaleId = item.resaleId;
+    let nextItem: ResaleChatListItem = item;
+
+    if (
+      item.chatSource === "owner" &&
+      item.unreadCommentCount > 0
+    ) {
+      const result = await markMyResaleCommentsAsRead({
+        resaleId,
       });
-    },
-    [navigate],
-  );
 
-  const handleOpenResaleChat = useCallback(
-    async (item: ResaleChatListItem) => {
-      const resaleId = item.resaleId;
-      let nextItem: ResaleChatListItem = item;
+      nextItem = {
+        ...item,
+        unreadCommentCount: 0,
+        chatKind: "resale",
+      };
 
-      if (
-        item.chatSource === "owner" &&
-        item.unreadCommentCount > 0
-      ) {
-        const result = await markMyResaleCommentsAsRead({
-          resaleId,
-        });
+      setItems((currentItems) =>
+        currentItems.map((currentItem) => {
+          if (
+            currentItem.chatKind === "resale" &&
+            currentItem.resaleId === resaleId
+          ) {
+            return nextItem;
+          }
 
-        nextItem = {
-          ...item,
-          unreadCommentCount: 0,
-          chatKind: "resale",
-        };
+          return currentItem;
+        }),
+      );
 
-        setItems((currentItems) =>
-          currentItems.map((currentItem) => {
-            if (
-              currentItem.chatKind === "resale" &&
-              currentItem.resaleId === resaleId
-            ) {
-              return nextItem;
-            }
-
-            return currentItem;
-          }),
-        );
-
-        if (result.markedCount > 0) {
-          updateResaleChatBadgeCount(-result.markedCount);
-        }
+      if (result.markedCount > 0) {
+        updateResaleChatBadgeCount(-result.markedCount);
       }
+    }
 
-      navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
-        state: {
-          source: item.chatSource,
-          resale: nextItem,
-        },
+    navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
+      state: {
+        source: item.chatSource,
+        resale: nextItem,
+      },
+    });
+  }, [navigate]);
+
+  const handleOpenTradeChat = useCallback(async (item: TradeChatListItem) => {
+    const tradeId = item.id;
+    let nextItem: TradeChatListItem = item;
+
+    if (item.unreadMessageCount > 0) {
+      await markTradeMessagesAsRead({
+        tradeId,
       });
-    },
-    [navigate],
-  );
 
-  const handleOpenTradeChat = useCallback(
-    async (item: TradeChatListItem) => {
-      const tradeId = item.id;
-      let nextItem: TradeChatListItem = item;
+      nextItem = {
+        ...item,
+        unreadMessageCount: 0,
+        chatKind: "trade",
+      };
 
-      if (item.unreadMessageCount > 0) {
-        await markTradeMessagesAsRead({
-          tradeId,
-        });
+      setItems((currentItems) =>
+        currentItems.map((currentItem) => {
+          if (
+            currentItem.chatKind === "trade" &&
+            currentItem.id === tradeId
+          ) {
+            return nextItem;
+          }
 
-        nextItem = {
-          ...item,
-          unreadMessageCount: 0,
-          chatKind: "trade",
-        };
+          return currentItem;
+        }),
+      );
+    }
 
-        setItems((currentItems) =>
-          currentItems.map((currentItem) => {
-            if (
-              currentItem.chatKind === "trade" &&
-              currentItem.id === tradeId
-            ) {
-              return nextItem;
-            }
+    navigate(`/chats/trades/${encodeURIComponent(tradeId)}`, {
+      state: {
+        trade: nextItem,
+      },
+    });
+  }, [navigate]);
 
-            return currentItem;
-          }),
-        );
+  const handleOpenChat = useCallback(async (item: ChatListItem) => {
+    if (navigatingId) {
+      return;
+    }
+
+    const chatId = getChatId(item);
+
+    if (!chatId) {
+      return;
+    }
+
+    setNavigatingId(chatId);
+    setError("");
+
+    try {
+      switch (item.chatKind) {
+        case "inquiry":
+          await handleOpenInquiryChat(item);
+          return;
+        case "resale":
+          await handleOpenResaleChat(item);
+          return;
+        case "trade":
+          await handleOpenTradeChat(item);
+          return;
       }
-
-      navigate(`/chats/trades/${encodeURIComponent(tradeId)}`, {
-        state: {
-          trade: nextItem,
-        },
-      });
-    },
-    [navigate],
-  );
-
-  const handleOpenChat = useCallback(
-    async (item: ChatListItem) => {
-      if (navigatingId) {
-        return;
-      }
-
-      const chatId = getChatId(item);
-
-      if (!chatId) {
-        return;
-      }
-
-      setNavigatingId(chatId);
-      setError("");
-
-      try {
-        switch (item.chatKind) {
-          case "inquiry":
-            await handleOpenInquiryChat(item);
-            return;
-
-          case "resale":
-            await handleOpenResaleChat(item);
-            return;
-
-          case "trade":
-            await handleOpenTradeChat(item);
-            return;
-        }
-      } catch (caught) {
-        setError(
-          getErrorMessage(
-            caught,
-            "チャットを開く処理に失敗しました。",
-          ),
-        );
-      } finally {
-        setNavigatingId(null);
-      }
-    },
-    [
-      handleOpenInquiryChat,
-      handleOpenResaleChat,
-      handleOpenTradeChat,
-      navigatingId,
-    ],
-  );
+    } catch (caught) {
+      setError(
+        getErrorMessage(
+          caught,
+          "チャットを開く処理に失敗しました。",
+        ),
+      );
+    } finally {
+      setNavigatingId(null);
+    }
+  }, [
+    handleOpenInquiryChat,
+    handleOpenResaleChat,
+    handleOpenTradeChat,
+    navigatingId,
+  ]);
 
   return {
     items,

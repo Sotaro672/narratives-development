@@ -40,7 +40,7 @@ import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
 import InquiryCreatePage from "../pages/InquiryCreatePage";
 import InquiryPage from "../pages/InquiryPage";
-import ChatListPage from "../pages/ChatListPage";
+import ChatWorkspacePage from "../pages/ChatWorkspacePage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import TradeChatRedirectPage from "../pages/TradeChatRedirectPage";
 import DispatchPage from "../pages/DispatchPage";
@@ -298,47 +298,33 @@ export const router = createBrowserRouter([
     path: "/chats",
     element: (
       <ProtectedRoute>
-        <ChatListPage />
+        <ChatWorkspacePage />
       </ProtectedRoute>
     ),
-  },
-  {
-    path: "/chats/resales/:resaleId",
-    element: (
-      <ProtectedRoute>
-        <ChatDetailPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/chats/trades/order-items/:orderId/:itemIndex",
-    element: (
-      <ProtectedRoute>
-        <TradeChatRedirectPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/chats/trades/:tradeId",
-    element: (
-      <ProtectedRoute>
-        <ChatDetailPage />
-      </ProtectedRoute>
-    ),
+    children: [
+      {
+        path: "resales/:resaleId",
+        element: <ChatDetailPage />,
+      },
+      {
+        path: "trades/order-items/:orderId/:itemIndex",
+        element: <TradeChatRedirectPage />,
+      },
+      {
+        path: "trades/:tradeId",
+        element: <ChatDetailPage />,
+      },
+      {
+        path: ":inquiryId",
+        element: <ChatDetailPage />,
+      },
+    ],
   },
   {
     path: "/dispatch/trades/:tradeId",
     element: (
       <ProtectedRoute>
         <DispatchPage />
-      </ProtectedRoute>
-    ),
-  },
-  {
-    path: "/chats/:inquiryId",
-    element: (
-      <ProtectedRoute>
-        <ChatDetailPage />
       </ProtectedRoute>
     ),
   },
