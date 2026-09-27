@@ -19,6 +19,7 @@ import {
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
+import ChatInlineComposer from "../../../shared/presentation/components/ChatInlineComposer";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import { useChatWorkspace } from "../../../shared/presentation/context/ChatWorkspaceContext";
 import "../../../shared/styles/trade-chat-detail.css";
@@ -508,6 +509,17 @@ export default function ResaleChatDetail({
                     </div>
                   )}
                 </div>
+
+                <ChatInlineComposer
+                  content={replyContent}
+                  placeholder="コメントを入力"
+                  error={replyError}
+                  submitting={postingReply}
+                  canSubmit={canSubmitReply}
+                  disabled={replyActionDisabled}
+                  onContentChange={setReplyContent}
+                  onSubmit={submitReply}
+                />
               </div>
             </div>
           ) : null}

@@ -8,6 +8,7 @@ import Preview from "../../../../components/ui/Preview";
 import StatePanel from "../../../../components/ui/StatePanel";
 import ReportModal from "../../../report/components/ReportModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
+import ChatInlineComposer from "../../../shared/presentation/components/ChatInlineComposer";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import { useChatWorkspace } from "../../../shared/presentation/context/ChatWorkspaceContext";
 import "../../../shared/styles/trade-chat-detail.css";
@@ -372,6 +373,15 @@ export default function TradeChatDetail({
                       />
                     ))}
 
+                    {thread.trade.transferredAt ? (
+                      <ChatMessageBubble
+                        senderName="AMOL"
+                        createdAt={thread.trade.transferredAt}
+                        content="購入者がトークンを受け取りました。"
+                        isSystem
+                      />
+                    ) : null}
+
                     {orderAction ? (
                       <TradeOrderActionPrompt
                         action={orderAction}
@@ -382,6 +392,17 @@ export default function TradeChatDetail({
                     ) : null}
                   </div>
                 </div>
+
+                <ChatInlineComposer
+                  content={reply.content}
+                  placeholder="メッセージを入力"
+                  error={reply.error}
+                  submitting={reply.submitting}
+                  canSubmit={reply.canSubmit}
+                  disabled={reply.actionDisabled}
+                  onContentChange={reply.setContent}
+                  onSubmit={reply.submit}
+                />
               </div>
             </div>
           ) : null}

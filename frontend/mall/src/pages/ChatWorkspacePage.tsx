@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type TransitionEvent,
 } from "react";
 import {
   Outlet,
@@ -115,20 +116,14 @@ function ChatWorkspaceContent() {
   }, [clearBackNavigationTimer, navigate]);
 
   useEffect(() => {
-    if (pendingBackNavigationRef.current) {
-      return;
-    }
-
-    setMobilePane(isChatListRoute ? "list" : "detail");
-  }, [
-    isChatListRoute,
-    location.pathname,
-  ]);
-
-  useEffect(() => {
     if (!isMobile) {
       pendingBackNavigationRef.current = false;
       clearBackNavigationTimer();
+      setMobilePane(isChatListRoute ? "list" : "detail");
+      return;
+    }
+
+    if (pendingBackNavigationRef.current) {
       return;
     }
 
@@ -185,7 +180,7 @@ function ChatWorkspaceContent() {
   ]);
 
   const handleRailTransitionEnd = useCallback(
-    (event: React.TransitionEvent<HTMLDivElement>) => {
+    (event: TransitionEvent<HTMLDivElement>) => {
       if (
         event.target !== event.currentTarget ||
         event.propertyName !== "transform" ||
@@ -211,7 +206,8 @@ function ChatWorkspaceContent() {
     .filter(Boolean)
     .join(" ");
 
-  const hasDetailAction =
+  const hasMobileDetailAction =
+    isMobile &&
     !isChatListRoute &&
     action !== null &&
     action.label !== "";
@@ -226,23 +222,8 @@ function ChatWorkspaceContent() {
       showBackButton={isMobile && !isChatListRoute}
       backButtonLabel="チャット一覧に戻る"
       onBackButtonClick={handleBackToList}
-      actionButtonLabel={
-        hasDetailAction
-          ? action?.label
-          : undefined
-      }
-      onActionButtonClick={
-        hasDetailAction
-          ? action?.onClick
-          : undefined
-      }
-      actionButtonDisabled={
-        hasDetailAction
-          ? action?.disabled
-          : false
-      }
       footerProps={
-        hasDetailAction
+        hasMobileDetailAction
           ? {
               variant: "default",
               centerActionLabel: action.label,

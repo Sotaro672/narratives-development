@@ -13,6 +13,7 @@ import InquiryReplyList from "../features/inquiry/presentation/components/Inquir
 import InquiryReplyModal from "../features/inquiry/presentation/components/InquiryReplyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import ResaleChatDetail from "../features/resale/presentation/components/ResaleChatDetail";
+import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 import ChatMessageBubble from "../features/shared/presentation/components/ChatMessageBubble";
 import { useChatWorkspace } from "../features/shared/presentation/context/ChatWorkspaceContext";
 import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
@@ -162,6 +163,21 @@ function InquiryChatDetail() {
                     </div>
                   )}
                 </div>
+
+                <ChatInlineComposer
+                  content={replyContent}
+                  placeholder="返信内容を入力"
+                  error={replyError}
+                  submitting={postingReply}
+                  canSubmit={canSubmitReply}
+                  disabled={replyActionDisabled}
+                  maxLength={null}
+                  files={replyFiles}
+                  onContentChange={setReplyContent}
+                  onFilesChange={handleReplyFilesChange}
+                  onRemoveFile={removeReplyFile}
+                  onSubmit={submitReply}
+                />
               </div>
             </div>
           ) : null}

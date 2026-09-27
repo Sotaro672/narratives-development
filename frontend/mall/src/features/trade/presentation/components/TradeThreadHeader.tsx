@@ -3,9 +3,7 @@
 import { useNavigate } from "react-router-dom";
 
 import Badge from "../../../../components/ui/Badge";
-import InfoList, { type InfoListRow } from "../../../../components/ui/InfoList";
 import TextLink from "../../../../components/ui/textLink";
-import { formatDateTime } from "../../../../components/utils/date";
 import type { TradeDetail } from "../../../shared/types/trade";
 import { getTradeTitle } from "../util/tradeChatDetail";
 import { getTradeStatusLabel } from "../util/tradeStatus";
@@ -39,15 +37,6 @@ export default function TradeThreadHeader({
       ? `/orders/${encodeURIComponent(orderId)}`
       : "";
 
-  const transactionMetaItems: InfoListRow[] = [];
-
-  if (trade.transferredAt) {
-    transactionMetaItems.push({
-      label: "受取日時",
-      value: formatDateTime(trade.transferredAt),
-    });
-  }
-
   const handleOpenResaleDetail = (): void => {
     if (!resaleDetailPath) {
       return;
@@ -78,12 +67,6 @@ export default function TradeThreadHeader({
           {getTradeStatusLabel(trade)}
         </Badge>
       </div>
-
-      {transactionMetaItems.length > 0 ? (
-        <section className="trade-chat-detail__transaction">
-          <InfoList rows={transactionMetaItems} />
-        </section>
-      ) : null}
 
       {resaleDetailPath || orderDetailPath ? (
         <div className="trade-chat-detail__detail-links">

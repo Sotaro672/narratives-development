@@ -1,4 +1,4 @@
-/* frontend/amol/src/features/inquiry/presentation/styles/inquiry-list-page.css */
+/* frontend/mall/src/features/inquiry/presentation/styles/inquiry-list-page.css */
 
 .chat-list-page-layout {
   background: #f8fafc;
@@ -8,6 +8,14 @@
   width: 100%;
   max-width: 720px;
   margin: 0 auto;
+  padding: 0;
+}
+
+.chat-list-page--workspace {
+  width: 100%;
+  max-width: none;
+  min-height: 100%;
+  margin: 0;
   padding: 0;
 }
 
@@ -41,6 +49,10 @@
   border-top: 1px solid rgba(15, 23, 42, 0.08);
   border-bottom: 1px solid rgba(15, 23, 42, 0.08);
   background: #ffffff;
+}
+
+.chat-list-page--workspace .chat-list-page__list {
+  border-bottom: none;
 }
 
 @media (max-width: 640px) {
