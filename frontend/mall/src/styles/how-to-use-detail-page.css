@@ -32,10 +32,6 @@
   overflow-wrap: anywhere;
 }
 
-.how-to-use-detail-page__section-nav {
-  display: none;
-}
-
 @media (max-width: 959px) {
   .how-to-use-detail-page {
     padding: 40px 16px 56px;
@@ -45,94 +41,12 @@
     font-size: 15px;
     line-height: 1.8;
   }
-
-  .how-to-use-detail-page__section-nav {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    margin-top: 20px;
-    overflow: hidden;
-  }
-
-  .how-to-use-detail-page__section-nav-track {
-    display: flex;
-    width: 100%;
-    min-width: 0;
-    gap: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    box-sizing: border-box;
-    padding-bottom: 4px;
-    scrollbar-width: none;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .how-to-use-detail-page__section-nav-track::-webkit-scrollbar {
-    display: none;
-  }
-
-  .how-to-use-detail-page__section-nav-item {
-    flex: 0 0 auto;
-    min-height: 36px;
-    box-sizing: border-box;
-    padding: 7px 12px;
-    border: 1px solid #e2e8f0;
-    border-radius: 999px;
-    background: #ffffff;
-    color: #64748b;
-    font: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    line-height: 1.5;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
-  }
-
-  .how-to-use-detail-page__section-nav-item:hover {
-    border-color: #cbd5e1;
-    background: #f8fafc;
-    color: var(--color-text, #111827);
-  }
-
-  .how-to-use-detail-page__section-nav-item--selected {
-    border-color: var(--color-text, #111827);
-    background: var(--color-text, #111827);
-    color: #ffffff;
-    font-weight: 700;
-  }
-
-  .how-to-use-detail-page__section-nav-item--selected:hover {
-    border-color: var(--color-text, #111827);
-    background: var(--color-text, #111827);
-    color: #ffffff;
-  }
-
-  .how-to-use-detail-page__section-nav-item:focus-visible {
-    outline: 2px solid var(--color-primary, #2563eb);
-    outline-offset: 2px;
-  }
 }
 
 @media (max-width: 640px) {
   .how-to-use-detail-page {
     padding-right: 12px;
     padding-left: 12px;
-  }
-
-  .how-to-use-detail-page__section-nav {
-    margin-top: 16px;
-  }
-
-  .how-to-use-detail-page__section-nav-track {
-    gap: 6px;
-  }
-
-  .how-to-use-detail-page__section-nav-item {
-    min-height: 34px;
-    padding: 6px 11px;
-    font-size: 13px;
   }
 }
 
@@ -157,15 +71,5 @@
     color: #000000;
     font-size: 12pt;
     line-height: 1.7;
-  }
-
-  .how-to-use-detail-page__section-nav {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .how-to-use-detail-page__section-nav-item {
-    transition: none;
   }
 }

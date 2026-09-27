@@ -223,14 +223,16 @@
  * Responsive
  * =======================================================*/
 
+@media (max-width: 959px) {
+  .how-to-use-article-section {
+    scroll-margin-top: calc(var(--amol-header-height) + 20px);
+  }
+}
+
 @media (max-width: 768px) {
   .how-to-use-article__content {
     gap: 44px;
     margin-top: 36px;
-  }
-
-  .how-to-use-article-section {
-    scroll-margin-top: 20px;
   }
 
   .how-to-use-article-section__title {

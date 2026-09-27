@@ -97,7 +97,13 @@
     min-height: 0;
     max-height: 100dvh;
     overflow: hidden;
+    padding-top: var(--amol-header-height);
     padding-bottom: 0;
+  }
+
+  .how-to-use-workspace-page {
+    height: 100%;
+    min-height: 0;
   }
 
   .how-to-use-workspace-page__rail {
@@ -168,6 +174,10 @@
     min-height: 0;
     max-height: none;
     overflow: visible;
+  }
+
+  .how-to-use-workspace-page-layout {
+    padding-top: 0;
   }
 
   .how-to-use-workspace-page__rail {
