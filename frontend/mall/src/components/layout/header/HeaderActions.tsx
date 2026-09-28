@@ -32,11 +32,23 @@ function isResaleDetailPagePath(pathname: string): boolean {
 }
 
 function isChatPagePath(pathname: string): boolean {
-  return pathname === "/chats" || pathname === "/chats/" || pathname.startsWith("/chats/");
+  return (
+    pathname === "/chats" ||
+    pathname === "/chats/" ||
+    pathname.startsWith("/chats/")
+  );
 }
 
 function isAnnouncementPagePath(pathname: string): boolean {
-  return pathname === "/announcements" || pathname === "/announcements/" || pathname.startsWith("/announcements/");
+  return (
+    pathname === "/announcements" ||
+    pathname === "/announcements/" ||
+    pathname.startsWith("/announcements/")
+  );
+}
+
+function isLandingPagePath(pathname: string): boolean {
+  return pathname === "/landing" || pathname === "/landing/";
 }
 
 export default function HeaderActions({ actions }: HeaderActionsProps) {
@@ -66,10 +78,23 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     toggleSettings,
   } = actions;
 
+  const isLandingPage = isLandingPagePath(location.pathname);
   const isChatPage = isChatPagePath(location.pathname);
   const isAnnouncementPage = isAnnouncementPagePath(location.pathname);
-  const shouldShowMessageButton = shouldShowAnnouncementButton && !isChatPage;
-  const shouldShowNotificationButton = shouldShowAnnouncementButton && !isAnnouncementPage;
+
+  const shouldShowLandingHowToUseButton =
+    isLandingPage &&
+    shouldShowAnnouncementButton;
+
+  const shouldShowMessageButton =
+    shouldShowAnnouncementButton &&
+    !isLandingPage &&
+    !isChatPage;
+
+  const shouldShowNotificationButton =
+    shouldShowAnnouncementButton &&
+    !isLandingPage &&
+    !isAnnouncementPage;
 
   const { unreadCount: notificationUnreadCount } = useNotificationUnreadCount({
     enabled: shouldShowNotificationButton,
@@ -99,29 +124,36 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
     safeTradeDispatchBadgeCount;
 
   const cartBadgeLabel = formatBadgeLabel(safeCartItemCount);
-  const notificationUnreadBadgeLabel = formatBadgeLabel(safeNotificationUnreadCount);
+  const notificationUnreadBadgeLabel = formatBadgeLabel(
+    safeNotificationUnreadCount,
+  );
   const chatBadgeLabel = formatBadgeLabel(safeChatBadgeCount);
 
-  const shouldShowResaleDetailActions = isResaleDetailPagePath(location.pathname);
+  const shouldShowResaleDetailActions =
+    isResaleDetailPagePath(location.pathname);
 
   const primaryActionClassName = [
     "header__action-button",
-    "header__add-to-cart-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const secondaryActionClassName = [
     "header__action-button",
     "header__secondary-action-button",
-    "header__buy-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const tertiaryActionClassName = [
     "header__action-button",
     "header__tertiary-action-button",
     shouldShowResaleDetailActions ? "header__resale-detail-action-button" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="header__right">
@@ -175,11 +207,16 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
           >
             使い方
           </Link>
-
           <Link to="/signin/select" className="header__login-link">
             ログイン
           </Link>
         </>
+      ) : null}
+
+      {shouldShowLandingHowToUseButton ? (
+        <Link to="/how-to-use" className="header__login-link">
+          使い方
+        </Link>
       ) : null}
 
       {shouldShowNotificationButton ? (

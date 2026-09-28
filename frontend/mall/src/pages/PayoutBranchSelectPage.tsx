@@ -115,7 +115,6 @@ export default function PayoutBranchSelectPage() {
       titleClickable={false}
       mode="mypage"
       showFooter
-      hideHamburgerMenu
     >
       <section className="page-section content-page-section settings-page payout-select-page payout-branch-select-page">
         <p className="content-page-description payout-select-page__description">

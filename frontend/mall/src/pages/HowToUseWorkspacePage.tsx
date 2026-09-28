@@ -46,7 +46,10 @@ function decodePathSegment(value: string): string {
 
 function decodeHash(hash: string): string | null {
   const value = hash.startsWith("#") ? hash.slice(1) : hash;
-  if (!value) return null;
+
+  if (!value) {
+    return null;
+  }
 
   try {
     return decodeURIComponent(value);
@@ -244,7 +247,9 @@ export default function HowToUseWorkspacePage() {
     mobilePane === "detail"
       ? "how-to-use-workspace-page--detail"
       : "how-to-use-workspace-page--list",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   const headerMobileContent =
     isMobile &&
@@ -264,7 +269,6 @@ export default function HowToUseWorkspacePage() {
               key={section.id}
               variant="compact"
               selected={selected}
-              className="how-to-use-header-nav__item"
               aria-current={selected ? "location" : undefined}
               onClick={() => {
                 handleSectionClick(section.id);

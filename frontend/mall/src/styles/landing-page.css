@@ -521,16 +521,9 @@
   .landing-page-hero__inner {
     grid-template-columns: minmax(0, 1fr) minmax(520px, 680px);
     gap: 56px;
-    text-align: center;
-  }
-
-  .landing-page-hero__content {
-    justify-items: center;
-    text-align: center;
   }
 
   .landing-page-hero__video-wrap {
-    max-width: 680px;
     margin: 0;
   }
 }
@@ -555,20 +548,10 @@
 }
 
 @media (max-width: 767px) {
-  .landing-page-feature-grid {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
   .landing-page-feature-card {
     min-height: auto;
     padding: 20px 16px;
     gap: 12px;
-  }
-
-  .landing-page-feature-card__title {
-    font-size: 20px;
-    text-align: center;
   }
 
   .landing-page-feature-card__text {
@@ -577,15 +560,7 @@
   }
 
   .landing-page-feature-card__image-placeholder {
-    width: 100%;
-    aspect-ratio: 3 / 2;
     align-self: stretch;
-  }
-
-  .landing-page-feature-card__image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
   }
 
   .landing-page-service-case__header {
@@ -606,16 +581,10 @@
   .landing-page-service-case-card {
     gap: 12px;
     padding: 18px 16px;
-    border-radius: 16px;
   }
 
   .landing-page-service-case-card__title {
     font-size: 17px;
-  }
-
-  .landing-page-service-case-card__text {
-    font-size: 14px;
-    line-height: 1.85;
   }
 
   .landing-page-service-case-card__image-wrap {
@@ -677,10 +646,6 @@
     padding: 18px 16px;
   }
 
-  .landing-page-sales-support-benefit--with-image {
-    grid-template-rows: auto 1fr;
-  }
-
   .landing-page-sales-support-benefit__image-wrap {
     width: calc(100% + 32px);
     height: 160px;
@@ -690,14 +655,10 @@
   }
 
   .landing-page-sales-support-benefit__image {
-    width: 100%;
     height: 100%;
-    max-height: none;
-    object-fit: contain;
   }
 
   .landing-page-pricing-grid {
-    grid-template-columns: 1fr;
     gap: 12px;
   }
 

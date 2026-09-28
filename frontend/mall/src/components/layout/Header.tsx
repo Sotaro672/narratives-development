@@ -51,7 +51,9 @@ export default function Header(props: HeaderProps) {
   const headerClassName = [
     "header",
     hasMobileContent ? "header--with-mobile-content" : "",
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <header className={headerClassName}>
@@ -61,7 +63,6 @@ export default function Header(props: HeaderProps) {
             <IconButton
               variant="ghost"
               size="md"
-              className="header__back-button"
               aria-label={props.backButtonLabel ?? "戻る"}
               title={props.backButtonLabel ?? "戻る"}
               onClick={() => {
@@ -69,7 +70,6 @@ export default function Header(props: HeaderProps) {
               }}
             >
               <ChevronLeft
-                className="header__back-icon"
                 size={24}
                 strokeWidth={2}
                 aria-hidden="true"
