@@ -6,6 +6,9 @@ import type { ShippingAddress } from "./shippingAddress";
 export type OrderConfirmedLocationState = {
   orderId?: string;
   amount?: number;
+  subtotalAmount?: number;
+  shippingAmount?: number;
+  taxAmount?: number;
   cartItems?: CartDisplayItem[];
   shippingAddress?: ShippingAddress | null;
 };
@@ -21,6 +24,9 @@ export type OrderConfirmedItemViewModel = {
 export type OrderConfirmedViewModel = {
   orderId: string;
   amount: number;
+  subtotalAmount: number;
+  shippingAmount: number;
+  taxAmount: number;
   statusLabel: string;
   items: OrderConfirmedItemViewModel[];
   shippingAddressLines: string[];

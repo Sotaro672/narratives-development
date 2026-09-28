@@ -1,4 +1,5 @@
 // frontend/amol/src/features/payment/hooks/usePaymentPage.ts
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigateFunction } from "react-router-dom";
 import { formatPrice } from "../../../components/utils/price";
@@ -83,7 +84,10 @@ function buildShippingQuoteItems(cartItems: CartDisplayItem[]): ShippingQuoteIte
   return items;
 }
 
-async function fetchShippingQuote(cartItems: CartDisplayItem[], shippingAddressId: string): Promise<number> {
+async function fetchShippingQuote(
+  cartItems: CartDisplayItem[],
+  shippingAddressId: string,
+): Promise<number> {
   if (!shippingAddressId) {
     throw new Error("配送先住所IDを取得できませんでした。");
   }
@@ -606,6 +610,7 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
       );
 
       const resolvedAmount = resolvedPaymentAmount.totalAmount;
+      const resolvedTaxAmount = resolvedPaymentAmount.taxAmount;
 
       if (resolvedAmount <= 0) {
         showErrorModal("注文金額が不正です。");
@@ -620,6 +625,9 @@ export function usePaymentPage({ listId, navigate }: UsePaymentPageParams) {
         state: {
           orderId: resolvedOrderId,
           amount: resolvedAmount,
+          subtotalAmount,
+          shippingAmount: resolvedShippingAmount,
+          taxAmount: resolvedTaxAmount,
           cartItems,
           shippingAddress: primaryShippingAddress,
         },

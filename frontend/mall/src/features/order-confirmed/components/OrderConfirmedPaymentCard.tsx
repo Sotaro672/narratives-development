@@ -6,12 +6,18 @@ import { formatPrice } from "../../../components/utils/price";
 
 type OrderConfirmedPaymentCardProps = {
   statusLabel: string;
+  subtotalAmount: number;
+  shippingAmount: number;
+  taxAmount: number;
   amount: number;
   orderId: string;
 };
 
 export function OrderConfirmedPaymentCard({
   statusLabel,
+  subtotalAmount,
+  shippingAmount,
+  taxAmount,
   amount,
   orderId,
 }: OrderConfirmedPaymentCardProps) {
@@ -22,8 +28,23 @@ export function OrderConfirmedPaymentCard({
       value: statusLabel,
     },
     {
+      key: "subtotal",
+      label: "商品小計",
+      value: formatPrice(subtotalAmount),
+    },
+    {
+      key: "shipping",
+      label: "配送料",
+      value: formatPrice(shippingAmount),
+    },
+    {
+      key: "tax",
+      label: "消費税",
+      value: formatPrice(taxAmount),
+    },
+    {
       key: "amount",
-      label: "金額",
+      label: "合計金額",
       value: formatPrice(amount),
     },
     ...(orderId

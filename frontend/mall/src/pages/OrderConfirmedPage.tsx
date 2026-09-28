@@ -1,5 +1,6 @@
 // frontend/amol/src/pages/OrderConfirmedPage.tsx
 
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
@@ -29,6 +30,9 @@ export default function OrderConfirmedPage() {
 
   const {
     amount,
+    subtotalAmount,
+    shippingAmount,
+    taxAmount,
     orderId,
     statusLabel,
     items,
@@ -36,6 +40,14 @@ export default function OrderConfirmedPage() {
     hasResaleItem,
     handleGoToTrade,
   } = useOrderConfirmedPage();
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+  }, []);
 
   const handleGoToOrderDetail = () => {
     const normalizedOrderId = orderId.trim();
@@ -53,11 +65,10 @@ export default function OrderConfirmedPage() {
 
   return (
     <Layout
-      title="注文受付完了"
-      titleClickable={false}
+      title="AMOL"
+      titleClickable
       mode="mypage"
       showFooter
-      hideSettingsButton
       mainClassName="order-confirmed-page"
     >
       <section className="order-confirmed-page__section">
@@ -66,6 +77,9 @@ export default function OrderConfirmedPage() {
         <div className="order-confirmed-page__content">
           <OrderConfirmedPaymentCard
             statusLabel={statusLabel}
+            subtotalAmount={subtotalAmount}
+            shippingAmount={shippingAmount}
+            taxAmount={taxAmount}
             amount={amount}
             orderId={orderId}
           />

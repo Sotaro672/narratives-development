@@ -10,6 +10,12 @@ import type {
 import { getShippingAddressLines } from "../utils/format";
 import { toOrderConfirmedItemViewModels } from "../utils/item";
 
+function normalizeAmount(value: number | undefined): number {
+  return Number.isSafeInteger(value) && (value ?? 0) >= 0
+    ? value ?? 0
+    : 0;
+}
+
 export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
   hasResaleItem: boolean;
   handleGoToTrade: () => void;
@@ -23,10 +29,10 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
   const shippingAddress = state.shippingAddress ?? null;
   const orderId = state.orderId ?? "";
 
-  const amount =
-    Number.isSafeInteger(state.amount) && (state.amount ?? 0) >= 0
-      ? state.amount ?? 0
-      : 0;
+  const amount = normalizeAmount(state.amount);
+  const subtotalAmount = normalizeAmount(state.subtotalAmount);
+  const shippingAmount = normalizeAmount(state.shippingAmount);
+  const taxAmount = normalizeAmount(state.taxAmount);
 
   const items = useMemo(
     () => toOrderConfirmedItemViewModels(cartItems),
@@ -60,6 +66,9 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
   return {
     orderId,
     amount,
+    subtotalAmount,
+    shippingAmount,
+    taxAmount,
     statusLabel,
     items,
     shippingAddressLines,
