@@ -1,6 +1,5 @@
 // frontend/mall/src/features/order-confirmed/components/OrderConfirmedShippingCard.tsx
 
-import Card from "../../../components/ui/Card";
 import TextState from "../../../components/ui/TextState";
 
 type OrderConfirmedShippingCardProps = {
@@ -11,8 +10,8 @@ export function OrderConfirmedShippingCard({
   lines,
 }: OrderConfirmedShippingCardProps) {
   return (
-    <Card as="section" variant="panel">
-      <h2 className="order-confirmed-page__card-title">
+    <section className="order-confirmed-page__content-section">
+      <h2 className="order-confirmed-page__section-title">
         配送先情報
       </h2>
 
@@ -32,6 +31,6 @@ export function OrderConfirmedShippingCard({
           配送先情報を取得できませんでした。
         </TextState>
       )}
-    </Card>
+    </section>
   );
 }
