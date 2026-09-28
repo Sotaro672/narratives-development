@@ -94,6 +94,7 @@ export default function ResaleDetailPage() {
         <Button
           variant="ghost"
           size="md"
+          className="resale-detail-page__delete-button"
           onClick={() => void footerProps.onRightButtonClick()}
           disabled={footerProps.rightButtonDisabled}
         >

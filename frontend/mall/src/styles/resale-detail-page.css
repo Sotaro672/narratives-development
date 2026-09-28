@@ -34,6 +34,14 @@
   margin-top: 24px;
 }
 
+.resale-detail-page__delete-button {
+  border-color: var(--color-border, #d1d5db);
+}
+
+.resale-detail-page__delete-button:hover:not(:disabled) {
+  border-color: var(--color-text, #111827);
+}
+
 .resale-detail-page .page-form__dropdown-button {
   display: flex;
   width: 100%;
