@@ -1,10 +1,13 @@
-// frontend/src/pages/TermsPage.tsx
+// frontend/mall/src/pages/TermsPage.tsx
+
 import { useEffect, useState } from "react";
 
 import "../styles/landing-page.css";
 import "../styles/terms-page.css";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import { useAuthState } from "../features/shared/hooks/useAuthState";
 
 type LegalDocument = {
   title: string;
@@ -16,7 +19,7 @@ const legalDocuments: LegalDocument[] = [
   {
     title: "利用規約",
     eyebrow: "Terms",
-    path: "/assets/terms.txt",
+    path: "/assets/terms-for-user.txt",
   },
   {
     title: "プライバシーポリシー",
@@ -48,9 +51,16 @@ function LegalDocumentCard({ document }: { document: LoadedLegalDocument }) {
 }
 
 export default function TermsPage() {
+  const { authResolved, isLoggedIn } = useAuthState();
+  const isMobilePortrait = useMobilePortrait();
   const [documents, setDocuments] = useState<LoadedLegalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+
+  const shouldShowFooter =
+    authResolved &&
+    isLoggedIn &&
+    isMobilePortrait;
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +84,7 @@ export default function TermsPage() {
               ...document,
               content,
             };
-          })
+          }),
         );
 
         if (!cancelled) {
@@ -104,7 +114,11 @@ export default function TermsPage() {
   }, []);
 
   return (
-    <Layout title="AMOL" mode="landing">
+    <Layout
+      title="AMOL"
+      mode="landing"
+      showFooter={shouldShowFooter}
+    >
       <section className="landing-page-section">
         <div className="landing-page-section__inner">
           <header className="how-to-use-page__header">

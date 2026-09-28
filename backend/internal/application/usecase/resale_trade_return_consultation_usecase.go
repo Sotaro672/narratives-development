@@ -30,11 +30,26 @@ var (
 	ErrResaleTradeReturnConsultationAlreadyExists = errors.New(
 		"resale trade return consultation: another consultation already exists",
 	)
+	ErrResaleTradeReturnConsultationIdentityVerificationRequired = errors.New(
+		"resale trade return consultation: identity verification is required",
+	)
 )
 
 const (
 	resaleTradeReturnConsultationSystemMessageID = "return-consultation"
 )
+
+// ResaleTradeReturnIdentityVerificationChecker abstracts the user-level
+// identity-verification check required before a buyer starts a new return
+// consultation.
+//
+// IdentityVerificationUsecase satisfies this interface.
+type ResaleTradeReturnIdentityVerificationChecker interface {
+	IsVerified(
+		ctx context.Context,
+		userID string,
+	) (bool, error)
+}
 
 // ResaleTradeReturnConsultationUsecase starts the return-negotiation flow for
 // one Avatar-to-Avatar Resale Trade.
@@ -45,6 +60,7 @@ const (
 //   - authenticate the buyer against the persisted Trade
 //   - confirm that the Trade represents an Avatar-to-Avatar Resale transaction
 //   - confirm the authoritative Order item is paid, dispatched and not transferred
+//   - require user-level identity verification before a new consultation starts
 //   - create exactly one ReturnAgreement for the Trade
 //   - create an idempotent system timeline message
 //
@@ -54,31 +70,38 @@ const (
 //
 // Order remains authoritative for purchase, cancellation, dispatch and token
 // transfer state.
+//
+// Identity verification is required only when creating a new ReturnAgreement.
+// An already-created consultation remains accessible and idempotent retries do
+// not require the verification check again.
 type ResaleTradeReturnConsultationUsecase struct {
-	tradeRepo           tradedom.Repository
-	returnAgreementRepo tradedom.ReturnAgreementRepository
-	orderRepo           orderdom.Repository
-	messageRepo         tradedom.MessageRepository
+	tradeRepo                   tradedom.Repository
+	returnAgreementRepo         tradedom.ReturnAgreementRepository
+	orderRepo                   orderdom.Repository
+	messageRepo                 tradedom.MessageRepository
+	identityVerificationChecker ResaleTradeReturnIdentityVerificationChecker
 
 	now func() time.Time
 }
 
 type NewResaleTradeReturnConsultationUsecaseInput struct {
-	TradeRepository           tradedom.Repository
-	ReturnAgreementRepository tradedom.ReturnAgreementRepository
-	OrderRepository           orderdom.Repository
-	MessageRepository         tradedom.MessageRepository
+	TradeRepository             tradedom.Repository
+	ReturnAgreementRepository   tradedom.ReturnAgreementRepository
+	OrderRepository             orderdom.Repository
+	MessageRepository           tradedom.MessageRepository
+	IdentityVerificationChecker ResaleTradeReturnIdentityVerificationChecker
 }
 
 func NewResaleTradeReturnConsultationUsecase(
 	in NewResaleTradeReturnConsultationUsecaseInput,
 ) *ResaleTradeReturnConsultationUsecase {
 	return &ResaleTradeReturnConsultationUsecase{
-		tradeRepo:           in.TradeRepository,
-		returnAgreementRepo: in.ReturnAgreementRepository,
-		orderRepo:           in.OrderRepository,
-		messageRepo:         in.MessageRepository,
-		now:                 time.Now,
+		tradeRepo:                   in.TradeRepository,
+		returnAgreementRepo:         in.ReturnAgreementRepository,
+		orderRepo:                   in.OrderRepository,
+		messageRepo:                 in.MessageRepository,
+		identityVerificationChecker: in.IdentityVerificationChecker,
+		now:                         time.Now,
 	}
 }
 
@@ -99,6 +122,7 @@ func (u *ResaleTradeReturnConsultationUsecase) SetNowFunc(
 
 type CreateResaleTradeReturnConsultationInput struct {
 	TradeID       string
+	BuyerUserID   string
 	BuyerAvatarID string
 	Reason        tradedom.ReturnConsultationReason
 	Detail        string
@@ -123,12 +147,17 @@ type ResaleTradeReturnConsultationResult struct {
 // Repeating the exact same request is safe:
 //
 //	first request
+//	  -> identity verification checked
 //	  -> ReturnAgreement created
 //	  -> system message ensured
 //
 //	retry
 //	  -> existing ReturnAgreement returned
 //	  -> same system message ensured
+//
+// Identity verification is checked only before creating a new ReturnAgreement.
+// An existing consultation is therefore not made inaccessible if verification
+// state changes after the consultation has already started.
 //
 // A request with different consultation contents for a Trade that already has
 // a ReturnAgreement is rejected as a conflict.
@@ -144,6 +173,12 @@ func (u *ResaleTradeReturnConsultationUsecase) Create(
 	if tradeID == "" {
 		return ResaleTradeReturnConsultationResult{},
 			tradedom.ErrInvalidID
+	}
+
+	buyerUserID := strings.TrimSpace(in.BuyerUserID)
+	if buyerUserID == "" {
+		return ResaleTradeReturnConsultationResult{},
+			ErrResaleTradeReturnConsultationInvalidBuyer
 	}
 
 	buyerAvatarID := strings.TrimSpace(in.BuyerAvatarID)
@@ -227,8 +262,9 @@ func (u *ResaleTradeReturnConsultationUsecase) Create(
 			ErrResaleTradeReturnConsultationNotEligible
 	}
 
-	// First check for an existing aggregate so retries of the same request are
-	// idempotent without attempting another Firestore create.
+	// Existing consultations are resolved before the identity-verification
+	// check. This keeps retries idempotent and prevents an already-open
+	// consultation from becoming inaccessible if KYC state later changes.
 	existing, err := u.returnAgreementRepo.GetByTradeID(
 		ctx,
 		tradeID,
@@ -262,10 +298,22 @@ func (u *ResaleTradeReturnConsultationUsecase) Create(
 		err,
 		tradedom.ErrReturnAgreementNotFound,
 	):
-		// Continue to create.
+		// Continue to identity verification before creating a new agreement.
 
 	default:
 		return result, err
+	}
+
+	verified, err := u.identityVerificationChecker.IsVerified(
+		ctx,
+		buyerUserID,
+	)
+	if err != nil {
+		return result, err
+	}
+	if !verified {
+		return result,
+			ErrResaleTradeReturnConsultationIdentityVerificationRequired
 	}
 
 	now := u.nowUTC()
@@ -485,6 +533,7 @@ func (u *ResaleTradeReturnConsultationUsecase) validateConfigured() error {
 		u.returnAgreementRepo == nil ||
 		u.orderRepo == nil ||
 		u.messageRepo == nil ||
+		u.identityVerificationChecker == nil ||
 		u.now == nil {
 		return ErrResaleTradeReturnConsultationNotConfigured
 	}

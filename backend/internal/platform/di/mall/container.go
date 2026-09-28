@@ -30,6 +30,7 @@ type Container struct {
 	ShippingQuoteUC                     *usecase.ShippingQuoteUsecase
 	PaymentMethodUC                     *usecase.PaymentMethodUsecase
 	PayoutAccountUC                     *usecase.PayoutAccountUsecase
+	IdentityVerificationUC              *usecase.IdentityVerificationUsecase
 	UserUC                              *usecase.UserUsecase
 	WalletUC                            *usecase.WalletUsecase
 	CartUC                              *usecase.CartUsecase

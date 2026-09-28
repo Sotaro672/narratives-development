@@ -10,17 +10,24 @@ type TradeOrderActionPromptProps = {
   action: TradeOrderActionKind;
   processing: boolean;
   error?: string | null;
+  identityVerificationRequired?: boolean;
+  identityVerificationLoading?: boolean;
   onAction: () => void;
 };
 
-function getPromptText(action: TradeOrderActionKind): string {
+function getPromptText(
+  action: TradeOrderActionKind,
+  identityVerificationRequired: boolean,
+): string {
   switch (action) {
     case "cancel":
       return "注文をキャンセルしますか？";
     case "dispatch":
       return "商品を発送しますか？";
     case "start-return-consultation":
-      return "返品について相談しますか？";
+      return identityVerificationRequired
+        ? "返品について相談するには、本人確認が必要です。"
+        : "返品について相談しますか？";
     case "respond-return-consultation":
       return "購入者から返品についての相談が届いています。";
     case "review-return-proposal":
@@ -37,7 +44,23 @@ function getPromptText(action: TradeOrderActionKind): string {
 function getActionLabel(
   action: TradeOrderActionKind,
   processing: boolean,
+  identityVerificationRequired: boolean,
+  identityVerificationLoading: boolean,
 ): string {
+  if (
+    action === "start-return-consultation" &&
+    identityVerificationLoading
+  ) {
+    return "本人確認情報を確認中...";
+  }
+
+  if (
+    action === "start-return-consultation" &&
+    identityVerificationRequired
+  ) {
+    return "本人確認を行う";
+  }
+
   if (processing) {
     switch (action) {
       case "cancel":
@@ -83,8 +106,13 @@ export default function TradeOrderActionPrompt({
   action,
   processing,
   error,
+  identityVerificationRequired = false,
+  identityVerificationLoading = false,
   onAction,
 }: TradeOrderActionPromptProps) {
+  const actionProcessing =
+    processing || identityVerificationLoading;
+
   return (
     <Card
       as="article"
@@ -97,7 +125,10 @@ export default function TradeOrderActionPrompt({
       />
 
       <p className="chat-detail-page__content">
-        {getPromptText(action)}
+        {getPromptText(
+          action,
+          identityVerificationRequired,
+        )}
       </p>
 
       {error ? (
@@ -111,9 +142,15 @@ export default function TradeOrderActionPrompt({
           variant="primary"
           size="sm"
           onClick={onAction}
-          disabled={processing}
+          disabled={actionProcessing}
+          aria-busy={actionProcessing}
         >
-          {getActionLabel(action, processing)}
+          {getActionLabel(
+            action,
+            processing,
+            identityVerificationRequired,
+            identityVerificationLoading,
+          )}
         </Button>
       </div>
     </Card>

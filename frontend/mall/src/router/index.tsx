@@ -17,6 +17,7 @@ import AvatarReviewPage from "../pages/AvatarReviewPage";
 import AvatarReviewCreatePage from "../pages/AvatarReviewCreatePage";
 import EmailPage from "../pages/EmailPage";
 import PasswordPage from "../pages/PasswordPage";
+import IdentityVerificationPage from "../pages/IdentityVerificationPage";
 import PaymentMethodPage from "../pages/PaymentMethodPage";
 import PayoutAccountPage from "../pages/PayoutAccountPage";
 import PayoutBankSelectPage from "../pages/PayoutBankSelectPage";
@@ -373,6 +374,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <PasswordPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/settings/identity-verification",
+    element: (
+      <ProtectedRoute>
+        <IdentityVerificationPage />
       </ProtectedRoute>
     ),
   },

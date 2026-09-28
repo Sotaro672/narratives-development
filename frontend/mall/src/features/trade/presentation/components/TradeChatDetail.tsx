@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 import Alert from "../../../../components/ui/Alert";
 import Preview from "../../../../components/ui/Preview";
 import StatePanel from "../../../../components/ui/StatePanel";
+import useIdentityVerification from "../../../identityVerification/hooks/useIdentityVerification";
 import ReportModal from "../../../report/components/ReportModal";
 import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatInlineComposer from "../../../shared/presentation/components/ChatInlineComposer";
@@ -47,6 +48,10 @@ export default function TradeChatDetail({
   const thread = useTradeThread(tradeId);
   const [dispatchQrPreviewOpen, setDispatchQrPreviewOpen] = useState(false);
 
+  const identityVerification = useIdentityVerification({
+    enabled: thread.trade?.viewerSide === "buyer",
+  });
+
   const dispatchQrPayload = useMemo(
     () => createTradeDispatchQrPayload(thread.tradeId),
     [thread.tradeId],
@@ -62,7 +67,10 @@ export default function TradeChatDetail({
     tradeId: thread.tradeId,
     trade: thread.trade,
     reload: thread.reload,
-    blocked: cancelFlow.cancelling,
+    blocked:
+      cancelFlow.cancelling ||
+      identityVerification.isLoading ||
+      !identityVerification.isVerified,
   });
 
   const returnProposalFlow = useTradeReturnProposal({
@@ -198,6 +206,15 @@ export default function TradeChatDetail({
           return;
         }
 
+        if (identityVerification.isLoading) {
+          return;
+        }
+
+        if (!identityVerification.isVerified) {
+          navigate("/settings/identity-verification");
+          return;
+        }
+
         returnConsultationFlow.openModal();
         return;
 
@@ -282,7 +299,11 @@ export default function TradeChatDetail({
     returnAgreementFlow.submitting ||
     returnShipmentFlow.loading ||
     returnReceiptFlow.submitting ||
-    returnDisputeFlow.submitting;
+    returnDisputeFlow.submitting ||
+    (
+      orderAction === "start-return-consultation" &&
+      identityVerification.isLoading
+    );
 
   const orderActionError =
     orderAction === "report-return-dispute"
@@ -296,7 +317,8 @@ export default function TradeChatDetail({
             : orderAction === "respond-return-consultation"
               ? returnProposalFlow.error
               : orderAction === "start-return-consultation"
-                ? returnConsultationFlow.error
+                ? identityVerification.errorMessage ||
+                  returnConsultationFlow.error
                 : undefined;
 
   return (

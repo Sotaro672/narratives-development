@@ -45,12 +45,12 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
     }
 
     const confirmed = window.confirm(
-      "本当にアカウントを削除しますか？\nFirebase Auth、Firestore、秘密鍵が削除されます。"
+      "本当にアカウントを削除しますか？\nFirebase Auth、Firestore、秘密鍵が削除されます。",
     );
     if (!confirmed) return;
 
     const password = window.prompt(
-      "本人確認のため現在のパスワードを入力してください。"
+      "本人確認のため現在のパスワードを入力してください。",
     );
     if (!password) return;
 
@@ -59,7 +59,7 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
 
       const credential = EmailAuthProvider.credential(
         currentUser.email,
-        password
+        password,
       );
       await reauthenticateWithCredential(currentUser, credential);
 
@@ -86,7 +86,7 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
 
       if (!response.ok) {
         throw new Error(
-          responseBody?.error || "アカウント削除に失敗しました。"
+          responseBody?.error || "アカウント削除に失敗しました。",
         );
       }
 
@@ -117,6 +117,10 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
         onClick={() => handleNavigate("/settings/password")}
       />
       <ListItem
+        label="本人確認"
+        onClick={() => handleNavigate("/settings/identity-verification")}
+      />
+      <ListItem
         label="支払方法"
         onClick={() => handleNavigate("/settings/payment-method")}
       />
@@ -133,6 +137,10 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
         onClick={() => handleNavigate("/settings/inquiry")}
       />
       <ListItem label="ログアウト" onClick={handleLogout} />
+      <ListItem
+        label="規約"
+        onClick={() => handleNavigate("/terms")}
+      />
       <ListItem
         label={isDeleting ? "削除中..." : "アカウント削除"}
         danger

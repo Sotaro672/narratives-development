@@ -33,6 +33,7 @@ type mallUsecases struct {
 	shippingQuoteUC                     *usecase.ShippingQuoteUsecase
 	paymentMethodUC                     *usecase.PaymentMethodUsecase
 	payoutAccountUC                     *usecase.PayoutAccountUsecase
+	identityVerificationUC              *usecase.IdentityVerificationUsecase
 	userUC                              *usecase.UserUsecase
 	walletUC                            *usecase.WalletUsecase
 	cartUC                              *usecase.CartUsecase
@@ -112,6 +113,9 @@ func buildMallUsecases(
 	}
 	if r.reportRepo == nil {
 		return nil, errors.New("di.mall: report repository is nil")
+	}
+	if r.identityVerificationRepo == nil {
+		return nil, errors.New("di.mall: identity verification repository is nil")
 	}
 
 	authUserReader := outfirebase.NewAuthUserReader(infra.FirebaseAuth)
@@ -257,6 +261,15 @@ func buildMallUsecases(
 		r.userRepo,
 		nil,
 	)
+
+	identityVerificationUC := usecase.NewIdentityVerificationUsecase(
+		r.identityVerificationRepo,
+	)
+	if identityVerificationUC == nil {
+		return nil, errors.New(
+			"di.mall: identity verification usecase is nil",
+		)
+	}
 
 	onchainReader := solana.NewOnchainWalletReaderDevnet()
 
@@ -820,6 +833,7 @@ func buildMallUsecases(
 		shippingQuoteUC:                     shippingQuoteUC,
 		paymentMethodUC:                     paymentMethodUC,
 		payoutAccountUC:                     payoutAccountUC,
+		identityVerificationUC:              identityVerificationUC,
 		userUC:                              userUC,
 		walletUC:                            walletUC,
 		cartUC:                              cartUC,
@@ -874,6 +888,7 @@ func (u *mallUsecases) applyToContainer(c *Container) {
 	c.ShippingQuoteUC = u.shippingQuoteUC
 	c.PaymentMethodUC = u.paymentMethodUC
 	c.PayoutAccountUC = u.payoutAccountUC
+	c.IdentityVerificationUC = u.identityVerificationUC
 	c.UserUC = u.userUC
 	c.WalletUC = u.walletUC
 	c.CartUC = u.cartUC

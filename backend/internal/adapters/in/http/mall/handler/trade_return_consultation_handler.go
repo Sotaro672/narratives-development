@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 	tradedom "narratives/internal/domain/trade"
 )
@@ -18,7 +19,7 @@ type createTradeReturnConsultationRequest struct {
 
 // POST /mall/me/trades/{tradeId}/return-consultations
 //
-// Starts a return consultation for the authenticated buyer Avatar.
+// Starts a return consultation for the authenticated buyer.
 //
 // Body:
 //
@@ -27,15 +28,25 @@ type createTradeReturnConsultationRequest struct {
 //	  "detail": "商品説明と実物の状態が異なります"
 //	}
 //
-// BuyerAvatarID is never accepted from the client. The authenticated Avatar
-// from AvatarContextMiddleware is authoritative. This endpoint does not mutate
-// the legacy Order return-request fields; return negotiation state is persisted
-// in ReturnAgreement.
+// BuyerUserID and BuyerAvatarID are never accepted from the client.
+// BuyerUserID comes from UserAuthMiddleware and BuyerAvatarID comes from
+// AvatarContextMiddleware.
+//
+// Starting a new return consultation requires identity verification.
+// The authoritative verification check is performed by the usecase.
+//
+// This endpoint does not mutate the legacy Order return-request fields.
+// Return negotiation state is persisted in ReturnAgreement.
 func (h *TradeHandler) createReturnConsultation(
 	w http.ResponseWriter,
 	r *http.Request,
 	tradeID string,
 ) {
+	userID, ok := requireTradeReturnConsultationUserID(w, r)
+	if !ok {
+		return
+	}
+
 	avatarID, ok := requireAvatarID(w, r)
 	if !ok {
 		return
@@ -64,6 +75,7 @@ func (h *TradeHandler) createReturnConsultation(
 		r.Context(),
 		usecase.CreateResaleTradeReturnConsultationInput{
 			TradeID:       tradeID,
+			BuyerUserID:   userID,
 			BuyerAvatarID: avatarID,
 			Reason:        req.Reason,
 			Detail:        req.Detail,
@@ -84,6 +96,23 @@ func (h *TradeHandler) createReturnConsultation(
 	})
 }
 
+func requireTradeReturnConsultationUserID(
+	w http.ResponseWriter,
+	r *http.Request,
+) (string, bool) {
+	userID, ok := middleware.CurrentUserUID(r)
+	userID = strings.TrimSpace(userID)
+
+	if !ok || userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "unauthorized",
+		})
+		return "", false
+	}
+
+	return userID, true
+}
+
 func writeTradeReturnConsultationErr(
 	w http.ResponseWriter,
 	err error,
@@ -98,7 +127,15 @@ func writeTradeReturnConsultationErr(
 
 	case errors.Is(err, usecase.ErrResaleTradeReturnConsultationInvalidBuyer):
 		writeJSON(w, http.StatusUnauthorized, map[string]string{
-			"error": "avatar context is required",
+			"error": "buyer context is required",
+		})
+
+	case errors.Is(
+		err,
+		usecase.ErrResaleTradeReturnConsultationIdentityVerificationRequired,
+	):
+		writeJSON(w, http.StatusForbidden, map[string]string{
+			"error": "identity_verification_required",
 		})
 
 	case errors.Is(err, tradedom.ErrInvalidID),

@@ -50,6 +50,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 	var shippingQuoteH http.Handler
 	var paymentMethodH http.Handler
 	var payoutAccountH http.Handler
+	var identityVerificationH http.Handler
 	var avatarH http.Handler
 	var meWalletH http.Handler
 	var likeH http.Handler
@@ -172,6 +173,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	if cont.PayoutAccountUC != nil {
 		payoutAccountH = mallhandler.NewPayoutAccountHandler(cont.PayoutAccountUC)
+	}
+
+	if cont.IdentityVerificationUC != nil {
+		identityVerificationH = mallhandler.NewIdentityVerificationHandler(
+			cont.IdentityVerificationUC,
+		)
 	}
 
 	// Wallet (me)
@@ -361,12 +368,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 		SignIn:                 signInH,
 		Auth:                   authH,
 
-		User:            userH,
-		ShippingAddress: shipH,
-		ShippingQuote:   shippingQuoteH,
-		PaymentMethod:   paymentMethodH,
-		PayoutAccount:   payoutAccountH,
-		Avatar:          avatarH,
+		User:                 userH,
+		ShippingAddress:      shipH,
+		ShippingQuote:        shippingQuoteH,
+		PaymentMethod:        paymentMethodH,
+		PayoutAccount:        payoutAccountH,
+		IdentityVerification: identityVerificationH,
+		Avatar:               avatarH,
 
 		MeAvatar: meAvatarsH,
 		MeWallet: meWalletH,
