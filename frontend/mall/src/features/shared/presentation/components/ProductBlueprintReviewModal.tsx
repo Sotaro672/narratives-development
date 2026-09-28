@@ -11,6 +11,7 @@ export type ProductBlueprintReviewModalProps = {
   rating: number;
   submitting: boolean;
   error?: string | null;
+  rows?: number;
   onBodyChange: (value: string) => void;
   onRatingChange: (rating: number) => void;
   onCancel: () => void;
@@ -23,6 +24,7 @@ export default function ProductBlueprintReviewModal({
   rating,
   submitting,
   error,
+  rows = 5,
   onBodyChange,
   onRatingChange,
   onCancel,
@@ -50,7 +52,7 @@ export default function ProductBlueprintReviewModal({
       onCancel={onCancel}
       onSubmit={onSubmit}
       inputAriaLabel="レビュー本文"
-      rows={5}
+      rows={rows}
       beforeInput={
         <fieldset
           className="product-blueprint-review-modal__rating-field"
@@ -58,10 +60,7 @@ export default function ProductBlueprintReviewModal({
         >
           <label className="product-blueprint-review-modal__rating-label">
             <span>評価</span>
-            <RatingSelect
-              value={rating}
-              onChange={onRatingChange}
-            />
+            <RatingSelect value={rating} onChange={onRatingChange} />
           </label>
         </fieldset>
       }

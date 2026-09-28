@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
@@ -16,6 +17,7 @@ import "../styles/scan-result-page.css";
 
 export default function ScanResultPage() {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
 
   const [reviewBody, setReviewBody] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
@@ -158,6 +160,7 @@ export default function ScanResultPage() {
         rating={reviewRating}
         submitting={state.postingReview}
         error={state.postReviewError}
+        rows={isMobilePortrait ? 1 : 5}
         onBodyChange={setReviewBody}
         onRatingChange={setReviewRating}
         onCancel={handleCloseReviewModal}
