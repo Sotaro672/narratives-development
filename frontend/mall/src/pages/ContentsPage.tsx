@@ -133,6 +133,7 @@ export default function ContentsPage() {
         canSubmit={canSubmitComment}
         submitLabel="投稿"
         submittingLabel="投稿中..."
+        rows={page.isMobilePortrait ? 1 : 6}
         onContentChange={page.commentCard.setCommentBody}
         onCancel={handleCloseCommentModal}
         onSubmit={handleSubmitComment}

@@ -53,6 +53,7 @@ export default function ContentsDetailPanel({
         tokenBlueprintId={contents.tokenBlueprintId}
         loading={loading}
         hideCommentForm={isMobilePortrait}
+        replyRows={isMobilePortrait ? 1 : 6}
         commentTree={commentCard.commentTree}
         commentsLoading={commentCard.commentsLoading}
         commentsError={commentCard.commentsError}

@@ -18,6 +18,7 @@ type TokenCommentSectionProps = {
   tokenBlueprintId: string;
   loading?: boolean;
   hideCommentForm?: boolean;
+  replyRows?: number;
   commentTree: TokenCommentTreeNode[];
   commentsLoading: boolean;
   commentsError: string;
@@ -42,6 +43,7 @@ export default function TokenCommentSection({
   tokenBlueprintId,
   loading = false,
   hideCommentForm = false,
+  replyRows = 6,
   commentTree,
   commentsLoading,
   commentsError,
@@ -81,9 +83,7 @@ export default function TokenCommentSection({
   } = useReport();
 
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
-  const canSubmitReply = Boolean(
-    replyingCommentId && replyBody.trim() && !replyPosting,
-  );
+  const canSubmitReply = Boolean(replyingCommentId && replyBody.trim() && !replyPosting);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,7 +96,6 @@ export default function TokenCommentSection({
 
       try {
         const avatar = await getMyAvatar();
-
         if (cancelled) {
           return;
         }
@@ -191,6 +190,7 @@ export default function TokenCommentSection({
         canSubmit={canSubmitReply}
         submitLabel="返信を投稿"
         submittingLabel="投稿中..."
+        rows={replyRows}
         onContentChange={onReplyBodyChange}
         onCancel={onCancelReply}
         onSubmit={handleSubmitReply}
