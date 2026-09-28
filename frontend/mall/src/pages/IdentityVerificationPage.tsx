@@ -1,28 +1,14 @@
 // frontend/mall/src/pages/IdentityVerificationPage.tsx
 
-import { useCallback, useEffect, useState } from "react";
-
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import StatePanel from "../components/ui/StatePanel";
-import {
-  fetchIdentityVerification,
-  verifyIdentityWithMockMyNumberCard,
-} from "../features/identityVerification/api/identityVerificationApi";
-import {
-  isIdentityVerified,
-  type IdentityVerification,
-} from "../features/identityVerification/types";
+import useIdentityVerification from "../features/identityVerification/hooks/useIdentityVerification";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
-
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : "本人確認情報の取得に失敗しました。";
-}
+import "../styles/identity-verification-page.css";
 
 function formatVerifiedAt(value: string | undefined): string | null {
   if (!value) {
@@ -44,88 +30,28 @@ function formatVerifiedAt(value: string | undefined): string | null {
 }
 
 export default function IdentityVerificationPage() {
-  const [verification, setVerification] =
-    useState<IdentityVerification | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+  const {
+    verification,
+    isVerified,
+    isLoading,
+    isVerifying,
+    errorMessage,
+    reload,
+    verify,
+  } = useIdentityVerification();
 
-  const loadVerification = useCallback(
-    async (signal?: AbortSignal): Promise<void> => {
-      setIsLoading(true);
-      setErrorMessage("");
-
-      try {
-        const result = await fetchIdentityVerification({
-          signal,
-        });
-
-        if (signal?.aborted) {
-          return;
-        }
-
-        setVerification(result);
-      } catch (error) {
-        if (signal?.aborted) {
-          return;
-        }
-
-        setErrorMessage(toErrorMessage(error));
-      } finally {
-        if (!signal?.aborted) {
-          setIsLoading(false);
-        }
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    void loadVerification(controller.signal);
-
-    return () => {
-      controller.abort();
-    };
-  }, [loadVerification]);
-
-  const handleVerify = useCallback(async (): Promise<void> => {
-    if (isVerifying || isIdentityVerified(verification)) {
-      return;
-    }
-
-    setIsVerifying(true);
-    setErrorMessage("");
-    setSuccessMessage("");
-
-    try {
-      const result =
-        await verifyIdentityWithMockMyNumberCard();
-
-      setVerification(result);
-      setSuccessMessage("本人確認が完了しました。");
-    } catch (error) {
-      setErrorMessage(toErrorMessage(error));
-    } finally {
-      setIsVerifying(false);
-    }
-  }, [isVerifying, verification]);
-
-  const verified = isIdentityVerified(verification);
   const verifiedAt = formatVerifiedAt(
     verification?.verifiedAt,
   );
 
   return (
     <Layout
-      title="本人確認"
-      titleClickable={false}
+      title="AMOL"
+      titleClickable
       mode="mypage"
       showFooter
     >
-      <section className="page-section content-page-section settings-page">
+      <section className="page-section content-page-section settings-page identity-verification-page">
         <p className="content-page-description">
           マイナンバーカードを使用して本人確認を行います。本人確認が完了すると、取引で返品についての相談を開始できるようになります。
         </p>
@@ -153,7 +79,7 @@ export default function IdentityVerificationPage() {
                 type="button"
                 variant="secondary"
                 onClick={() => {
-                  void loadVerification();
+                  void reload();
                 }}
               >
                 再読み込み
@@ -164,7 +90,7 @@ export default function IdentityVerificationPage() {
 
         {!isLoading && verification ? (
           <>
-            {verified ? (
+            {isVerified ? (
               <StatePanel
                 variant="success"
                 title="本人確認済み"
@@ -175,21 +101,13 @@ export default function IdentityVerificationPage() {
                 }
               />
             ) : (
-              <StatePanel
-                variant="default"
-                title="本人確認が必要です"
-                description="取引で返品についての相談を開始するには、本人確認を完了してください。"
-              />
-            )}
-
-            {successMessage ? (
-              <Alert variant="success">
-                {successMessage}
-              </Alert>
-            ) : null}
-
-            {!verified ? (
               <>
+                <StatePanel
+                  variant="default"
+                  title="本人確認が必要です"
+                  description="取引で返品についての相談を開始するには、本人確認を完了してください。"
+                />
+
                 <Alert variant="info">
                   <strong>本人確認方法</strong>
                   <br />
@@ -205,10 +123,11 @@ export default function IdentityVerificationPage() {
                   variant="primary"
                   size="lg"
                   fullWidth
+                  className="identity-verification-page__verify-button"
                   disabled={isVerifying}
                   aria-busy={isVerifying}
                   onClick={() => {
-                    void handleVerify();
+                    void verify();
                   }}
                 >
                   {isVerifying
@@ -216,10 +135,6 @@ export default function IdentityVerificationPage() {
                     : "本人確認を行う"}
                 </Button>
               </>
-            ) : (
-              <Alert variant="info">
-                本人確認が完了しているため、取引で返品についての相談を開始できます。
-              </Alert>
             )}
           </>
         ) : null}

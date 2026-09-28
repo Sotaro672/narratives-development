@@ -1,0 +1,9 @@
+/* frontend/mall/src/styles/identity-verification-page.css */
+
+.identity-verification-page {
+  gap: 16px;
+}
+
+.identity-verification-page__verify-button {
+  margin-top: 8px;
+}
