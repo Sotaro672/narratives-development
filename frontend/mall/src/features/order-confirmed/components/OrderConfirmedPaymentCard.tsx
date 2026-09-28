@@ -1,6 +1,5 @@
 // frontend/mall/src/features/order-confirmed/components/OrderConfirmedPaymentCard.tsx
 
-import Card from "../../../components/ui/Card";
 import InfoList from "../../../components/ui/InfoList";
 import { formatPrice } from "../../../components/utils/price";
 
@@ -59,12 +58,12 @@ export function OrderConfirmedPaymentCard({
   ];
 
   return (
-    <Card as="section" variant="panel">
-      <h2 className="order-confirmed-page__card-title">
+    <section className="order-confirmed-page__content-section">
+      <h2 className="order-confirmed-page__section-title">
         決済情報
       </h2>
 
       <InfoList rows={rows} />
-    </Card>
+    </section>
   );
 }

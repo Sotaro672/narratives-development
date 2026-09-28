@@ -4,7 +4,6 @@ import Button from "../../../components/ui/Button";
 
 type OrderConfirmedActionsProps = {
   onGoToOrderDetail: () => void;
-  onGoToTrade?: () => void;
 };
 
 export function OrderConfirmedActions({

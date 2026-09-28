@@ -1,6 +1,5 @@
 // frontend/mall/src/features/order-confirmed/components/OrderConfirmedItemsCard.tsx
 
-import Card from "../../../components/ui/Card";
 import TextState from "../../../components/ui/TextState";
 import { formatPrice } from "../../../components/utils/price";
 import type {
@@ -15,8 +14,8 @@ export function OrderConfirmedItemsCard({
   items,
 }: OrderConfirmedItemsCardProps) {
   return (
-    <Card as="section" variant="panel">
-      <h2 className="order-confirmed-page__card-title">
+    <section className="order-confirmed-page__content-section">
+      <h2 className="order-confirmed-page__section-title">
         注文内容
       </h2>
 
@@ -54,6 +53,6 @@ export function OrderConfirmedItemsCard({
           注文内容を取得できませんでした。
         </TextState>
       )}
-    </Card>
+    </section>
   );
 }

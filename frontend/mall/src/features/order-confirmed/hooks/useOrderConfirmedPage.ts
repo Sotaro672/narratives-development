@@ -1,7 +1,7 @@
-// frontend/amol/src/features/order-confirmed/hooks/useOrderConfirmedPage.ts
+// frontend/mall/src/features/order-confirmed/hooks/useOrderConfirmedPage.ts
 
 import { useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 
 import type {
   OrderConfirmedLocationState,
@@ -16,22 +16,27 @@ function normalizeAmount(value: number | undefined): number {
     : 0;
 }
 
-export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
-  hasResaleItem: boolean;
-  handleGoToTrade: () => void;
-} {
-  const navigate = useNavigate();
+export function useOrderConfirmedPage(): OrderConfirmedViewModel {
   const location = useLocation();
 
   const state = (location.state ?? {}) as OrderConfirmedLocationState;
 
-  const cartItems = Array.isArray(state.cartItems) ? state.cartItems : [];
-  const shippingAddress = state.shippingAddress ?? null;
+  const cartItems = Array.isArray(state.cartItems)
+    ? state.cartItems
+    : [];
+
+  const shippingAddress =
+    state.shippingAddress ?? null;
+
   const orderId = state.orderId ?? "";
 
   const amount = normalizeAmount(state.amount);
-  const subtotalAmount = normalizeAmount(state.subtotalAmount);
-  const shippingAmount = normalizeAmount(state.shippingAmount);
+  const subtotalAmount = normalizeAmount(
+    state.subtotalAmount,
+  );
+  const shippingAmount = normalizeAmount(
+    state.shippingAmount,
+  );
   const taxAmount = normalizeAmount(state.taxAmount);
 
   const items = useMemo(
@@ -44,24 +49,7 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
     [shippingAddress],
   );
 
-  const hasResaleItem = useMemo(
-    () => cartItems.some((item) => item.type === "resale"),
-    [cartItems],
-  );
-
   const statusLabel = "発送時に決済";
-
-  const handleGoToTrade = () => {
-    const normalizedOrderId = orderId.trim();
-
-    if (!normalizedOrderId || !hasResaleItem) {
-      return;
-    }
-
-    navigate(
-      `/orders/${encodeURIComponent(normalizedOrderId)}/trade`,
-    );
-  };
 
   return {
     orderId,
@@ -72,7 +60,5 @@ export function useOrderConfirmedPage(): OrderConfirmedViewModel & {
     statusLabel,
     items,
     shippingAddressLines,
-    hasResaleItem,
-    handleGoToTrade,
   };
 }

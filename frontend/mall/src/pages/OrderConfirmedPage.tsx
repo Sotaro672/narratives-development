@@ -37,8 +37,6 @@ export default function OrderConfirmedPage() {
     statusLabel,
     items,
     shippingAddressLines,
-    hasResaleItem,
-    handleGoToTrade,
   } = useOrderConfirmedPage();
 
   useEffect(() => {
@@ -94,11 +92,6 @@ export default function OrderConfirmedPage() {
 
           <OrderConfirmedActions
             onGoToOrderDetail={handleGoToOrderDetail}
-            onGoToTrade={
-              hasResaleItem
-                ? handleGoToTrade
-                : undefined
-            }
           />
         </div>
       </section>

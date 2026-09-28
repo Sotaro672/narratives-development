@@ -1,7 +1,7 @@
 /* frontend/amol/src/styles/order-confirmed-page.css */
 
 .order-confirmed-page {
-  background: #f9fafb;
+  background: #fff;
 }
 
 .order-confirmed-page__section {
@@ -46,16 +46,22 @@
 }
 
 .order-confirmed-page__content {
-  display: grid;
-  gap: 16px;
-  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  margin-top: 32px;
 }
 
-.order-confirmed-page__card-title {
-  margin: 0 0 16px;
+.order-confirmed-page__content-section {
+  min-width: 0;
+}
+
+.order-confirmed-page__section-title {
+  margin: 0 0 20px;
   color: #111827;
   font-size: 18px;
   font-weight: 800;
+  line-height: 1.5;
 }
 
 .order-confirmed-page__items {
@@ -118,10 +124,8 @@
 .order-confirmed-page__actions {
   display: grid;
   gap: 12px;
-  margin-top: 4px;
+  margin-top: 8px;
 }
-
-/* Mobile: 注文完了画面ではアクションボタンを非表示 */
 
 @media (max-width: 959px) {
   .order-confirmed-page__actions {
@@ -143,8 +147,8 @@
   }
 
   .order-confirmed-page__content {
-    gap: 20px;
-    margin-top: 24px;
+    gap: 48px;
+    margin-top: 40px;
   }
 
   .order-confirmed-page__actions {
@@ -171,7 +175,15 @@
     font-size: 22px;
   }
 
-  .order-confirmed-page__detail-row,
+  .order-confirmed-page__content {
+    gap: 32px;
+    margin-top: 24px;
+  }
+
+  .order-confirmed-page__section-title {
+    margin-bottom: 16px;
+  }
+
   .order-confirmed-page__item {
     gap: 12px;
   }
