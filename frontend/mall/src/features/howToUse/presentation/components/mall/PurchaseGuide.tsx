@@ -30,12 +30,13 @@ export default function PurchaseGuide() {
 
           <HowToUseStepList>
             <HowToUseStep>商品到着後、商品のQRコードをスキャンしてください。</HowToUseStep>
-            <HowToUseStep>スキャンした商品が購入商品と一致する場合、トークンがアバターへ渡されます。</HowToUseStep>
-            <HowToUseStep>コンテンツを見るボタンを押すとトークンのメタデータコンテンツを閲覧することができます。</HowToUseStep>
+            <HowToUseStep>スキャンした商品が購入商品と一致する場合、トークン移譲をしてもよいか確認されます。</HowToUseStep>
+            <HowToUseStep>承認ボタンを押すとトークン移譲が開始されます。</HowToUseStep>
+            <HowToUseStep>トークン移譲後は商品、トークンへのコメント投稿、トークンコンテンツの閲覧ができるようになります。</HowToUseStep>
           </HowToUseStepList>
         </div>
 
-        <HowToUseNote title="所有者のみコンテンツ閲覧が可能">トークンコンテンツはトークン所有者のみ閲覧できるようにしています。</HowToUseNote>
+        <HowToUseNote title="トークン移譲後は返品不可">トークン移譲確認でも記載されている通り、トークン移譲後は返品申請ができません。商品を問題なく受け取ったという意思表示としてトークンを受け取ってください。</HowToUseNote>
       </HowToUseSection>
     </>
   );
