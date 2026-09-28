@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 import Alert from "../../../../components/ui/Alert";
 import Badge from "../../../../components/ui/Badge";
 import Button from "../../../../components/ui/Button";
@@ -168,6 +169,7 @@ export default function ResaleChatDetail({
   resaleId,
 }: ResaleChatDetailProps) {
   const location = useLocation();
+  const isMobilePortrait = useMobilePortrait();
   const { registerAction } = useChatWorkspace();
   const routeState = location.state as ResaleChatRouteState | null;
   const preferredSource = routeState?.source;
@@ -536,6 +538,7 @@ export default function ResaleChatDetail({
         canSubmit={canSubmitReply}
         submitLabel="送信"
         submittingLabel="送信中..."
+        rows={isMobilePortrait ? 1 : 6}
         onContentChange={setReplyContent}
         onCancel={closeReplyModal}
         onSubmit={() => {
@@ -575,12 +578,14 @@ function ResaleThreadHeader({
       </div>
 
       {showDetailLink && detailPath ? (
-        <Link
-          to={detailPath}
-          className="trade-chat-detail__resale-link"
-        >
-          出品詳細を見る
-        </Link>
+        <div className="trade-chat-detail__detail-links">
+          <Link
+            to={detailPath}
+            className="trade-chat-detail__detail-link"
+          >
+            出品詳細を見る
+          </Link>
+        </div>
       ) : null}
     </>
   );
