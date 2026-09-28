@@ -179,6 +179,15 @@ function InquiryChatListRow({
       }
       title={title}
       subLabel={item.brandName || undefined}
+      dateLeading={
+        <Badge
+          variant="info"
+          size="sm"
+          className="chat-list-page__status"
+        >
+          {statusLabel}
+        </Badge>
+      }
       dateValue={item.latestActivityAt}
       preview={preview}
       meta={
@@ -192,14 +201,6 @@ function InquiryChatListRow({
               {countLabel}
             </Badge>
           ) : null}
-
-          <Badge
-            variant="info"
-            size="sm"
-            className="chat-list-page__status"
-          >
-            {statusLabel}
-          </Badge>
 
           {hasAttention ? (
             <Badge
@@ -271,6 +272,17 @@ function ResaleChatListRow({
       }
       title={title}
       subLabel={item.brandName || undefined}
+      dateLeading={
+        statusLabel ? (
+          <Badge
+            variant="info"
+            size="sm"
+            className="chat-list-page__status"
+          >
+            {statusLabel}
+          </Badge>
+        ) : null
+      }
       dateValue={item.latestActivityAt}
       preview={preview}
       meta={
@@ -282,16 +294,6 @@ function ResaleChatListRow({
               className="chat-list-page__reply-count"
             >
               {countLabel}
-            </Badge>
-          ) : null}
-
-          {statusLabel ? (
-            <Badge
-              variant="info"
-              size="sm"
-              className="chat-list-page__status"
-            >
-              {statusLabel}
             </Badge>
           ) : null}
 
@@ -360,33 +362,32 @@ function TradeChatListRow({
       subLabel={
         item.counterpartAvatarName || undefined
       }
+      dateLeading={
+        statusLabel ? (
+          <Badge
+            variant="info"
+            size="sm"
+            className="chat-list-page__status"
+          >
+            {statusLabel}
+          </Badge>
+        ) : null
+      }
       dateValue={item.latestActivityAt}
       preview={preview}
       meta={
-        <>
-          {statusLabel ? (
-            <Badge
-              variant="info"
-              size="sm"
-              className="chat-list-page__status"
-            >
-              {statusLabel}
-            </Badge>
-          ) : null}
-
-          {hasAttention ? (
-            <Badge
-              variant="info"
-              size="sm"
-              className="chat-list-page__badge-count"
-              aria-label={`未読 ${item.unreadMessageCount} 件`}
-            >
-              {item.unreadMessageCount > 99
-                ? "99+"
-                : item.unreadMessageCount}
-            </Badge>
-          ) : null}
-        </>
+        hasAttention ? (
+          <Badge
+            variant="info"
+            size="sm"
+            className="chat-list-page__badge-count"
+            aria-label={`未読 ${item.unreadMessageCount} 件`}
+          >
+            {item.unreadMessageCount > 99
+              ? "99+"
+              : item.unreadMessageCount}
+          </Badge>
+        ) : null
       }
     />
   );

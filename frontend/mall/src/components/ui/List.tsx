@@ -27,6 +27,7 @@ type ListRowProps = {
   leading?: ReactNode;
   title: ReactNode;
   subLabel?: ReactNode;
+  dateLeading?: ReactNode;
   dateValue?: string | null;
   preview?: ReactNode;
   meta?: ReactNode;
@@ -77,6 +78,7 @@ export function ListRow({
   leading,
   title,
   subLabel,
+  dateLeading,
   dateValue,
   preview,
   meta,
@@ -153,12 +155,22 @@ export function ListRow({
             ) : null}
           </div>
 
-          {dateValue ? (
-            <DateDisplay
-              className="ui-list__date"
-              value={dateValue}
-              variant="compact"
-            />
+          {dateLeading || dateValue ? (
+            <div className="ui-list__date-group">
+              {dateLeading ? (
+                <div className="ui-list__date-leading">
+                  {dateLeading}
+                </div>
+              ) : null}
+
+              {dateValue ? (
+                <DateDisplay
+                  className="ui-list__date"
+                  value={dateValue}
+                  variant="compact"
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
 

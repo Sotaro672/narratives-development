@@ -1,4 +1,4 @@
-/* frontend/amol/src/features/shared/styles/product-listing.css */
+/* frontend/mall/src/features/shared/styles/product-listing.css */
 
 .product-listing-grid {
   display: grid;
@@ -161,11 +161,5 @@
 
   .product-listing-card__price {
     font-size: 15px;
-  }
-}
-
-@media (max-width: 380px) {
-  .product-listing-grid {
-    grid-template-columns: 1fr;
   }
 }

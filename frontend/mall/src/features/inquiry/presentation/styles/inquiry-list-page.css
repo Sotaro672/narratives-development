@@ -55,18 +55,17 @@
   border-bottom: none;
 }
 
+.chat-list-page__status {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 @media (max-width: 640px) {
   .chat-list-page {
     max-width: none;
   }
 
   .chat-list-page__reply-count {
-    display: none;
-  }
-}
-
-@media (max-width: 380px) {
-  .chat-list-page__status {
     display: none;
   }
 }
