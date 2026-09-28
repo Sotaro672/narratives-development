@@ -4,12 +4,16 @@ package mall
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
+	"sort"
 	"strings"
 
 	applicationport "narratives/internal/application/port"
 	mallshared "narratives/internal/application/query/mall/shared"
 	ldom "narratives/internal/domain/list"
 )
+
+const mallListCursorBatchSize = 200
 
 type ListQuery struct {
 	listRepo  ldom.Repository
@@ -63,30 +67,43 @@ func (q *ListQuery) ListIndex(
 		50,
 	)
 
-	var filter ldom.Filter
-	status := ldom.StatusListing
-	filter.Status = &status
-
-	result, err := q.listRepo.List(
-		ctx,
-		filter,
-		ldom.Sort{},
-		ldom.Page{
-			Number:  pageNum,
-			PerPage: perPage,
-		},
-	)
+	publicLists, err := q.listAllPublicListings(ctx)
 	if err != nil {
 		return ListIndexResponseDTO{}, err
 	}
 
-	items := make([]ListItemDTO, 0, len(result.Items))
-	for _, l := range result.Items {
-		if !isMallPublicListing(l.Status) {
+	groups := groupMallListsByInventory(publicLists)
+
+	totalCount := len(groups)
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = (totalCount + perPage - 1) / perPage
+	}
+
+	start := (pageNum - 1) * perPage
+	if start >= totalCount {
+		return ListIndexResponseDTO{
+			Items:      []ListItemDTO{},
+			TotalCount: totalCount,
+			TotalPages: totalPages,
+			Page:       pageNum,
+			PerPage:    perPage,
+		}, nil
+	}
+
+	end := start + perPage
+	if end > totalCount {
+		end = totalCount
+	}
+
+	items := make([]ListItemDTO, 0, end-start)
+	for _, group := range groups[start:end] {
+		selected, ok := pickMallList(group)
+		if !ok {
 			continue
 		}
 
-		item, err := q.toListItemDTO(ctx, l)
+		item, err := q.toListItemDTO(ctx, selected)
 		if err != nil {
 			return ListIndexResponseDTO{}, err
 		}
@@ -96,11 +113,132 @@ func (q *ListQuery) ListIndex(
 
 	return ListIndexResponseDTO{
 		Items:      items,
-		TotalCount: result.TotalCount,
-		TotalPages: result.TotalPages,
-		Page:       result.Page,
+		TotalCount: totalCount,
+		TotalPages: totalPages,
+		Page:       pageNum,
 		PerPage:    perPage,
 	}, nil
+}
+
+func (q *ListQuery) listAllPublicListings(
+	ctx context.Context,
+) ([]ldom.List, error) {
+	status := ldom.StatusListing
+	filter := ldom.Filter{
+		Status: &status,
+	}
+
+	items := make([]ldom.List, 0)
+	after := ""
+
+	for {
+		result, err := q.listRepo.ListByCursor(
+			ctx,
+			filter,
+			ldom.Sort{},
+			ldom.CursorPage{
+				After: after,
+				Limit: mallListCursorBatchSize,
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, l := range result.Items {
+			if !isMallPublicListing(l.Status) {
+				continue
+			}
+
+			if strings.TrimSpace(l.InventoryID) == "" {
+				continue
+			}
+
+			items = append(items, l)
+		}
+
+		if result.NextCursor == nil {
+			break
+		}
+
+		next := strings.TrimSpace(*result.NextCursor)
+		if next == "" {
+			break
+		}
+
+		if next == after {
+			return nil, errors.New("mall list query: cursor did not advance")
+		}
+
+		after = next
+	}
+
+	return items, nil
+}
+
+func groupMallListsByInventory(
+	items []ldom.List,
+) [][]ldom.List {
+	sortedItems := append([]ldom.List(nil), items...)
+
+	sort.SliceStable(sortedItems, func(i, j int) bool {
+		return mallListComesBefore(sortedItems[i], sortedItems[j])
+	})
+
+	groups := make([][]ldom.List, 0)
+	groupIndexes := make(map[string]int)
+
+	for _, l := range sortedItems {
+		inventoryID := strings.TrimSpace(l.InventoryID)
+		if inventoryID == "" {
+			continue
+		}
+
+		index, exists := groupIndexes[inventoryID]
+		if !exists {
+			groupIndexes[inventoryID] = len(groups)
+			groups = append(groups, []ldom.List{l})
+			continue
+		}
+
+		groups[index] = append(groups[index], l)
+	}
+
+	return groups
+}
+
+func mallListComesBefore(
+	left ldom.List,
+	right ldom.List,
+) bool {
+	if left.UpdatedAt != nil && right.UpdatedAt != nil {
+		if !left.UpdatedAt.Equal(*right.UpdatedAt) {
+			return left.UpdatedAt.After(*right.UpdatedAt)
+		}
+	} else if left.UpdatedAt != nil {
+		return true
+	} else if right.UpdatedAt != nil {
+		return false
+	}
+
+	if !left.CreatedAt.Equal(right.CreatedAt) {
+		return left.CreatedAt.After(right.CreatedAt)
+	}
+
+	return left.ID > right.ID
+}
+
+func pickMallList(
+	items []ldom.List,
+) (ldom.List, bool) {
+	switch len(items) {
+	case 0:
+		return ldom.List{}, false
+	case 1:
+		return items[0], true
+	default:
+		return items[rand.IntN(len(items))], true
+	}
 }
 
 func (q *ListQuery) GetByID(

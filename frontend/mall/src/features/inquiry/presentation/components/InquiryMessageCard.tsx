@@ -1,13 +1,14 @@
 // frontend/mall/src/features/inquiry/presentation/components/InquiryMessageCard.tsx
 
+import { useNavigate } from "react-router-dom";
+
 import Badge from "../../../../components/ui/Badge";
 import SectionHeader from "../../../../components/ui/SectionHeader";
+import TextLink from "../../../../components/ui/textLink";
 
 import ChatImageGrid from "../../../shared/presentation/components/ChatImageGrid";
 import type { InquiryDetail } from "../../../shared/types/inquiryTypes";
 import { getInquiryTypeLabel } from "../../../shared/types/inquiryTypes";
-
-import InquiryModelMeta from "./InquiryModelMeta";
 
 type InquiryMessageCardProps = {
   inquiry: InquiryDetail;
@@ -22,16 +23,26 @@ type InquiryStatusBadgeVariant =
 export default function InquiryMessageCard({
   inquiry,
 }: InquiryMessageCardProps) {
+  const navigate = useNavigate();
   const statusLabel = getInquiryStatusLabel(inquiry.status);
   const statusVariant = getInquiryStatusBadgeVariant(inquiry.status);
   const title = getInquiryTitle(inquiry);
   const isProductInquiry = inquiry.inquiryType === "product";
+  const orderId = inquiry.orderId?.trim() ?? "";
 
   const images = inquiry.images?.map((image) => ({
     key: image.fileUrl,
     url: image.fileUrl,
     alt: image.fileName,
   }));
+
+  const handleOpenOrderDetail = (): void => {
+    if (!orderId) {
+      return;
+    }
+
+    navigate(`/orders/${encodeURIComponent(orderId)}`);
+  };
 
   return (
     <article className="chat-detail-page__inquiry-detail">
@@ -45,8 +56,10 @@ export default function InquiryMessageCard({
         </Badge>
       </div>
 
-      {!isProductInquiry && inquiry.modelMeta ? (
-        <InquiryModelMeta modelMeta={inquiry.modelMeta} />
+      {!isProductInquiry && orderId ? (
+        <TextLink onClick={handleOpenOrderDetail}>
+          注文詳細を見る
+        </TextLink>
       ) : null}
 
       {isProductInquiry ? (
