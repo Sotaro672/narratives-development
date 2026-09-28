@@ -164,7 +164,6 @@ export default function PayoutAccountConfirmPage() {
       titleClickable={false}
       mode="mypage"
       showFooter
-      hideHamburgerMenu
     >
       <section className="page-section content-page-section settings-page payout-page payout-account-confirm-page">
         <p className="content-page-description payout-page__description">

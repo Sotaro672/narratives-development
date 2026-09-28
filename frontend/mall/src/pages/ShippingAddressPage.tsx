@@ -27,7 +27,6 @@ export default function ShippingAddressPage() {
       titleClickable={false}
       mode="mypage"
       showFooter
-      hideHamburgerMenu
     >
       <section className="page-section content-page-section settings-page shipping-address-page">
         <p className="content-page-description shipping-address-page__description">

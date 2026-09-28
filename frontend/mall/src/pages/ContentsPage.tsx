@@ -75,7 +75,6 @@ export default function ContentsPage() {
         title="AMOL"
         mode="mypage"
         showHeader={!page.isMobilePortrait}
-        hideHamburgerMenu
         showFooter={!page.isMobilePortrait || !commentModalOpen}
         disableFooterPaddingOnDesktop
         footerProps={

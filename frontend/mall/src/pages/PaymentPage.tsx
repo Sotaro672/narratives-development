@@ -51,7 +51,6 @@ export default function PaymentPage() {
           title="AMOL"
           mode="mypage"
           showFooter={isMobilePortrait}
-          hideHamburgerMenu
           hideSettingsButton
           mainClassName="payment-page"
         >
@@ -76,7 +75,6 @@ export default function PaymentPage() {
         title="AMOL"
         mode="mypage"
         showFooter={isMobilePortrait}
-        hideHamburgerMenu
         hideSettingsButton
         mainClassName="payment-page"
       >

@@ -134,7 +134,6 @@ export default function InquiryPage() {
         titleClickable={false}
         mode="mypage"
         showFooter
-        hideHamburgerMenu
       >
         <section className="page-section content-page-section">
           <p className="page-description">

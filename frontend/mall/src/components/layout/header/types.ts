@@ -6,8 +6,6 @@ export type HeaderProps = {
   title?: string;
   titleClickable?: boolean;
   mode?: "default" | "landing" | "signin";
-  showEditButton?: boolean;
-  hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
   hideAnnouncementButton?: boolean;
   mobileContent?: ReactNode;
@@ -59,9 +57,6 @@ export type HeaderActionState = {
 
   shouldShowLoginButton: boolean;
   shouldShowAnnouncementButton: boolean;
-  shouldShowRoomCopyButton: boolean;
-  shouldShowEditButton: boolean;
   shouldShowSettingsButton: boolean;
-  copyButtonLabel: string;
   toggleSettings: () => void;
 };

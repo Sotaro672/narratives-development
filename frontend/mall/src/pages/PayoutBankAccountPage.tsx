@@ -128,7 +128,6 @@ export default function PayoutBankAccountPage() {
       titleClickable={false}
       mode="mypage"
       showFooter
-      hideHamburgerMenu
     >
       <section className="page-section content-page-section settings-page payout-page payout-bank-account-page">
         <p className="content-page-description payout-page__description">

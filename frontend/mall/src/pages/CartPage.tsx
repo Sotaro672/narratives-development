@@ -52,7 +52,6 @@ export default function CartPage() {
       title="AMOL"
       mode="mypage"
       showFooter={isMobilePortrait}
-      hideHamburgerMenu
       hideSettingsButton
     >
       <section className="content-page-section cart-page-section-root">

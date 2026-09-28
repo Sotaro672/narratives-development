@@ -168,9 +168,18 @@ export default function HeaderActions({ actions }: HeaderActionsProps) {
       ) : null}
 
       {shouldShowLoginButton ? (
-        <Link to="/signin/select" className="header__login-link">
-          ログイン
-        </Link>
+        <>
+          <Link
+            to="/how-to-use"
+            className="header__login-link header__mobile-how-to-use-link"
+          >
+            使い方
+          </Link>
+
+          <Link to="/signin/select" className="header__login-link">
+            ログイン
+          </Link>
+        </>
       ) : null}
 
       {shouldShowNotificationButton ? (

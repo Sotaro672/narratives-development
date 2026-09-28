@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 
-import Header from "./Header";
 import FooterNav from "./FooterNav";
+import Header from "./Header";
 import "./layout.css";
 
 type LayoutMode =
@@ -74,8 +74,6 @@ type LayoutProps = {
   mode?: LayoutMode;
   showFooter?: boolean;
   showHeader?: boolean;
-  showEditButton?: boolean;
-  hideHamburgerMenu?: boolean;
   hideSettingsButton?: boolean;
   hideAnnouncementButton?: boolean;
   headerMobileContent?: ReactNode;
@@ -102,6 +100,7 @@ type LayoutProps = {
   cartButtonLabel?: string;
   onCartButtonClick?: () => void | Promise<void>;
   cartButtonDisabled?: boolean;
+  cartItemCount?: number;
 
   footerProps?: FooterProps;
 };
@@ -113,8 +112,6 @@ export default function Layout({
   mode = "default",
   showFooter,
   showHeader = true,
-  showEditButton = false,
-  hideHamburgerMenu = false,
   hideSettingsButton = false,
   hideAnnouncementButton = false,
   headerMobileContent,
@@ -141,6 +138,7 @@ export default function Layout({
   cartButtonLabel = "カート",
   onCartButtonClick,
   cartButtonDisabled = false,
+  cartItemCount,
 
   footerProps,
 }: LayoutProps) {
@@ -167,8 +165,6 @@ export default function Layout({
           title={title}
           titleClickable={titleClickable}
           mode={headerMode}
-          showEditButton={showEditButton}
-          hideHamburgerMenu={hideHamburgerMenu}
           hideSettingsButton={hideSettingsButton}
           hideAnnouncementButton={hideAnnouncementButton}
           mobileContent={headerMobileContent}
@@ -188,6 +184,7 @@ export default function Layout({
           cartButtonLabel={cartButtonLabel}
           onCartButtonClick={onCartButtonClick}
           cartButtonDisabled={cartButtonDisabled}
+          cartItemCount={cartItemCount}
         />
       ) : null}
 

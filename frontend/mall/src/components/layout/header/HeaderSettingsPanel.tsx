@@ -37,7 +37,6 @@ export default function HeaderSettingsPanel({
           <IconButton
             variant="ghost"
             size="md"
-            className="header__panel-close-button"
             aria-label="設定を閉じる"
             title="閉じる"
             onClick={closeSettings}

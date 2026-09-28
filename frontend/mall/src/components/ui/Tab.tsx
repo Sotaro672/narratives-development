@@ -4,7 +4,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 import "./tab.css";
 
-export type TabVariant = "pill" | "underline";
+export type TabVariant = "pill" | "underline" | "compact";
 
 type TabProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   children: ReactNode;

@@ -117,7 +117,6 @@ export default function ScanResultPage() {
         title="AMOL"
         mode={isLoggedIn ? "mypage" : "landing"}
         showHeader
-        hideHamburgerMenu={false}
         hideSettingsButton={!isLoggedIn}
         hideAnnouncementButton={!isLoggedIn}
       >

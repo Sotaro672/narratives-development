@@ -8,8 +8,8 @@ import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/payout-account-complete-page.css";
 
-import Layout from "../components/layout/Layout";
 import FooterNav from "../components/layout/FooterNav";
+import Layout from "../components/layout/Layout";
 import { useContactViewport } from "../features/contact/hooks/useContactViewport";
 
 type PayoutAccountCompleteLocationState = {
@@ -43,7 +43,6 @@ export default function PayoutAccountCompletePage() {
       title="口座登録完了"
       titleClickable={false}
       mode="default"
-      hideHamburgerMenu
       hideSettingsButton
       actionButtonLabel={isDesktop ? "売上受取口座へ戻る" : undefined}
       onActionButtonClick={isDesktop ? handleBackToPayoutAccount : undefined}

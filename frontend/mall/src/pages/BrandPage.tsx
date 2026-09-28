@@ -85,7 +85,6 @@ export default function BrandPage() {
         mode={isLoggedIn ? "mypage" : "landing"}
         showHeader
         showFooter={isLoggedIn}
-        hideHamburgerMenu={false}
         hideSettingsButton
         showCartButton={isLoggedIn}
         cartButtonLabel="カート"

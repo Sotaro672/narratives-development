@@ -57,7 +57,6 @@ export default function OrderConfirmedPage() {
       titleClickable={false}
       mode="mypage"
       showFooter
-      hideHamburgerMenu
       hideSettingsButton
       mainClassName="order-confirmed-page"
     >
@@ -80,9 +79,7 @@ export default function OrderConfirmedPage() {
           />
 
           <OrderConfirmedActions
-            onGoToOrderDetail={
-              handleGoToOrderDetail
-            }
+            onGoToOrderDetail={handleGoToOrderDetail}
             onGoToTrade={
               hasResaleItem
                 ? handleGoToTrade

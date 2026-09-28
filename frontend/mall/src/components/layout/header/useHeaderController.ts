@@ -32,7 +32,6 @@ async function fetchCartItemCount(): Promise<number> {
 export function useHeaderController({
   title,
   mode = "default",
-  showEditButton = false,
   hideSettingsButton = false,
   hideAnnouncementButton = false,
   actionButtonLabel,
@@ -153,18 +152,7 @@ export function useHeaderController({
     mode !== "signin" &&
     authResolved &&
     isLoggedIn &&
-    !showEditButton &&
     !hideSettingsButton &&
-    !hasActionButton &&
-    !hasSecondaryActionButton &&
-    !hasTertiaryActionButton &&
-    !shouldShowCartButton;
-
-  const shouldShowEditButton =
-    mode !== "signin" &&
-    authResolved &&
-    isLoggedIn &&
-    showEditButton &&
     !hasActionButton &&
     !hasSecondaryActionButton &&
     !hasTertiaryActionButton &&
@@ -202,10 +190,7 @@ export function useHeaderController({
     cartItemCount: displayCartItemCount,
     shouldShowLoginButton,
     shouldShowAnnouncementButton,
-    shouldShowRoomCopyButton: false,
-    shouldShowEditButton,
     shouldShowSettingsButton,
-    copyButtonLabel: "",
     toggleSettings,
   };
 

@@ -93,7 +93,6 @@ export default function MarketDetailPage() {
       showHeader={!isMobilePortrait}
       hideAnnouncementButton
       hideSettingsButton
-      hideHamburgerMenu
       showCartButton
       cartButtonLabel="カート"
       onCartButtonClick={() => navigate("/cart")}

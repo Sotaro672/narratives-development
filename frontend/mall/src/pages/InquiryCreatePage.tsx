@@ -42,13 +42,13 @@ export default function InquiryCreatePage() {
       mode="mypage"
       showHeader
       showFooter
-      hideHamburgerMenu={false}
-      hideSettingsButton={false}
       mainClassName="inquiry-page"
     >
       <section className="inquiry-page__container">
         <div className="inquiry-page__header">
-          <h1 className="inquiry-page__title">商品について問い合わせる</h1>
+          <h1 className="inquiry-page__title">
+            商品について問い合わせる
+          </h1>
         </div>
 
         {!productId ? (

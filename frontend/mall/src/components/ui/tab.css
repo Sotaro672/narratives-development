@@ -1,4 +1,4 @@
-/* frontend/amol/src/components/ui/tab.css */
+/* frontend\mall\src\components\ui\tab.css */
 
 .tab {
   appearance: none;
@@ -60,6 +60,43 @@
   color: #111827;
 }
 
+.tab--compact {
+  height: 40px;
+  min-width: max-content;
+  flex: 0 0 auto;
+  border-color: #e2e8f0;
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 0 12px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.tab--compact:hover:not(:disabled) {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: var(--color-text, #111827);
+}
+
+.tab--compact.tab--selected {
+  border-color: var(--color-text, #111827);
+  background: var(--color-text, #111827);
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.tab--compact.tab--selected:hover:not(:disabled) {
+  border-color: var(--color-text, #111827);
+  background: var(--color-text, #111827);
+  color: #ffffff;
+}
+
 .tab--full-width {
   width: 100%;
 }
@@ -78,4 +115,18 @@
 .tab:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+@media (max-width: 480px) {
+  .tab--compact {
+    height: 40px;
+    padding: 0 10px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab--compact {
+    transition: none;
+  }
 }

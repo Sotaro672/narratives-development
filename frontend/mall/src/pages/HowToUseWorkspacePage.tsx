@@ -15,6 +15,7 @@ import {
 
 import Layout from "../components/layout/Layout";
 import StatePanel from "../components/ui/StatePanel";
+import Tab from "../components/ui/Tab";
 import {
   findHowToUseItem,
   isHowToUseCategory,
@@ -235,10 +236,7 @@ export default function HowToUseWorkspacePage() {
 
       completeBackNavigation();
     },
-    [
-      completeBackNavigation,
-      mobilePane,
-    ],
+    [completeBackNavigation, mobilePane],
   );
 
   const workspaceClassName = [
@@ -246,9 +244,7 @@ export default function HowToUseWorkspacePage() {
     mobilePane === "detail"
       ? "how-to-use-workspace-page--detail"
       : "how-to-use-workspace-page--list",
-  ]
-    .filter(Boolean)
-    .join(" ");
+  ].filter(Boolean).join(" ");
 
   const headerMobileContent =
     isMobile &&
@@ -264,24 +260,18 @@ export default function HowToUseWorkspacePage() {
             (!selectedSectionId && index === 0);
 
           return (
-            <button
+            <Tab
               key={section.id}
-              type="button"
-              className={[
-                "how-to-use-header-nav__item",
-                selected
-                  ? "how-to-use-header-nav__item--selected"
-                  : "",
-              ]
-                .filter(Boolean)
-                .join(" ")}
+              variant="compact"
+              selected={selected}
+              className="how-to-use-header-nav__item"
               aria-current={selected ? "location" : undefined}
               onClick={() => {
                 handleSectionClick(section.id);
               }}
             >
               {section.title}
-            </button>
+            </Tab>
           );
         })}
       </nav>

@@ -5,11 +5,12 @@ import { ChevronLeft } from "lucide-react";
 import "./header.css";
 import "../../styles/settings-page.css";
 
-import { useHeaderController } from "./header/useHeaderController";
+import IconButton from "../ui/IconButton";
 import HeaderActions from "./header/HeaderActions";
 import HeaderDesktopNavigation from "./header/HeaderDesktopNavigation";
 import HeaderSettingsPanel from "./header/HeaderSettingsPanel";
 import type { HeaderProps } from "./header/types";
+import { useHeaderController } from "./header/useHeaderController";
 
 export default function Header(props: HeaderProps) {
   const {
@@ -35,7 +36,8 @@ export default function Header(props: HeaderProps) {
     ...actions,
     hasActionButton: actions.hasActionButton || hasDirectActionButton,
     actionButtonLabel: props.actionButtonLabel ?? actions.actionButtonLabel,
-    onActionButtonClick: props.onActionButtonClick ?? actions.onActionButtonClick,
+    onActionButtonClick:
+      props.onActionButtonClick ?? actions.onActionButtonClick,
     actionButtonDisabled:
       props.actionButtonDisabled ?? actions.actionButtonDisabled,
     shouldShowSettingsButton: hasDirectActionButton
@@ -56,8 +58,9 @@ export default function Header(props: HeaderProps) {
       <div className="header__inner">
         <div className="header__left">
           {hasBackButton ? (
-            <button
-              type="button"
+            <IconButton
+              variant="ghost"
+              size="md"
               className="header__back-button"
               aria-label={props.backButtonLabel ?? "戻る"}
               title={props.backButtonLabel ?? "戻る"}
@@ -71,7 +74,7 @@ export default function Header(props: HeaderProps) {
                 strokeWidth={2}
                 aria-hidden="true"
               />
-            </button>
+            </IconButton>
           ) : null}
 
           <div className="header__title-container">
