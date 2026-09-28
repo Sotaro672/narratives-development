@@ -35,6 +35,17 @@ export default function AvatarCreateGuide() {
           </HowToUseStepList>
         </div>
       </HowToUseSection>
+
+      <HowToUseSection id="avatar-registration-edit" title="アバターを編集する">
+        <div className="how-to-use-mobile-guide">
+          <HowToUseVideo storagePath="mall/avatar/edit-avatar.mp4" label="Mallでアバター情報を編集する手順" variant="iphone-12-pro" />
+
+          <HowToUseStepList>
+            <HowToUseStep>ウォレットページのアバターアイコンの下にある編集ボタンを押してください。</HowToUseStep>
+            <HowToUseStep>入力内容を確認し、変更を保存してください。</HowToUseStep>
+          </HowToUseStepList>
+        </div>
+      </HowToUseSection>
     </>
   );
 }
