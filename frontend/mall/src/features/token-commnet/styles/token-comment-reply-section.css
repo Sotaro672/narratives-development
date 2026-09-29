@@ -131,7 +131,6 @@
 .token-comment-reply-section__reply-node {
   display: grid;
   min-width: 0;
-  gap: 14px;
 }
 
 .token-comment-reply-section__comment {
@@ -186,17 +185,24 @@
 
 .token-comment-reply-section .token-comment-item__actions {
   display: flex;
+  min-width: 0;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-top: 10px;
 }
 
-.token-comment-reply-section__comment[data-reply-target="true"] {
+.token-comment-reply-section .token-comment-item__actions .report-flag-button {
+  flex: 0 0 auto;
+}
+
+.token-comment-reply-section__comment[data-reply-target="true"],
+.token-comment-reply-section__comment[data-editing="true"] {
   position: relative;
 }
 
-.token-comment-reply-section__comment[data-reply-target="true"]::before {
+.token-comment-reply-section__comment[data-reply-target="true"]::before,
+.token-comment-reply-section__comment[data-editing="true"]::before {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -205,6 +211,32 @@
   border-radius: 9999px;
   background: #d1d5db;
   content: "";
+}
+
+.token-comment-reply-section__comment[data-editing="true"]::before {
+  background: #111827;
+}
+
+.token-comment-reply-section__comment[data-editing="true"] .token-comment-item__text {
+  font-weight: 500;
+}
+
+.token-comment-reply-section__comment--deleted {
+  position: relative;
+  min-height: 28px;
+}
+
+.token-comment-reply-section__deleted {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.token-comment-reply-section__comment--deleted[data-reply-depth="1"] {
+  max-width: calc(100% - 24px);
 }
 
 @media (max-width: 640px) {
@@ -234,10 +266,6 @@
     gap: 16px;
   }
 
-  .token-comment-reply-section__reply-node {
-    gap: 12px;
-  }
-
   .token-comment-reply-section .token-comment-item__header {
     display: grid;
     gap: 4px;
@@ -247,8 +275,13 @@
     justify-self: start;
   }
 
-  .token-comment-reply-section__comment[data-reply-target="true"]::before {
+  .token-comment-reply-section__comment[data-reply-target="true"]::before,
+  .token-comment-reply-section__comment[data-editing="true"]::before {
     left: -6px;
+  }
+
+  .token-comment-reply-section__deleted {
+    font-size: 12px;
   }
 }
 
