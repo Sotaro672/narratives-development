@@ -7,7 +7,6 @@ import OrderDetailItem from "./OrderDetailItem";
 type OrderDetailItemListProps = {
   order: OrderDetail;
   cancellingItemIndex: number | null;
-  returningItemIndex: number | null;
   tradeNavigatingIndex: number | null;
   onCancelItem: (itemIndex: number) => void | Promise<void>;
   onReturnItem: (itemIndex: number) => void;
@@ -18,7 +17,6 @@ type OrderDetailItemListProps = {
 export default function OrderDetailItemList({
   order,
   cancellingItemIndex,
-  returningItemIndex,
   tradeNavigatingIndex,
   onCancelItem,
   onReturnItem,
@@ -37,7 +35,6 @@ export default function OrderDetailItemList({
             item={item}
             index={index}
             cancellingItemIndex={cancellingItemIndex}
-            returningItemIndex={returningItemIndex}
             tradeNavigatingIndex={tradeNavigatingIndex}
             onCancelItem={onCancelItem}
             onReturnItem={onReturnItem}

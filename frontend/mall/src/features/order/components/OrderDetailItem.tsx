@@ -16,7 +16,6 @@ type OrderDetailItemProps = {
   item: OrderDetailItemType;
   index: number;
   cancellingItemIndex: number | null;
-  returningItemIndex: number | null;
   tradeNavigatingIndex: number | null;
   onCancelItem: (itemIndex: number) => void | Promise<void>;
   onReturnItem: (itemIndex: number) => void;
@@ -40,7 +39,6 @@ export default function OrderDetailItem({
   item,
   index,
   cancellingItemIndex,
-  returningItemIndex,
   tradeNavigatingIndex,
   onCancelItem,
   onReturnItem,
@@ -51,7 +49,6 @@ export default function OrderDetailItem({
   const brandName = item.brandName || "ブランド未設定";
   const isResaleItem = item.itemType === "resale";
   const isCancelling = cancellingItemIndex === index;
-  const isReturning = returningItemIndex === index;
   const isOpeningTrade = tradeNavigatingIndex === index;
 
   const cancelDisabled =
@@ -59,8 +56,7 @@ export default function OrderDetailItem({
     item.isDispatched ||
     item.transferred ||
     item.isReturnCompleted ||
-    isCancelling ||
-    returningItemIndex !== null;
+    isCancelling;
 
   const showReturnButton =
     !isResaleItem &&
@@ -173,10 +169,10 @@ export default function OrderDetailItem({
                 type="button"
                 variant="secondary"
                 size="sm"
-                disabled={isReturning || cancellingItemIndex !== null}
+                disabled={cancellingItemIndex !== null}
                 onClick={() => onReturnItem(index)}
               >
-                {isReturning ? "返品申請中..." : "返品"}
+                返品
               </Button>
             ) : (
               <Button

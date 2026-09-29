@@ -161,52 +161,6 @@
   font-weight: 700;
 }
 
-/* ==============================
-   Return request
-   ============================== */
-
-.order-detail-page__return-modal-body {
-  display: grid;
-  gap: 20px;
-}
-
-.order-detail-page__return-package-section {
-  display: grid;
-  gap: 10px;
-}
-
-.order-detail-page__return-package-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.order-detail-page__return-conditions {
-  display: block;
-}
-
-.order-detail-page__return-conditions-title {
-  margin: 0 0 10px;
-  font-size: 0.95rem;
-  font-weight: 700;
-  line-height: 1.5;
-}
-
-.order-detail-page__return-condition-list {
-  margin: 0;
-  padding-left: 22px;
-  font-size: 0.88rem;
-  line-height: 1.7;
-}
-
-.order-detail-page__return-condition-list li {
-  padding-left: 4px;
-}
-
-.order-detail-page__return-condition-list li + li {
-  margin-top: 8px;
-}
-
 @media (max-width: 640px) {
   .order-detail-page__stack {
     gap: 20px;
@@ -255,23 +209,5 @@
 
   .order-detail-page__cancel-actions .ui-button {
     width: 100%;
-  }
-
-  .order-detail-page__return-modal-body {
-    gap: 16px;
-  }
-
-  .order-detail-page__return-package-options {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .order-detail-page__return-package-options .ui-chip {
-    width: 100%;
-  }
-
-  .order-detail-page__return-condition-list {
-    padding-left: 20px;
-    font-size: 0.82rem;
   }
 }

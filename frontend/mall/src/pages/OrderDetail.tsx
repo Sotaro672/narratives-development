@@ -8,9 +8,7 @@ import SectionHeader from "../components/ui/SectionHeader";
 import OrderDetailItemList from "../features/order/components/OrderDetailItemList";
 import OrderDetailSummary from "../features/order/components/OrderDetailSummary";
 import OrderPaymentSummary from "../features/order/components/OrderPaymentSummary";
-import ReturnRequestModal from "../features/order/components/ReturnRequestModal";
 import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
-import { useOrderReturn } from "../features/order/hooks/useOrderReturn";
 import { useOrderTradeNavigation } from "../features/order/hooks/useOrderTradeNavigation";
 
 import "../styles/page-layout.css";
@@ -23,26 +21,10 @@ export default function OrderDetail() {
     order,
     loading,
     cancellingItemIndex,
-    returningItemIndex,
     error,
     reload,
     cancelItem,
-    returnItem,
   } = useOrderDetail();
-
-  const {
-    returnTargetIndex,
-    packageState,
-    reason,
-    setReason,
-    setPackageState,
-    openReturnModal,
-    closeReturnModal,
-    submitReturn,
-  } = useOrderReturn({
-    returningItemIndex,
-    returnItem,
-  });
 
   const {
     openingItemIndex,
@@ -60,15 +42,25 @@ export default function OrderDetail() {
     navigate(`/brands/${encodeURIComponent(id)}`);
   };
 
+  const handleOpenReturn = (itemIndex: number) => {
+    if (
+      !order?.id ||
+      !Number.isInteger(itemIndex) ||
+      itemIndex < 0
+    ) {
+      return;
+    }
+
+    navigate(
+      `/orders/${encodeURIComponent(order.id)}/items/${itemIndex}/return`,
+    );
+  };
+
   const showError = !loading && !order && Boolean(error);
   const showDetail = !loading && Boolean(order);
 
   return (
-    <Layout
-      title="AMOL"
-      mode="mypage"
-      showFooter
-    >
+    <Layout title="AMOL" mode="mypage" showFooter>
       <section className="page-section order-detail-page">
         {loading ? (
           <section
@@ -110,10 +102,9 @@ export default function OrderDetail() {
             <OrderDetailItemList
               order={order}
               cancellingItemIndex={cancellingItemIndex}
-              returningItemIndex={returningItemIndex}
               tradeNavigatingIndex={openingItemIndex}
               onCancelItem={cancelItem}
-              onReturnItem={openReturnModal}
+              onReturnItem={handleOpenReturn}
               onOpenTrade={openTrade}
               onOpenBrand={handleOpenBrand}
             />
@@ -122,21 +113,6 @@ export default function OrderDetail() {
           </div>
         ) : null}
       </section>
-
-      <ReturnRequestModal
-        open={returnTargetIndex !== null}
-        packageState={packageState}
-        reason={reason}
-        error={returnTargetIndex !== null ? error : null}
-        submitting={
-          returnTargetIndex !== null &&
-          returningItemIndex === returnTargetIndex
-        }
-        onPackageStateChange={setPackageState}
-        onReasonChange={setReason}
-        onCancel={closeReturnModal}
-        onSubmit={() => void submitReturn()}
-      />
     </Layout>
   );
 }

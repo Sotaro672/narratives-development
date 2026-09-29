@@ -37,6 +37,7 @@ import BrandPage from "../pages/BrandPage";
 import PaymentPage from "../pages/PaymentPage";
 import OrderConfirmedPage from "../pages/OrderConfirmedPage";
 import OrderDetail from "../pages/OrderDetail";
+import ReturnRequestPage from "../pages/ReturnRequestPage";
 import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
 import InquiryCreatePage from "../pages/InquiryCreatePage";
@@ -254,6 +255,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <OrderDetail />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/orders/:orderId/items/:itemIndex/return",
+    element: (
+      <ProtectedRoute>
+        <ReturnRequestPage />
       </ProtectedRoute>
     ),
   },
