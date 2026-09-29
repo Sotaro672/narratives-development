@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 import Alert from "../../../../components/ui/Alert";
 import Preview from "../../../../components/ui/Preview";
 import StatePanel from "../../../../components/ui/StatePanel";
@@ -44,6 +45,7 @@ export default function TradeChatDetail({
   tradeId,
 }: TradeChatDetailProps) {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
   const { registerAction } = useChatWorkspace();
   const thread = useTradeThread(tradeId);
   const [dispatchQrPreviewOpen, setDispatchQrPreviewOpen] = useState(false);
@@ -466,6 +468,7 @@ export default function TradeChatDetail({
         submitLabel="メッセージを送信してキャンセル"
         submittingLabel="キャンセル中..."
         description="出品者へ送るキャンセル理由のメッセージを入力してください。"
+        rows={isMobilePortrait ? 1 : 6}
         onContentChange={cancelFlow.setMessage}
         onCancel={cancelFlow.closeModal}
         onSubmit={() => {
