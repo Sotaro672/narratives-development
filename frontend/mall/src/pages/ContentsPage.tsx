@@ -2,9 +2,10 @@
 
 import {
   useCallback,
+  useEffect,
   useRef,
 } from "react";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
@@ -24,6 +25,7 @@ export default function ContentsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const page = useContentsPage();
+
   const swipeDismissRef =
     useRef<MobileSwipeDismissPageHandle | null>(null);
 
@@ -52,6 +54,107 @@ export default function ContentsPage() {
     !replyActionDisabled &&
     Boolean(page.commentCard.replyingCommentId) &&
     page.commentCard.replyBody.trim().length > 0;
+
+  useEffect(() => {
+    if (
+      !page.isMobilePortrait ||
+      !page.commentCard.replyingCommentId ||
+      typeof document === "undefined"
+    ) {
+      return;
+    }
+
+    const replyingCommentId =
+      page.commentCard.replyingCommentId.trim();
+
+    if (!replyingCommentId) {
+      return;
+    }
+
+    const animationFrameId =
+      window.requestAnimationFrame(() => {
+        const commentElements =
+          document.querySelectorAll<HTMLElement>(
+            "[data-token-comment-id]",
+          );
+
+        const targetElement =
+          Array.from(commentElements).find(
+            (element) =>
+              element.dataset.tokenCommentId ===
+              replyingCommentId,
+          );
+
+        targetElement?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "nearest",
+        });
+      });
+
+    return () => {
+      window.cancelAnimationFrame(
+        animationFrameId,
+      );
+    };
+  }, [
+    page.commentCard.replyingCommentId,
+    page.isMobilePortrait,
+  ]);
+
+  useEffect(() => {
+    if (
+      !page.isMobilePortrait ||
+      !isReplying ||
+      typeof document === "undefined"
+    ) {
+      return;
+    }
+
+    const handlePointerDown = (
+      event: PointerEvent,
+    ) => {
+      if (
+        page.commentCard.replyPosting
+      ) {
+        return;
+      }
+
+      const target =
+        event.target;
+
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      if (
+        target.closest(
+          ".mobile-composer-footer",
+        )
+      ) {
+        return;
+      }
+
+      page.commentCard.cancelReply();
+    };
+
+    document.addEventListener(
+      "pointerdown",
+      handlePointerDown,
+    );
+
+    return () => {
+      document.removeEventListener(
+        "pointerdown",
+        handlePointerDown,
+      );
+    };
+  }, [
+    isReplying,
+    page.commentCard.cancelReply,
+    page.commentCard.replyPosting,
+    page.isMobilePortrait,
+  ]);
 
   const handleSubmitComment = useCallback(() => {
     if (!canSubmitComment) {
@@ -83,21 +186,17 @@ export default function ContentsPage() {
     page.commentCard,
   ]);
 
-  const handleCancelReply = useCallback(() => {
-    if (page.commentCard.replyPosting) {
-      return;
-    }
-
-    page.commentCard.cancelReply();
-  }, [page.commentCard]);
-
   const handleDismissStart = useCallback(() => {
-    if (typeof document === "undefined") {
+    if (
+      typeof document === "undefined"
+    ) {
       return;
     }
 
     document
-      .querySelectorAll<HTMLVideoElement>("video")
+      .querySelectorAll<HTMLVideoElement>(
+        "video",
+      )
       .forEach((video) => {
         if (!video.paused) {
           video.pause();
@@ -111,9 +210,10 @@ export default function ContentsPage() {
     });
   }, [navigate]);
 
-  const handleDismissButtonClick = useCallback(() => {
-    swipeDismissRef.current?.dismiss();
-  }, []);
+  const handleDismissButtonClick =
+    useCallback(() => {
+      swipeDismissRef.current?.dismiss();
+    }, []);
 
   const content = (
     <>
@@ -151,15 +251,33 @@ export default function ContentsPage() {
             <ContentsMediaPanel
               loading={page.loading}
               error={page.error}
-              metadataUri={page.contents.metadataUri}
-              moderationHidden={page.moderationHidden}
-              hasMediaItems={page.hasMediaItems}
-              mediaItems={page.mediaItems}
-              activeFileIndex={page.activeFileIndex}
-              tokenName={page.tokenName}
-              onPrevFile={page.handlePrevFile}
-              onNextFile={page.handleNextFile}
-              onSelectFile={page.setActiveFileIndex}
+              metadataUri={
+                page.contents.metadataUri
+              }
+              moderationHidden={
+                page.moderationHidden
+              }
+              hasMediaItems={
+                page.hasMediaItems
+              }
+              mediaItems={
+                page.mediaItems
+              }
+              activeFileIndex={
+                page.activeFileIndex
+              }
+              tokenName={
+                page.tokenName
+              }
+              onPrevFile={
+                page.handlePrevFile
+              }
+              onNextFile={
+                page.handleNextFile
+              }
+              onSelectFile={
+                page.setActiveFileIndex
+              }
               onPageDismissStart={
                 isWalletOverlay
                   ? handleDismissStart
@@ -173,17 +291,39 @@ export default function ContentsPage() {
             />
 
             <ContentsDetailPanel
-              contents={page.contents}
-              tokenName={page.tokenName}
-              tokenIconUrl={page.tokenIconUrl}
-              loading={page.loading}
-              isMobilePortrait={page.isMobilePortrait}
-              commentCard={page.commentCard}
-              resaleDisabled={page.resaleButtonDisabled}
-              resaleLabel={page.resaleButtonLabel}
-              onProductNameClick={page.handleProductNameClick}
-              onBrandNameClick={page.handleBrandNameClick}
-              onResaleClick={page.handleOpenResalePage}
+              contents={
+                page.contents
+              }
+              tokenName={
+                page.tokenName
+              }
+              tokenIconUrl={
+                page.tokenIconUrl
+              }
+              loading={
+                page.loading
+              }
+              isMobilePortrait={
+                page.isMobilePortrait
+              }
+              commentCard={
+                page.commentCard
+              }
+              resaleDisabled={
+                page.resaleButtonDisabled
+              }
+              resaleLabel={
+                page.resaleButtonLabel
+              }
+              onProductNameClick={
+                page.handleProductNameClick
+              }
+              onBrandNameClick={
+                page.handleBrandNameClick
+              }
+              onResaleClick={
+                page.handleOpenResalePage
+              }
             />
           </div>
         </section>
@@ -226,30 +366,6 @@ export default function ContentsPage() {
               : "投稿"
           }
           submittingLabel="投稿中..."
-          beforeInput={
-            isReplying ? (
-              <div className="contents-page__reply-composer-header">
-                <span className="contents-page__reply-composer-label">
-                  返信中
-                </span>
-
-                <IconButton
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="contents-page__reply-composer-close"
-                  aria-label="返信をキャンセル"
-                  disabled={page.commentCard.replyPosting}
-                  onClick={handleCancelReply}
-                >
-                  <X
-                    size={18}
-                    aria-hidden="true"
-                  />
-                </IconButton>
-              </div>
-            ) : undefined
-          }
           onContentChange={
             isReplying
               ? page.commentCard.setReplyBody
