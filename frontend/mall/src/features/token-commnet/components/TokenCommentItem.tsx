@@ -28,9 +28,7 @@ type TokenCommentItemProps = {
   onReport: (commentId: string) => void;
 };
 
-function getAuthorAvatarId(
-  comment: TokenComment,
-): string {
+function getAuthorAvatarId(comment: TokenComment): string {
   return comment.authorId?.trim() || "";
 }
 
@@ -40,21 +38,16 @@ function TokenCommentAuthor({
   comment: TokenComment;
 }) {
   const navigate = useNavigate();
-  const displayName =
-    getTokenCommentDisplayName(comment);
-  const iconUrl =
-    getTokenCommentDisplayIconUrl(comment);
-  const avatarId =
-    getAuthorAvatarId(comment);
+  const displayName = getTokenCommentDisplayName(comment);
+  const iconUrl = getTokenCommentDisplayIconUrl(comment);
+  const avatarId = getAuthorAvatarId(comment);
 
   const handleOpenAvatar = () => {
     if (!avatarId) {
       return;
     }
 
-    navigate(
-      `/avatars/${encodeURIComponent(avatarId)}`,
-    );
+    navigate(`/avatars/${encodeURIComponent(avatarId)}`);
   };
 
   const content = (
@@ -66,7 +59,6 @@ function TokenCommentAuthor({
         size="xs"
         shape="circle"
       />
-
       <span className="token-comment-author__name">
         {displayName}
       </span>
@@ -109,32 +101,18 @@ export default function TokenCommentItem({
     return null;
   }
 
-  const commentId =
-    comment.commentId?.trim() || "";
-
-  const authorAvatarId =
-    getAuthorAvatarId(comment);
-
-  const displayName =
-    getTokenCommentDisplayName(comment);
-
-  const normalizedTokenBlueprintId =
-    tokenBlueprintId.trim();
-
-  const normalizedCurrentAvatarId =
-    currentAvatarId.trim();
-
-  const isExpanded =
-    expandedIds.has(commentId);
-
-  const hasChildren =
-    hasTokenCommentChildren(node);
+  const commentId = comment.commentId?.trim() || "";
+  const authorAvatarId = getAuthorAvatarId(comment);
+  const displayName = getTokenCommentDisplayName(comment);
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedCurrentAvatarId = currentAvatarId.trim();
+  const isExpanded = expandedIds.has(commentId);
+  const hasChildren = hasTokenCommentChildren(node);
 
   const isOwnComment = Boolean(
     normalizedCurrentAvatarId &&
       authorAvatarId &&
-      normalizedCurrentAvatarId ===
-        authorAvatarId,
+      normalizedCurrentAvatarId === authorAvatarId,
   );
 
   const canReport = Boolean(
@@ -144,14 +122,10 @@ export default function TokenCommentItem({
       !isOwnComment,
   );
 
-  const indent =
-    Math.min(
-      Math.max(
-        comment.depth * 16,
-        0,
-      ),
-      48,
-    );
+  const indent = Math.min(
+    Math.max(comment.depth * 16, 0),
+    48,
+  );
 
   const handleLike = () => {
     if (!commentId) {
@@ -196,27 +170,19 @@ export default function TokenCommentItem({
   return (
     <div
       className="token-comment-item"
-      data-token-comment-id={
-        commentId || undefined
-      }
-      style={{
-        marginLeft: `${indent}px`,
-      }}
+      data-token-comment-id={commentId || undefined}
+      style={{ marginLeft: `${indent}px` }}
     >
       <article className="token-comment-item__body">
         <div className="token-comment-item__header">
-          <TokenCommentAuthor
-            comment={comment}
-          />
+          <TokenCommentAuthor comment={comment} />
 
           {comment.createdAt ? (
             <time
               className="token-comment-item__date"
               dateTime={comment.createdAt}
             >
-              {formatDateTime(
-                comment.createdAt,
-              )}
+              {formatDateTime(comment.createdAt)}
             </time>
           ) : null}
         </div>
@@ -262,9 +228,7 @@ export default function TokenCommentItem({
               size="sm"
               variant="neutral"
               selected={isExpanded}
-              onClick={
-                handleToggleExpanded
-              }
+              onClick={handleToggleExpanded}
             >
               {isExpanded
                 ? "返信を閉じる"
@@ -277,42 +241,22 @@ export default function TokenCommentItem({
           )}
         </div>
 
-        {isExpanded &&
-        node.children.length > 0 ? (
+        {isExpanded && node.children.length > 0 ? (
           <div className="token-comment-item__children">
-            {node.children.map(
-              (child) => (
-                <TokenCommentItem
-                  key={
-                    child.comment
-                      .commentId
-                  }
-                  tokenBlueprintId={
-                    normalizedTokenBlueprintId
-                  }
-                  currentAvatarId={
-                    normalizedCurrentAvatarId
-                  }
-                  node={child}
-                  expandedIds={
-                    expandedIds
-                  }
-                  onToggleExpanded={
-                    onToggleExpanded
-                  }
-                  onLike={onLike}
-                  onDislike={
-                    onDislike
-                  }
-                  onStartReply={
-                    onStartReply
-                  }
-                  onReport={
-                    onReport
-                  }
-                />
-              ),
-            )}
+            {node.children.map((child) => (
+              <TokenCommentItem
+                key={child.comment.commentId}
+                tokenBlueprintId={normalizedTokenBlueprintId}
+                currentAvatarId={normalizedCurrentAvatarId}
+                node={child}
+                expandedIds={expandedIds}
+                onToggleExpanded={onToggleExpanded}
+                onLike={onLike}
+                onDislike={onDislike}
+                onStartReply={onStartReply}
+                onReport={onReport}
+              />
+            ))}
           </div>
         ) : null}
       </article>
