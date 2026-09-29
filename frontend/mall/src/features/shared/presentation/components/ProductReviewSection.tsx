@@ -105,13 +105,11 @@ export default function ProductReviewSection({
 
   return (
     <>
-      <section
-        className={["product-review", className].filter(Boolean).join(" ")}
-      >
+      <section className={["product-review", className].filter(Boolean).join(" ")}>
         <SectionHeader
           title="レビュー"
           titleAs="h2"
-          className="ui-section-header--title-sm"
+          titleSize="sm"
           right={
             loading ? (
               <TextState variant="loading">読み込み中...</TextState>

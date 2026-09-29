@@ -26,7 +26,6 @@ export function ShippingAddressCard({
         title="配送先情報"
         titleAs="h2"
         titleSize="md"
-        className="payment-page__section-header"
         right={
           <TextButton type="button" onClick={onGoToShippingAddress}>
             配送先を管理

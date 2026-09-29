@@ -27,18 +27,6 @@
   gap: 16px;
 }
 
-.payment-page__section-header {
-  margin-bottom: 14px;
-}
-
-.payment-page__section-header .ui-section-header__title,
-.payment-page__card > .ui-section-header .ui-section-header__title {
-  color: #111827;
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.4;
-}
-
 .payment-page__card > .ui-section-header {
   margin-bottom: 14px;
 }

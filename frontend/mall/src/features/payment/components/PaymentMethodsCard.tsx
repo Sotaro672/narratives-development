@@ -33,7 +33,6 @@ export function PaymentMethodsCard({
         title="支払い方法"
         titleAs="h2"
         titleSize="md"
-        className="payment-page__section-header"
         right={
           <TextButton type="button" onClick={onGoToPaymentMethod}>
             カードを管理
