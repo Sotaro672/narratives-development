@@ -124,6 +124,10 @@
     touch-action: pan-y;
   }
 
+  .chat-workspace-page--detail .chat-workspace-page__detail {
+    height: calc(100% - var(--mobile-composer-height, 56px));
+  }
+
   .chat-workspace-page__empty {
     padding: 16px;
   }
@@ -131,9 +135,7 @@
   .chat-list-page--workspace {
     min-height: 100%;
   }
-}
 
-@media (max-width: 959px) and (orientation: portrait) {
   .chat-workspace-page-layout.layout-main--with-footer {
     height: 100dvh;
     min-height: 0;

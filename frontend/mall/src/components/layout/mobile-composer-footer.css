@@ -1,6 +1,7 @@
 /* frontend/mall/src/components/layout/mobile-composer-footer.css */
 
 .mobile-composer-footer {
+  --mobile-composer-safe-area-bottom: max(0px, calc(env(safe-area-inset-bottom) - var(--mobile-composer-keyboard-offset, 0px)));
   position: fixed;
   right: 0;
   bottom: var(--mobile-composer-keyboard-offset, 0px);
@@ -8,10 +9,11 @@
   z-index: var(--footer-nav-z-index, 40);
   display: none;
   box-sizing: border-box;
-  padding: 8px 10px;
-  padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  padding: 8px 10px calc(8px + var(--mobile-composer-safe-area-bottom));
   border-top: 1px solid #e5e7eb;
   background: #fff;
+  transition: bottom 80ms linear;
+  will-change: bottom;
 }
 
 .mobile-composer-footer__previews {
@@ -117,9 +119,7 @@
   resize: none;
   appearance: none;
   -webkit-appearance: none;
-  transition:
-    border-color 120ms ease,
-    background-color 120ms ease;
+  transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .mobile-composer-footer__input::placeholder {
@@ -175,8 +175,7 @@
 
 @media (max-width: 640px) {
   .mobile-composer-footer {
-    padding: 7px 8px;
-    padding-bottom: calc(7px + env(safe-area-inset-bottom));
+    padding: 7px 8px calc(7px + var(--mobile-composer-safe-area-bottom));
   }
 
   .mobile-composer-footer__previews {
@@ -214,7 +213,7 @@
 
 @media (orientation: landscape) and (max-width: 959px) {
   .mobile-composer-footer {
-    padding-bottom: calc(7px + env(safe-area-inset-bottom));
+    padding-bottom: calc(7px + var(--mobile-composer-safe-area-bottom));
   }
 
   .mobile-composer-footer__previews {
@@ -229,6 +228,12 @@
 
   .mobile-composer-footer__preview-item {
     flex-basis: 60px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobile-composer-footer {
+    transition: none;
   }
 }
 

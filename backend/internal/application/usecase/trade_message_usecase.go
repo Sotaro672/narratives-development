@@ -4,6 +4,7 @@ package usecase
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	tradedom "narratives/internal/domain/trade"
@@ -106,9 +107,10 @@ type CreateTradeMessageInput struct {
 	TradeID  string
 	AvatarID string
 	Content  string
+	Images   []tradedom.MessageImage
 }
 
-// CreateMessage creates one text message from the authenticated Avatar.
+// CreateMessage creates one message from the authenticated Avatar.
 //
 // SenderSide is derived from the persisted Trade:
 //   - Trade.BuyerAvatarID == AvatarID -> buyer
@@ -117,9 +119,8 @@ type CreateTradeMessageInput struct {
 // SenderType is always avatar because Trade is currently limited to Resale
 // transactions between Mall Avatars.
 //
-// Images are intentionally not accepted here yet. Image messages should be
-// introduced together with an authenticated upload/storage flow rather than
-// accepting arbitrary file URLs or object paths from clients.
+// A message may contain text, images, or both. Image metadata is accepted only
+// for objects scoped under trade-message-images/{tradeId}/.
 func (u *TradeMessageUsecase) CreateMessage(
 	ctx context.Context,
 	in CreateTradeMessageInput,
@@ -140,6 +141,13 @@ func (u *TradeMessageUsecase) CreateMessage(
 		return tradedom.Message{}, tradedom.ErrInvalidStatus
 	}
 
+	if err := validateTradeMessageImageScope(
+		participant.Trade.ID,
+		in.Images,
+	); err != nil {
+		return tradedom.Message{}, err
+	}
+
 	message, err := tradedom.NewMessageForCreate(
 		"",
 		participant.Trade.ID,
@@ -147,7 +155,7 @@ func (u *TradeMessageUsecase) CreateMessage(
 		tradedom.MessageSenderTypeAvatar,
 		in.AvatarID,
 		in.Content,
-		nil,
+		in.Images,
 	)
 	if err != nil {
 		return tradedom.Message{}, err
@@ -300,6 +308,36 @@ func (u *TradeMessageUsecase) CountUnread(
 // ============================================================
 // Internal
 // ============================================================
+
+func validateTradeMessageImageScope(
+	tradeID string,
+	images []tradedom.MessageImage,
+) error {
+	if len(images) == 0 {
+		return nil
+	}
+
+	expectedPrefix := "trade-message-images/" + tradeID + "/"
+
+	for _, image := range images {
+		objectPath := strings.TrimSpace(image.ObjectPath)
+
+		if !strings.HasPrefix(objectPath, expectedPrefix) {
+			return tradedom.ErrInvalidMessageImageObjectPath
+		}
+
+		remainder := strings.TrimPrefix(objectPath, expectedPrefix)
+		parts := strings.Split(remainder, "/")
+
+		if len(parts) != 2 ||
+			strings.TrimSpace(parts[0]) == "" ||
+			strings.TrimSpace(parts[1]) == "" {
+			return tradedom.ErrInvalidMessageImageObjectPath
+		}
+	}
+
+	return nil
+}
 
 func resolveTradeMessageParticipantSide(
 	trade tradedom.Trade,

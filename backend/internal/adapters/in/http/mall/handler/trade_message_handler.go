@@ -6,10 +6,42 @@ import (
 	"net/http"
 
 	usecase "narratives/internal/application/usecase"
+	tradedom "narratives/internal/domain/trade"
 )
 
+type createTradeMessageImageRequest struct {
+	FileName   string `json:"fileName"`
+	FileURL    string `json:"fileUrl"`
+	ObjectPath string `json:"objectPath"`
+	FileSize   int64  `json:"fileSize"`
+	MIMEType   string `json:"mimeType"`
+}
+
 type createTradeMessageRequest struct {
-	Content string `json:"content"`
+	Content string                           `json:"content"`
+	Images  []createTradeMessageImageRequest `json:"images"`
+}
+
+func toTradeMessageImages(
+	images []createTradeMessageImageRequest,
+) []tradedom.MessageImage {
+	if len(images) == 0 {
+		return []tradedom.MessageImage{}
+	}
+
+	result := make([]tradedom.MessageImage, 0, len(images))
+
+	for _, image := range images {
+		result = append(result, tradedom.MessageImage{
+			FileName:   image.FileName,
+			FileURL:    image.FileURL,
+			ObjectPath: image.ObjectPath,
+			FileSize:   image.FileSize,
+			MIMEType:   image.MIMEType,
+		})
+	}
+
+	return result
 }
 
 // POST /mall/me/trades/{tradeId}/messages
@@ -17,8 +49,19 @@ type createTradeMessageRequest struct {
 // Body:
 //
 //	{
-//	  "content": "発送ありがとうございます"
+//	  "content": "発送ありがとうございます",
+//	  "images": [
+//	    {
+//	      "fileName": "photo.jpg",
+//	      "fileUrl": "https://...",
+//	      "objectPath": "trade-message-images/{tradeId}/{imageId}/photo.jpg",
+//	      "fileSize": 123456,
+//	      "mimeType": "image/jpeg"
+//	    }
+//	  ]
 //	}
+//
+// content may be empty when one or more images are provided.
 //
 // SenderSide, SenderType and SenderID are never accepted from the client.
 // TradeMessageUsecase derives them from the authenticated Avatar and Trade.
@@ -43,17 +86,13 @@ func (h *TradeHandler) createMessage(
 		return
 	}
 
-	if req.Content == "" {
-		badRequest(w, "content is required")
-		return
-	}
-
 	created, err := h.messageUC.CreateMessage(
 		r.Context(),
 		usecase.CreateTradeMessageInput{
 			TradeID:  tradeID,
 			AvatarID: avatarID,
 			Content:  req.Content,
+			Images:   toTradeMessageImages(req.Images),
 		},
 	)
 	if err != nil {

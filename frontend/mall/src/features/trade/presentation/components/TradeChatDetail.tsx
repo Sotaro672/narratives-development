@@ -154,19 +154,27 @@ export default function TradeChatDetail({
     return registerComposer({
       content: reply.content,
       placeholder: "メッセージを入力",
+      files: reply.files,
       error: reply.error,
       submitting: reply.submitting,
       canSubmit: reply.canSubmit,
       disabled: reply.actionDisabled,
+      maxFiles: 10,
+      accept: "image/*",
       onContentChange: reply.setContent,
+      onFilesAdd: reply.addFiles,
+      onRemoveFile: reply.removeFile,
       onSubmit: reply.submit,
     });
   }, [
     registerComposer,
     reply.actionDisabled,
+    reply.addFiles,
     reply.canSubmit,
     reply.content,
     reply.error,
+    reply.files,
+    reply.removeFile,
     reply.setContent,
     reply.submit,
     reply.submitting,
@@ -437,11 +445,14 @@ export default function TradeChatDetail({
                 <ChatInlineComposer
                   content={reply.content}
                   placeholder="メッセージを入力"
+                  files={reply.files}
                   error={reply.error}
                   submitting={reply.submitting}
                   canSubmit={reply.canSubmit}
                   disabled={reply.actionDisabled}
                   onContentChange={reply.setContent}
+                  onFilesAdd={reply.addFiles}
+                  onRemoveFile={reply.removeFile}
                   onSubmit={reply.submit}
                 />
               </div>

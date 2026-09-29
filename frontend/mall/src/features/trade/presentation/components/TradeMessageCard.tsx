@@ -1,5 +1,8 @@
 // frontend/mall/src/features/trade/presentation/components/TradeMessageCard.tsx
 
+import { useState } from "react";
+
+import Preview from "../../../../components/ui/Preview";
 import TextLink from "../../../../components/ui/textLink";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import type {
@@ -134,6 +137,8 @@ export default function TradeMessageCard({
   onOpenDispatchQr,
   onOpenReturnShipmentQr,
 }: TradeMessageCardProps) {
+  const [previewImageIndex, setPreviewImageIndex] = useState<number | null>(null);
+
   const displaySenderSide = getDisplaySenderSide(message);
   const isSystem = displaySenderSide === "system";
   const isMine =
@@ -145,9 +150,16 @@ export default function TradeMessageCard({
     message,
     trade,
   );
+
   const dispatchSystemMessage = isDispatchSystemMessage(message);
   const returnShipmentReadySystemMessage =
     isReturnShipmentReadySystemMessage(message);
+
+  const images = message.images ?? [];
+  const previewImage =
+    previewImageIndex !== null
+      ? images[previewImageIndex] ?? null
+      : null;
 
   const canReport =
     message.senderType === "avatar" &&
@@ -155,6 +167,7 @@ export default function TradeMessageCard({
     Boolean(message.id.trim());
 
   const hasAfterContent =
+    images.length > 0 ||
     Boolean(returnConsultationDetail) ||
     (dispatchSystemMessage && Boolean(onOpenDispatchQr)) ||
     (
@@ -162,56 +175,136 @@ export default function TradeMessageCard({
       Boolean(onOpenReturnShipmentQr)
     );
 
+  const handlePreviewPrevious = (): void => {
+    if (
+      previewImageIndex === null ||
+      images.length <= 1
+    ) {
+      return;
+    }
+
+    setPreviewImageIndex(
+      previewImageIndex === 0
+        ? images.length - 1
+        : previewImageIndex - 1,
+    );
+  };
+
+  const handlePreviewNext = (): void => {
+    if (
+      previewImageIndex === null ||
+      images.length <= 1
+    ) {
+      return;
+    }
+
+    setPreviewImageIndex(
+      previewImageIndex === images.length - 1
+        ? 0
+        : previewImageIndex + 1,
+    );
+  };
+
   return (
-    <ChatMessageBubble
-      senderName={sender.name}
-      senderIcon={sender.icon}
-      createdAt={message.createdAt}
-      content={message.content}
-      isMine={isMine}
-      isSystem={isSystem}
-      action={
-        canReport ? (
-          <button
-            type="button"
-            className="trade-chat-detail__copy-button"
-            aria-label={`${sender.name}の取引コメントを通報`}
-            onClick={() => onReport(message)}
-          >
-            通報
-          </button>
-        ) : undefined
-      }
-      afterContent={
-        hasAfterContent ? (
-          <>
-            {returnConsultationDetail ? (
-              <p className="chat-detail-page__content">
-                {returnConsultationDetail}
-              </p>
-            ) : null}
+    <>
+      <ChatMessageBubble
+        senderName={sender.name}
+        senderIcon={sender.icon}
+        createdAt={message.createdAt}
+        content={message.content}
+        isMine={isMine}
+        isSystem={isSystem}
+        action={
+          canReport ? (
+            <button
+              type="button"
+              className="trade-chat-detail__copy-button"
+              aria-label={`${sender.name}の取引コメントを通報`}
+              onClick={() => onReport(message)}
+            >
+              通報
+            </button>
+          ) : undefined
+        }
+        afterContent={
+          hasAfterContent ? (
+            <>
+              {images.length > 0 ? (
+                <div
+                  className="chat-detail-page__images"
+                  aria-label="添付画像"
+                >
+                  {images.map((image, index) => (
+                    <a
+                      key={`${image.objectPath}-${index}`}
+                      href={image.fileUrl}
+                      className="chat-detail-page__image-link"
+                      aria-label={`${image.fileName || `添付画像${index + 1}`}を表示`}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setPreviewImageIndex(index);
+                      }}
+                    >
+                      <img
+                        src={image.fileUrl}
+                        alt={image.fileName || `添付画像${index + 1}`}
+                        className="chat-detail-page__image"
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    </a>
+                  ))}
+                </div>
+              ) : null}
 
-            {dispatchSystemMessage && onOpenDispatchQr ? (
-              <TextLink
-                className="trade-chat-detail__dispatch-qr-link"
-                onClick={onOpenDispatchQr}
-              >
-                PUDO QRを表示
-              </TextLink>
-            ) : null}
+              {returnConsultationDetail ? (
+                <p className="chat-detail-page__content">
+                  {returnConsultationDetail}
+                </p>
+              ) : null}
 
-            {returnShipmentReadySystemMessage &&
-            onOpenReturnShipmentQr ? (
-              <TextLink
-                className="trade-chat-detail__dispatch-qr-link"
-                onClick={onOpenReturnShipmentQr}
-              >
-                PUDO QRを表示
-              </TextLink>
-            ) : null}
-          </>
-        ) : undefined
-      }
-    />
+              {dispatchSystemMessage && onOpenDispatchQr ? (
+                <TextLink
+                  className="trade-chat-detail__dispatch-qr-link"
+                  onClick={onOpenDispatchQr}
+                >
+                  PUDO QRを表示
+                </TextLink>
+              ) : null}
+
+              {returnShipmentReadySystemMessage &&
+              onOpenReturnShipmentQr ? (
+                <TextLink
+                  className="trade-chat-detail__dispatch-qr-link"
+                  onClick={onOpenReturnShipmentQr}
+                >
+                  PUDO QRを表示
+                </TextLink>
+              ) : null}
+            </>
+          ) : undefined
+        }
+      />
+
+      <Preview
+        open={previewImage !== null}
+        src={previewImage?.fileUrl}
+        alt={previewImage?.fileName || "取引メッセージの添付画像"}
+        type={previewImage?.mimeType || "image"}
+        onClose={() => {
+          setPreviewImageIndex(null);
+        }}
+        onPrev={
+          images.length > 1
+            ? handlePreviewPrevious
+            : undefined
+        }
+        onNext={
+          images.length > 1
+            ? handlePreviewNext
+            : undefined
+        }
+      />
+    </>
   );
 }

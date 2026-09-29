@@ -295,11 +295,13 @@ export type TradeDetailResponse = {
 
 export type CreateTradeMessageParams = {
   tradeId: string;
-  content: string;
+  content?: string;
+  images?: TradeMessageImage[];
 };
 
 export type CreateTradeMessageRequest = {
-  content: string;
+  content?: string;
+  images?: TradeMessageImage[];
 };
 
 export type CreateTradeMessageResponse = {

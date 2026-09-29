@@ -139,14 +139,6 @@ function requireOrderItemIndex(orderItemIndex: number): number {
   return orderItemIndex;
 }
 
-function requireMessageContent(content: string): string {
-  if (!content || !/\S/u.test(content)) {
-    throw new Error("メッセージを入力してください。");
-  }
-
-  return content;
-}
-
 function requireReturnConsultationReason(
   reason: TradeReturnConsultationReason,
 ): TradeReturnConsultationReason {
@@ -489,10 +481,16 @@ export async function createTradeMessage(
   params: CreateTradeMessageParams,
 ): Promise<TradeMessage> {
   const tradeId = requireTradeId(params.tradeId);
-  const content = requireMessageContent(params.content);
+  const content = params.content?.trim() ?? "";
+  const images = params.images ?? [];
+
+  if (!content && images.length === 0) {
+    throw new Error("メッセージまたは画像を入力してください。");
+  }
 
   const request: CreateTradeMessageRequest = {
-    content,
+    ...(content ? { content } : {}),
+    ...(images.length > 0 ? { images } : {}),
   };
 
   const result = await fetchTradeWithAuth<CreateTradeMessageResponse>(

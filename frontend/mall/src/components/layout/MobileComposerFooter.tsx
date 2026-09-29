@@ -101,6 +101,7 @@ export default function MobileComposerFooter({
   onRemoveFile,
   onSubmit,
 }: MobileComposerFooterProps) {
+  const footerRef = useRef<HTMLElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -108,14 +109,17 @@ export default function MobileComposerFooter({
   const supportsFiles =
     typeof onFilesAdd === "function" &&
     typeof onRemoveFile === "function";
+
   const remainingFileCount = Math.max(
     maxFiles - files.length,
     0,
   );
+
   const canAddFiles =
     supportsFiles &&
     !inputDisabled &&
     remainingFileCount > 0;
+
   const submitDisabled =
     inputDisabled ||
     !canSubmit;
@@ -141,6 +145,139 @@ export default function MobileComposerFooter({
         : "hidden";
   }, [content]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const footer = footerRef.current;
+
+    if (!footer) {
+      return;
+    }
+
+    const root = document.documentElement;
+    const visualViewport = window.visualViewport;
+
+    let animationFrameId: number | null = null;
+
+    const updateKeyboardOffset = (): void => {
+      const layoutViewportHeight = window.innerHeight;
+
+      if (!visualViewport) {
+        footer.style.setProperty(
+          "--mobile-composer-keyboard-offset",
+          "0px",
+        );
+        return;
+      }
+
+      const visibleViewportBottom =
+        visualViewport.height +
+        visualViewport.offsetTop;
+
+      const keyboardOffset = Math.max(
+        0,
+        layoutViewportHeight - visibleViewportBottom,
+      );
+
+      footer.style.setProperty(
+        "--mobile-composer-keyboard-offset",
+        `${Math.round(keyboardOffset)}px`,
+      );
+    };
+
+    const updateComposerHeight = (): void => {
+      const height = footer.getBoundingClientRect().height;
+
+      root.style.setProperty(
+        "--mobile-composer-height",
+        `${Math.ceil(height)}px`,
+      );
+    };
+
+    const updateLayout = (): void => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      animationFrameId = window.requestAnimationFrame(() => {
+        animationFrameId = null;
+        updateKeyboardOffset();
+        updateComposerHeight();
+      });
+    };
+
+    const resizeObserver =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(updateLayout)
+        : null;
+
+    resizeObserver?.observe(footer);
+
+    window.addEventListener(
+      "resize",
+      updateLayout,
+      { passive: true },
+    );
+
+    window.addEventListener(
+      "orientationchange",
+      updateLayout,
+      { passive: true },
+    );
+
+    visualViewport?.addEventListener(
+      "resize",
+      updateLayout,
+      { passive: true },
+    );
+
+    visualViewport?.addEventListener(
+      "scroll",
+      updateLayout,
+      { passive: true },
+    );
+
+    updateLayout();
+
+    return () => {
+      if (animationFrameId !== null) {
+        window.cancelAnimationFrame(animationFrameId);
+      }
+
+      resizeObserver?.disconnect();
+
+      window.removeEventListener(
+        "resize",
+        updateLayout,
+      );
+
+      window.removeEventListener(
+        "orientationchange",
+        updateLayout,
+      );
+
+      visualViewport?.removeEventListener(
+        "resize",
+        updateLayout,
+      );
+
+      visualViewport?.removeEventListener(
+        "scroll",
+        updateLayout,
+      );
+
+      footer.style.removeProperty(
+        "--mobile-composer-keyboard-offset",
+      );
+
+      root.style.removeProperty(
+        "--mobile-composer-height",
+      );
+    };
+  }, []);
+
   const handleFilesChange = (
     event: ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -153,6 +290,7 @@ export default function MobileComposerFooter({
     event.currentTarget.value = "";
 
     if (
+      typeof onFilesAdd !== "function" ||
       !supportsFiles ||
       inputDisabled ||
       selectedFiles.length === 0 ||
@@ -179,6 +317,7 @@ export default function MobileComposerFooter({
 
   return (
     <footer
+      ref={footerRef}
       className="mobile-composer-footer"
       aria-busy={submitting || undefined}
     >
