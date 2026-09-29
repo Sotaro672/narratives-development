@@ -5,11 +5,6 @@
   padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
 
-.scan-result-token-card {
-  margin-top: 20px;
-  margin-bottom: 20px;
-}
-
 .scan-result-desktop-grid {
   display: grid;
   gap: 16px;
@@ -53,46 +48,6 @@
 
 .scan-result-measurements {
   margin-top: 14px;
-}
-
-.scan-result-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.scan-result-transfer-list {
-  display: grid;
-  gap: 12px;
-}
-
-.scan-result-transfer {
-  padding: 12px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 14px;
-  background: var(--color-surface-subtle, #f9fafb);
-}
-
-.scan-result-transfer__date {
-  margin-bottom: 10px;
-  color: var(--color-text-muted, #6b7280);
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-
-.scan-result-transfer__arrow {
-  padding: 8px 0;
-  color: var(--color-text-muted, #6b7280);
-  text-align: center;
-}
-
-.scan-result-label {
-  display: grid;
-  gap: 6px;
-  margin-bottom: 12px;
-  color: var(--color-text-muted, #6b7280);
-  font-size: 0.88rem;
 }
 
 .scan-transfer-modal__review {
@@ -171,10 +126,6 @@
 @media (max-width: 520px) {
   .scan-result-quality-tabs {
     justify-content: flex-start;
-  }
-
-  .scan-result-actions {
-    display: grid;
   }
 
   .scan-transfer-modal__review-options {

@@ -1,4 +1,4 @@
-// frontend/amol/src/features/order/hooks/useOrderDetail.ts
+// frontend/mall/src/features/order/hooks/useOrderDetail.ts
 
 import {
   useCallback,
@@ -14,16 +14,11 @@ import { getFirebaseIdToken } from "../../../lib/authToken";
 import {
   cancelOrderItem,
   fetchOrderDetail,
-  returnOrderItem,
 } from "../api/orderDetailApi";
 
 import type {
   OrderDetail,
 } from "../../shared/types/orderDetailTypes";
-
-export type ReturnPackageState =
-  | "unopened"
-  | "opened";
 
 function getErrorMessage(
   caught: unknown,
@@ -53,11 +48,6 @@ export function useOrderDetail() {
   const [
     cancellingItemIndex,
     setCancellingItemIndex,
-  ] = useState<number | null>(null);
-
-  const [
-    returningItemIndex,
-    setReturningItemIndex,
   ] = useState<number | null>(null);
 
   const [error, setError] =
@@ -181,10 +171,7 @@ export function useOrderDetail() {
         return;
       }
 
-      if (
-        cancellingItemIndex !== null ||
-        returningItemIndex !== null
-      ) {
+      if (cancellingItemIndex !== null) {
         return;
       }
 
@@ -228,175 +215,6 @@ export function useOrderDetail() {
     [
       cancellingItemIndex,
       orderId,
-      returningItemIndex,
-    ],
-  );
-
-  const returnItem = useCallback(
-    async (
-      itemIndex: number,
-      packageState: ReturnPackageState,
-      reason: string,
-    ): Promise<boolean> => {
-      if (!orderId) {
-        setError(
-          "注文IDが指定されていません。",
-        );
-        return false;
-      }
-
-      if (
-        !Number.isInteger(itemIndex) ||
-        itemIndex < 0
-      ) {
-        setError(
-          "注文商品のインデックスが不正です。",
-        );
-        return false;
-      }
-
-      if (
-        packageState !== "unopened" &&
-        packageState !== "opened"
-      ) {
-        setError(
-          "商品の開封状態を選択してください。",
-        );
-        return false;
-      }
-
-      const normalizedReason =
-        reason.trim();
-
-      if (!normalizedReason) {
-        setError(
-          "返品理由を入力してください。",
-        );
-        return false;
-      }
-
-      const targetItem =
-        order?.items[itemIndex];
-
-      if (!targetItem) {
-        setError(
-          "返品対象の商品が見つかりません。",
-        );
-        return false;
-      }
-
-      if (targetItem.isCancelled) {
-        setError(
-          "キャンセル済みの商品は返品できません。",
-        );
-        return false;
-      }
-
-      if (!targetItem.isDispatched) {
-        setError(
-          "未発送の商品は返品できません。",
-        );
-        return false;
-      }
-
-      if (targetItem.transferred) {
-        setError(
-          "受け取り済みの商品は返品できません。",
-        );
-        return false;
-      }
-
-      if (targetItem.isReturnCompleted) {
-        setError(
-          "この商品の返品は完了しています。",
-        );
-        return false;
-      }
-
-      if (targetItem.isReturnRequested) {
-        if (
-          targetItem.returnRequestKind ===
-          packageState
-        ) {
-          setError(
-            "この商品は同じ開封状態で返品申請済みです。",
-          );
-        } else {
-          setError(
-            "この商品は別の開封状態で返品申請済みです。",
-          );
-        }
-
-        return false;
-      }
-
-      if (
-        packageState === "unopened" &&
-        targetItem.tokenTransferVerifiedAt
-      ) {
-        setError(
-          "この商品は開封確認済みのため、開封前として返品を申請できません。",
-        );
-        return false;
-      }
-
-      if (
-        cancellingItemIndex !== null ||
-        returningItemIndex !== null
-      ) {
-        return false;
-      }
-
-      setReturningItemIndex(itemIndex);
-      setError("");
-
-      try {
-        const backendUrl =
-          getApiBaseUrl();
-
-        if (!backendUrl) {
-          throw new Error(
-            "VITE_API_BASE_URLが設定されていません。",
-          );
-        }
-
-        const idToken =
-          await getFirebaseIdToken();
-
-        const nextOrder =
-          await returnOrderItem({
-            backendUrl,
-            idToken,
-            orderId,
-            itemIndex,
-            packageState,
-            reason: normalizedReason,
-          });
-
-        setOrder(nextOrder);
-        setError("");
-        return true;
-      } catch (caught) {
-        const message =
-          getErrorMessage(
-            caught,
-            "商品の返品受付に失敗しました。",
-          );
-
-        await loadOrder();
-        setError(message);
-
-        return false;
-      } finally {
-        setReturningItemIndex(null);
-      }
-    },
-    [
-      cancellingItemIndex,
-      loadOrder,
-      order,
-      orderId,
-      returningItemIndex,
     ],
   );
 
@@ -405,10 +223,8 @@ export function useOrderDetail() {
     order,
     loading,
     cancellingItemIndex,
-    returningItemIndex,
     error,
     reload,
     cancelItem,
-    returnItem,
   };
 }

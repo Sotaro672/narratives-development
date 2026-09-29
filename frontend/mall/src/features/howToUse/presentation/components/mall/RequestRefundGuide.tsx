@@ -11,17 +11,18 @@ export default function RequestRefundGuide() {
     <>
       <HowToUseSection id="return-request" title="返品申請">
         <div className="how-to-use-mobile-guide">
-          <HowToUseVideo storagePath="mall/refund/request-refund.mp4" label="Mallの注文詳細から返品を申請する手順" variant="iphone-12-pro" />
+          <HowToUseVideo storagePath="mall/refund/request-refund.mp4" label="Mallの注文詳細から返品申請画面を開き、返品を申請する手順" variant="iphone-12-pro" />
 
           <HowToUseStepList>
             <HowToUseStep>注文一覧から返品する注文を開いてください。</HowToUseStep>
-            <HowToUseStep>返品する商品を確認し、返品申請を開いてください。</HowToUseStep>
-            <HowToUseStep>商品の開封状態と返品理由を入力してください。</HowToUseStep>
-            <HowToUseStep>入力内容を確認し、返品申請を送信してください。</HowToUseStep>
+            <HowToUseStep>返品する商品の「返品」ボタンを押して、返品申請画面を開いてください。</HowToUseStep>
+            <HowToUseStep>返品する商品を確認し、商品の開封状態を選択してください。</HowToUseStep>
+            <HowToUseStep>開封前の場合は返品条件を確認し、「返品条件に合意する」にチェックを入れてください。</HowToUseStep>
+            <HowToUseStep>返品理由を入力し、「返品を申請する」ボタンを押してください。</HowToUseStep>
           </HowToUseStepList>
         </div>
 
-        <HowToUseNote title="未開封商品の返品について">未開封として返品申請した後に商品のQRコードをスキャンすると、開封後での返品として自動的に更新されます。ご注意ください。</HowToUseNote>
+        <HowToUseNote title="未開封商品の返品について">未開封として返品申請する場合は、返品条件を確認してから申請してください。返品手続き中は、商品が入っている配送用梱包材を開けないでください。</HowToUseNote>
       </HowToUseSection>
 
       <HowToUseSection id="return-reply" title="返信入力">

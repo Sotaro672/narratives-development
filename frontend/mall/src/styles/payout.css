@@ -77,37 +77,6 @@
 }
 
 /* =========================================================
- * Payout Select
- * ======================================================= */
-
-.payout-select__search {
-  position: relative;
-  width: 100%;
-  margin-bottom: 20px;
-}
-
-.payout-select__search .input-field {
-  width: 100%;
-}
-
-.payout-select__search .input-field__control {
-  min-height: 48px;
-  height: 48px;
-  padding-left: 46px;
-  font-size: 16px;
-}
-
-.payout-select__search-icon {
-  position: absolute;
-  z-index: 1;
-  top: 24px;
-  left: 16px;
-  transform: translateY(-50%);
-  color: #6b7280;
-  pointer-events: none;
-}
-
-/* =========================================================
  * Option List
  * ======================================================= */
 
@@ -138,31 +107,6 @@
 }
 
 /* =========================================================
- * Empty
- * ======================================================= */
-
-.payout-select__empty {
-  padding: 32px 20px;
-  text-align: center;
-}
-
-.payout-select__empty .ui-text-state {
-  margin: 0;
-}
-
-.payout-select__empty .ui-text-state:first-child {
-  color: var(--color-text);
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.payout-select__empty .ui-text-state + .ui-text-state {
-  margin-top: 8px;
-  font-size: 13px;
-}
-
-/* =========================================================
  * Note
  * ======================================================= */
 
@@ -179,11 +123,5 @@
   .payout-page,
   .payout-select-page {
     padding-bottom: 32px;
-  }
-}
-
-@media (max-width: 480px) {
-  .payout-select__search .input-field__control {
-    font-size: 16px;
   }
 }

@@ -11,8 +11,11 @@ import Chip from "../components/ui/Chip";
 import MediaIcon from "../components/ui/MediaIcon";
 import Textbox from "../components/ui/Textbox";
 
-import { useOrderDetail, type ReturnPackageState } from "../features/order/hooks/useOrderDetail";
+import { returnOrderItem, type ReturnPackageState } from "../features/order/api/orderDetailApi";
+import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
 import { getFallbackInitial, getProductTitle } from "../features/order/util/orderItemDisplay";
+import { getApiBaseUrl } from "../lib/apiBaseUrl";
+import { getFirebaseIdToken } from "../lib/authToken";
 
 import "../styles/page-layout.css";
 import "../styles/return-request-page.css";
@@ -31,6 +34,12 @@ function parseItemIndex(value: string | undefined): number | null {
     : null;
 }
 
+function getErrorMessage(caught: unknown, defaultMessage: string): string {
+  return caught instanceof Error
+    ? caught.message
+    : defaultMessage;
+}
+
 export default function ReturnRequestPage() {
   const navigate = useNavigate();
   const { itemIndex: routeItemIndex } = useParams<{ itemIndex: string }>();
@@ -40,24 +49,20 @@ export default function ReturnRequestPage() {
     orderId,
     order,
     loading,
-    returningItemIndex,
-    error,
+    error: orderError,
     reload,
-    returnItem,
   } = useOrderDetail();
 
   const [packageState, setPackageState] = useState<ReturnPackageState | null>(null);
   const [reason, setReason] = useState("");
   const [agreedToReturnConditions, setAgreedToReturnConditions] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   const item =
     order && itemIndex !== null
       ? order.items[itemIndex] ?? null
       : null;
-
-  const submitting =
-    itemIndex !== null &&
-    returningItemIndex === itemIndex;
 
   const eligibilityError = useMemo(() => {
     if (!order || itemIndex === null || !item) {
@@ -116,6 +121,7 @@ export default function ReturnRequestPage() {
 
     setPackageState(nextState);
     setReason("");
+    setSubmitError("");
     setAgreedToReturnConditions(false);
   };
 
@@ -135,40 +141,63 @@ export default function ReturnRequestPage() {
   const handleSubmit = async () => {
     if (
       !canSubmit ||
+      !orderId ||
       itemIndex === null ||
       packageState === null
     ) {
       return;
     }
 
-    const succeeded = await returnItem(
-      itemIndex,
-      packageState,
-      normalizedReason,
-    );
+    setSubmitting(true);
+    setSubmitError("");
 
-    if (!succeeded) {
-      return;
+    try {
+      const backendUrl = getApiBaseUrl();
+
+      if (!backendUrl) {
+        throw new Error("VITE_API_BASE_URLが設定されていません。");
+      }
+
+      const idToken = await getFirebaseIdToken();
+
+      await returnOrderItem({
+        backendUrl,
+        idToken,
+        orderId,
+        itemIndex,
+        packageState,
+        reason: normalizedReason,
+      });
+
+      navigate(
+        `/orders/${encodeURIComponent(orderId)}`,
+        { replace: true },
+      );
+    } catch (caught) {
+      const message = getErrorMessage(
+        caught,
+        "商品の返品受付に失敗しました。",
+      );
+
+      try {
+        await reload();
+      } catch {
+        // reload側で取得エラーが管理されるため、ここでは送信エラーを優先して表示する。
+      }
+
+      setSubmitError(message);
+    } finally {
+      setSubmitting(false);
     }
-
-    navigate(
-      `/orders/${encodeURIComponent(orderId)}`,
-      { replace: true },
-    );
   };
 
+  const visibleError = submitError || orderError;
+
   return (
-    <Layout
-      title="AMOL"
-      mode="mypage"
-      showFooter
-    >
+    <Layout title="AMOL" mode="mypage" showFooter>
       <section className="page-section return-request-page">
         <header className="return-request-page__header">
-          <h1 className="return-request-page__title">
-            返品を申請する
-          </h1>
-
+          <h1 className="return-request-page__title">返品を申請する</h1>
           <p className="return-request-page__description">
             返品する商品を確認し、商品の開封状態と返品理由を入力してください。
           </p>
@@ -183,7 +212,7 @@ export default function ReturnRequestPage() {
         {!loading && (!order || itemIndex === null || !item) ? (
           <div className="return-request-page__state">
             <Alert variant="error">
-              {error || "返品対象の商品が見つかりません。"}
+              {orderError || "返品対象の商品が見つかりません。"}
             </Alert>
 
             {orderId ? (
@@ -207,17 +236,13 @@ export default function ReturnRequestPage() {
             }}
           >
             <section className="return-request-page__section">
-              <h2 className="return-request-page__section-title">
-                返品する商品
-              </h2>
+              <h2 className="return-request-page__section-title">返品する商品</h2>
 
               <div className="return-request-page__product">
                 <MediaIcon
                   src={item.tokenIcon}
                   alt={item.tokenName || getProductTitle(item)}
-                  fallback={getFallbackInitial(
-                    item.tokenName || getProductTitle(item),
-                  )}
+                  fallback={getFallbackInitial(item.tokenName || getProductTitle(item))}
                   size="lg"
                   shape="rounded"
                 />
@@ -296,27 +321,15 @@ export default function ReturnRequestPage() {
 
                 {packageState === "unopened" && !unopenedUnavailable ? (
                   <section className="return-request-page__section">
-                    <h2 className="return-request-page__section-title">
-                      返品条件
-                    </h2>
+                    <h2 className="return-request-page__section-title">返品条件</h2>
 
                     <Alert variant="warning">
                       <ol className="return-request-page__condition-list">
-                        <li>
-                          返品が承認された場合、返金対象は商品代金（税込）のみです。
-                        </li>
-                        <li>
-                          商品代金（税込）には、商品本体価格とその商品にかかる消費税が含まれます。
-                        </li>
-                        <li>
-                          ご購入時の配送料および配送料にかかる消費税は返金対象外です。
-                        </li>
-                        <li>
-                          返品商品の返送にかかる配送料はお客様のご負担となります。
-                        </li>
-                        <li>
-                          返品手続き中は、商品が入っている配送用梱包材を開けないでください。
-                        </li>
+                        <li>返品が承認された場合、返金対象は商品代金（税込）のみです。</li>
+                        <li>商品代金（税込）には、商品本体価格とその商品にかかる消費税が含まれます。</li>
+                        <li>ご購入時の配送料および配送料にかかる消費税は返金対象外です。</li>
+                        <li>返品商品の返送にかかる配送料はお客様のご負担となります。</li>
+                        <li>返品手続き中は、商品が入っている配送用梱包材を開けないでください。</li>
                       </ol>
                     </Alert>
 
@@ -326,9 +339,7 @@ export default function ReturnRequestPage() {
                       checked={agreedToReturnConditions}
                       disabled={submitting}
                       onChange={(event) => {
-                        setAgreedToReturnConditions(
-                          event.target.checked,
-                        );
+                        setAgreedToReturnConditions(event.target.checked);
                       }}
                     />
                   </section>
@@ -336,9 +347,7 @@ export default function ReturnRequestPage() {
 
                 {packageState !== null ? (
                   <section className="return-request-page__section">
-                    <h2 className="return-request-page__section-title">
-                      返品理由
-                    </h2>
+                    <h2 className="return-request-page__section-title">返品理由</h2>
 
                     <Textbox
                       id="return-request-reason"
@@ -349,14 +358,15 @@ export default function ReturnRequestPage() {
                       placeholder="返品理由を入力してください"
                       onChange={(event) => {
                         setReason(event.target.value);
+                        setSubmitError("");
                       }}
                     />
                   </section>
                 ) : null}
 
-                {error ? (
+                {visibleError ? (
                   <Alert variant="error">
-                    {error}
+                    {visibleError}
                   </Alert>
                 ) : null}
               </>
@@ -380,9 +390,7 @@ export default function ReturnRequestPage() {
                   size="lg"
                   disabled={!canSubmit}
                 >
-                  {submitting
-                    ? "申請中..."
-                    : "返品を申請する"}
+                  {submitting ? "申請中..." : "返品を申請する"}
                 </Button>
               ) : null}
             </div>

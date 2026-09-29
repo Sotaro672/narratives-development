@@ -1,4 +1,4 @@
-// frontend/amol/src/features/wallet/components/WalletTokenContentsCard.tsx
+// frontend/mall/src/features/wallet/components/WalletTokenContentsCard.tsx
 
 import Media from "../../../components/ui/Media";
 
@@ -38,7 +38,7 @@ export default function WalletTokenContentsCard({
       </div>
 
       <div className="wallet-token-card__body">
-        <p className="wallet-token-card__name">
+        <p className="wallet-token-card__token-name">
           {tokenName || "名称未設定のトークン"}
         </p>
 

@@ -10,36 +10,6 @@
 }
 
 /* =========================================================
- * Layout
- * ======================================================= */
-
-.layout-shell {
-  min-height: 100vh;
-  background: #fff;
-}
-
-.layout-main {
-  padding-top: var(--amol-header-height);
-  min-height: 100vh;
-  box-sizing: border-box;
-  overflow: visible;
-}
-
-.layout-main--without-header {
-  padding-top: 0;
-}
-
-.layout-main--with-footer {
-  padding-bottom: 80px;
-}
-
-@media (max-width: 640px) {
-  .layout-main--with-footer {
-    padding-bottom: 76px;
-  }
-}
-
-/* =========================================================
  * Profile
  * ======================================================= */
 
@@ -313,11 +283,20 @@
   gap: 6px;
 }
 
-.wallet-token-card__name {
+.wallet-token-card__token-name {
   margin: 0;
   color: #111827;
   font-size: 14px;
   font-weight: 700;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.wallet-token-card__product-name {
+  margin: 0;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.4;
   word-break: break-word;
 }
