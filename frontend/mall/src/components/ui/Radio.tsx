@@ -1,9 +1,13 @@
+// frontend/mall/src/components/ui/Radio.tsx
+
 import type {
   InputHTMLAttributes,
   ReactNode,
 } from "react";
 
 import "./Radio.css";
+
+export type RadioVariant = "default" | "card";
 
 type RadioProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
@@ -12,12 +16,14 @@ type RadioProps = Omit<
   label: ReactNode;
   description?: ReactNode;
   error?: ReactNode;
+  variant?: RadioVariant;
 };
 
 export default function Radio({
   label,
   description,
   error,
+  variant = "default",
   className = "",
   disabled = false,
   id,
@@ -25,6 +31,7 @@ export default function Radio({
 }: RadioProps) {
   const classes = [
     "ui-radio",
+    variant !== "default" ? `ui-radio--${variant}` : "",
     disabled ? "ui-radio--disabled" : "",
     error ? "ui-radio--error" : "",
     className,

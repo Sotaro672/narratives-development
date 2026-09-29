@@ -74,16 +74,19 @@
   grid-template-columns: 1fr 1fr;
   gap: 12px;
   min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 .avatar-review-page fieldset legend {
   grid-column: 1 / -1;
   margin: 0 0 4px;
   padding: 0;
+  color: var(--color-text, #111827);
   font-size: 15px;
   font-weight: 700;
   line-height: 1.5;
-  color: var(--color-text, #111827);
 }
 
 .avatar-review-page fieldset .ui-radio {
@@ -110,9 +113,9 @@
 .avatar-review-page fieldset .ui-radio__label {
   width: 100%;
   min-height: 52px;
-  padding: 14px 16px;
   box-sizing: border-box;
   align-items: center;
+  padding: 14px 16px;
   cursor: pointer;
 }
 
@@ -120,63 +123,17 @@
   min-width: 0;
 }
 
-.avatar-review-page fieldset:disabled .ui-radio {
-  opacity: 0.6;
-}
-
-.avatar-review-page form > div {
+.avatar-review-page__comment-field {
   display: grid;
   gap: 8px;
   min-width: 0;
 }
 
-.avatar-review-page form > div > label {
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.5;
-  color: var(--color-text, #111827);
-}
-
-.avatar-review-page textarea {
-  display: block;
-  width: 100%;
+.avatar-review-page__comment-input {
   min-height: 144px;
-  resize: vertical;
-  border: 1px solid var(--color-border, #d1d5db);
-  border-radius: 12px;
-  padding: 12px 14px;
-  background: var(--color-surface, #ffffff);
-  color: var(--color-text, #111827);
-  font: inherit;
-  font-size: 15px;
-  line-height: 1.6;
-  box-sizing: border-box;
-  outline: none;
-  transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease;
 }
 
-.avatar-review-page textarea::placeholder {
-  color: #9ca3af;
-}
-
-.avatar-review-page textarea:hover:not(:disabled) {
-  border-color: #9ca3af;
-}
-
-.avatar-review-page textarea:focus {
-  border-color: var(--color-text, #111827);
-  box-shadow: 0 0 0 1px var(--color-text, #111827);
-}
-
-.avatar-review-page textarea:disabled {
-  cursor: not-allowed;
-  opacity: 0.6;
-  background: var(--color-surface-subtle, #f9fafb);
-}
-
-.avatar-review-page textarea + .ui-text-state {
+.avatar-review-page__comment-count {
   justify-self: end;
   margin: 0;
   font-size: 12px;
@@ -213,7 +170,7 @@
     grid-template-columns: 1fr;
   }
 
-  .avatar-review-page textarea {
+  .avatar-review-page__comment-input {
     min-height: 132px;
   }
 }

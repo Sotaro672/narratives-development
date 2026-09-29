@@ -22,8 +22,15 @@
 }
 
 /* Variations */
+
 .ui-section-header--title-sm .ui-section-header__title {
   font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.ui-section-header--title-md .ui-section-header__title {
+  font-size: 1.125rem;
   font-weight: 700;
   line-height: 1.45;
 }

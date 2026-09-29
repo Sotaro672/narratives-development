@@ -1,6 +1,4 @@
-// frontend/amol/src/features/resale/presentation/components/ResaleDetailEditForm.tsx
-
-import type { MouseEventHandler } from "react";
+// frontend/mall/src/features/resale/presentation/components/ResaleDetailEditForm.tsx
 
 import Dropdown from "../../../../components/ui/Dropdown";
 import Input from "../../../../components/ui/Input";
@@ -16,33 +14,6 @@ import { getResaleEditableStatusLabel } from "../../constants/resaleStatusOption
 import type { ResaleDetailEditFormProps } from "../types/resaleDetailPageTypes";
 
 const DESCRIPTION_MAX_LENGTH = 1000;
-
-type DropdownTriggerProps = {
-  label: string;
-  isOpen: boolean;
-  disabled: boolean;
-  onClick: MouseEventHandler<HTMLButtonElement>;
-};
-
-function DropdownTrigger({
-  label,
-  isOpen,
-  disabled,
-  onClick,
-}: DropdownTriggerProps) {
-  return (
-    <button
-      type="button"
-      className="page-form__dropdown-button"
-      disabled={disabled}
-      aria-expanded={isOpen}
-      onClick={onClick}
-    >
-      <span>{label}</span>
-      <span aria-hidden="true">{isOpen ? "▲" : "▼"}</span>
-    </button>
-  );
-}
 
 export default function ResaleDetailEditForm({
   priceValue,
@@ -81,14 +52,7 @@ export default function ResaleDetailEditForm({
             items={RESALE_CONDITION_OPTIONS}
             selectedValue={condition}
             onSelect={onConditionChange}
-            renderButton={({ isOpen, toggle }) => (
-              <DropdownTrigger
-                label={condition}
-                isOpen={isOpen}
-                disabled={saving}
-                onClick={toggle}
-              />
-            )}
+            disabled={saving}
           />
         </div>
 
@@ -99,14 +63,7 @@ export default function ResaleDetailEditForm({
             items={RESALE_STATUS_OPTIONS}
             selectedValue={status}
             onSelect={onStatusChange}
-            renderButton={({ isOpen, toggle }) => (
-              <DropdownTrigger
-                label={statusLabel}
-                isOpen={isOpen}
-                disabled={saving}
-                onClick={toggle}
-              />
-            )}
+            disabled={saving}
           />
         </div>
 

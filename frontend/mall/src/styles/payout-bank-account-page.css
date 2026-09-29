@@ -16,16 +16,6 @@
   gap: 24px;
 }
 
-.payout-bank-account-page__form .input-field {
-  width: 100%;
-}
-
-.payout-bank-account-page__form .input-field__control {
-  min-height: 48px;
-  height: 48px;
-  font-size: 16px;
-}
-
 .payout-bank-account-page__field {
   display: flex;
   width: 100%;
@@ -57,23 +47,6 @@
 
 .payout-bank-account-page__account-type-option {
   min-height: 48px;
-  box-sizing: border-box;
-  padding: 11px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 10px;
-  background: #fff;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
-}
-
-.payout-bank-account-page__account-type-option:hover {
-  background: #f9fafb;
-}
-
-.payout-bank-account-page__account-type-option--selected {
-  border-color: #111827;
-  background: #f3f4f6;
 }
 
 .payout-bank-account-page__account-type-option .ui-radio__label {

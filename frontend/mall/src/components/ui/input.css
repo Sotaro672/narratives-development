@@ -1,3 +1,5 @@
+/* frontend/mall/src/components/ui/input.css */
+
 .input-field {
   display: flex;
   flex-direction: column;
@@ -36,6 +38,11 @@
     box-shadow 0.2s ease,
     background-color 0.2s ease,
     color 0.2s ease;
+}
+
+.input-field__control--lg {
+  height: 48px;
+  font-size: 16px;
 }
 
 .input-field__control:focus {

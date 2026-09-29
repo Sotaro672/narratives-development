@@ -1,8 +1,71 @@
-/* frontend/amol/src/components/ui/dropdown.css */
+/* frontend/mall/src/components/ui/dropdown.css */
 
 .ui-dropdown {
   position: relative;
   width: 100%;
+}
+
+.ui-dropdown--disabled {
+  opacity: 0.6;
+}
+
+.ui-dropdown__trigger {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #d1d5db);
+  border-radius: 10px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #111827);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.ui-dropdown__trigger:hover:not(:disabled) {
+  background: #f9fafb;
+}
+
+.ui-dropdown__trigger:focus-visible {
+  outline: 2px solid var(--color-text, #111827);
+  outline-offset: 2px;
+}
+
+.ui-dropdown__trigger:disabled {
+  cursor: not-allowed;
+}
+
+.ui-dropdown__trigger-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-dropdown__trigger-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.ui-dropdown__trigger-icon--open {
+  transform: rotate(180deg);
 }
 
 .ui-dropdown__menu {
@@ -24,13 +87,13 @@
 .ui-dropdown__item {
   display: block;
   width: 100%;
-  border: none;
-  background: transparent;
   padding: 10px 14px;
   box-sizing: border-box;
-  text-align: left;
-  font: inherit;
+  border: none;
+  background: transparent;
   color: var(--color-text, #111827);
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
 
@@ -39,8 +102,8 @@
 }
 
 .ui-dropdown__item.is-selected {
-  font-weight: 700;
   background: #f3f4f6;
+  font-weight: 700;
 }
 
 .ui-dropdown__item.is-selected:hover {

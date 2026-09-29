@@ -169,15 +169,9 @@ export default function PayoutBankAccountPage() {
                 name="accountType"
                 value="ordinary"
                 label="普通"
+                variant="card"
                 checked={accountType === "ordinary"}
-                className={[
-                  "payout-bank-account-page__account-type-option",
-                  accountType === "ordinary"
-                    ? "payout-bank-account-page__account-type-option--selected"
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                className="payout-bank-account-page__account-type-option"
                 onChange={() => setAccountType("ordinary")}
               />
 
@@ -185,15 +179,9 @@ export default function PayoutBankAccountPage() {
                 name="accountType"
                 value="current"
                 label="当座"
+                variant="card"
                 checked={accountType === "current"}
-                className={[
-                  "payout-bank-account-page__account-type-option",
-                  accountType === "current"
-                    ? "payout-bank-account-page__account-type-option--selected"
-                    : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
+                className="payout-bank-account-page__account-type-option"
                 onChange={() => setAccountType("current")}
               />
             </div>
@@ -203,6 +191,7 @@ export default function PayoutBankAccountPage() {
             id="payout-account-number"
             label="口座番号"
             type="text"
+            size="lg"
             inputMode="numeric"
             autoComplete="off"
             maxLength={7}
@@ -217,6 +206,7 @@ export default function PayoutBankAccountPage() {
             id="payout-account-holder-name"
             label="口座名義"
             type="text"
+            size="lg"
             autoComplete="off"
             maxLength={64}
             value={accountHolderName}

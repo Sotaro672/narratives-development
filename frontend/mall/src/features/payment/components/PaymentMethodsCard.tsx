@@ -45,6 +45,7 @@ export function PaymentMethodsCard({
           {paymentMethods.map((method) => (
             <Radio
               key={method.id}
+              variant="card"
               className="payment-page__payment-method"
               name="paymentMethod"
               value={method.id}

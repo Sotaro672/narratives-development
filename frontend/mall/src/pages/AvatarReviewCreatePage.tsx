@@ -15,6 +15,7 @@ import Layout from "../components/layout/Layout";
 import Button from "../components/ui/Button";
 import Radio from "../components/ui/Radio";
 import SectionCard from "../components/ui/SectionCard";
+import Textbox from "../components/ui/Textbox";
 import TextState from "../components/ui/TextState";
 import {
   createAvatarReview,
@@ -318,14 +319,7 @@ export default function AvatarReviewCreatePage() {
                 void handleSubmit();
               }}
             >
-              <fieldset
-                disabled={submitting}
-                style={{
-                  margin: 0,
-                  padding: 0,
-                  border: 0,
-                }}
-              >
+              <fieldset>
                 <legend>
                   取引はいかがでしたか？
                 </legend>
@@ -335,6 +329,7 @@ export default function AvatarReviewCreatePage() {
                   name="avatar-review-evaluation"
                   value="good"
                   checked={evaluation === "good"}
+                  disabled={submitting}
                   label="良かった"
                   onChange={() => {
                     setEvaluation("good");
@@ -348,6 +343,7 @@ export default function AvatarReviewCreatePage() {
                   checked={
                     evaluation === "disappointed"
                   }
+                  disabled={submitting}
                   label="残念だった"
                   onChange={() => {
                     setEvaluation("disappointed");
@@ -355,17 +351,15 @@ export default function AvatarReviewCreatePage() {
                 />
               </fieldset>
 
-              <div>
-                <label htmlFor="avatar-review-comment">
-                  コメント
-                </label>
-
-                <textarea
+              <div className="avatar-review-page__comment-field">
+                <Textbox
                   id="avatar-review-comment"
+                  label="コメント"
                   value={comment}
                   disabled={submitting}
                   rows={6}
                   placeholder="取引についてコメントを入力してください。"
+                  className="avatar-review-page__comment-input"
                   onChange={(event) => {
                     setComment(event.target.value);
                   }}
@@ -377,6 +371,7 @@ export default function AvatarReviewCreatePage() {
                       ? "error"
                       : "muted"
                   }
+                  className="avatar-review-page__comment-count"
                 >
                   {commentLength}/{MAX_COMMENT_LENGTH}文字
                 </TextState>
