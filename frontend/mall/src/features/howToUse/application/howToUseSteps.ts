@@ -203,6 +203,7 @@ export const mallItems: HowToUseItem[] = [
     sections: [
       { id: "purchase-order", title: "商品の購入" },
       { id: "purchase-token-transfer", title: "トークンの受け取り" },
+      { id: "purchase-resale-receipt", title: "フリマ取引での受取" },
     ],
   },
   {
