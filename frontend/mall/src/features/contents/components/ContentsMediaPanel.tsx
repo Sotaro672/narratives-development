@@ -16,6 +16,8 @@ type ContentsMediaPanelProps = {
   onPrevFile: () => void;
   onNextFile: () => void;
   onSelectFile: (index: number) => void;
+  onPageDismissStart?: () => void;
+  onPageDismiss?: () => void | Promise<void>;
 };
 
 export default function ContentsMediaPanel({
@@ -30,6 +32,8 @@ export default function ContentsMediaPanel({
   onPrevFile,
   onNextFile,
   onSelectFile,
+  onPageDismissStart,
+  onPageDismiss,
 }: ContentsMediaPanelProps) {
   return (
     <div className="split-page-left">
@@ -82,6 +86,8 @@ export default function ContentsMediaPanel({
           onPrev={onPrevFile}
           onNext={onNextFile}
           onSelect={onSelectFile}
+          onPageDismissStart={onPageDismissStart}
+          onPageDismiss={onPageDismiss}
         />
       ) : null}
     </div>

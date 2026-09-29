@@ -1,25 +1,31 @@
 // frontend/mall/src/pages/ContentsPage.tsx
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback,
+  useRef,
+} from "react";
+import { ChevronDown } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/contents-page.css";
 
 import Layout from "../components/layout/Layout";
-import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
+import MobileComposerFooter from "../components/layout/MobileComposerFooter";
+import MobileSwipeDismissPage, {
+  type MobileSwipeDismissPageHandle,
+} from "../components/layout/MobileSwipeDismissPage";
+import IconButton from "../components/ui/IconButton";
 import ContentsDetailPanel from "../features/contents/components/ContentsDetailPanel";
 import ContentsMediaPanel from "../features/contents/components/ContentsMediaPanel";
 import { useContentsPage } from "../features/contents/hooks/useContentsPage";
-import ChatComposerModal from "../features/shared/presentation/components/ChatComposerModal";
 
 export default function ContentsPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const page = useContentsPage();
-
-  const [commentModalOpen, setCommentModalOpen] = useState(false);
-  const [commentSubmitRequested, setCommentSubmitRequested] = useState(false);
+  const swipeDismissRef =
+    useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const isWalletOverlay =
     page.isMobilePortrait &&
@@ -34,60 +40,29 @@ export default function ContentsPage() {
     !commentActionDisabled &&
     page.commentCard.commentBody.trim().length > 0;
 
-  useEffect(() => {
-    if (
-      !commentSubmitRequested ||
-      page.commentCard.posting ||
-      page.commentCard.commentBody.trim() !== ""
-    ) {
-      return;
-    }
-
-    setCommentModalOpen(false);
-    setCommentSubmitRequested(false);
-  }, [
-    commentSubmitRequested,
-    page.commentCard.commentBody,
-    page.commentCard.posting,
-  ]);
-
-  const handleOpenCommentModal = () => {
-    if (commentActionDisabled) {
-      return;
-    }
-
-    setCommentSubmitRequested(false);
-    setCommentModalOpen(true);
-  };
-
-  const handleCloseCommentModal = () => {
-    if (page.commentCard.posting) {
-      return;
-    }
-
-    setCommentModalOpen(false);
-    setCommentSubmitRequested(false);
-  };
-
-  const handleSubmitComment = () => {
+  const handleSubmitComment = useCallback(() => {
     if (!canSubmitComment) {
       return;
     }
 
-    setCommentSubmitRequested(true);
     void page.commentCard.postComment();
-  };
+  }, [
+    canSubmitComment,
+    page.commentCard,
+  ]);
 
   const handleDismissStart = useCallback(() => {
     if (typeof document === "undefined") {
       return;
     }
 
-    document.querySelectorAll<HTMLVideoElement>("video").forEach((video) => {
-      if (!video.paused) {
-        video.pause();
-      }
-    });
+    document
+      .querySelectorAll<HTMLVideoElement>("video")
+      .forEach((video) => {
+        if (!video.paused) {
+          video.pause();
+        }
+      });
   }, []);
 
   const handleDismiss = useCallback(() => {
@@ -96,89 +71,112 @@ export default function ContentsPage() {
     });
   }, [navigate]);
 
-  const content = (
-    <Layout
-      title="AMOL"
-      mode="mypage"
-      showHeader={!page.isMobilePortrait}
-      showFooter={!page.isMobilePortrait || !commentModalOpen}
-      disableFooterPaddingOnDesktop
-      footerProps={
-        page.isMobilePortrait
-          ? {
-              variant: "default",
-              centerActionLabel: "コメント",
-              centerActionDisabled: commentActionDisabled,
-              onCenterActionClick: handleOpenCommentModal,
-            }
-          : {
-              variant: "default",
-            }
-      }
-    >
-      <section className="split-page contents-page">
-        <div className="split-page-content contents-page-content">
-          <ContentsMediaPanel
-            loading={page.loading}
-            error={page.error}
-            metadataUri={page.contents.metadataUri}
-            moderationHidden={page.moderationHidden}
-            hasMediaItems={page.hasMediaItems}
-            mediaItems={page.mediaItems}
-            activeFileIndex={page.activeFileIndex}
-            tokenName={page.tokenName}
-            onPrevFile={page.handlePrevFile}
-            onNextFile={page.handleNextFile}
-            onSelectFile={page.setActiveFileIndex}
-          />
+  const handleDismissButtonClick = useCallback(() => {
+    swipeDismissRef.current?.dismiss();
+  }, []);
 
-          <ContentsDetailPanel
-            contents={page.contents}
-            tokenName={page.tokenName}
-            tokenIconUrl={page.tokenIconUrl}
-            loading={page.loading}
-            isMobilePortrait={page.isMobilePortrait}
-            commentCard={page.commentCard}
-            resaleDisabled={page.resaleButtonDisabled}
-            resaleLabel={page.resaleButtonLabel}
-            onProductNameClick={page.handleProductNameClick}
-            onBrandNameClick={page.handleBrandNameClick}
-            onResaleClick={page.handleOpenResalePage}
-          />
-        </div>
-      </section>
-    </Layout>
+  const content = (
+    <>
+      <Layout
+        title="AMOL"
+        mode="mypage"
+        showHeader={!page.isMobilePortrait}
+        showFooter={!page.isMobilePortrait}
+        disableFooterPaddingOnDesktop
+      >
+        {isWalletOverlay ? (
+          <div
+            className="contents-page__dismiss-control"
+            data-mobile-swipe-dismiss-ignore="true"
+          >
+            <IconButton
+              type="button"
+              variant="secondary"
+              size="md"
+              className="contents-page__dismiss-button"
+              aria-label="コンテンツを閉じる"
+              onClick={handleDismissButtonClick}
+            >
+              <ChevronDown
+                size={24}
+                strokeWidth={2.25}
+                aria-hidden="true"
+              />
+            </IconButton>
+          </div>
+        ) : null}
+
+        <section className="split-page contents-page">
+          <div className="split-page-content contents-page-content">
+            <ContentsMediaPanel
+              loading={page.loading}
+              error={page.error}
+              metadataUri={page.contents.metadataUri}
+              moderationHidden={page.moderationHidden}
+              hasMediaItems={page.hasMediaItems}
+              mediaItems={page.mediaItems}
+              activeFileIndex={page.activeFileIndex}
+              tokenName={page.tokenName}
+              onPrevFile={page.handlePrevFile}
+              onNextFile={page.handleNextFile}
+              onSelectFile={page.setActiveFileIndex}
+              onPageDismissStart={
+                isWalletOverlay
+                  ? handleDismissStart
+                  : undefined
+              }
+              onPageDismiss={
+                isWalletOverlay
+                  ? handleDismiss
+                  : undefined
+              }
+            />
+
+            <ContentsDetailPanel
+              contents={page.contents}
+              tokenName={page.tokenName}
+              tokenIconUrl={page.tokenIconUrl}
+              loading={page.loading}
+              isMobilePortrait={page.isMobilePortrait}
+              commentCard={page.commentCard}
+              resaleDisabled={page.resaleButtonDisabled}
+              resaleLabel={page.resaleButtonLabel}
+              onProductNameClick={page.handleProductNameClick}
+              onBrandNameClick={page.handleBrandNameClick}
+              onResaleClick={page.handleOpenResalePage}
+            />
+          </div>
+        </section>
+      </Layout>
+
+      {page.isMobilePortrait ? (
+        <MobileComposerFooter
+          content={page.commentCard.commentBody}
+          placeholder="コメントを書く…"
+          error={page.commentCard.commentsError || undefined}
+          submitting={page.commentCard.posting}
+          canSubmit={canSubmitComment}
+          disabled={commentActionDisabled}
+          submitLabel="投稿"
+          submittingLabel="投稿中..."
+          onContentChange={page.commentCard.setCommentBody}
+          onSubmit={handleSubmitComment}
+        />
+      ) : null}
+    </>
   );
 
-  return (
-    <>
-      {isWalletOverlay ? (
-        <MobileSwipeDismissPage
-          enabled={!commentModalOpen}
-          onDismissStart={handleDismissStart}
-          onDismiss={handleDismiss}
-        >
-          {content}
-        </MobileSwipeDismissPage>
-      ) : (
-        content
-      )}
+  if (!isWalletOverlay) {
+    return content;
+  }
 
-      <ChatComposerModal
-        open={commentModalOpen}
-        title="コメントする"
-        content={page.commentCard.commentBody}
-        placeholder="コメントを書く…"
-        error={page.commentCard.commentsError || undefined}
-        submitting={page.commentCard.posting}
-        canSubmit={canSubmitComment}
-        submitLabel="投稿"
-        submittingLabel="投稿中..."
-        rows={page.isMobilePortrait ? 1 : 6}
-        onContentChange={page.commentCard.setCommentBody}
-        onCancel={handleCloseCommentModal}
-        onSubmit={handleSubmitComment}
-      />
-    </>
+  return (
+    <MobileSwipeDismissPage
+      ref={swipeDismissRef}
+      onDismissStart={handleDismissStart}
+      onDismiss={handleDismiss}
+    >
+      {content}
+    </MobileSwipeDismissPage>
   );
 }
