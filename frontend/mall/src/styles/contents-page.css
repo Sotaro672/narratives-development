@@ -248,8 +248,26 @@
 
 .token-comment-item__children {
   display: grid;
-  gap: 10px;
-  margin-top: 10px;
+  min-width: 0;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.token-comment-list > .token-comment-item > .token-comment-item__children {
+  margin-left: 24px;
+}
+
+.token-comment-item__children .token-comment-item__children {
+  margin-left: 0;
+}
+
+.token-comment-item__children > .token-comment-item {
+  min-width: 0;
+}
+
+.token-comment-item__children > .token-comment-item + .token-comment-item {
+  padding-top: 14px;
+  border-top: 1px solid #f3f4f6;
 }
 
 .contents-page-mobile-stage {

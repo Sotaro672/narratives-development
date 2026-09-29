@@ -262,6 +262,7 @@ export default function TokenCommentSection({
               expandedIds={expandedIds}
               editingCommentId={editingCommentId}
               deletingCommentId={deletingCommentId}
+              useDedicatedReplySection={hideCommentForm}
               onToggleExpanded={onToggleExpanded}
               onLike={onLikeComment}
               onDislike={onDislikeComment}

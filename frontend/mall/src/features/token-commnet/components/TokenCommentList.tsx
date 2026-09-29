@@ -12,6 +12,7 @@ type TokenCommentListProps = {
   expandedIds: Set<string>;
   editingCommentId: string | null;
   deletingCommentId: string | null;
+  useDedicatedReplySection: boolean;
   onToggleExpanded: (commentId: string) => void;
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
@@ -29,6 +30,7 @@ export default function TokenCommentList({
   expandedIds,
   editingCommentId,
   deletingCommentId,
+  useDedicatedReplySection,
   onToggleExpanded,
   onLike,
   onDislike,
@@ -68,6 +70,7 @@ export default function TokenCommentList({
           expandedIds={expandedIds}
           editingCommentId={editingCommentId}
           deletingCommentId={deletingCommentId}
+          useDedicatedReplySection={useDedicatedReplySection}
           onToggleExpanded={onToggleExpanded}
           onLike={onLike}
           onDislike={onDislike}

@@ -22,6 +22,7 @@ type TokenCommentItemProps = {
   expandedIds: Set<string>;
   editingCommentId: string | null;
   deletingCommentId: string | null;
+  useDedicatedReplySection: boolean;
   onToggleExpanded: (commentId: string) => void;
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
@@ -95,8 +96,11 @@ export default function TokenCommentItem({
   tokenBlueprintId,
   currentAvatarId,
   node,
+  expandedIds,
   editingCommentId,
   deletingCommentId,
+  useDedicatedReplySection,
+  onToggleExpanded,
   onLike,
   onDislike,
   onStartReply,
@@ -118,6 +122,7 @@ export default function TokenCommentItem({
   const normalizedEditingCommentId = editingCommentId?.trim() ?? "";
   const normalizedDeletingCommentId = deletingCommentId?.trim() ?? "";
   const hasReplies = comment.childCount > 0 || node.children.length > 0;
+  const isExpanded = Boolean(commentId && expandedIds.has(commentId));
 
   const isOwnComment = Boolean(
     comment.authorType === "avatar" &&
@@ -161,12 +166,25 @@ export default function TokenCommentItem({
     void onDislike(commentId);
   };
 
-  const handleOpenReplySection = () => {
+  const handleStartReply = () => {
     if (!commentId || actionDisabled) {
       return;
     }
 
     onStartReply(commentId);
+  };
+
+  const handleToggleReplies = () => {
+    if (!commentId || actionDisabled) {
+      return;
+    }
+
+    if (useDedicatedReplySection) {
+      onStartReply(commentId);
+      return;
+    }
+
+    onToggleExpanded(commentId);
   };
 
   const handleStartEdit = () => {
@@ -236,7 +254,7 @@ export default function TokenCommentItem({
             size="sm"
             variant="neutral"
             disabled={actionDisabled}
-            onClick={handleOpenReplySection}
+            onClick={handleStartReply}
           >
             返信
           </Chip>
@@ -274,14 +292,43 @@ export default function TokenCommentItem({
             <Chip
               size="sm"
               variant="neutral"
+              selected={!useDedicatedReplySection && isExpanded}
               disabled={actionDisabled}
-              onClick={handleOpenReplySection}
+              onClick={handleToggleReplies}
             >
-              返信を表示 ({comment.childCount || node.children.length})
+              {!useDedicatedReplySection && isExpanded
+                ? "返信を非表示"
+                : `返信を表示 (${comment.childCount || node.children.length})`}
             </Chip>
           ) : null}
         </div>
       </article>
+
+      {!useDedicatedReplySection &&
+      isExpanded &&
+      node.children.length > 0 ? (
+        <div className="token-comment-item__children">
+          {node.children.map((childNode) => (
+            <TokenCommentItem
+              key={childNode.comment.commentId}
+              tokenBlueprintId={tokenBlueprintId}
+              currentAvatarId={currentAvatarId}
+              node={childNode}
+              expandedIds={expandedIds}
+              editingCommentId={editingCommentId}
+              deletingCommentId={deletingCommentId}
+              useDedicatedReplySection={useDedicatedReplySection}
+              onToggleExpanded={onToggleExpanded}
+              onLike={onLike}
+              onDislike={onDislike}
+              onStartReply={onStartReply}
+              onStartEdit={onStartEdit}
+              onDelete={onDelete}
+              onReport={onReport}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
