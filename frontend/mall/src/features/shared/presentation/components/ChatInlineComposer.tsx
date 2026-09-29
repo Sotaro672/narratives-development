@@ -1,9 +1,16 @@
 // frontend/mall/src/features/shared/presentation/components/ChatInlineComposer.tsx
 
-import { ImagePlus } from "lucide-react";
-import { type KeyboardEvent, useRef } from "react";
+import {
+  ImagePlus,
+  X,
+} from "lucide-react";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 
-import Button from "../../../../components/ui/Button";
 import IconButton from "../../../../components/ui/IconButton";
 import Textbox from "../../../../components/ui/Textbox";
 
@@ -22,6 +29,55 @@ type ChatInlineComposerProps = {
   onSubmit: () => void | Promise<void>;
 };
 
+type ChatInlineImagePreviewProps = {
+  file: File;
+  index: number;
+  disabled: boolean;
+  onRemove: (index: number) => void;
+};
+
+function ChatInlineImagePreview({
+  file,
+  index,
+  disabled,
+  onRemove,
+}: ChatInlineImagePreviewProps) {
+  const previewUrl = useMemo(
+    () => URL.createObjectURL(file),
+    [file],
+  );
+
+  useEffect(() => {
+    return () => {
+      URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
+  return (
+    <div className="chat-detail-page__desktop-preview-item">
+      <img
+        src={previewUrl}
+        alt={file.name}
+        className="chat-detail-page__desktop-preview-image"
+      />
+
+      <IconButton
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="chat-detail-page__desktop-preview-remove"
+        aria-label={`${file.name}を削除`}
+        disabled={disabled}
+        onClick={() => {
+          onRemove(index);
+        }}
+      >
+        <X size={16} aria-hidden="true" />
+      </IconButton>
+    </div>
+  );
+}
+
 export default function ChatInlineComposer({
   content,
   placeholder,
@@ -38,10 +94,19 @@ export default function ChatInlineComposer({
 }: ChatInlineComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputDisabled = disabled || submitting;
-  const supportsFiles = typeof onFilesAdd === "function" && typeof onRemoveFile === "function";
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
+  const supportsFiles =
+    typeof onFilesAdd === "function" &&
+    typeof onRemoveFile === "function";
+
+  const handleKeyDown = (
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ): void => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
       return;
     }
 
@@ -56,6 +121,23 @@ export default function ChatInlineComposer({
 
   return (
     <div className="chat-detail-page__desktop-composer">
+      {supportsFiles && files.length > 0 ? (
+        <div
+          className="chat-detail-page__desktop-previews"
+          aria-label="添付画像"
+        >
+          {files.map((file, index) => (
+            <ChatInlineImagePreview
+              key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
+              file={file}
+              index={index}
+              disabled={inputDisabled}
+              onRemove={onRemoveFile}
+            />
+          ))}
+        </div>
+      ) : null}
+
       <div className="chat-detail-page__desktop-composer-row">
         {supportsFiles ? (
           <>
@@ -67,7 +149,12 @@ export default function ChatInlineComposer({
               disabled={inputDisabled}
               hidden
               onChange={(event) => {
-                const selectedFiles = Array.from(event.currentTarget.files ?? []).filter((file) => file.type.startsWith("image/"));
+                const selectedFiles = Array.from(
+                  event.currentTarget.files ?? [],
+                ).filter((file) =>
+                  file.type.startsWith("image/"),
+                );
+
                 event.currentTarget.value = "";
 
                 if (selectedFiles.length === 0) {
@@ -109,33 +196,11 @@ export default function ChatInlineComposer({
         />
       </div>
 
-      {supportsFiles && files.length > 0 ? (
-        <div className="chat-detail-page__selected-files">
-          {files.map((file, index) => (
-            <div
-              key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
-              className="chat-detail-page__selected-file"
-            >
-              <span>{file.name}</span>
-
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={inputDisabled}
-                onClick={() => {
-                  onRemoveFile(index);
-                }}
-              >
-                削除
-              </Button>
-            </div>
-          ))}
-        </div>
-      ) : null}
-
       {error ? (
-        <p className="chat-detail-page__desktop-composer-error" role="alert">
+        <p
+          className="chat-detail-page__desktop-composer-error"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}

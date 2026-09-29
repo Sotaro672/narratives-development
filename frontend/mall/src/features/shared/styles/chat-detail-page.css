@@ -320,36 +320,6 @@
   margin-top: 12px;
 }
 
-.chat-detail-page__selected-files {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.chat-detail-page__selected-file {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  box-sizing: border-box;
-  padding: 8px 10px 8px 12px;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.96);
-  color: rgba(15, 23, 42, 0.78);
-  font-size: 0.84rem;
-  line-height: 1.4;
-}
-
-.chat-detail-page__selected-file span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .chat-detail-page__desktop-composer {
   display: flex;
   width: 100%;
@@ -361,6 +331,52 @@
   padding: 10px 16px;
   border-top: 1px solid rgba(15, 23, 42, 0.1);
   background: #ffffff;
+}
+
+.chat-detail-page__desktop-previews {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 8px 8px 4px 0;
+  scrollbar-width: thin;
+}
+
+.chat-detail-page__desktop-preview-item {
+  position: relative;
+  width: 88px;
+  min-width: 88px;
+  height: 88px;
+  flex: 0 0 88px;
+  overflow: visible;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.chat-detail-page__desktop-preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 12px;
+}
+
+.chat-detail-page__desktop-preview-remove {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  z-index: 2;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 9999px;
 }
 
 .chat-detail-page__desktop-composer-row {
@@ -405,14 +421,6 @@
   color: #dc2626;
   font-size: 12px;
   line-height: 1.5;
-}
-
-.chat-detail-page__desktop-composer .chat-detail-page__selected-files {
-  margin-top: 0;
-}
-
-.chat-detail-page__desktop-composer .chat-detail-page__selected-file {
-  min-height: 36px;
 }
 
 @media (max-width: 959px) {
@@ -543,11 +551,6 @@
 
   .chat-detail-page__reply {
     width: 94%;
-  }
-
-  .chat-detail-page__selected-file {
-    align-items: stretch;
-    flex-direction: column;
   }
 }
 
