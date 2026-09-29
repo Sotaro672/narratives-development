@@ -1,4 +1,4 @@
-// frontend/amol/src/features/scan/presentation/hooks/useScanPage.ts
+// frontend/mall/src/features/scan/presentation/hooks/useScanPage.ts
 
 import {
   useCallback,
@@ -335,7 +335,7 @@ export function useScanPage() {
           );
 
         navigate(
-          `/scan/result?productId=${encodedProductId}`,
+          `/wallet/scan-result?productId=${encodedProductId}`,
           {
             replace: true,
           },

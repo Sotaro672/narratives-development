@@ -18,7 +18,7 @@ type ScanResultCardProps = {
   onRefresh: () => void;
   onAvatarClick: (avatarId: string) => void;
   onOpenTokenContents: (assetId: string) => void | Promise<void>;
-  onOpenReviewModal: () => void;
+  tokenContentsDisabled?: boolean;
   canOpenInquiryPage: boolean;
   onOpenInquiryPage: () => void;
 };
@@ -31,7 +31,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     onRefresh,
     onAvatarClick,
     onOpenTokenContents,
-    onOpenReviewModal,
+    tokenContentsDisabled = false,
     canOpenInquiryPage,
     onOpenInquiryPage,
   } = props;
@@ -49,7 +49,9 @@ export default function ScanResultCard(props: ScanResultCardProps) {
       <SectionCard>
         <h1>Scan Result</h1>
         <TextState variant="error">{state.error}</TextState>
-        <Button type="button" onClick={onRefresh}>再読み込み</Button>
+        <Button type="button" onClick={onRefresh}>
+          再読み込み
+        </Button>
       </SectionCard>
     );
   }
@@ -68,8 +70,10 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const ownedError = state.ownedByWalletError ?? "";
   const productBlueprintId =
     state.previewState?.raw.productBlueprintId?.trim() ?? "";
-  const showReviewActions =
-    state.authAvailable === true || canOpenInquiryPage;
+
+  const tokenCardDisabled =
+    tokenContentsDisabled ||
+    !token?.canOpenTokenContents;
 
   return (
     <div className="scan-result-desktop-grid">
@@ -106,31 +110,25 @@ export default function ScanResultCard(props: ScanResultCardProps) {
             tokenName={token.tokenName}
             tokenIcon={token.tokenIcon}
             symbol={token.symbol}
-            description={token.description}
-            onClick={() => void onOpenTokenContents(token.assetId)}
-            disabled={!token.canOpenTokenContents}
+            onClick={
+              tokenCardDisabled
+                ? undefined
+                : () => void onOpenTokenContents(token.assetId)
+            }
+            disabled={tokenCardDisabled}
           />
         ) : null}
       </div>
 
       <aside className="scan-result-desktop-side">
-        {showReviewActions ? (
+        {canOpenInquiryPage ? (
           <div className="scan-result-review-actions">
-            {state.authAvailable === true ? (
-              <Button
-                type="button"
-                disabled={state.postingReview}
-                onClick={onOpenReviewModal}
-              >
-                レビューを書く
-              </Button>
-            ) : null}
-
-            {canOpenInquiryPage ? (
-              <Button type="button" onClick={onOpenInquiryPage}>
-                問い合わせ
-              </Button>
-            ) : null}
+            <Button
+              type="button"
+              onClick={onOpenInquiryPage}
+            >
+              問い合わせ
+            </Button>
           </div>
         ) : null}
 

@@ -1,13 +1,7 @@
 /* frontend/mall/src/components/layout/mobile-composer-footer.css */
 
 .mobile-composer-footer {
-  --mobile-composer-safe-area-bottom: max(
-    0px,
-    calc(
-      env(safe-area-inset-bottom) -
-      var(--mobile-composer-keyboard-offset, 0px)
-    )
-  );
+  --mobile-composer-safe-area-bottom: max(0px, calc(env(safe-area-inset-bottom) - var(--mobile-composer-keyboard-offset, 0px)));
   position: fixed;
   right: 0;
   bottom: var(--mobile-composer-keyboard-offset, 0px);
@@ -85,6 +79,15 @@
   color: #dc2626;
   font-size: 12px;
   line-height: 1.5;
+}
+
+.mobile-composer-footer__before-input {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  align-items: center;
+  margin-bottom: 8px;
 }
 
 .mobile-composer-footer__row {
@@ -201,6 +204,10 @@
     flex-basis: 68px;
   }
 
+  .mobile-composer-footer__before-input {
+    margin-bottom: 7px;
+  }
+
   .mobile-composer-footer__row {
     gap: 6px;
   }
@@ -236,6 +243,10 @@
 
   .mobile-composer-footer__preview-item {
     flex-basis: 60px;
+  }
+
+  .mobile-composer-footer__before-input {
+    margin-bottom: 6px;
   }
 }
 

@@ -8,6 +8,7 @@ import {
   useState,
   type ChangeEvent,
   type CompositionEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { ImagePlus, X } from "lucide-react";
@@ -30,6 +31,7 @@ export type MobileComposerFooterProps = {
   maxLength?: number | null;
   maxFiles?: number;
   accept?: string;
+  beforeInput?: ReactNode;
   onContentChange: (value: string) => void;
   onFilesAdd?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
@@ -98,6 +100,7 @@ export default function MobileComposerFooter({
   maxLength = 500,
   maxFiles = 10,
   accept = "image/*",
+  beforeInput,
   onContentChange,
   onFilesAdd,
   onRemoveFile,
@@ -242,7 +245,6 @@ export default function MobileComposerFooter({
       animationFrameId =
         window.requestAnimationFrame(() => {
           animationFrameId = null;
-
           updateKeyboardOffset();
           updateComposerHeight();
         });
@@ -448,6 +450,12 @@ export default function MobileComposerFooter({
         >
           {error}
         </p>
+      ) : null}
+
+      {beforeInput ? (
+        <div className="mobile-composer-footer__before-input">
+          {beforeInput}
+        </div>
       ) : null}
 
       <div className="mobile-composer-footer__row">
