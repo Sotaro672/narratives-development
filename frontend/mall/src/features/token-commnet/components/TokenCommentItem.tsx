@@ -14,7 +14,6 @@ import {
   getTokenCommentDisplayIconUrl,
   getTokenCommentDisplayName,
 } from "../../shared/types/tokenCommentTypes";
-import { hasTokenCommentChildren } from "../utils/commentTree";
 
 type TokenCommentItemProps = {
   tokenBlueprintId: string;
@@ -88,8 +87,6 @@ export default function TokenCommentItem({
   tokenBlueprintId,
   currentAvatarId,
   node,
-  expandedIds,
-  onToggleExpanded,
   onLike,
   onDislike,
   onStartReply,
@@ -106,8 +103,7 @@ export default function TokenCommentItem({
   const displayName = getTokenCommentDisplayName(comment);
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const normalizedCurrentAvatarId = currentAvatarId.trim();
-  const isExpanded = expandedIds.has(commentId);
-  const hasChildren = hasTokenCommentChildren(node);
+  const hasReplies = comment.childCount > 0 || node.children.length > 0;
 
   const isOwnComment = Boolean(
     normalizedCurrentAvatarId &&
@@ -120,11 +116,6 @@ export default function TokenCommentItem({
       normalizedCurrentAvatarId &&
       commentId &&
       !isOwnComment,
-  );
-
-  const indent = Math.min(
-    Math.max(comment.depth * 16, 0),
-    48,
   );
 
   const handleLike = () => {
@@ -143,7 +134,7 @@ export default function TokenCommentItem({
     void onDislike(commentId);
   };
 
-  const handleStartReply = () => {
+  const handleOpenReplySection = () => {
     if (!commentId) {
       return;
     }
@@ -159,20 +150,8 @@ export default function TokenCommentItem({
     onReport(commentId);
   };
 
-  const handleToggleExpanded = () => {
-    if (!commentId) {
-      return;
-    }
-
-    onToggleExpanded(commentId);
-  };
-
   return (
-    <div
-      className="token-comment-item"
-      data-token-comment-id={commentId || undefined}
-      style={{ marginLeft: `${indent}px` }}
-    >
+    <div className="token-comment-item">
       <article className="token-comment-item__body">
         <div className="token-comment-item__header">
           <TokenCommentAuthor comment={comment} />
@@ -211,7 +190,7 @@ export default function TokenCommentItem({
           <Chip
             size="sm"
             variant="neutral"
-            onClick={handleStartReply}
+            onClick={handleOpenReplySection}
           >
             返信
           </Chip>
@@ -223,42 +202,16 @@ export default function TokenCommentItem({
             />
           ) : null}
 
-          {hasChildren ? (
+          {hasReplies ? (
             <Chip
               size="sm"
               variant="neutral"
-              selected={isExpanded}
-              onClick={handleToggleExpanded}
+              onClick={handleOpenReplySection}
             >
-              {isExpanded
-                ? "返信を閉じる"
-                : `返信を表示 (${comment.childCount})`}
+              返信を表示 ({comment.childCount || node.children.length})
             </Chip>
-          ) : (
-            <span className="token-comment-item__reply-count">
-              💬 {comment.childCount}
-            </span>
-          )}
+          ) : null}
         </div>
-
-        {isExpanded && node.children.length > 0 ? (
-          <div className="token-comment-item__children">
-            {node.children.map((child) => (
-              <TokenCommentItem
-                key={child.comment.commentId}
-                tokenBlueprintId={normalizedTokenBlueprintId}
-                currentAvatarId={normalizedCurrentAvatarId}
-                node={child}
-                expandedIds={expandedIds}
-                onToggleExpanded={onToggleExpanded}
-                onLike={onLike}
-                onDislike={onDislike}
-                onStartReply={onStartReply}
-                onReport={onReport}
-              />
-            ))}
-          </div>
-        ) : null}
       </article>
     </div>
   );

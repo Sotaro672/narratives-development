@@ -15,7 +15,7 @@ import ContentsMediaPanel from "../features/contents/components/ContentsMediaPan
 import { useContentsCommentComposer } from "../features/contents/hooks/useContentsCommentComposer";
 import { useContentsPage } from "../features/contents/hooks/useContentsPage";
 import { useContentsSwipeDismiss } from "../features/contents/hooks/useContentsSwipeDismiss";
-import { useTokenCommentReplyAnchor } from "../features/contents/hooks/useTokenCommentReplyAnchor";
+import TokenCommentReplySection from "../features/token-commnet/components/TokenCommentReplySection";
 
 export default function ContentsPage() {
   const location = useLocation();
@@ -29,169 +29,156 @@ export default function ContentsPage() {
     isReplying,
     composerProps,
   } = useContentsCommentComposer({
-    commentCard:
-      page.commentCard,
-    loading:
-      page.loading,
-    tokenBlueprintId:
-      page.contents.tokenBlueprintId,
+    commentCard: page.commentCard,
+    loading: page.loading,
+    tokenBlueprintId: page.contents.tokenBlueprintId,
   });
 
-  const {
-    resetReplyAnchor,
-  } = useTokenCommentReplyAnchor({
-    enabled:
-      page.isMobilePortrait &&
-      isReplying,
-    replyingCommentId:
-      page.commentCard.replyingCommentId,
-    replyPosting:
-      page.commentCard.replyPosting,
-    onCancelReply:
-      page.commentCard.cancelReply,
-  });
+  const isReplySectionOpen =
+    page.isMobilePortrait &&
+    isReplying &&
+    Boolean(page.commentCard.replyingCommentId);
 
   const {
     swipeDismissRef,
     handleDismissStart,
     handleDismiss,
     handleDismissButtonClick,
-  } = useContentsSwipeDismiss({
-    onBeforeDismiss:
-      resetReplyAnchor,
-  });
+  } = useContentsSwipeDismiss();
 
-  const content = (
-    <>
-      <Layout
-        title="AMOL"
-        mode="mypage"
-        showHeader={
-          !page.isMobilePortrait
-        }
-        showFooter={
-          !page.isMobilePortrait
-        }
-        disableFooterPaddingOnDesktop
-      >
-        {isWalletOverlay ? (
-          <div
-            className="contents-page__dismiss-control"
-            data-mobile-swipe-dismiss-ignore="true"
+  const mainContent = (
+    <Layout
+      title="AMOL"
+      mode="mypage"
+      showHeader={!page.isMobilePortrait}
+      showFooter={!page.isMobilePortrait}
+      disableFooterPaddingOnDesktop
+    >
+      {isWalletOverlay ? (
+        <div
+          className="contents-page__dismiss-control"
+          data-mobile-swipe-dismiss-ignore="true"
+        >
+          <IconButton
+            type="button"
+            variant="secondary"
+            size="md"
+            className="contents-page__dismiss-button"
+            aria-label="コンテンツを閉じる"
+            onClick={handleDismissButtonClick}
           >
-            <IconButton
-              type="button"
-              variant="secondary"
-              size="md"
-              className="contents-page__dismiss-button"
-              aria-label="コンテンツを閉じる"
-              onClick={
-                handleDismissButtonClick
-              }
-            >
-              <ChevronDown
-                size={24}
-                strokeWidth={2.25}
-                aria-hidden="true"
-              />
-            </IconButton>
-          </div>
-        ) : null}
-
-        <section className="split-page contents-page">
-          <div className="split-page-content contents-page-content">
-            <ContentsMediaPanel
-              loading={
-                page.loading
-              }
-              error={
-                page.error
-              }
-              metadataUri={
-                page.contents.metadataUri
-              }
-              moderationHidden={
-                page.moderationHidden
-              }
-              hasMediaItems={
-                page.hasMediaItems
-              }
-              mediaItems={
-                page.mediaItems
-              }
-              activeFileIndex={
-                page.activeFileIndex
-              }
-              tokenName={
-                page.tokenName
-              }
-              onPrevFile={
-                page.handlePrevFile
-              }
-              onNextFile={
-                page.handleNextFile
-              }
-              onSelectFile={
-                page.setActiveFileIndex
-              }
-              onPageDismissStart={
-                isWalletOverlay
-                  ? handleDismissStart
-                  : undefined
-              }
-              onPageDismiss={
-                isWalletOverlay
-                  ? handleDismiss
-                  : undefined
-              }
+            <ChevronDown
+              size={24}
+              strokeWidth={2.25}
+              aria-hidden="true"
             />
-
-            <ContentsDetailPanel
-              contents={
-                page.contents
-              }
-              tokenName={
-                page.tokenName
-              }
-              tokenIconUrl={
-                page.tokenIconUrl
-              }
-              loading={
-                page.loading
-              }
-              isMobilePortrait={
-                page.isMobilePortrait
-              }
-              commentCard={
-                page.commentCard
-              }
-              resaleDisabled={
-                page.resaleButtonDisabled
-              }
-              resaleLabel={
-                page.resaleButtonLabel
-              }
-              onProductNameClick={
-                page.handleProductNameClick
-              }
-              onBrandNameClick={
-                page.handleBrandNameClick
-              }
-              onResaleClick={
-                page.handleOpenResalePage
-              }
-            />
-          </div>
-        </section>
-      </Layout>
-
-      {page.isMobilePortrait ? (
-        <MobileComposerFooter
-          {...composerProps}
-        />
+          </IconButton>
+        </div>
       ) : null}
+
+      <section className="split-page contents-page">
+        <div className="split-page-content contents-page-content">
+          <ContentsMediaPanel
+            loading={page.loading}
+            error={page.error}
+            metadataUri={page.contents.metadataUri}
+            moderationHidden={page.moderationHidden}
+            hasMediaItems={page.hasMediaItems}
+            mediaItems={page.mediaItems}
+            activeFileIndex={page.activeFileIndex}
+            tokenName={page.tokenName}
+            onPrevFile={page.handlePrevFile}
+            onNextFile={page.handleNextFile}
+            onSelectFile={page.setActiveFileIndex}
+            onPageDismissStart={
+              isWalletOverlay
+                ? handleDismissStart
+                : undefined
+            }
+            onPageDismiss={
+              isWalletOverlay
+                ? handleDismiss
+                : undefined
+            }
+          />
+
+          <ContentsDetailPanel
+            contents={page.contents}
+            tokenName={page.tokenName}
+            tokenIconUrl={page.tokenIconUrl}
+            loading={page.loading}
+            isMobilePortrait={page.isMobilePortrait}
+            commentCard={page.commentCard}
+            resaleDisabled={page.resaleButtonDisabled}
+            resaleLabel={page.resaleButtonLabel}
+            onProductNameClick={page.handleProductNameClick}
+            onBrandNameClick={page.handleBrandNameClick}
+            onResaleClick={page.handleOpenResalePage}
+          />
+        </div>
+      </section>
+    </Layout>
+  );
+
+  const mobileContent = (
+    <>
+      <div
+        className={[
+          "contents-page-mobile-stage",
+          isReplySectionOpen
+            ? "contents-page-mobile-stage--reply-open"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <div
+          className="contents-page-mobile-stage__main"
+          aria-hidden={isReplySectionOpen || undefined}
+        >
+          {mainContent}
+        </div>
+
+        <div
+          className="contents-page-mobile-stage__reply"
+          aria-hidden={!isReplySectionOpen || undefined}
+          data-mobile-swipe-dismiss-ignore={
+            isReplySectionOpen
+              ? "true"
+              : undefined
+          }
+        >
+          {page.commentCard.replyingCommentId ? (
+            <TokenCommentReplySection
+              commentId={page.commentCard.replyingCommentId}
+              tokenBlueprintId={page.contents.tokenBlueprintId}
+              commentTree={page.commentCard.commentTree}
+              expandedIds={page.commentCard.expandedIds}
+              replyBody={page.commentCard.replyBody}
+              replyPosting={page.commentCard.replyPosting}
+              commentsLoading={page.commentCard.commentsLoading}
+              commentsError={page.commentCard.commentsError}
+              onBack={page.commentCard.cancelReply}
+              onReplyBodyChange={page.commentCard.setReplyBody}
+              onSubmitReply={page.commentCard.submitReply}
+              onToggleExpanded={page.commentCard.toggleExpanded}
+              onLike={page.commentCard.likeComment}
+              onDislike={page.commentCard.dislikeComment}
+            />
+          ) : null}
+        </div>
+      </div>
+
+      <MobileComposerFooter
+        {...composerProps}
+      />
     </>
   );
+
+  const content =
+    page.isMobilePortrait
+      ? mobileContent
+      : mainContent;
 
   if (!isWalletOverlay) {
     return content;
@@ -200,12 +187,9 @@ export default function ContentsPage() {
   return (
     <MobileSwipeDismissPage
       ref={swipeDismissRef}
-      onDismissStart={
-        handleDismissStart
-      }
-      onDismiss={
-        handleDismiss
-      }
+      enabled={!isReplySectionOpen}
+      onDismissStart={handleDismissStart}
+      onDismiss={handleDismiss}
     >
       {content}
     </MobileSwipeDismissPage>

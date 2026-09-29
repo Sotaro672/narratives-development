@@ -63,15 +63,8 @@ export default function TokenCommentSection({
   onCancelReply,
   onSubmitReply,
 }: TokenCommentSectionProps) {
-  const {
-    authResolved,
-    isLoggedIn,
-  } = useAuthState();
-
-  const [
-    currentAvatarId,
-    setCurrentAvatarId,
-  ] = useState("");
+  const { authResolved, isLoggedIn } = useAuthState();
+  const [currentAvatarId, setCurrentAvatarId] = useState("");
 
   const {
     target,
@@ -89,39 +82,30 @@ export default function TokenCommentSection({
     submit,
   } = useReport();
 
-  const normalizedTokenBlueprintId =
-    tokenBlueprintId.trim();
-
-  const canSubmitReply =
-    Boolean(
-      replyingCommentId &&
-      replyBody.trim() &&
-      !replyPosting,
-    );
+  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const canSubmitReply = Boolean(
+    replyingCommentId &&
+    replyBody.trim() &&
+    !replyPosting,
+  );
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadCurrentAvatar() {
-      if (
-        !authResolved ||
-        !isLoggedIn
-      ) {
+      if (!authResolved || !isLoggedIn) {
         setCurrentAvatarId("");
         return;
       }
 
       try {
-        const avatar =
-          await getMyAvatar();
+        const avatar = await getMyAvatar();
 
         if (cancelled) {
           return;
         }
 
-        setCurrentAvatarId(
-          avatar?.avatarId?.trim() ?? "",
-        );
+        setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
       } catch {
         if (!cancelled) {
           setCurrentAvatarId("");
@@ -139,11 +123,8 @@ export default function TokenCommentSection({
     isLoggedIn,
   ]);
 
-  const handleReportComment = (
-    commentId: string,
-  ) => {
-    const normalizedCommentId =
-      commentId.trim();
+  const handleReportComment = (commentId: string) => {
+    const normalizedCommentId = commentId.trim();
 
     if (
       !isLoggedIn ||
@@ -155,10 +136,8 @@ export default function TokenCommentSection({
     }
 
     openTokenBlueprintCommentReport({
-      tokenBlueprintId:
-        normalizedTokenBlueprintId,
-      commentId:
-        normalizedCommentId,
+      tokenBlueprintId: normalizedTokenBlueprintId,
+      commentId: normalizedCommentId,
     });
   };
 
@@ -170,9 +149,7 @@ export default function TokenCommentSection({
       return;
     }
 
-    void onSubmitReply(
-      replyingCommentId,
-    );
+    void onSubmitReply(replyingCommentId);
   };
 
   return (
@@ -202,36 +179,16 @@ export default function TokenCommentSection({
             ) : null}
 
             <TokenCommentList
-              tokenBlueprintId={
-                normalizedTokenBlueprintId
-              }
-              currentAvatarId={
-                currentAvatarId
-              }
-              commentTree={
-                commentTree
-              }
-              commentsLoading={
-                commentsLoading
-              }
-              expandedIds={
-                expandedIds
-              }
-              onToggleExpanded={
-                onToggleExpanded
-              }
-              onLike={
-                onLikeComment
-              }
-              onDislike={
-                onDislikeComment
-              }
-              onStartReply={
-                onStartReply
-              }
-              onReport={
-                handleReportComment
-              }
+              tokenBlueprintId={normalizedTokenBlueprintId}
+              currentAvatarId={currentAvatarId}
+              commentTree={commentTree}
+              commentsLoading={commentsLoading}
+              expandedIds={expandedIds}
+              onToggleExpanded={onToggleExpanded}
+              onLike={onLikeComment}
+              onDislike={onDislikeComment}
+              onStartReply={onStartReply}
+              onReport={handleReportComment}
             />
           </>
         )}
