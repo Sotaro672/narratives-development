@@ -73,6 +73,7 @@ export default function MarketDetailPage() {
     navigate(`/chats/resales/${encodeURIComponent(normalizedResaleId)}`, {
       state: {
         source: "market",
+        returnTo: `/market/${encodeURIComponent(normalizedResaleId)}`,
       },
     });
   }

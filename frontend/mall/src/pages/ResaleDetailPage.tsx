@@ -55,6 +55,7 @@ export default function ResaleDetailPage() {
     navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
       state: {
         source: "owner",
+        returnTo: `/resales/${encodeURIComponent(resaleId)}`,
       },
     });
   }

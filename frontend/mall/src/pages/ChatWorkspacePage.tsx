@@ -31,6 +31,10 @@ const MOBILE_SLIDE_DURATION_MS = 320;
 
 type MobilePane = "list" | "detail";
 
+type ChatWorkspaceRouteState = {
+  returnTo?: string;
+};
+
 function isChatListPath(pathname: string): boolean {
   return pathname === "/chats" || pathname === "/chats/";
 }
@@ -87,10 +91,22 @@ function ChatWorkspaceContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useMobileChatViewport();
+
   const {
     composer,
     headerTitle,
   } = useChatWorkspace();
+
+  const routeState = location.state as ChatWorkspaceRouteState | null;
+
+  const returnTo =
+    typeof routeState?.returnTo === "string"
+      ? routeState.returnTo.trim()
+      : "";
+
+  const hasDetailReturnTarget =
+    returnTo.startsWith("/market/") ||
+    returnTo.startsWith("/resales/");
 
   const isChatListRoute = isChatListPath(location.pathname);
   const isMobileChatDetail = isMobile && !isChatListRoute;
@@ -154,6 +170,13 @@ function ChatWorkspaceContent() {
       return;
     }
 
+    if (hasDetailReturnTarget) {
+      clearBackNavigationTimer();
+      pendingBackNavigationRef.current = false;
+      navigate(-1);
+      return;
+    }
+
     if (!isMobile) {
       navigate("/chats", { replace: true });
       return;
@@ -183,6 +206,7 @@ function ChatWorkspaceContent() {
   }, [
     clearBackNavigationTimer,
     completeBackNavigation,
+    hasDetailReturnTarget,
     isChatListRoute,
     isMobile,
     navigate,
@@ -226,6 +250,11 @@ function ChatWorkspaceContent() {
       ? headerTitle || "チャット"
       : "AMOL";
 
+  const backButtonLabel =
+    hasDetailReturnTarget
+      ? "前の画面に戻る"
+      : "チャット一覧に戻る";
+
   return (
     <>
       <Layout
@@ -236,7 +265,7 @@ function ChatWorkspaceContent() {
         mainClassName="chat-workspace-page-layout"
         disableFooterPaddingOnDesktop
         showBackButton={isMobileChatDetail}
-        backButtonLabel="チャット一覧に戻る"
+        backButtonLabel={backButtonLabel}
         onBackButtonClick={handleBackToList}
         hideSettingsButton={isMobileChatDetail}
         hideAnnouncementButton={isMobileChatDetail}
