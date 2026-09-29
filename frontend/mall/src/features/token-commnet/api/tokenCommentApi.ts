@@ -1,5 +1,4 @@
-// frontend/amol/src/features/token-commnet/api/tokenCommentApi.ts
-
+// frontend\mall\src\features\token-commnet\api\tokenCommentApi.ts
 import {
   requestJson,
   requestVoid,

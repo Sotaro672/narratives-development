@@ -41,7 +41,8 @@ type TokenCommentReplySectionProps = {
 
 type ReplyCommentProps = {
   comment: TokenComment;
-  depth?: number;
+  visualDepth?: 0 | 1;
+  replyToName?: string;
   disabled?: boolean;
   isReplyTarget?: boolean;
   onLike: (commentId: string) => void | Promise<void>;
@@ -141,7 +142,8 @@ function ReplyCommentAuthor({
 
 function ReplyComment({
   comment,
-  depth = 0,
+  visualDepth = 0,
+  replyToName = "",
   disabled = false,
   isReplyTarget = false,
   onLike,
@@ -149,6 +151,7 @@ function ReplyComment({
   onStartReply,
 }: ReplyCommentProps) {
   const commentId = comment.commentId?.trim() ?? "";
+  const normalizedReplyToName = replyToName.trim();
 
   if (
     comment.deleted ||
@@ -181,17 +184,21 @@ function ReplyComment({
     onStartReply(commentId);
   };
 
-  const indent = Math.min(
-    Math.max(depth * 24, 0),
-    48,
-  );
+  const indent =
+    visualDepth === 1
+      ? 24
+      : 0;
+
+  const showReplyMention =
+    comment.depth >= 2 &&
+    Boolean(normalizedReplyToName);
 
   return (
     <article
       className="token-comment-item token-comment-reply-section__comment"
       data-token-comment-id={commentId}
       data-reply-target={isReplyTarget ? "true" : undefined}
-      data-reply-depth={depth}
+      data-reply-depth={visualDepth}
       style={{ marginLeft: `${indent}px` }}
     >
       <div className="token-comment-item__header">
@@ -208,6 +215,13 @@ function ReplyComment({
       </div>
 
       <p className="token-comment-item__text">
+        {showReplyMention ? (
+          <>
+            <span className="token-comment-reply-section__mention">
+              @{normalizedReplyToName}
+            </span>{" "}
+          </>
+        ) : null}
         {comment.body}
       </p>
 
@@ -246,7 +260,7 @@ function ReplyComment({
 
 function ReplyTree({
   nodes,
-  depth,
+  parentComment,
   disabled,
   replyingCommentId,
   onLike,
@@ -254,17 +268,21 @@ function ReplyTree({
   onStartReply,
 }: {
   nodes: TokenCommentTreeNode[];
-  depth: number;
+  parentComment: TokenComment;
   disabled: boolean;
   replyingCommentId: string | null;
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
 }) {
+  const parentDisplayName =
+    getTokenCommentDisplayName(parentComment);
+
   return (
     <>
       {nodes.map((node) => {
-        const commentId = node.comment.commentId?.trim() ?? "";
+        const commentId =
+          node.comment.commentId?.trim() ?? "";
 
         if (
           node.comment.deleted ||
@@ -280,9 +298,16 @@ function ReplyTree({
           >
             <ReplyComment
               comment={node.comment}
-              depth={depth}
+              visualDepth={1}
+              replyToName={
+                node.comment.depth >= 2
+                  ? parentDisplayName
+                  : ""
+              }
               disabled={disabled}
-              isReplyTarget={replyingCommentId === commentId}
+              isReplyTarget={
+                replyingCommentId === commentId
+              }
               onLike={onLike}
               onDislike={onDislike}
               onStartReply={onStartReply}
@@ -291,7 +316,7 @@ function ReplyTree({
             {node.children.length > 0 ? (
               <ReplyTree
                 nodes={node.children}
-                depth={depth + 1}
+                parentComment={node.comment}
                 disabled={disabled}
                 replyingCommentId={replyingCommentId}
                 onLike={onLike}
@@ -323,9 +348,14 @@ export default function TokenCommentReplySection(
     onStartReply,
   } = props;
 
-  const normalizedCommentId = commentId.trim();
-  const normalizedReplyingCommentId = replyingCommentId?.trim() ?? "";
-  const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedCommentId =
+    commentId.trim();
+
+  const normalizedReplyingCommentId =
+    replyingCommentId?.trim() ?? "";
+
+  const normalizedTokenBlueprintId =
+    tokenBlueprintId.trim();
 
   const targetNode = normalizedCommentId
     ? findCommentNode(
@@ -334,6 +364,29 @@ export default function TokenCommentReplySection(
         normalizedTokenBlueprintId,
       )
     : null;
+
+  const replyingTargetNode =
+    normalizedReplyingCommentId
+      ? findCommentNode(
+          commentTree,
+          normalizedReplyingCommentId,
+          normalizedTokenBlueprintId,
+        )
+      : null;
+
+  const replyingTargetComment =
+    replyingTargetNode?.comment ?? null;
+
+  const showReplyingTo =
+    Boolean(replyingTargetComment) &&
+    (replyingTargetComment?.depth ?? 0) >= 1;
+
+  const replyingToDisplayName =
+    showReplyingTo && replyingTargetComment
+      ? getTokenCommentDisplayName(
+          replyingTargetComment,
+        )
+      : "";
 
   const replyCount =
     targetNode?.comment.childCount ??
@@ -365,13 +418,21 @@ export default function TokenCommentReplySection(
         </IconButton>
 
         <div className="token-comment-reply-section__heading">
-          <span className="token-comment-reply-section__title">
-            返信
-          </span>
+          <div className="token-comment-reply-section__heading-main">
+            <span className="token-comment-reply-section__title">
+              返信
+            </span>
 
-          {targetNode ? (
-            <span className="token-comment-reply-section__count">
-              {replyCount}件
+            {targetNode ? (
+              <span className="token-comment-reply-section__count">
+                {replyCount}件
+              </span>
+            ) : null}
+          </div>
+
+          {replyingToDisplayName ? (
+            <span className="token-comment-reply-section__replying-to">
+              {replyingToDisplayName}に返信しています
             </span>
           ) : null}
         </div>
@@ -393,7 +454,7 @@ export default function TokenCommentReplySection(
         {targetNode ? (
           <ReplyComment
             comment={targetNode.comment}
-            depth={0}
+            visualDepth={0}
             disabled={replyPosting}
             isReplyTarget={
               normalizedReplyingCommentId ===
@@ -418,9 +479,12 @@ export default function TokenCommentReplySection(
           <div className="token-comment-reply-section__list">
             <ReplyTree
               nodes={targetNode.children}
-              depth={1}
+              parentComment={targetNode.comment}
               disabled={replyPosting}
-              replyingCommentId={normalizedReplyingCommentId || null}
+              replyingCommentId={
+                normalizedReplyingCommentId ||
+                null
+              }
               onLike={onLike}
               onDislike={onDislike}
               onStartReply={onStartReply}

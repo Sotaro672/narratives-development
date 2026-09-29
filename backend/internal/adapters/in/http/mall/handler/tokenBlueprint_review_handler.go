@@ -34,6 +34,7 @@ import (
 //
 // - usecase: application command service
 //   - comment creation
+//   - comment update
 //   - comment deletion
 //   - reaction mutation
 //   - aggregate count update
@@ -44,6 +45,7 @@ import (
 // - POST   /mall/me/token-blueprints/{id}/reactions
 // - GET    /mall/me/token-blueprints/{id}/comments
 // - POST   /mall/me/token-blueprints/{id}/comments
+// - PATCH  /mall/me/token-blueprints/{id}/comments/{commentId}
 // - DELETE /mall/me/token-blueprints/{id}/comments/{commentId}
 // - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/reactions
 // - POST   /mall/me/token-blueprints/{id}/comments/{commentId}/replies
@@ -82,7 +84,6 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(
 	}
 
 	path := strings.TrimSuffix(r.URL.Path, "/")
-
 	tokenBlueprintID := extractTokenBlueprintIDFromPath(path)
 	if tokenBlueprintID == "" {
 		notFound(w)
@@ -96,36 +97,21 @@ func (h *TokenBlueprintReviewHandler) ServeHTTP(
 			return
 		}
 
-		h.getAggregate(
-			w,
-			r,
-			tokenBlueprintID,
-		)
+		h.getAggregate(w, r, tokenBlueprintID)
 		return
 
 	case strings.HasSuffix(path, "/reactions") &&
-		isTokenBlueprintReactionPath(
-			path,
-			tokenBlueprintID,
-		):
+		isTokenBlueprintReactionPath(path, tokenBlueprintID):
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w)
 			return
 		}
 
-		h.upsertTokenBlueprintReaction(
-			w,
-			r,
-			tokenBlueprintID,
-		)
+		h.upsertTokenBlueprintReaction(w, r, tokenBlueprintID)
 		return
 
 	case strings.Contains(path, "/comments"):
-		h.dispatchComments(
-			w,
-			r,
-			tokenBlueprintID,
-		)
+		h.dispatchComments(w, r, tokenBlueprintID)
 		return
 
 	default:
@@ -156,10 +142,7 @@ func extractTokenBlueprintIDFromPath(path string) string {
 	}
 
 	segment := rest
-	if separatorIndex := strings.Index(
-		segment,
-		"/",
-	); separatorIndex >= 0 {
+	if separatorIndex := strings.Index(segment, "/"); separatorIndex >= 0 {
 		segment = segment[:separatorIndex]
 	}
 
@@ -206,10 +189,7 @@ func extractCommentID(
 	}
 
 	segment := rest
-	if separatorIndex := strings.Index(
-		segment,
-		"/",
-	); separatorIndex >= 0 {
+	if separatorIndex := strings.Index(segment, "/"); separatorIndex >= 0 {
 		segment = segment[:separatorIndex]
 	}
 
@@ -235,18 +215,10 @@ func (h *TokenBlueprintReviewHandler) dispatchComments(
 	if path == base {
 		switch r.Method {
 		case http.MethodGet:
-			h.listComments(
-				w,
-				r,
-				tokenBlueprintID,
-			)
+			h.listComments(w, r, tokenBlueprintID)
 
 		case http.MethodPost:
-			h.createComment(
-				w,
-				r,
-				tokenBlueprintID,
-			)
+			h.createComment(w, r, tokenBlueprintID)
 
 		default:
 			methodNotAllowed(w)
@@ -255,10 +227,7 @@ func (h *TokenBlueprintReviewHandler) dispatchComments(
 		return
 	}
 
-	commentID := extractCommentID(
-		path,
-		tokenBlueprintID,
-	)
+	commentID := extractCommentID(path, tokenBlueprintID)
 	if commentID == "" {
 		notFound(w)
 		return
@@ -266,17 +235,27 @@ func (h *TokenBlueprintReviewHandler) dispatchComments(
 
 	// /mall/me/token-blueprints/{id}/comments/{commentId}
 	if path == base+"/"+commentID {
-		if r.Method != http.MethodDelete {
+		switch r.Method {
+		case http.MethodPatch:
+			h.updateComment(
+				w,
+				r,
+				tokenBlueprintID,
+				commentID,
+			)
+
+		case http.MethodDelete:
+			h.deleteComment(
+				w,
+				r,
+				tokenBlueprintID,
+				commentID,
+			)
+
+		default:
 			methodNotAllowed(w)
-			return
 		}
 
-		h.deleteComment(
-			w,
-			r,
-			tokenBlueprintID,
-			commentID,
-		)
 		return
 	}
 
@@ -345,6 +324,10 @@ type createCommentRequest struct {
 	Body            string  `json:"body"`
 }
 
+type updateCommentRequest struct {
+	Body string `json:"body"`
+}
+
 // ============================================================
 // Helpers
 // ============================================================
@@ -363,7 +346,6 @@ func queryStringPtr(
 	}
 
 	value := raw[0]
-
 	return &value
 }
 
@@ -381,7 +363,6 @@ func queryBoolPtr(
 	}
 
 	value := strings.EqualFold(raw, "true")
-
 	return &value
 }
 
@@ -399,7 +380,6 @@ func queryIntPtr(
 	}
 
 	value := parseIntDefault(raw, 0)
-
 	return &value
 }
 
@@ -412,13 +392,12 @@ func (h *TokenBlueprintReviewHandler) getAggregate(
 	r *http.Request,
 	tokenBlueprintID string,
 ) {
-	result, err :=
-		h.query.GetAggregateByTokenBlueprintID(
-			r.Context(),
-			appquery.GetMallTokenBlueprintReviewAggregateInput{
-				TokenBlueprintID: tokenBlueprintID,
-			},
-		)
+	result, err := h.query.GetAggregateByTokenBlueprintID(
+		r.Context(),
+		appquery.GetMallTokenBlueprintReviewAggregateInput{
+			TokenBlueprintID: tokenBlueprintID,
+		},
+	)
 	if err != nil {
 		if isNotFound(err) {
 			notFound(w)
@@ -469,14 +448,13 @@ func (h *TokenBlueprintReviewHandler) upsertTokenBlueprintReaction(
 		return
 	}
 
-	result, err :=
-		h.uc.ReactToTokenBlueprintDetailed(
-			r.Context(),
-			tokenBlueprintID,
-			avatarID,
-			h.query.ActorType(),
-			request.Type,
-		)
+	result, err := h.uc.ReactToTokenBlueprintDetailed(
+		r.Context(),
+		tokenBlueprintID,
+		avatarID,
+		h.query.ActorType(),
+		request.Type,
+	)
 	if err != nil {
 		badRequest(w, err.Error())
 		return
@@ -509,60 +487,57 @@ func (h *TokenBlueprintReviewHandler) listComments(
 	r *http.Request,
 	tokenBlueprintID string,
 ) {
-	result, err :=
-		h.query.ListCommentsByTokenBlueprintID(
-			r.Context(),
-			appquery.ListMallTokenBlueprintCommentsInput{
-				TokenBlueprintID: tokenBlueprintID,
-
-				SearchQuery: r.URL.Query().Get("q"),
-				ParentCommentID: queryStringPtr(
-					r,
-					"parentCommentId",
+	result, err := h.query.ListCommentsByTokenBlueprintID(
+		r.Context(),
+		appquery.ListMallTokenBlueprintCommentsInput{
+			TokenBlueprintID: tokenBlueprintID,
+			SearchQuery:      r.URL.Query().Get("q"),
+			ParentCommentID: queryStringPtr(
+				r,
+				"parentCommentId",
+			),
+			RootCommentID: r.URL.Query().Get(
+				"rootCommentId",
+			),
+			AuthorID: r.URL.Query().Get(
+				"authorId",
+			),
+			Deleted: queryBoolPtr(
+				r,
+				"deleted",
+			),
+			Depth: queryIntPtr(
+				r,
+				"depth",
+			),
+			Sort: common.Sort{
+				Column: r.URL.Query().Get(
+					"sort",
 				),
-				RootCommentID: r.URL.Query().Get(
-					"rootCommentId",
-				),
-				AuthorID: r.URL.Query().Get(
-					"authorId",
-				),
-				Deleted: queryBoolPtr(
-					r,
-					"deleted",
-				),
-				Depth: queryIntPtr(
-					r,
-					"depth",
-				),
-
-				Sort: common.Sort{
-					Column: r.URL.Query().Get(
-						"sort",
-					),
-					Order: common.SortOrder(
-						strings.ToLower(
-							r.URL.Query().Get(
-								"order",
-							),
-						),
-					),
-				},
-				Page: common.Page{
-					Number: parseIntDefault(
+				Order: common.SortOrder(
+					strings.ToLower(
 						r.URL.Query().Get(
-							"page",
+							"order",
 						),
-						1,
 					),
-					PerPage: parseIntDefault(
-						r.URL.Query().Get(
-							"perPage",
-						),
-						0,
-					),
-				},
+				),
 			},
-		)
+			Page: common.Page{
+				Number: parseIntDefault(
+					r.URL.Query().Get(
+						"page",
+					),
+					1,
+				),
+				PerPage: parseIntDefault(
+					r.URL.Query().Get(
+						"perPage",
+					),
+					0,
+				),
+			},
+		},
+	)
 	if err != nil {
 		internalError(w, err.Error())
 		return
@@ -691,6 +666,81 @@ func (h *TokenBlueprintReviewHandler) createReplyComment(
 			h.uc.BuildComment(
 				r.Context(),
 				created,
+			),
+		),
+	)
+}
+
+func (h *TokenBlueprintReviewHandler) updateComment(
+	w http.ResponseWriter,
+	r *http.Request,
+	tokenBlueprintID string,
+	commentID string,
+) {
+	avatarID, ok := mw.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		writeJSON(
+			w,
+			http.StatusUnauthorized,
+			map[string]string{
+				"error": "unauthorized",
+			},
+		)
+		return
+	}
+
+	var request updateCommentRequest
+	if err := readJSON(r, &request); err != nil {
+		badRequest(w, err.Error())
+		return
+	}
+
+	if strings.TrimSpace(request.Body) == "" {
+		badRequest(w, "body must not be empty")
+		return
+	}
+
+	updated, err := h.uc.UpdateComment(
+		r.Context(),
+		appusecase.UpdateCommentInput{
+			TokenBlueprintID: tokenBlueprintID,
+			CommentID:        commentID,
+			AuthorID:         avatarID,
+			AuthorType:       h.query.AuthorType(),
+			Body:             request.Body,
+		},
+	)
+	if err != nil {
+		if errors.Is(
+			err,
+			appusecase.ErrCommentUpdateForbidden,
+		) {
+			writeJSON(
+				w,
+				http.StatusForbidden,
+				map[string]string{
+					"error": err.Error(),
+				},
+			)
+			return
+		}
+
+		if isNotFound(err) {
+			notFound(w)
+			return
+		}
+
+		badRequest(w, err.Error())
+		return
+	}
+
+	writeJSON(
+		w,
+		http.StatusOK,
+		h.query.ToCommentReadModel(
+			h.uc.BuildComment(
+				r.Context(),
+				updated,
 			),
 		),
 	)

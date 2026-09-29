@@ -4,6 +4,7 @@ import { useCallback } from "react";
 
 import type { MobileComposerFooterProps } from "../../../components/layout/MobileComposerFooter";
 import type { TokenCommentCardController } from "../../shared/types/contents";
+import { getTokenCommentDisplayName } from "../../shared/types/tokenCommentTypes";
 
 type UseContentsCommentComposerParams = {
   commentCard: TokenCommentCardController;
@@ -21,6 +22,7 @@ type ComposerProps = Pick<
   | "disabled"
   | "submitLabel"
   | "submittingLabel"
+  | "beforeInput"
   | "onContentChange"
   | "onSubmit"
 >;
@@ -31,6 +33,23 @@ export function useContentsCommentComposer({
   tokenBlueprintId,
 }: UseContentsCommentComposerParams) {
   const isReplying = Boolean(commentCard.replyingCommentId);
+
+  const replyingCommentId = commentCard.replyingCommentId?.trim() ?? "";
+
+  const replyingComment = replyingCommentId
+    ? commentCard.comments.find(
+        (comment) => comment.commentId?.trim() === replyingCommentId,
+      ) ?? null
+    : null;
+
+  const isNestedReply =
+    Boolean(replyingComment) &&
+    (replyingComment?.depth ?? 0) >= 1;
+
+  const replyingToName =
+    isNestedReply && replyingComment
+      ? getTokenCommentDisplayName(replyingComment).trim()
+      : "";
 
   const commentActionDisabled =
     commentCard.posting ||
@@ -48,7 +67,7 @@ export function useContentsCommentComposer({
 
   const canSubmitReply =
     !replyActionDisabled &&
-    Boolean(commentCard.replyingCommentId) &&
+    Boolean(replyingCommentId) &&
     commentCard.replyBody.trim().length > 0;
 
   const handleSubmitComment = useCallback(() => {
@@ -63,18 +82,17 @@ export function useContentsCommentComposer({
   ]);
 
   const handleSubmitReply = useCallback(() => {
-    const replyingCommentId =
-      commentCard.replyingCommentId;
+    const targetCommentId = commentCard.replyingCommentId?.trim() ?? "";
 
     if (
-      !replyingCommentId ||
+      !targetCommentId ||
       !canSubmitReply
     ) {
       return;
     }
 
     void commentCard.submitReply(
-      replyingCommentId,
+      targetCommentId,
     );
   }, [
     canSubmitReply,
@@ -85,9 +103,12 @@ export function useContentsCommentComposer({
     content: isReplying
       ? commentCard.replyBody
       : commentCard.commentBody,
-    placeholder: isReplying
-      ? "返信を書く…"
-      : "コメントを書く…",
+    placeholder:
+      isReplying && replyingToName
+        ? `@${replyingToName} 返信を書く…`
+        : isReplying
+          ? "返信を書く…"
+          : "コメントを書く…",
     error:
       commentCard.commentsError ||
       undefined,
@@ -104,6 +125,10 @@ export function useContentsCommentComposer({
       ? "返信"
       : "投稿",
     submittingLabel: "投稿中...",
+    beforeInput:
+      isReplying && replyingToName
+        ? `${replyingToName}に返信しています`
+        : undefined,
     onContentChange: isReplying
       ? commentCard.setReplyBody
       : commentCard.setCommentBody,
@@ -114,6 +139,9 @@ export function useContentsCommentComposer({
 
   return {
     isReplying,
+    replyingComment,
+    isNestedReply,
+    replyingToName,
     composerProps,
   };
 }

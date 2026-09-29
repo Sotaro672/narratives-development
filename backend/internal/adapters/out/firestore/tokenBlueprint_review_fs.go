@@ -114,6 +114,7 @@ func (a *tokenBlueprintAggregateRepoFS) GetByID(ctx context.Context, id string) 
 	if err := snap.DataTo(&out); err != nil {
 		return tbReview.TokenBlueprintReviewAggregate{}, err
 	}
+
 	return out, nil
 }
 
@@ -129,6 +130,7 @@ func (a *tokenBlueprintAggregateRepoFS) Create(ctx context.Context, entity tbRev
 	if err != nil {
 		return tbReview.TokenBlueprintReviewAggregate{}, err
 	}
+
 	return entity, nil
 }
 
@@ -138,6 +140,7 @@ func (a *tokenBlueprintAggregateRepoFS) Update(ctx context.Context, id string, p
 	}
 
 	updates := make([]firestore.Update, 0, 6)
+
 	if patch.LikeCount != nil {
 		updates = append(updates, firestore.Update{Path: "LikeCount", Value: *patch.LikeCount})
 	}
@@ -155,7 +158,7 @@ func (a *tokenBlueprintAggregateRepoFS) Update(ctx context.Context, id string, p
 	}
 
 	now := time.Now()
-	updates = append(updates, firestore.Update{Path: "UpdatedAt", Value: &now})
+	updates = append(updates, firestore.Update{Path: "UpdatedAt", Value: now})
 
 	_, err := a.root.rootDoc(id).Update(ctx, updates)
 	if err != nil {
@@ -241,6 +244,7 @@ func (r *commentRepoFS) List(ctx context.Context, filter tbReview.FilterComment,
 	if sort.Order == common.SortDesc {
 		order = firestore.Desc
 	}
+
 	switch sort.Column {
 	case "", "createdAt", "CreatedAt":
 		q = q.OrderBy("CreatedAt", order)
@@ -258,10 +262,12 @@ func (r *commentRepoFS) List(ctx context.Context, filter tbReview.FilterComment,
 	if perPage <= 0 {
 		perPage = 20
 	}
+
 	pageNo := page.Number
 	if pageNo <= 0 {
 		pageNo = 1
 	}
+
 	offset := (pageNo - 1) * perPage
 
 	totalCount, _ := countDocs(ctx, q)
@@ -269,6 +275,7 @@ func (r *commentRepoFS) List(ctx context.Context, filter tbReview.FilterComment,
 
 	it := q.Documents(ctx)
 	items := make([]tbReview.Comment, 0, perPage)
+
 	for {
 		s, err := it.Next()
 		if err != nil {
@@ -277,10 +284,12 @@ func (r *commentRepoFS) List(ctx context.Context, filter tbReview.FilterComment,
 			}
 			return common.PageResult[tbReview.Comment]{}, err
 		}
+
 		var v tbReview.Comment
 		if err := s.DataTo(&v); err != nil {
 			return common.PageResult[tbReview.Comment]{}, err
 		}
+
 		items = append(items, v)
 	}
 
@@ -313,6 +322,7 @@ func (r *commentRepoFS) GetByParentID(ctx context.Context, tokenBlueprintID, com
 	if err := snap.DataTo(&out); err != nil {
 		return tbReview.Comment{}, err
 	}
+
 	return out, nil
 }
 
@@ -325,6 +335,7 @@ func (r *commentRepoFS) CreateUnderParent(ctx context.Context, tokenBlueprintID 
 	}
 
 	col := r.root.commentsCol(tokenBlueprintID)
+
 	if comment.CommentID == "" {
 		doc := col.NewDoc()
 		comment.CommentID = doc.ID
@@ -343,6 +354,7 @@ func (r *commentRepoFS) CreateUnderParent(ctx context.Context, tokenBlueprintID 
 	if err != nil {
 		return tbReview.Comment{}, err
 	}
+
 	return comment, nil
 }
 
@@ -358,8 +370,8 @@ func (r *commentRepoFS) UpdateUnderParent(ctx context.Context, tokenBlueprintID,
 	}
 
 	docRef := r.root.commentsCol(tokenBlueprintID).Doc(commentID)
-
 	updates := make([]firestore.Update, 0, 8)
+
 	if patch.Body != nil {
 		updates = append(updates, firestore.Update{Path: "Body", Value: *patch.Body})
 	}
@@ -376,8 +388,12 @@ func (r *commentRepoFS) UpdateUnderParent(ctx context.Context, tokenBlueprintID,
 		updates = append(updates, firestore.Update{Path: "ChildCount", Value: *patch.ChildCount})
 	}
 
-	now := time.Now()
-	updates = append(updates, firestore.Update{Path: "UpdatedAt", Value: &now})
+	if patch.UpdatedAt != nil {
+		updates = append(updates, firestore.Update{Path: "UpdatedAt", Value: *patch.UpdatedAt})
+	} else {
+		now := time.Now()
+		updates = append(updates, firestore.Update{Path: "UpdatedAt", Value: now})
+	}
 
 	_, err := docRef.Update(ctx, updates)
 	if err != nil {
@@ -399,6 +415,7 @@ func (r *commentRepoFS) UpdateUnderParent(ctx context.Context, tokenBlueprintID,
 	if err := after.DataTo(&out); err != nil {
 		return tbReview.Comment{}, err
 	}
+
 	return out, nil
 }
 
@@ -437,6 +454,7 @@ func (r *tokenBlueprintReactionRepoFS) FindByActor(ctx context.Context, tokenBlu
 	if err := snap.DataTo(&out); err != nil {
 		return tbReview.TokenBlueprintReaction{}, err
 	}
+
 	return out, nil
 }
 
@@ -460,6 +478,7 @@ func (r *tokenBlueprintReactionRepoFS) Upsert(ctx context.Context, reaction tbRe
 	if err != nil {
 		return tbReview.TokenBlueprintReaction{}, err
 	}
+
 	return reaction, nil
 }
 
@@ -489,6 +508,7 @@ func (r *commentReactionRepoFS) FindByActor(ctx context.Context, tokenBlueprintI
 	if err := snap.DataTo(&out); err != nil {
 		return tbReview.CommentReaction{}, err
 	}
+
 	return out, nil
 }
 
@@ -512,6 +532,7 @@ func (r *commentReactionRepoFS) Upsert(ctx context.Context, reaction tbReview.Co
 	if err != nil {
 		return tbReview.CommentReaction{}, err
 	}
+
 	return reaction, nil
 }
 

@@ -1,8 +1,10 @@
 // backend/internal/domain/tokenBlueprint_review/repository_port.go
+
 package tokenBlueprint_review
 
 import (
 	"context"
+	"time"
 
 	common "narratives/internal/domain/common"
 )
@@ -42,22 +44,44 @@ func NewPatchFromTokenBlueprintReviewAggregate(
 // This supports both top-level comments and nested replies.
 type FilterComment struct {
 	common.FilterCommon `json:",inline"`
-	TokenBlueprintID    string      `json:"tokenBlueprintId"` // required for parent aggregate
-	ParentCommentID     *string     `json:"parentCommentId"`  // nil=no filter, ptr("")=top-level only, ptr(id)=children of the parent
-	RootCommentID       string      `json:"rootCommentId"`    // optional
-	AuthorID            string      `json:"authorId"`         // optional
-	AuthorType          *AuthorType `json:"authorType"`       // optional
-	Deleted             *bool       `json:"deleted"`          // optional
-	Depth               *int        `json:"depth"`            // optional
+	TokenBlueprintID    string      `json:"tokenBlueprintId"`
+	ParentCommentID     *string     `json:"parentCommentId"`
+	RootCommentID       string      `json:"rootCommentId"`
+	AuthorID            string      `json:"authorId"`
+	AuthorType          *AuthorType `json:"authorType"`
+	Deleted             *bool       `json:"deleted"`
+	Depth               *int        `json:"depth"`
 }
 
 // PatchComment is a partial update model for comment doc.
 type PatchComment struct {
-	Body         *string `json:"body"`
-	Deleted      *bool   `json:"deleted"`
-	LikeCount    *int64  `json:"likeCount"`
-	DislikeCount *int64  `json:"dislikeCount"`
-	ChildCount   *int64  `json:"childCount"`
+	Body         *string    `json:"body"`
+	Deleted      *bool      `json:"deleted"`
+	LikeCount    *int64     `json:"likeCount"`
+	DislikeCount *int64     `json:"dislikeCount"`
+	ChildCount   *int64     `json:"childCount"`
+	UpdatedAt    *time.Time `json:"updatedAt"`
+}
+
+// NewBodyPatchFromComment creates a patch for persisting an edited comment body.
+func NewBodyPatchFromComment(
+	comment Comment,
+) PatchComment {
+	return PatchComment{
+		Body:      &comment.Body,
+		UpdatedAt: &comment.UpdatedAt,
+	}
+}
+
+// NewDeletePatchFromComment creates a patch for persisting a logically deleted comment.
+func NewDeletePatchFromComment(
+	comment Comment,
+) PatchComment {
+	return PatchComment{
+		Body:      &comment.Body,
+		Deleted:   &comment.Deleted,
+		UpdatedAt: &comment.UpdatedAt,
+	}
 }
 
 // NewChildCountPatchFromComment creates a patch for persisting only the
@@ -67,6 +91,7 @@ func NewChildCountPatchFromComment(
 ) PatchComment {
 	return PatchComment{
 		ChildCount: &comment.ChildCount,
+		UpdatedAt:  &comment.UpdatedAt,
 	}
 }
 
@@ -79,6 +104,7 @@ func NewReactionCountPatchFromComment(
 		LikeCount:    &comment.LikeCount,
 		DislikeCount: &comment.DislikeCount,
 		ChildCount:   &comment.ChildCount,
+		UpdatedAt:    &comment.UpdatedAt,
 	}
 }
 
@@ -98,19 +124,10 @@ type TokenBlueprintAggregateRepository interface {
 // CommentRepository manages comments collection under a tokenBlueprint:
 // tokenBlueprintReviews/{tokenBlueprintId}/comments/{commentId}
 type CommentRepository interface {
-	// List lists comments under tokenBlueprintId with optional filters.
 	List(ctx context.Context, filter FilterComment, sort common.Sort, page common.Page) (common.PageResult[Comment], error)
-
-	// GetByParentID fetches a comment by parent tokenBlueprintId and commentId.
 	GetByParentID(ctx context.Context, tokenBlueprintID, commentID string) (Comment, error)
-
-	// CreateUnderParent creates a comment under tokenBlueprintId.
 	CreateUnderParent(ctx context.Context, tokenBlueprintID string, comment Comment) (Comment, error)
-
-	// UpdateUnderParent updates a comment directly under tokenBlueprintId by commentId.
 	UpdateUnderParent(ctx context.Context, tokenBlueprintID, commentID string, patch PatchComment) (Comment, error)
-
-	// DeleteUnderParent deletes a comment under tokenBlueprintId.
 	DeleteUnderParent(ctx context.Context, tokenBlueprintID, commentID string) error
 }
 
@@ -121,21 +138,34 @@ type CommentRepository interface {
 // TokenBlueprintReactionRepository manages:
 // tokenBlueprintReviews/{tokenBlueprintId}/reactions/{actorType_actorId}
 type TokenBlueprintReactionRepository interface {
-	// FindByActor fetches a reaction by tokenBlueprintId + actorType + actorId.
-	FindByActor(ctx context.Context, tokenBlueprintID string, actorType ActorType, actorID string) (TokenBlueprintReaction, error)
+	FindByActor(
+		ctx context.Context,
+		tokenBlueprintID string,
+		actorType ActorType,
+		actorID string,
+	) (TokenBlueprintReaction, error)
 
-	// Upsert creates or updates a reaction doc.
-	Upsert(ctx context.Context, reaction TokenBlueprintReaction) (TokenBlueprintReaction, error)
+	Upsert(
+		ctx context.Context,
+		reaction TokenBlueprintReaction,
+	) (TokenBlueprintReaction, error)
 }
 
 // CommentReactionRepository manages:
 // tokenBlueprintReviews/{tokenBlueprintId}/comments/{commentId}/reactions/{actorType_actorId}
 type CommentReactionRepository interface {
-	// FindByActor fetches a reaction by tokenBlueprintId + commentId + actorType + actorId.
-	FindByActor(ctx context.Context, tokenBlueprintID, commentID string, actorType ActorType, actorID string) (CommentReaction, error)
+	FindByActor(
+		ctx context.Context,
+		tokenBlueprintID string,
+		commentID string,
+		actorType ActorType,
+		actorID string,
+	) (CommentReaction, error)
 
-	// Upsert creates or updates a reaction doc.
-	Upsert(ctx context.Context, reaction CommentReaction) (CommentReaction, error)
+	Upsert(
+		ctx context.Context,
+		reaction CommentReaction,
+	) (CommentReaction, error)
 }
 
 // ============================================================
