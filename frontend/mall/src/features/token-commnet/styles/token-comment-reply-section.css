@@ -66,21 +66,12 @@
 
 .token-comment-reply-section__parent {
   min-width: 0;
-  max-height: min(38dvh, 320px);
   flex: 0 0 auto;
   box-sizing: border-box;
   padding: 16px;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
   border-bottom: 1px solid #e5e7eb;
   background: #fff;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-
-.token-comment-reply-section__parent::-webkit-scrollbar {
-  display: none;
 }
 
 .token-comment-reply-section__parent .token-comment-item {
@@ -218,7 +209,6 @@
   }
 
   .token-comment-reply-section__parent {
-    max-height: min(36dvh, 280px);
     padding: 14px 12px;
   }
 
@@ -245,12 +235,6 @@
 
   .token-comment-reply-section__comment[data-reply-target="true"]::before {
     left: -6px;
-  }
-}
-
-@media (orientation: landscape) and (max-width: 959px) {
-  .token-comment-reply-section__parent {
-    max-height: min(30dvh, 180px);
   }
 }
 
