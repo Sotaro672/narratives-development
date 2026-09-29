@@ -1,10 +1,13 @@
 // frontend/mall/src/components/layout/MobileComposerFooter.tsx
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ChangeEvent,
+  type CompositionEvent,
 } from "react";
 import {
   ImagePlus,
@@ -104,6 +107,9 @@ export default function MobileComposerFooter({
   const footerRef = useRef<HTMLElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false);
+  const lastEmittedContentRef = useRef(content);
+  const [draft, setDraft] = useState(content);
 
   const inputDisabled = disabled || submitting;
   const supportsFiles =
@@ -124,6 +130,28 @@ export default function MobileComposerFooter({
     inputDisabled ||
     !canSubmit;
 
+  const emitContentChange = useCallback((value: string): void => {
+    if (lastEmittedContentRef.current === value) {
+      return;
+    }
+
+    lastEmittedContentRef.current = value;
+    onContentChange(value);
+  }, [onContentChange]);
+
+  useEffect(() => {
+    if (isComposingRef.current) {
+      return;
+    }
+
+    lastEmittedContentRef.current = content;
+    setDraft((currentDraft) =>
+      currentDraft === content
+        ? currentDraft
+        : content,
+    );
+  }, [content]);
+
   useEffect(() => {
     const textarea = textareaRef.current;
 
@@ -143,7 +171,7 @@ export default function MobileComposerFooter({
       textarea.scrollHeight > 96
         ? "auto"
         : "hidden";
-  }, [content]);
+  }, [draft]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -158,7 +186,6 @@ export default function MobileComposerFooter({
 
     const root = document.documentElement;
     const visualViewport = window.visualViewport;
-
     let animationFrameId: number | null = null;
 
     const updateKeyboardOffset = (): void => {
@@ -278,6 +305,36 @@ export default function MobileComposerFooter({
     };
   }, []);
 
+  const handleCompositionStart = (
+    _event: CompositionEvent<HTMLTextAreaElement>,
+  ): void => {
+    isComposingRef.current = true;
+  };
+
+  const handleCompositionEnd = (
+    event: CompositionEvent<HTMLTextAreaElement>,
+  ): void => {
+    const nextValue = event.currentTarget.value;
+
+    isComposingRef.current = false;
+    setDraft(nextValue);
+    emitContentChange(nextValue);
+  };
+
+  const handleContentChange = (
+    event: ChangeEvent<HTMLTextAreaElement>,
+  ): void => {
+    const nextValue = event.currentTarget.value;
+
+    setDraft(nextValue);
+
+    if (isComposingRef.current) {
+      return;
+    }
+
+    emitContentChange(nextValue);
+  };
+
   const handleFilesChange = (
     event: ChangeEvent<HTMLInputElement>,
   ): void => {
@@ -308,7 +365,10 @@ export default function MobileComposerFooter({
   };
 
   const handleSubmit = (): void => {
-    if (submitDisabled) {
+    if (
+      submitDisabled ||
+      isComposingRef.current
+    ) {
       return;
     }
 
@@ -386,18 +446,16 @@ export default function MobileComposerFooter({
         <textarea
           ref={textareaRef}
           className="mobile-composer-footer__input"
-          value={content}
+          value={draft}
           rows={1}
           maxLength={maxLength ?? undefined}
           placeholder={placeholder}
           aria-label={placeholder}
           disabled={inputDisabled}
           enterKeyHint="enter"
-          onChange={(event) => {
-            onContentChange(
-              event.currentTarget.value,
-            );
-          }}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          onChange={handleContentChange}
         />
 
         <button

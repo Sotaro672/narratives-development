@@ -1,6 +1,9 @@
 // frontend/mall/src/pages/ChatDetailPage.tsx
 
-import { useEffect } from "react";
+import {
+  useEffect,
+  useRef,
+} from "react";
 import { useParams } from "react-router-dom";
 
 import Alert from "../components/ui/Alert";
@@ -42,6 +45,7 @@ export default function ChatDetailPage() {
 
 function InquiryChatDetail() {
   const { registerComposer } = useChatWorkspace();
+  const unregisterComposerRef = useRef<(() => void) | null>(null);
 
   const {
     inquiry,
@@ -65,7 +69,7 @@ function InquiryChatDetail() {
   } = useInquiryDetailPage();
 
   useEffect(() => {
-    return registerComposer({
+    unregisterComposerRef.current = registerComposer({
       content: replyContent,
       placeholder: "返信内容を入力",
       files: replyFiles,
@@ -95,6 +99,13 @@ function InquiryChatDetail() {
     submitReply,
   ]);
 
+  useEffect(() => {
+    return () => {
+      unregisterComposerRef.current?.();
+      unregisterComposerRef.current = null;
+    };
+  }, []);
+
   const hasInitialReturnMessage =
     inquiry?.inquiryType !== "product" &&
     !!inquiry?.content.trim();
@@ -106,17 +117,26 @@ function InquiryChatDetail() {
     >
       <section className="product-detail-page-layout chat-detail-page">
         {error ? (
-          <Alert variant="error" className="chat-detail-page__error">
+          <Alert
+            variant="error"
+            className="chat-detail-page__error"
+          >
             {error}
           </Alert>
         ) : null}
 
         {loading ? (
-          <StatePanel variant="loading" title="読み込み中..." />
+          <StatePanel
+            variant="loading"
+            title="読み込み中..."
+          />
         ) : null}
 
         {!loading && !inquiry ? (
-          <StatePanel variant="empty" title="問い合わせが見つかりません。" />
+          <StatePanel
+            variant="empty"
+            title="問い合わせが見つかりません。"
+          />
         ) : null}
 
         {!loading && inquiry ? (

@@ -1,6 +1,11 @@
 // frontend/mall/src/features/trade/presentation/components/TradeChatDetail.tsx
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
@@ -47,6 +52,7 @@ export default function TradeChatDetail({
   const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
   const { registerComposer } = useChatWorkspace();
+  const unregisterComposerRef = useRef<(() => void) | null>(null);
   const thread = useTradeThread(tradeId);
   const [dispatchQrPreviewOpen, setDispatchQrPreviewOpen] = useState(false);
 
@@ -151,7 +157,7 @@ export default function TradeChatDetail({
   });
 
   useEffect(() => {
-    return registerComposer({
+    unregisterComposerRef.current = registerComposer({
       content: reply.content,
       placeholder: "メッセージを入力",
       files: reply.files,
@@ -179,6 +185,13 @@ export default function TradeChatDetail({
     reply.submit,
     reply.submitting,
   ]);
+
+  useEffect(() => {
+    return () => {
+      unregisterComposerRef.current?.();
+      unregisterComposerRef.current = null;
+    };
+  }, []);
 
   const orderAction = getTradeOrderAction(thread.trade);
 
