@@ -12,10 +12,10 @@ import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage"
 import IconButton from "../components/ui/IconButton";
 import ContentsDetailPanel from "../features/contents/components/ContentsDetailPanel";
 import ContentsMediaPanel from "../features/contents/components/ContentsMediaPanel";
+import TokenCommentReplySection from "../features/contents/components/TokenCommentReplySection";
 import { useContentsCommentComposer } from "../features/contents/hooks/useContentsCommentComposer";
 import { useContentsPage } from "../features/contents/hooks/useContentsPage";
 import { useContentsSwipeDismiss } from "../features/contents/hooks/useContentsSwipeDismiss";
-import TokenCommentReplySection from "../features/token-commnet/components/TokenCommentReplySection";
 
 export default function ContentsPage() {
   const location = useLocation();
@@ -45,6 +45,41 @@ export default function ContentsPage() {
     handleDismiss,
     handleDismissButtonClick,
   } = useContentsSwipeDismiss();
+
+  const detailPanel = (
+    <ContentsDetailPanel
+      contents={page.contents}
+      tokenName={page.tokenName}
+      tokenIconUrl={page.tokenIconUrl}
+      loading={page.loading}
+      isMobilePortrait={page.isMobilePortrait}
+      commentCard={page.commentCard}
+      resaleDisabled={page.resaleButtonDisabled}
+      resaleLabel={page.resaleButtonLabel}
+      onProductNameClick={page.handleProductNameClick}
+      onBrandNameClick={page.handleBrandNameClick}
+      onResaleClick={page.handleOpenResalePage}
+    />
+  );
+
+  const replySection = page.commentCard.replyingCommentId ? (
+    <TokenCommentReplySection
+      commentId={page.commentCard.replyingCommentId}
+      tokenBlueprintId={page.contents.tokenBlueprintId}
+      commentTree={page.commentCard.commentTree}
+      expandedIds={page.commentCard.expandedIds}
+      replyBody={page.commentCard.replyBody}
+      replyPosting={page.commentCard.replyPosting}
+      commentsLoading={page.commentCard.commentsLoading}
+      commentsError={page.commentCard.commentsError}
+      onBack={page.commentCard.cancelReply}
+      onReplyBodyChange={page.commentCard.setReplyBody}
+      onSubmitReply={page.commentCard.submitReply}
+      onToggleExpanded={page.commentCard.toggleExpanded}
+      onLike={page.commentCard.likeComment}
+      onDislike={page.commentCard.dislikeComment}
+    />
+  ) : null;
 
   const mainContent = (
     <Layout
@@ -102,83 +137,53 @@ export default function ContentsPage() {
             }
           />
 
-          <ContentsDetailPanel
-            contents={page.contents}
-            tokenName={page.tokenName}
-            tokenIconUrl={page.tokenIconUrl}
-            loading={page.loading}
-            isMobilePortrait={page.isMobilePortrait}
-            commentCard={page.commentCard}
-            resaleDisabled={page.resaleButtonDisabled}
-            resaleLabel={page.resaleButtonLabel}
-            onProductNameClick={page.handleProductNameClick}
-            onBrandNameClick={page.handleBrandNameClick}
-            onResaleClick={page.handleOpenResalePage}
-          />
+          {page.isMobilePortrait ? (
+            <div
+              className={[
+                "contents-page-mobile-stage",
+                isReplySectionOpen
+                  ? "contents-page-mobile-stage--reply-open"
+                  : "",
+              ].filter(Boolean).join(" ")}
+            >
+              <div
+                className="contents-page-mobile-stage__main"
+                aria-hidden={isReplySectionOpen || undefined}
+              >
+                {detailPanel}
+              </div>
+
+              <div
+                className="contents-page-mobile-stage__reply"
+                aria-hidden={!isReplySectionOpen || undefined}
+                data-mobile-swipe-dismiss-ignore={
+                  isReplySectionOpen
+                    ? "true"
+                    : undefined
+                }
+              >
+                {replySection}
+              </div>
+            </div>
+          ) : (
+            detailPanel
+          )}
         </div>
       </section>
     </Layout>
   );
 
-  const mobileContent = (
+  const content = (
     <>
-      <div
-        className={[
-          "contents-page-mobile-stage",
-          isReplySectionOpen
-            ? "contents-page-mobile-stage--reply-open"
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
-      >
-        <div
-          className="contents-page-mobile-stage__main"
-          aria-hidden={isReplySectionOpen || undefined}
-        >
-          {mainContent}
-        </div>
+      {mainContent}
 
-        <div
-          className="contents-page-mobile-stage__reply"
-          aria-hidden={!isReplySectionOpen || undefined}
-          data-mobile-swipe-dismiss-ignore={
-            isReplySectionOpen
-              ? "true"
-              : undefined
-          }
-        >
-          {page.commentCard.replyingCommentId ? (
-            <TokenCommentReplySection
-              commentId={page.commentCard.replyingCommentId}
-              tokenBlueprintId={page.contents.tokenBlueprintId}
-              commentTree={page.commentCard.commentTree}
-              expandedIds={page.commentCard.expandedIds}
-              replyBody={page.commentCard.replyBody}
-              replyPosting={page.commentCard.replyPosting}
-              commentsLoading={page.commentCard.commentsLoading}
-              commentsError={page.commentCard.commentsError}
-              onBack={page.commentCard.cancelReply}
-              onReplyBodyChange={page.commentCard.setReplyBody}
-              onSubmitReply={page.commentCard.submitReply}
-              onToggleExpanded={page.commentCard.toggleExpanded}
-              onLike={page.commentCard.likeComment}
-              onDislike={page.commentCard.dislikeComment}
-            />
-          ) : null}
-        </div>
-      </div>
-
-      <MobileComposerFooter
-        {...composerProps}
-      />
+      {page.isMobilePortrait ? (
+        <MobileComposerFooter
+          {...composerProps}
+        />
+      ) : null}
     </>
   );
-
-  const content =
-    page.isMobilePortrait
-      ? mobileContent
-      : mainContent;
 
   if (!isWalletOverlay) {
     return content;
