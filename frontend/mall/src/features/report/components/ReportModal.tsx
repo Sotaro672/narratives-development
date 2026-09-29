@@ -127,7 +127,6 @@ export default function ReportModal({
         onClose={submitting ? undefined : onClose}
         closeLabel="通報画面を閉じる"
       >
-
         <ModalTitle id="report-modal-title">{targetLabel}を通報</ModalTitle>
       </ModalHeader>
 
@@ -173,27 +172,19 @@ export default function ReportModal({
               <legend className="report-modal__label">通報理由</legend>
 
               <div className="report-modal__reason-list">
-                {REPORT_REASONS.map((value) => {
-                  const selected = reason === value;
-
-                  return (
-                    <Radio
-                      key={value}
-                      name="report-reason"
-                      value={value}
-                      checked={selected}
-                      disabled={submitting}
-                      label={getReportReasonLabel(value)}
-                      className={[
-                        "report-modal__reason",
-                        selected ? "report-modal__reason--selected" : "",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onChange={() => onReasonChange(value)}
-                    />
-                  );
-                })}
+                {REPORT_REASONS.map((value) => (
+                  <Radio
+                    key={value}
+                    name="report-reason"
+                    value={value}
+                    variant="card"
+                    checked={reason === value}
+                    disabled={submitting}
+                    label={getReportReasonLabel(value)}
+                    className="report-modal__reason"
+                    onChange={() => onReasonChange(value)}
+                  />
+                ))}
               </div>
             </fieldset>
 

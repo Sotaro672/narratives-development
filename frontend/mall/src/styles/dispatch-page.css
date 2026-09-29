@@ -22,10 +22,6 @@
   margin-bottom: 12px;
 }
 
-.dispatch-page > section > .ui-section-header .ui-section-header__title {
-  margin: 0;
-}
-
 .dispatch-page > section > .content-page-description {
   margin: -4px 0 16px;
 }
