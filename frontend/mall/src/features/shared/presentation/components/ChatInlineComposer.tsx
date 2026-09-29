@@ -1,7 +1,6 @@
 // frontend/mall/src/features/shared/presentation/components/ChatInlineComposer.tsx
 
 import {
-  type ChangeEvent,
   type KeyboardEvent,
   useRef,
 } from "react";
@@ -19,7 +18,7 @@ type ChatInlineComposerProps = {
   maxLength?: number | null;
   files?: File[];
   onContentChange: (value: string) => void;
-  onFilesChange?: (event: ChangeEvent<HTMLInputElement>) => void;
+  onFilesAdd?: (files: File[]) => void;
   onRemoveFile?: (index: number) => void;
   onSubmit: () => void | Promise<void>;
 };
@@ -34,14 +33,14 @@ export default function ChatInlineComposer({
   maxLength = 500,
   files = [],
   onContentChange,
-  onFilesChange,
+  onFilesAdd,
   onRemoveFile,
   onSubmit,
 }: ChatInlineComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputDisabled = disabled || submitting;
   const supportsFiles =
-    typeof onFilesChange === "function" &&
+    typeof onFilesAdd === "function" &&
     typeof onRemoveFile === "function";
 
   const handleKeyDown = (
@@ -79,7 +78,21 @@ export default function ChatInlineComposer({
               multiple
               disabled={inputDisabled}
               hidden
-              onChange={onFilesChange}
+              onChange={(event) => {
+                const selectedFiles = Array.from(
+                  event.currentTarget.files ?? [],
+                ).filter((file) =>
+                  file.type.startsWith("image/"),
+                );
+
+                event.currentTarget.value = "";
+
+                if (selectedFiles.length === 0) {
+                  return;
+                }
+
+                onFilesAdd(selectedFiles);
+              }}
             />
 
             <Button
@@ -115,7 +128,7 @@ export default function ChatInlineComposer({
         <div className="chat-detail-page__selected-files">
           {files.map((file, index) => (
             <div
-              key={`${file.name}-${file.lastModified}-${index}`}
+              key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
               className="chat-detail-page__selected-file"
             >
               <span>{file.name}</span>

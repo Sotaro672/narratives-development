@@ -14,6 +14,7 @@ import {
 } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import MobileComposerFooter from "../components/layout/MobileComposerFooter";
 import StatePanel from "../components/ui/StatePanel";
 import ChatListPane from "../features/inquiry/presentation/components/ChatListPane";
 import {
@@ -86,7 +87,7 @@ function ChatWorkspaceContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useMobileChatViewport();
-  const { action } = useChatWorkspace();
+  const { composer } = useChatWorkspace();
 
   const isChatListRoute = isChatListPath(location.pathname);
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
@@ -206,74 +207,88 @@ function ChatWorkspaceContent() {
     .filter(Boolean)
     .join(" ");
 
-  const hasMobileDetailAction =
+  const shouldShowMobileComposer =
     isMobile &&
     !isChatListRoute &&
-    action !== null &&
-    action.label !== "";
+    mobilePane === "detail" &&
+    composer !== null;
 
   return (
-    <Layout
-      title="AMOL"
-      showFooter={isMobile}
-      mode="mypage"
-      mainClassName="chat-workspace-page-layout"
-      disableFooterPaddingOnDesktop
-      showBackButton={isMobile && !isChatListRoute}
-      backButtonLabel="チャット一覧に戻る"
-      onBackButtonClick={handleBackToList}
-      footerProps={
-        hasMobileDetailAction
-          ? {
-              variant: "default",
-              centerActionLabel: action.label,
-              centerActionDisabled: action.disabled ?? false,
-              onCenterActionClick: action.onClick,
-            }
-          : {
-              variant: "default",
-            }
-      }
-    >
-      <div className={workspaceClassName}>
-        <div
-          className="chat-workspace-page__rail"
-          onTransitionEnd={handleRailTransitionEnd}
-        >
-          <aside
-            className="chat-workspace-page__list"
-            aria-label="チャット一覧"
-            aria-hidden={
-              isMobile && mobilePane === "detail"
-                ? true
-                : undefined
-            }
+    <>
+      <Layout
+        title="AMOL"
+        showFooter={isMobile && isChatListRoute}
+        mode="mypage"
+        mainClassName="chat-workspace-page-layout"
+        disableFooterPaddingOnDesktop
+        showBackButton={isMobile && !isChatListRoute}
+        backButtonLabel="チャット一覧に戻る"
+        onBackButtonClick={handleBackToList}
+        footerProps={{
+          variant: "default",
+        }}
+      >
+        <div className={workspaceClassName}>
+          <div
+            className="chat-workspace-page__rail"
+            onTransitionEnd={handleRailTransitionEnd}
           >
-            <ChatListPane />
-          </aside>
+            <aside
+              className="chat-workspace-page__list"
+              aria-label="チャット一覧"
+              aria-hidden={
+                isMobile && mobilePane === "detail"
+                  ? true
+                  : undefined
+              }
+            >
+              <ChatListPane />
+            </aside>
 
-          <section
-            className="chat-workspace-page__detail"
-            aria-label="チャット詳細"
-            aria-hidden={
-              isMobile && mobilePane === "list"
-                ? true
-                : undefined
-            }
-          >
-            {isChatListRoute ? (
-              <div className="chat-workspace-page__empty">
-                <StatePanel
-                  variant="empty"
-                  title="チャットを選択してください。"
-                />
-              </div>
-            ) : (
-              <Outlet />
-            )}
-          </section>
+            <section
+              className="chat-workspace-page__detail"
+              aria-label="チャット詳細"
+              aria-hidden={
+                isMobile && mobilePane === "list"
+                  ? true
+                  : undefined
+              }
+            >
+              {isChatListRoute ? (
+                <div className="chat-workspace-page__empty">
+                  <StatePanel
+                    variant="empty"
+                    title="チャットを選択してください。"
+                  />
+                </div>
+              ) : (
+                <Outlet />
+              )}
+            </section>
+          </div>
         </div>
-      </div>
-    </Layout>
+      </Layout>
+
+      {shouldShowMobileComposer ? (
+        <MobileComposerFooter
+          content={composer.content}
+          placeholder={composer.placeholder}
+          files={composer.files}
+          error={composer.error}
+          submitting={composer.submitting}
+          canSubmit={composer.canSubmit}
+          disabled={composer.disabled}
+          submitLabel={composer.submitLabel}
+          submittingLabel={composer.submittingLabel}
+          maxLength={composer.maxLength}
+          maxFiles={composer.maxFiles}
+          accept={composer.accept}
+          onContentChange={composer.onContentChange}
+          onFilesAdd={composer.onFilesAdd}
+          onRemoveFile={composer.onRemoveFile}
+          onSubmit={composer.onSubmit}
+        />
+      ) : null}
+    </>
   );
 }

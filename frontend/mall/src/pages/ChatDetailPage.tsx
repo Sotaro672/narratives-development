@@ -10,7 +10,6 @@ import TextState from "../components/ui/TextState";
 import InquiryClosePrompt from "../features/inquiry/presentation/components/InquiryClosePrompt";
 import InquiryMessageCard from "../features/inquiry/presentation/components/InquiryMessageCard";
 import InquiryReplyList from "../features/inquiry/presentation/components/InquiryReplyList";
-import InquiryReplyModal from "../features/inquiry/presentation/components/InquiryReplyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import ResaleChatDetail from "../features/resale/presentation/components/ResaleChatDetail";
 import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
@@ -42,14 +41,13 @@ export default function ChatDetailPage() {
 }
 
 function InquiryChatDetail() {
-  const { registerAction } = useChatWorkspace();
+  const { registerComposer } = useChatWorkspace();
 
   const {
     inquiry,
     sortedReplies,
     loading,
     error,
-    isReplyModalOpen,
     replyContent,
     replyFiles,
     replyError,
@@ -60,24 +58,41 @@ function InquiryChatDetail() {
     shouldShowClosePrompt,
     replyActionDisabled,
     setReplyContent,
-    openReplyModal,
-    closeReplyModal,
-    handleReplyFilesChange,
+    addReplyFiles,
     removeReplyFile,
     submitReply,
     handleCloseInquiry,
   } = useInquiryDetailPage();
 
   useEffect(() => {
-    return registerAction({
-      label: "返信",
-      onClick: openReplyModal,
+    return registerComposer({
+      content: replyContent,
+      placeholder: "返信内容を入力",
+      files: replyFiles,
+      error: replyError,
+      submitting: postingReply,
+      canSubmit: canSubmitReply,
       disabled: replyActionDisabled,
+      maxLength: null,
+      maxFiles: 10,
+      accept: "image/*",
+      onContentChange: setReplyContent,
+      onFilesAdd: addReplyFiles,
+      onRemoveFile: removeReplyFile,
+      onSubmit: submitReply,
     });
   }, [
-    openReplyModal,
-    registerAction,
+    addReplyFiles,
+    canSubmitReply,
+    postingReply,
+    registerComposer,
+    removeReplyFile,
     replyActionDisabled,
+    replyContent,
+    replyError,
+    replyFiles,
+    setReplyContent,
+    submitReply,
   ]);
 
   const hasInitialReturnMessage =
@@ -85,120 +100,93 @@ function InquiryChatDetail() {
     !!inquiry?.content.trim();
 
   return (
-    <>
-      <div
-        className="chat-detail-page-layout chat-detail-page-layout--inquiry"
-        data-chat-detail
-      >
-        <section className="product-detail-page-layout chat-detail-page">
-          {error ? (
-            <Alert
-              variant="error"
-              className="chat-detail-page__error"
-            >
-              {error}
-            </Alert>
-          ) : null}
+    <div
+      className="chat-detail-page-layout chat-detail-page-layout--inquiry"
+      data-chat-detail
+    >
+      <section className="product-detail-page-layout chat-detail-page">
+        {error ? (
+          <Alert variant="error" className="chat-detail-page__error">
+            {error}
+          </Alert>
+        ) : null}
 
-          {loading ? (
-            <StatePanel
-              variant="loading"
-              title="読み込み中..."
-            />
-          ) : null}
+        {loading ? (
+          <StatePanel variant="loading" title="読み込み中..." />
+        ) : null}
 
-          {!loading && !inquiry ? (
-            <StatePanel
-              variant="empty"
-              title="問い合わせが見つかりません。"
-            />
-          ) : null}
+        {!loading && !inquiry ? (
+          <StatePanel variant="empty" title="問い合わせが見つかりません。" />
+        ) : null}
 
-          {!loading && inquiry ? (
-            <div className="chat-detail-page__split">
-              <div className="chat-detail-page__left">
-                <InquiryMessageCard inquiry={inquiry} />
-              </div>
-
-              <div className="chat-detail-page__right">
-                <div className="chat-detail-page__reply-section">
-                  {!hasInitialReturnMessage &&
-                  sortedReplies.length === 0 &&
-                  !shouldShowClosePrompt ? (
-                    <TextState
-                      variant="empty"
-                      className="chat-detail-page__no-replies"
-                    >
-                      まだ返信はありません。
-                    </TextState>
-                  ) : (
-                    <div className="chat-detail-page__replies">
-                      {hasInitialReturnMessage ? (
-                        <ChatMessageBubble
-                          senderName={inquiry.avatarName}
-                          senderIcon={inquiry.avatarIcon}
-                          createdAt={inquiry.createdAt}
-                          content={inquiry.content}
-                          isMine
-                        />
-                      ) : null}
-
-                      <InquiryReplyList
-                        replies={sortedReplies}
-                        brandName={inquiry.brandName}
-                        brandIcon={inquiry.brandIcon}
-                        avatarName={inquiry.avatarName}
-                        avatarIcon={inquiry.avatarIcon}
-                      />
-
-                      {shouldShowClosePrompt ? (
-                        <InquiryClosePrompt
-                          error={closeError}
-                          closing={closingInquiry}
-                          onClose={() => {
-                            void handleCloseInquiry();
-                          }}
-                        />
-                      ) : null}
-                    </div>
-                  )}
-                </div>
-
-                <ChatInlineComposer
-                  content={replyContent}
-                  placeholder="返信内容を入力"
-                  error={replyError}
-                  submitting={postingReply}
-                  canSubmit={canSubmitReply}
-                  disabled={replyActionDisabled}
-                  maxLength={null}
-                  files={replyFiles}
-                  onContentChange={setReplyContent}
-                  onFilesChange={handleReplyFilesChange}
-                  onRemoveFile={removeReplyFile}
-                  onSubmit={submitReply}
-                />
-              </div>
+        {!loading && inquiry ? (
+          <div className="chat-detail-page__split">
+            <div className="chat-detail-page__left">
+              <InquiryMessageCard inquiry={inquiry} />
             </div>
-          ) : null}
-        </section>
-      </div>
 
-      <InquiryReplyModal
-        open={isReplyModalOpen}
-        content={replyContent}
-        files={replyFiles}
-        error={replyError}
-        submitting={postingReply}
-        canSubmit={canSubmitReply}
-        onContentChange={setReplyContent}
-        onFilesChange={handleReplyFilesChange}
-        onRemoveFile={removeReplyFile}
-        onCancel={closeReplyModal}
-        onSubmit={() => {
-          void submitReply();
-        }}
-      />
-    </>
+            <div className="chat-detail-page__right">
+              <div className="chat-detail-page__reply-section">
+                {!hasInitialReturnMessage &&
+                sortedReplies.length === 0 &&
+                !shouldShowClosePrompt ? (
+                  <TextState
+                    variant="empty"
+                    className="chat-detail-page__no-replies"
+                  >
+                    まだ返信はありません。
+                  </TextState>
+                ) : (
+                  <div className="chat-detail-page__replies">
+                    {hasInitialReturnMessage ? (
+                      <ChatMessageBubble
+                        senderName={inquiry.avatarName}
+                        senderIcon={inquiry.avatarIcon}
+                        createdAt={inquiry.createdAt}
+                        content={inquiry.content}
+                        isMine
+                      />
+                    ) : null}
+
+                    <InquiryReplyList
+                      replies={sortedReplies}
+                      brandName={inquiry.brandName}
+                      brandIcon={inquiry.brandIcon}
+                      avatarName={inquiry.avatarName}
+                      avatarIcon={inquiry.avatarIcon}
+                    />
+
+                    {shouldShowClosePrompt ? (
+                      <InquiryClosePrompt
+                        error={closeError}
+                        closing={closingInquiry}
+                        onClose={() => {
+                          void handleCloseInquiry();
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                )}
+              </div>
+
+              <ChatInlineComposer
+                content={replyContent}
+                placeholder="返信内容を入力"
+                error={replyError}
+                submitting={postingReply}
+                canSubmit={canSubmitReply}
+                disabled={replyActionDisabled}
+                maxLength={null}
+                files={replyFiles}
+                onContentChange={setReplyContent}
+                onFilesAdd={addReplyFiles}
+                onRemoveFile={removeReplyFile}
+                onSubmit={submitReply}
+              />
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }

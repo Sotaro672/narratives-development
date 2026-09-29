@@ -46,7 +46,7 @@ export default function TradeChatDetail({
 }: TradeChatDetailProps) {
   const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
-  const { registerAction } = useChatWorkspace();
+  const { registerComposer } = useChatWorkspace();
   const thread = useTradeThread(tradeId);
   const [dispatchQrPreviewOpen, setDispatchQrPreviewOpen] = useState(false);
 
@@ -151,15 +151,25 @@ export default function TradeChatDetail({
   });
 
   useEffect(() => {
-    return registerAction({
-      label: "返信",
-      onClick: reply.openModal,
+    return registerComposer({
+      content: reply.content,
+      placeholder: "メッセージを入力",
+      error: reply.error,
+      submitting: reply.submitting,
+      canSubmit: reply.canSubmit,
       disabled: reply.actionDisabled,
+      onContentChange: reply.setContent,
+      onSubmit: reply.submit,
     });
   }, [
-    registerAction,
+    registerComposer,
     reply.actionDisabled,
-    reply.openModal,
+    reply.canSubmit,
+    reply.content,
+    reply.error,
+    reply.setContent,
+    reply.submit,
+    reply.submitting,
   ]);
 
   const orderAction = getTradeOrderAction(thread.trade);
@@ -439,23 +449,6 @@ export default function TradeChatDetail({
           ) : null}
         </section>
       </div>
-
-      <ChatComposerModal
-        open={reply.open}
-        title="返信する"
-        content={reply.content}
-        placeholder="メッセージを入力"
-        error={reply.error}
-        submitting={reply.submitting}
-        canSubmit={reply.canSubmit}
-        submitLabel="送信"
-        submittingLabel="送信中..."
-        onContentChange={reply.setContent}
-        onCancel={reply.closeModal}
-        onSubmit={() => {
-          void reply.submit();
-        }}
-      />
 
       <ChatComposerModal
         open={cancelFlow.open}

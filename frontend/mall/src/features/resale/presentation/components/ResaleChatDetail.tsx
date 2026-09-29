@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
-import { useMobilePortrait } from "../../../../components/hooks/useMobilePortrait";
 import Alert from "../../../../components/ui/Alert";
 import Badge from "../../../../components/ui/Badge";
 import Button from "../../../../components/ui/Button";
@@ -19,7 +18,6 @@ import {
   fetchMarketResaleComments,
 } from "../../../market/infrastructure/marketResaleReviewApi";
 
-import ChatComposerModal from "../../../shared/presentation/components/ChatComposerModal";
 import ChatInlineComposer from "../../../shared/presentation/components/ChatInlineComposer";
 import ChatMessageBubble from "../../../shared/presentation/components/ChatMessageBubble";
 import { useChatWorkspace } from "../../../shared/presentation/context/ChatWorkspaceContext";
@@ -169,8 +167,7 @@ export default function ResaleChatDetail({
   resaleId,
 }: ResaleChatDetailProps) {
   const location = useLocation();
-  const isMobilePortrait = useMobilePortrait();
-  const { registerAction } = useChatWorkspace();
+  const { registerComposer } = useChatWorkspace();
   const routeState = location.state as ResaleChatRouteState | null;
   const preferredSource = routeState?.source;
   const normalizedResaleId = resaleId.trim();
@@ -181,8 +178,7 @@ export default function ResaleChatDetail({
   const [viewerAvatarId, setViewerAvatarId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
+  const [replyContent, setReplyContentState] = useState("");
   const [replyError, setReplyError] = useState("");
   const [postingReply, setPostingReply] = useState(false);
   const [deletingCommentId, setDeletingCommentId] = useState("");
@@ -268,43 +264,19 @@ export default function ResaleChatDetail({
     item.status !== "listing" ||
     postingReply;
 
-  const openReplyModal = useCallback(() => {
-    if (replyActionDisabled) {
-      return;
-    }
-
+  const setReplyContent = useCallback((value: string) => {
+    setReplyContentState(value);
     setReplyError("");
-    setIsReplyModalOpen(true);
-  }, [replyActionDisabled]);
-
-  useEffect(() => {
-    return registerAction({
-      label: "コメント",
-      onClick: openReplyModal,
-      disabled: replyActionDisabled,
-    });
-  }, [
-    openReplyModal,
-    registerAction,
-    replyActionDisabled,
-  ]);
-
-  const closeReplyModal = useCallback(() => {
-    if (postingReply) {
-      return;
-    }
-
-    setIsReplyModalOpen(false);
-    setReplyContent("");
-    setReplyError("");
-  }, [postingReply]);
+  }, []);
 
   const submitReply = useCallback(async (): Promise<void> => {
     if (postingReply || !source || !normalizedResaleId) {
       return;
     }
 
-    if (!/\S/u.test(replyContent)) {
+    const content = replyContent.trim();
+
+    if (!content) {
       setReplyError("コメントを入力してください。");
       return;
     }
@@ -322,11 +294,11 @@ export default function ResaleChatDetail({
         source === "owner"
           ? await createMyResaleComment({
               resaleId: normalizedResaleId,
-              body: replyContent,
+              body: content,
             })
           : await createMarketResaleComment({
               resaleId: normalizedResaleId,
-              body: replyContent,
+              body: content,
             });
 
       setComments((currentComments) =>
@@ -339,8 +311,7 @@ export default function ResaleChatDetail({
         ]),
       );
 
-      setIsReplyModalOpen(false);
-      setReplyContent("");
+      setReplyContentState("");
       setReplyError("");
     } catch (caught) {
       setReplyError(
@@ -358,6 +329,28 @@ export default function ResaleChatDetail({
     postingReply,
     replyContent,
     source,
+  ]);
+
+  useEffect(() => {
+    return registerComposer({
+      content: replyContent,
+      placeholder: "コメントを入力",
+      error: replyError,
+      submitting: postingReply,
+      canSubmit: canSubmitReply,
+      disabled: replyActionDisabled,
+      onContentChange: setReplyContent,
+      onSubmit: submitReply,
+    });
+  }, [
+    canSubmitReply,
+    postingReply,
+    registerComposer,
+    replyActionDisabled,
+    replyContent,
+    replyError,
+    setReplyContent,
+    submitReply,
   ]);
 
   const handleDeleteComment = useCallback(
@@ -434,118 +427,98 @@ export default function ResaleChatDetail({
         : undefined;
 
   return (
-    <>
-      <div
-        className="chat-detail-page-layout chat-detail-page-layout--inquiry"
-        data-chat-detail
-      >
-        <section className="product-detail-page-layout chat-detail-page">
-          {error ? (
-            <Alert
-              variant="error"
-              className="chat-detail-page__error"
-            >
-              {error}
-            </Alert>
-          ) : null}
+    <div
+      className="chat-detail-page-layout chat-detail-page-layout--inquiry"
+      data-chat-detail
+    >
+      <section className="product-detail-page-layout chat-detail-page">
+        {error ? (
+          <Alert
+            variant="error"
+            className="chat-detail-page__error"
+          >
+            {error}
+          </Alert>
+        ) : null}
 
-          {loading ? (
-            <StatePanel
-              variant="loading"
-              title="読み込み中..."
-            />
-          ) : null}
+        {loading ? (
+          <StatePanel
+            variant="loading"
+            title="読み込み中..."
+          />
+        ) : null}
 
-          {!loading && !item ? (
-            <StatePanel
-              variant="empty"
-              title="出品情報が見つかりません。"
-            />
-          ) : null}
+        {!loading && !item ? (
+          <StatePanel
+            variant="empty"
+            title="出品情報が見つかりません。"
+          />
+        ) : null}
 
-          {!loading && item ? (
-            <div className="chat-detail-page__split">
-              <div className="chat-detail-page__left">
-                <ResaleThreadHeader
-                  item={item}
-                  detailPath={detailPath}
-                />
-              </div>
-
-              <div className="chat-detail-page__right">
-                <div className="chat-detail-page__reply-section">
-                  {sortedComments.length === 0 ? (
-                    <TextState
-                      variant="empty"
-                      className="chat-detail-page__no-replies"
-                    >
-                      まだコメントはありません。
-                    </TextState>
-                  ) : (
-                    <div className="chat-detail-page__replies">
-                      {sortedComments.map((comment) => {
-                        const isMine =
-                          Boolean(viewerAvatarId) &&
-                          comment.avatarId === viewerAvatarId;
-
-                        const canDelete =
-                          item.status === "listing" &&
-                          isMine &&
-                          !comment.isRead;
-
-                        return (
-                          <ResaleCommentMessage
-                            key={comment.commentId}
-                            comment={comment}
-                            isMine={isMine}
-                            canDelete={canDelete}
-                            deleting={
-                              deletingCommentId === comment.commentId
-                            }
-                            onDelete={() => {
-                              void handleDeleteComment(comment);
-                            }}
-                          />
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-
-                <ChatInlineComposer
-                  content={replyContent}
-                  placeholder="コメントを入力"
-                  error={replyError}
-                  submitting={postingReply}
-                  canSubmit={canSubmitReply}
-                  disabled={replyActionDisabled}
-                  onContentChange={setReplyContent}
-                  onSubmit={submitReply}
-                />
-              </div>
+        {!loading && item ? (
+          <div className="chat-detail-page__split">
+            <div className="chat-detail-page__left">
+              <ResaleThreadHeader
+                item={item}
+                detailPath={detailPath}
+              />
             </div>
-          ) : null}
-        </section>
-      </div>
 
-      <ChatComposerModal
-        open={isReplyModalOpen}
-        title="コメントする"
-        content={replyContent}
-        placeholder="コメントを入力"
-        error={replyError}
-        submitting={postingReply}
-        canSubmit={canSubmitReply}
-        submitLabel="送信"
-        submittingLabel="送信中..."
-        rows={isMobilePortrait ? 1 : 6}
-        onContentChange={setReplyContent}
-        onCancel={closeReplyModal}
-        onSubmit={() => {
-          void submitReply();
-        }}
-      />
-    </>
+            <div className="chat-detail-page__right">
+              <div className="chat-detail-page__reply-section">
+                {sortedComments.length === 0 ? (
+                  <TextState
+                    variant="empty"
+                    className="chat-detail-page__no-replies"
+                  >
+                    まだコメントはありません。
+                  </TextState>
+                ) : (
+                  <div className="chat-detail-page__replies">
+                    {sortedComments.map((comment) => {
+                      const isMine =
+                        Boolean(viewerAvatarId) &&
+                        comment.avatarId === viewerAvatarId;
+
+                      const canDelete =
+                        item.status === "listing" &&
+                        isMine &&
+                        !comment.isRead;
+
+                      return (
+                        <ResaleCommentMessage
+                          key={comment.commentId}
+                          comment={comment}
+                          isMine={isMine}
+                          canDelete={canDelete}
+                          deleting={
+                            deletingCommentId === comment.commentId
+                          }
+                          onDelete={() => {
+                            void handleDeleteComment(comment);
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <ChatInlineComposer
+                content={replyContent}
+                placeholder="コメントを入力"
+                error={replyError}
+                submitting={postingReply}
+                canSubmit={canSubmitReply}
+                disabled={replyActionDisabled}
+                onContentChange={setReplyContent}
+                onSubmit={submitReply}
+              />
+            </div>
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }
 

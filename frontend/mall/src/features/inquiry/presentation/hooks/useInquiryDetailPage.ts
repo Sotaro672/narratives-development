@@ -1,7 +1,6 @@
-// frontend/amol/src/features/inquiry/presentation/hooks/useInquiryDetailPage.ts
+// frontend/mall/src/features/inquiry/presentation/hooks/useInquiryDetailPage.ts
 
 import {
-  type ChangeEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -24,6 +23,8 @@ import {
   refreshInquiryBadgeCount,
   updateInquiryBadgeCount,
 } from "../inquiryBadgeEvents";
+
+const MAX_REPLY_FILES = 10;
 
 type InquiryDetailRouteParams = {
   inquiryId?: string;
@@ -51,13 +52,10 @@ export function useInquiryDetailPage() {
   const [replies, setReplies] = useState<InquiryReply[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  const [isReplyModalOpen, setIsReplyModalOpen] = useState(false);
-  const [replyContent, setReplyContent] = useState("");
+  const [replyContent, setReplyContentState] = useState("");
   const [replyFiles, setReplyFiles] = useState<File[]>([]);
   const [replyError, setReplyError] = useState("");
   const [postingReply, setPostingReply] = useState(false);
-
   const [closingInquiry, setClosingInquiry] = useState(false);
   const [closeError, setCloseError] = useState("");
 
@@ -113,58 +111,45 @@ export function useInquiryDetailPage() {
     void loadThread();
   }, [loadThread]);
 
-  useEffect(() => {
-    if (!isReplyModalOpen) {
-      return;
-    }
-
-    const previousOverflow = document.body.style.overflow;
-    const previousTouchAction = document.body.style.touchAction;
-
-    document.body.style.overflow = "hidden";
-    document.body.style.touchAction = "none";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.body.style.touchAction = previousTouchAction;
-    };
-  }, [isReplyModalOpen]);
-
-  const openReplyModal = useCallback(() => {
+  const setReplyContent = useCallback((value: string) => {
+    setReplyContentState(value);
     setReplyError("");
-    setIsReplyModalOpen(true);
   }, []);
 
-  const closeReplyModal = useCallback(() => {
-    if (postingReply) {
+  const addReplyFiles = useCallback((files: File[]) => {
+    const imageFiles = files.filter((file) =>
+      file.type.startsWith("image/"),
+    );
+
+    if (imageFiles.length === 0) {
       return;
     }
 
-    setIsReplyModalOpen(false);
-    setReplyContent("");
-    setReplyFiles([]);
-    setReplyError("");
-  }, [postingReply]);
-
-  const handleReplyFilesChange = useCallback(
-    (event: ChangeEvent<HTMLInputElement>) => {
-      const selectedFiles = Array.from(
-        event.target.files ?? [],
-      ).filter((file) =>
-        file.type.startsWith("image/"),
+    setReplyFiles((currentFiles) => {
+      const remainingCount = Math.max(
+        MAX_REPLY_FILES - currentFiles.length,
+        0,
       );
 
-      if (selectedFiles.length > 0) {
-        setReplyFiles((currentFiles) => [
-          ...currentFiles,
-          ...selectedFiles,
-        ]);
+      if (remainingCount === 0) {
+        setReplyError(`画像は最大${MAX_REPLY_FILES}枚まで添付できます。`);
+        return currentFiles;
       }
 
-      event.target.value = "";
-    },
-    [],
-  );
+      const filesToAdd = imageFiles.slice(0, remainingCount);
+
+      if (imageFiles.length > remainingCount) {
+        setReplyError(`画像は最大${MAX_REPLY_FILES}枚まで添付できます。`);
+      } else {
+        setReplyError("");
+      }
+
+      return [
+        ...currentFiles,
+        ...filesToAdd,
+      ];
+    });
+  }, []);
 
   const removeReplyFile = useCallback((index: number) => {
     setReplyFiles((currentFiles) =>
@@ -173,6 +158,7 @@ export function useInquiryDetailPage() {
           currentIndex !== index,
       ),
     );
+    setReplyError("");
   }, []);
 
   const submitReply = useCallback(async () => {
@@ -217,9 +203,7 @@ export function useInquiryDetailPage() {
         ...currentReplies,
         createdReply,
       ]);
-
-      setIsReplyModalOpen(false);
-      setReplyContent("");
+      setReplyContentState("");
       setReplyFiles([]);
       setReplyError("");
     } catch (caught) {
@@ -297,24 +281,18 @@ export function useInquiryDetailPage() {
     sortedReplies,
     loading,
     error,
-
-    isReplyModalOpen,
     replyContent,
     replyFiles,
     replyError,
     postingReply,
     canSubmitReply,
-
     closingInquiry,
     closeError,
     shouldShowClosePrompt,
     replyActionDisabled,
-
     setReplyContent,
     loadThread,
-    openReplyModal,
-    closeReplyModal,
-    handleReplyFilesChange,
+    addReplyFiles,
     removeReplyFile,
     submitReply,
     handleCloseInquiry,

@@ -10,24 +10,36 @@ import {
   type ReactNode,
 } from "react";
 
-export type ChatWorkspaceAction = {
-  label: string;
-  onClick: () => void | Promise<void>;
+export type ChatWorkspaceComposer = {
+  content: string;
+  placeholder?: string;
+  files?: File[];
+  error?: string | null;
+  submitting?: boolean;
+  canSubmit: boolean;
   disabled?: boolean;
+  submitLabel?: string;
+  submittingLabel?: string;
+  maxLength?: number | null;
+  maxFiles?: number;
+  accept?: string;
+  onContentChange: (value: string) => void;
+  onFilesAdd?: (files: File[]) => void;
+  onRemoveFile?: (index: number) => void;
+  onSubmit: () => void | Promise<void>;
 };
 
-type RegisteredChatWorkspaceAction = ChatWorkspaceAction & {
+type RegisteredChatWorkspaceComposer = ChatWorkspaceComposer & {
   registrationId: number;
 };
 
 type ChatWorkspaceContextValue = {
-  action: ChatWorkspaceAction | null;
-  registerAction: (action: ChatWorkspaceAction) => () => void;
-  clearAction: () => void;
+  composer: ChatWorkspaceComposer | null;
+  registerComposer: (composer: ChatWorkspaceComposer) => () => void;
+  clearComposer: () => void;
 };
 
-const ChatWorkspaceContext =
-  createContext<ChatWorkspaceContextValue | null>(null);
+const ChatWorkspaceContext = createContext<ChatWorkspaceContextValue | null>(null);
 
 type ChatWorkspaceProviderProps = {
   children: ReactNode;
@@ -37,65 +49,77 @@ export function ChatWorkspaceProvider({
   children,
 }: ChatWorkspaceProviderProps) {
   const registrationIdRef = useRef(0);
-  const [registeredAction, setRegisteredAction] =
-    useState<RegisteredChatWorkspaceAction | null>(null);
+  const [registeredComposer, setRegisteredComposer] = useState<RegisteredChatWorkspaceComposer | null>(null);
 
-  const registerAction = useCallback(
-    (action: ChatWorkspaceAction): (() => void) => {
-      registrationIdRef.current += 1;
-      const registrationId = registrationIdRef.current;
-
-      setRegisteredAction({
-        ...action,
-        label: action.label.trim(),
-        registrationId,
-      });
-
-      return () => {
-        setRegisteredAction((currentAction) => {
-          if (
-            !currentAction ||
-            currentAction.registrationId !== registrationId
-          ) {
-            return currentAction;
-          }
-
-          return null;
-        });
-      };
-    },
-    [],
-  );
-
-  const clearAction = useCallback(() => {
+  const registerComposer = useCallback((composer: ChatWorkspaceComposer): (() => void) => {
     registrationIdRef.current += 1;
-    setRegisteredAction(null);
+    const registrationId = registrationIdRef.current;
+
+    setRegisteredComposer({
+      ...composer,
+      placeholder: composer.placeholder?.trim() || "メッセージを入力",
+      files: composer.files ?? [],
+      error: composer.error ?? null,
+      submitting: composer.submitting ?? false,
+      disabled: composer.disabled ?? false,
+      submitLabel: composer.submitLabel?.trim() || "送信",
+      submittingLabel: composer.submittingLabel?.trim() || "送信中",
+      maxLength: composer.maxLength === undefined ? 500 : composer.maxLength,
+      maxFiles: composer.maxFiles ?? 10,
+      accept: composer.accept?.trim() || "image/*",
+      registrationId,
+    });
+
+    return () => {
+      setRegisteredComposer((currentComposer) => {
+        if (!currentComposer || currentComposer.registrationId !== registrationId) {
+          return currentComposer;
+        }
+
+        return null;
+      });
+    };
   }, []);
 
-  const action = useMemo<ChatWorkspaceAction | null>(() => {
-    if (!registeredAction) {
+  const clearComposer = useCallback(() => {
+    registrationIdRef.current += 1;
+    setRegisteredComposer(null);
+  }, []);
+
+  const composer = useMemo<ChatWorkspaceComposer | null>(() => {
+    if (!registeredComposer) {
       return null;
     }
 
     return {
-      label: registeredAction.label,
-      onClick: registeredAction.onClick,
-      disabled: registeredAction.disabled ?? false,
+      content: registeredComposer.content,
+      placeholder: registeredComposer.placeholder,
+      files: registeredComposer.files,
+      error: registeredComposer.error,
+      submitting: registeredComposer.submitting,
+      canSubmit: registeredComposer.canSubmit,
+      disabled: registeredComposer.disabled,
+      submitLabel: registeredComposer.submitLabel,
+      submittingLabel: registeredComposer.submittingLabel,
+      maxLength: registeredComposer.maxLength,
+      maxFiles: registeredComposer.maxFiles,
+      accept: registeredComposer.accept,
+      onContentChange: registeredComposer.onContentChange,
+      onFilesAdd: registeredComposer.onFilesAdd,
+      onRemoveFile: registeredComposer.onRemoveFile,
+      onSubmit: registeredComposer.onSubmit,
     };
-  }, [registeredAction]);
+  }, [registeredComposer]);
 
-  const value = useMemo<ChatWorkspaceContextValue>(
-    () => ({
-      action,
-      registerAction,
-      clearAction,
-    }),
-    [
-      action,
-      clearAction,
-      registerAction,
-    ],
-  );
+  const value = useMemo<ChatWorkspaceContextValue>(() => ({
+    composer,
+    registerComposer,
+    clearComposer,
+  }), [
+    composer,
+    registerComposer,
+    clearComposer,
+  ]);
 
   return (
     <ChatWorkspaceContext.Provider value={value}>
@@ -108,9 +132,7 @@ export function useChatWorkspace(): ChatWorkspaceContextValue {
   const context = useContext(ChatWorkspaceContext);
 
   if (!context) {
-    throw new Error(
-      "useChatWorkspace must be used within ChatWorkspaceProvider.",
-    );
+    throw new Error("useChatWorkspace must be used within ChatWorkspaceProvider.");
   }
 
   return context;
