@@ -59,36 +59,38 @@ export default function TradeThreadHeader({
   };
 
   return (
-    <>
-      <div className="trade-chat-detail__heading">
-        <h2 className="chat-detail-page__subject">{title}</h2>
+    <div className="trade-chat-detail__heading">
+      <h2 className="chat-detail-page__subject">
+        {title}
+      </h2>
 
+      <div className="chat-detail-page__header-meta">
         <Badge variant="info">
           {getTradeStatusLabel(trade)}
         </Badge>
+
+        {resaleDetailPath || orderDetailPath ? (
+          <div className="trade-chat-detail__detail-links">
+            {resaleDetailPath ? (
+              <TextLink
+                className="trade-chat-detail__detail-link"
+                onClick={handleOpenResaleDetail}
+              >
+                出品詳細を見る
+              </TextLink>
+            ) : null}
+
+            {orderDetailPath ? (
+              <TextLink
+                className="trade-chat-detail__detail-link"
+                onClick={handleOpenOrderDetail}
+              >
+                注文詳細を見る
+              </TextLink>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-
-      {resaleDetailPath || orderDetailPath ? (
-        <div className="trade-chat-detail__detail-links">
-          {resaleDetailPath ? (
-            <TextLink
-              className="trade-chat-detail__detail-link"
-              onClick={handleOpenResaleDetail}
-            >
-              出品詳細を見る
-            </TextLink>
-          ) : null}
-
-          {orderDetailPath ? (
-            <TextLink
-              className="trade-chat-detail__detail-link"
-              onClick={handleOpenOrderDetail}
-            >
-              注文詳細を見る
-            </TextLink>
-          ) : null}
-        </div>
-      ) : null}
-    </>
+    </div>
   );
 }

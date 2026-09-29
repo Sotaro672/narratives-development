@@ -150,6 +150,30 @@
   margin-bottom: 4px;
 }
 
+.chat-detail-page__header-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.chat-detail-page__header-meta .trade-chat-detail__detail-links {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+  margin: 0;
+}
+
+.chat-detail-page__header-meta .trade-chat-detail__detail-link,
+.chat-detail-page__header-meta > a,
+.chat-detail-page__header-meta > button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
 .chat-detail-page__sender-profile {
   display: flex;
   min-width: 0;
@@ -403,6 +427,32 @@
 
   .chat-detail-page-layout--inquiry .chat-detail-page__left .chat-detail-page__subject {
     display: none;
+  }
+
+  .chat-detail-page-layout--inquiry .chat-detail-page__message-head,
+  .chat-detail-page-layout--inquiry .trade-chat-detail__heading {
+    display: block;
+  }
+
+  .chat-detail-page__header-meta {
+    width: 100%;
+    max-width: 100%;
+    flex-wrap: nowrap;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .chat-detail-page__header-meta::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chat-detail-page__header-meta .trade-chat-detail__detail-links {
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+    gap: 12px;
   }
 
   .chat-detail-page-layout--inquiry .chat-detail-page__right,

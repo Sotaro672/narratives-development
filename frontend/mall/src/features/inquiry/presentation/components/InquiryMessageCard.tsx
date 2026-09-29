@@ -51,16 +51,18 @@ export default function InquiryMessageCard({
           {title}
         </h2>
 
-        <Badge variant={statusVariant}>
-          {statusLabel}
-        </Badge>
-      </div>
+        <div className="chat-detail-page__header-meta">
+          <Badge variant={statusVariant}>
+            {statusLabel}
+          </Badge>
 
-      {!isProductInquiry && orderId ? (
-        <TextLink onClick={handleOpenOrderDetail}>
-          注文詳細を見る
-        </TextLink>
-      ) : null}
+          {!isProductInquiry && orderId ? (
+            <TextLink onClick={handleOpenOrderDetail}>
+              注文詳細を見る
+            </TextLink>
+          ) : null}
+        </div>
+      </div>
 
       {isProductInquiry ? (
         <section className="chat-detail-page__inquiry-section">
