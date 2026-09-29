@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { createPortal } from "react-dom";
@@ -22,6 +23,8 @@ export type PreviewProps = {
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
+  onPageDismissStart?: () => void;
+  onPageDismiss?: () => void | Promise<void>;
 };
 
 type Point = {
@@ -43,14 +46,53 @@ type DragOrigin = {
   y: number;
 };
 
+type VideoDismissGesture = {
+  active: boolean;
+  dragging: boolean;
+  blocked: boolean;
+  pointerId: number | null;
+  startX: number;
+  startY: number;
+  startTime: number;
+  lastY: number;
+  lastTime: number;
+  velocityY: number;
+};
+
+type VideoDismissPhase =
+  | "idle"
+  | "dragging"
+  | "returning"
+  | "dismissing";
+
 const MIN_SCALE = 1;
 const MAX_SCALE = 4;
 const DOUBLE_TAP_SCALE = 2;
+
+const VIDEO_DISMISS_DIRECTION_LOCK_DISTANCE = 8;
+const VIDEO_DISMISS_DISTANCE = 120;
+const VIDEO_DISMISS_FAST_DISTANCE = 32;
+const VIDEO_DISMISS_VELOCITY = 0.65;
+const VIDEO_DISMISS_RETURN_MS = 220;
+const VIDEO_DISMISS_ANIMATION_MS = 180;
 
 const INITIAL_TRANSFORM: PreviewTransform = {
   scale: MIN_SCALE,
   x: 0,
   y: 0,
+};
+
+const INITIAL_VIDEO_DISMISS_GESTURE: VideoDismissGesture = {
+  active: false,
+  dragging: false,
+  blocked: false,
+  pointerId: null,
+  startX: 0,
+  startY: 0,
+  startTime: 0,
+  lastY: 0,
+  lastTime: 0,
+  velocityY: 0,
 };
 
 function clamp(value: number, min: number, max: number): number {
@@ -70,9 +112,12 @@ export default function Preview({
   onClose,
   onPrev,
   onNext,
+  onPageDismissStart,
+  onPageDismiss,
 }: PreviewProps) {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const previousActiveElementRef = useRef<HTMLElement | null>(null);
   const pointersRef = useRef<Map<number, Point>>(new Map());
@@ -80,8 +125,19 @@ export default function Preview({
   const pinchStartScaleRef = useRef(MIN_SCALE);
   const dragOriginRef = useRef<DragOrigin | null>(null);
   const transformRef = useRef<PreviewTransform>(INITIAL_TRANSFORM);
+  const videoDismissGestureRef = useRef<VideoDismissGesture>({
+    ...INITIAL_VIDEO_DISMISS_GESTURE,
+  });
+  const videoDismissStartedRef = useRef(false);
+  const videoDismissCompletedRef = useRef(false);
+  const suppressVideoClickRef = useRef(false);
+  const videoDismissAnimationTimerRef = useRef<number | null>(null);
+  const suppressVideoClickTimerRef = useRef<number | null>(null);
 
   const [transform, setTransform] = useState<PreviewTransform>(INITIAL_TRANSFORM);
+  const [videoDismissY, setVideoDismissY] = useState(0);
+  const [videoDismissPhase, setVideoDismissPhase] =
+    useState<VideoDismissPhase>("idle");
 
   const source = String(src ?? "").trim();
   const qrPayload = String(qrValue ?? "").trim();
@@ -91,6 +147,9 @@ export default function Preview({
     normalizedType === "video" ||
     normalizedType.startsWith("video/");
   const isQr = normalizedType === "qr";
+  const canSwipeDismissVideo =
+    isVideo &&
+    typeof onPageDismiss === "function";
 
   const applyTransform = useCallback((nextTransform: PreviewTransform) => {
     transformRef.current = nextTransform;
@@ -108,6 +167,45 @@ export default function Preview({
     clearGesture();
     applyTransform(INITIAL_TRANSFORM);
   }, [applyTransform, clearGesture]);
+
+  const clearVideoDismissAnimationTimer = useCallback(() => {
+    if (videoDismissAnimationTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(videoDismissAnimationTimerRef.current);
+    videoDismissAnimationTimerRef.current = null;
+  }, []);
+
+  const clearSuppressVideoClickTimer = useCallback(() => {
+    if (suppressVideoClickTimerRef.current === null) {
+      return;
+    }
+
+    window.clearTimeout(suppressVideoClickTimerRef.current);
+    suppressVideoClickTimerRef.current = null;
+  }, []);
+
+  const resetVideoDismissGesture = useCallback(() => {
+    videoDismissGestureRef.current = {
+      ...INITIAL_VIDEO_DISMISS_GESTURE,
+    };
+    videoDismissStartedRef.current = false;
+  }, []);
+
+  const resetVideoDismiss = useCallback(() => {
+    clearVideoDismissAnimationTimer();
+    clearSuppressVideoClickTimer();
+    resetVideoDismissGesture();
+    videoDismissCompletedRef.current = false;
+    suppressVideoClickRef.current = false;
+    setVideoDismissY(0);
+    setVideoDismissPhase("idle");
+  }, [
+    clearSuppressVideoClickTimer,
+    clearVideoDismissAnimationTimer,
+    resetVideoDismissGesture,
+  ]);
 
   const clampTransform = useCallback(
     (nextTransform: PreviewTransform): PreviewTransform => {
@@ -145,6 +243,65 @@ export default function Preview({
     [],
   );
 
+  const scheduleSuppressVideoClickReset = useCallback(() => {
+    clearSuppressVideoClickTimer();
+
+    suppressVideoClickTimerRef.current = window.setTimeout(() => {
+      suppressVideoClickTimerRef.current = null;
+      suppressVideoClickRef.current = false;
+    }, 0);
+  }, [clearSuppressVideoClickTimer]);
+
+  const returnVideoPreviewToStart = useCallback(() => {
+    clearVideoDismissAnimationTimer();
+
+    setVideoDismissPhase("returning");
+    setVideoDismissY(0);
+
+    videoDismissAnimationTimerRef.current = window.setTimeout(() => {
+      videoDismissAnimationTimerRef.current = null;
+      setVideoDismissPhase("idle");
+      resetVideoDismissGesture();
+    }, VIDEO_DISMISS_RETURN_MS);
+  }, [
+    clearVideoDismissAnimationTimer,
+    resetVideoDismissGesture,
+  ]);
+
+  const finishVideoPageDismiss = useCallback(() => {
+    if (
+      videoDismissCompletedRef.current ||
+      typeof onPageDismiss !== "function"
+    ) {
+      return;
+    }
+
+    videoDismissCompletedRef.current = true;
+    onClose();
+    void onPageDismiss();
+  }, [onClose, onPageDismiss]);
+
+  const dismissVideoPage = useCallback(() => {
+    clearVideoDismissAnimationTimer();
+
+    const dismissDistance =
+      Math.max(
+        contentRef.current?.clientHeight ?? 0,
+        window.innerHeight,
+      ) + 32;
+
+    setVideoDismissPhase("dismissing");
+    setVideoDismissY(dismissDistance);
+
+    videoDismissAnimationTimerRef.current = window.setTimeout(() => {
+      videoDismissAnimationTimerRef.current = null;
+      finishVideoPageDismiss();
+    }, VIDEO_DISMISS_ANIMATION_MS);
+  }, [
+    clearVideoDismissAnimationTimer,
+    finishVideoPageDismiss,
+  ]);
+
   useEffect(() => {
     if (!open || typeof document === "undefined") {
       return;
@@ -156,7 +313,8 @@ export default function Preview({
         : null;
 
     const previousBodyOverflow = document.body.style.overflow;
-    const previousBodyOverscrollBehavior = document.body.style.overscrollBehavior;
+    const previousBodyOverscrollBehavior =
+      document.body.style.overscrollBehavior;
 
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
@@ -168,7 +326,8 @@ export default function Preview({
     return () => {
       window.cancelAnimationFrame(frameId);
       document.body.style.overflow = previousBodyOverflow;
-      document.body.style.overscrollBehavior = previousBodyOverscrollBehavior;
+      document.body.style.overscrollBehavior =
+        previousBodyOverscrollBehavior;
       previousActiveElementRef.current?.focus();
       previousActiveElementRef.current = null;
     };
@@ -176,13 +335,16 @@ export default function Preview({
 
   useEffect(() => {
     if (!open) {
+      resetVideoDismiss();
       return;
     }
 
     resetTransform();
+    resetVideoDismiss();
 
     const handleResize = () => {
       resetTransform();
+      resetVideoDismiss();
     };
 
     window.addEventListener("resize", handleResize);
@@ -190,8 +352,16 @@ export default function Preview({
     return () => {
       window.removeEventListener("resize", handleResize);
       clearGesture();
+      resetVideoDismiss();
     };
-  }, [open, source, qrPayload, clearGesture, resetTransform]);
+  }, [
+    open,
+    source,
+    qrPayload,
+    clearGesture,
+    resetTransform,
+    resetVideoDismiss,
+  ]);
 
   useEffect(() => {
     if (!open || typeof document === "undefined") {
@@ -224,7 +394,23 @@ export default function Preview({
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
     };
-  }, [open, onClose, onPrev, onNext, resetTransform]);
+  }, [
+    open,
+    onClose,
+    onPrev,
+    onNext,
+    resetTransform,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearVideoDismissAnimationTimer();
+      clearSuppressVideoClickTimer();
+    };
+  }, [
+    clearSuppressVideoClickTimer,
+    clearVideoDismissAnimationTimer,
+  ]);
 
   const handlePointerDown = (
     event: ReactPointerEvent<HTMLDivElement>,
@@ -387,6 +573,190 @@ export default function Preview({
     dragOriginRef.current = null;
   };
 
+  const handleVideoDismissPointerDown = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    if (
+      !canSwipeDismissVideo ||
+      videoDismissPhase === "dismissing" ||
+      videoDismissPhase === "returning"
+    ) {
+      return;
+    }
+
+    if (event.pointerType === "mouse" && event.button !== 0) {
+      return;
+    }
+
+    const now = performance.now();
+
+    videoDismissGestureRef.current = {
+      active: true,
+      dragging: false,
+      blocked: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      startTime: now,
+      lastY: event.clientY,
+      lastTime: now,
+      velocityY: 0,
+    };
+
+    videoDismissStartedRef.current = false;
+    videoDismissCompletedRef.current = false;
+    suppressVideoClickRef.current = false;
+  };
+
+  const handleVideoDismissPointerMove = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const gesture = videoDismissGestureRef.current;
+
+    if (
+      !canSwipeDismissVideo ||
+      !gesture.active ||
+      gesture.blocked ||
+      gesture.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    const deltaX = event.clientX - gesture.startX;
+    const deltaY = event.clientY - gesture.startY;
+
+    if (!gesture.dragging) {
+      const distance = Math.hypot(deltaX, deltaY);
+
+      if (distance < VIDEO_DISMISS_DIRECTION_LOCK_DISTANCE) {
+        return;
+      }
+
+      const isDownward = deltaY > 0;
+      const isVertical = Math.abs(deltaY) > Math.abs(deltaX);
+
+      if (!isDownward || !isVertical) {
+        gesture.blocked = true;
+        return;
+      }
+
+      gesture.dragging = true;
+      suppressVideoClickRef.current = true;
+
+      if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      }
+
+      videoRef.current?.pause();
+
+      if (!videoDismissStartedRef.current) {
+        videoDismissStartedRef.current = true;
+        onPageDismissStart?.();
+      }
+
+      setVideoDismissPhase("dragging");
+    }
+
+    if (!gesture.dragging) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const now = performance.now();
+    const elapsed = Math.max(1, now - gesture.lastTime);
+    const movement = event.clientY - gesture.lastY;
+
+    gesture.velocityY = movement / elapsed;
+    gesture.lastY = event.clientY;
+    gesture.lastTime = now;
+
+    setVideoDismissY(Math.max(0, deltaY));
+  };
+
+  const handleVideoDismissPointerEnd = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const gesture = videoDismissGestureRef.current;
+
+    if (
+      !canSwipeDismissVideo ||
+      !gesture.active ||
+      gesture.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (!gesture.dragging) {
+      resetVideoDismissGesture();
+      return;
+    }
+
+    const distance = Math.max(
+      0,
+      event.clientY - gesture.startY,
+    );
+
+    const elapsed = Math.max(
+      1,
+      performance.now() - gesture.startTime,
+    );
+
+    const averageVelocity = distance / elapsed;
+    const velocity = Math.max(
+      gesture.velocityY,
+      averageVelocity,
+    );
+
+    const shouldDismiss =
+      distance >= VIDEO_DISMISS_DISTANCE ||
+      (
+        distance >= VIDEO_DISMISS_FAST_DISTANCE &&
+        velocity >= VIDEO_DISMISS_VELOCITY
+      );
+
+    gesture.active = false;
+    gesture.dragging = false;
+
+    scheduleSuppressVideoClickReset();
+
+    if (shouldDismiss) {
+      dismissVideoPage();
+      return;
+    }
+
+    returnVideoPreviewToStart();
+  };
+
+  const handleVideoDismissPointerCancel = (
+    event: ReactPointerEvent<HTMLDivElement>,
+  ): void => {
+    const gesture = videoDismissGestureRef.current;
+
+    if (
+      !gesture.active ||
+      gesture.pointerId !== event.pointerId
+    ) {
+      return;
+    }
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (gesture.dragging) {
+      scheduleSuppressVideoClickReset();
+      returnVideoPreviewToStart();
+      return;
+    }
+
+    resetVideoDismissGesture();
+  };
+
   const handleDoubleClick = (): void => {
     if (isVideo || isQr) {
       return;
@@ -408,15 +778,34 @@ export default function Preview({
 
   const handlePrev = (): void => {
     resetTransform();
+    resetVideoDismiss();
     onPrev?.();
   };
 
   const handleNext = (): void => {
     resetTransform();
+    resetVideoDismiss();
     onNext?.();
   };
 
   const hasContent = isQr ? Boolean(qrPayload) : Boolean(source);
+
+  const previewStyle: CSSProperties | undefined =
+    canSwipeDismissVideo
+      ? {
+          transform: `translate3d(0, ${videoDismissY}px, 0)`,
+          transition:
+            videoDismissPhase === "returning"
+              ? `transform ${VIDEO_DISMISS_RETURN_MS}ms cubic-bezier(0.22, 1, 0.36, 1)`
+              : videoDismissPhase === "dismissing"
+                ? `transform ${VIDEO_DISMISS_ANIMATION_MS}ms cubic-bezier(0.4, 0, 1, 1)`
+                : "none",
+          willChange:
+            videoDismissPhase === "idle"
+              ? undefined
+              : "transform",
+        }
+      : undefined;
 
   if (
     !open ||
@@ -432,6 +821,15 @@ export default function Preview({
       role="dialog"
       aria-modal="true"
       aria-label={alt}
+      style={previewStyle}
+      onClickCapture={(event) => {
+        if (!suppressVideoClickRef.current) {
+          return;
+        }
+
+        event.preventDefault();
+        event.stopPropagation();
+      }}
     >
       <button
         ref={closeButtonRef}
@@ -470,11 +868,37 @@ export default function Preview({
             return;
           }
 
+          if (isVideo) {
+            handleVideoDismissPointerDown(event);
+            return;
+          }
+
           handlePointerDown(event);
         }}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerEnd}
-        onPointerCancel={handlePointerEnd}
+        onPointerMove={(event) => {
+          if (isVideo) {
+            handleVideoDismissPointerMove(event);
+            return;
+          }
+
+          handlePointerMove(event);
+        }}
+        onPointerUp={(event) => {
+          if (isVideo) {
+            handleVideoDismissPointerEnd(event);
+            return;
+          }
+
+          handlePointerEnd(event);
+        }}
+        onPointerCancel={(event) => {
+          if (isVideo) {
+            handleVideoDismissPointerCancel(event);
+            return;
+          }
+
+          handlePointerEnd(event);
+        }}
         onDoubleClick={handleDoubleClick}
       >
         {isQr ? (
@@ -497,6 +921,7 @@ export default function Preview({
           </div>
         ) : isVideo ? (
           <video
+            ref={videoRef}
             src={source}
             className="ui-preview__video"
             controls

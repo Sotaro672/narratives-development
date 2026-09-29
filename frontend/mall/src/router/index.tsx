@@ -46,7 +46,7 @@ import ChatWorkspacePage from "../pages/ChatWorkspacePage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import TradeChatRedirectPage from "../pages/TradeChatRedirectPage";
 import DispatchPage from "../pages/DispatchPage";
-import WalletPage from "../pages/WalletPage";
+import WalletStackPage from "../pages/WalletStackPage";
 import PublicWalletPage from "../pages/PublicWalletPage";
 import ContentsPage from "../pages/ContentsPage";
 import AnnouncementWorkspacePage from "../pages/AnnouncementWorkspacePage";
@@ -358,9 +358,23 @@ export const router = createBrowserRouter([
     path: "/wallet",
     element: (
       <ProtectedRoute>
-        <WalletPage />
+        <WalletStackPage />
       </ProtectedRoute>
     ),
+    children: [
+      {
+        path: "contents",
+        element: <ContentsPage />,
+      },
+      {
+        path: "scan-result",
+        element: <ScanResultPage />,
+      },
+      {
+        path: "scan-result/:productId",
+        element: <ScanResultPage />,
+      },
+    ],
   },
   {
     path: "/contents",

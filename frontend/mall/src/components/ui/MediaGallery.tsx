@@ -27,6 +27,8 @@ type MediaGalleryProps = {
   onSelect: (index: number) => void;
   onTouchStart?: (event: TouchEvent<HTMLDivElement>) => void;
   onTouchEnd?: (event: TouchEvent<HTMLDivElement>) => void;
+  onPageDismissStart?: () => void;
+  onPageDismiss?: () => void | Promise<void>;
 };
 
 const SWIPE_THRESHOLD = 48;
@@ -43,6 +45,8 @@ export default function MediaGallery({
   onSelect,
   onTouchStart,
   onTouchEnd,
+  onPageDismissStart,
+  onPageDismiss,
 }: MediaGalleryProps) {
   const touchStartXRef = useRef<number | null>(null);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
@@ -81,11 +85,15 @@ export default function MediaGallery({
 
     touchStartXRef.current = null;
 
-    if (startX === null || endX === null) return;
+    if (startX === null || endX === null) {
+      return;
+    }
 
     const diff = endX - startX;
 
-    if (Math.abs(diff) < SWIPE_THRESHOLD) return;
+    if (Math.abs(diff) < SWIPE_THRESHOLD) {
+      return;
+    }
 
     if (diff > 0) {
       onPrev();
@@ -108,7 +116,9 @@ export default function MediaGallery({
   };
 
   const handlePreviewPrev = () => {
-    if (safePreviewIndex === null || items.length <= 1) return;
+    if (safePreviewIndex === null || items.length <= 1) {
+      return;
+    }
 
     const nextIndex =
       safePreviewIndex <= 0
@@ -120,7 +130,9 @@ export default function MediaGallery({
   };
 
   const handlePreviewNext = () => {
-    if (safePreviewIndex === null || items.length <= 1) return;
+    if (safePreviewIndex === null || items.length <= 1) {
+      return;
+    }
 
     const nextIndex =
       safePreviewIndex >= items.length - 1
@@ -244,6 +256,8 @@ export default function MediaGallery({
         onClose={handlePreviewClose}
         onPrev={hasMultipleItems ? handlePreviewPrev : undefined}
         onNext={hasMultipleItems ? handlePreviewNext : undefined}
+        onPageDismissStart={onPageDismissStart}
+        onPageDismiss={onPageDismiss}
       />
     </>
   );

@@ -2,7 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getAuth } from "firebase/auth";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
 
 import type { MediaGalleryItem } from "../../../components/ui/MediaGallery";
 import { useMobilePortrait } from "../../../components/hooks/useMobilePortrait";
@@ -36,6 +40,7 @@ function buildContentsSearchParams(
 export function useContentsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobilePortrait = useMobilePortrait();
 
   const contents = useMemo(
@@ -56,19 +61,37 @@ export function useContentsPage() {
   const [isResaleListed, setIsResaleListed] = useState(false);
 
   const handleProductNameClick = () => {
-    if (!contents.productId) return;
+    const productId = contents.productId.trim();
 
-    navigate(
-      `/scan/result?productId=${encodeURIComponent(contents.productId)}`,
-    );
+    if (!productId) {
+      return;
+    }
+
+    const encodedProductId = encodeURIComponent(productId);
+    const isWalletContentsRoute =
+      location.pathname === "/wallet/contents";
+
+    if (isWalletContentsRoute) {
+      navigate(
+        `/wallet/scan-result?productId=${encodedProductId}`,
+        {
+          replace: true,
+        },
+      );
+      return;
+    }
+
+    navigate(`/scan/result?productId=${encodedProductId}`);
   };
 
   const handleBrandNameClick = () => {
-    if (!contents.brandId) return;
+    const brandId = contents.brandId.trim();
 
-    navigate(
-      `/brands/${encodeURIComponent(contents.brandId)}`,
-    );
+    if (!brandId) {
+      return;
+    }
+
+    navigate(`/brands/${encodeURIComponent(brandId)}`);
   };
 
   useEffect(() => {
@@ -96,7 +119,9 @@ export function useContentsPage() {
             contents.tokenBlueprintId,
           );
 
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
 
         if (moderation.status === "HIDDEN_BY_MODERATION") {
           setModerationHidden(true);
@@ -115,12 +140,16 @@ export function useContentsPage() {
           contents.metadataUri,
         );
 
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
 
         setMetadata(result);
         setActiveFileIndex(0);
       } catch (err) {
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
 
         setMetadata(null);
         setModerationHidden(false);
@@ -165,11 +194,15 @@ export function useContentsPage() {
           contents.productId,
         );
 
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
 
         setIsResaleListed(listed);
       } catch (err) {
-        if (!isMounted) return;
+        if (!isMounted) {
+          return;
+        }
 
         console.error(
           "failed to check existing resale listing:",
@@ -197,7 +230,9 @@ export function useContentsPage() {
   const pageTitle = tokenName || "トークン詳細";
 
   const mediaItems = useMemo<MediaGalleryItem[]>(() => {
-    if (!metadata || moderationHidden) return [];
+    if (!metadata || moderationHidden) {
+      return [];
+    }
 
     return metadata.files
       .filter((file) => file.uri !== metadata.image)
@@ -223,18 +258,26 @@ export function useContentsPage() {
       : "出品";
 
   const handlePrevFile = () => {
-    if (!hasMediaItems) return;
+    if (!hasMediaItems) {
+      return;
+    }
 
     setActiveFileIndex((current) =>
-      current === 0 ? mediaItems.length - 1 : current - 1,
+      current === 0
+        ? mediaItems.length - 1
+        : current - 1,
     );
   };
 
   const handleNextFile = () => {
-    if (!hasMediaItems) return;
+    if (!hasMediaItems) {
+      return;
+    }
 
     setActiveFileIndex((current) =>
-      current === mediaItems.length - 1 ? 0 : current + 1,
+      current === mediaItems.length - 1
+        ? 0
+        : current + 1,
     );
   };
 
@@ -251,7 +294,9 @@ export function useContentsPage() {
     const currentUser = auth.currentUser;
 
     if (!currentUser) {
-      navigate("/signin", { replace: true });
+      navigate("/signin", {
+        replace: true,
+      });
       return;
     }
 

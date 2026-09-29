@@ -1,7 +1,7 @@
 // frontend/mall/src/features/scan-result/presentation/hooks/useScanResultPage.ts
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
 import { getOptionalAuthHeaders } from "../../../../lib/authHeaders";
@@ -72,6 +72,7 @@ function getAvatarReviewCreatePath(
 
 export function useScanResultPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const productId = useScanProductIdFromUrl();
 
   const [previewState, setPreviewState] = useState<PreviewState | null>(null);
@@ -604,9 +605,23 @@ export function useScanResultPage() {
         tokenBlueprintId,
       });
 
-      navigate(`/contents?${searchParams.toString()}`);
+      const isWalletScanResultRoute =
+        location.pathname === "/wallet/scan-result" ||
+        location.pathname.startsWith("/wallet/scan-result/");
+
+      const targetPath = isWalletScanResultRoute
+        ? "/wallet/contents"
+        : "/contents";
+
+      navigate(`${targetPath}?${searchParams.toString()}`, {
+        replace: isWalletScanResultRoute,
+      });
     },
-    [navigate, previewState],
+    [
+      location.pathname,
+      navigate,
+      previewState,
+    ],
   );
 
   const openContentsAfterResolve = useCallback(async () => {

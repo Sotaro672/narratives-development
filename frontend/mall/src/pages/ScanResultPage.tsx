@@ -1,10 +1,11 @@
 // frontend/mall/src/pages/ScanResultPage.tsx
 
 import { useCallback, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
 import ScanTransferConfirmModal from "../features/scan-result/presentation/components/ScanTransferConfirmModal";
@@ -17,6 +18,7 @@ import "../styles/scan-result-page.css";
 
 export default function ScanResultPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobilePortrait = useMobilePortrait();
 
   const [reviewBody, setReviewBody] = useState("");
@@ -42,6 +44,16 @@ export default function ScanResultPage() {
   } = useScanResultPage();
 
   const isLoggedIn = state.authAvailable === true;
+  const isWalletOverlay =
+    isMobilePortrait &&
+    (location.pathname === "/wallet/scan-result" ||
+      location.pathname.startsWith("/wallet/scan-result/"));
+
+  const swipeDismissEnabled =
+    isWalletOverlay &&
+    !transferConfirmModalOpen &&
+    !transferModalOpen &&
+    !reviewModalOpen;
 
   const handleSubmitReview = useCallback(async () => {
     const ok = await submitReview(reviewBody, reviewRating);
@@ -102,6 +114,12 @@ export default function ScanResultPage() {
     [currentAvatarId, navigate],
   );
 
+  const handleDismiss = useCallback(() => {
+    navigate("/wallet", {
+      replace: true,
+    });
+  }, [navigate]);
+
   const isResalePurchase =
     state.transferResult?.matchedItemType === "resale" ||
     hasMultipleTransfers;
@@ -113,46 +131,59 @@ export default function ScanResultPage() {
     Boolean(state.productId.trim()) &&
     !isResalePurchase;
 
+  const content = (
+    <Layout
+      title="AMOL"
+      mode={isLoggedIn ? "mypage" : "landing"}
+      showHeader
+      hideSettingsButton={!isLoggedIn}
+      hideAnnouncementButton={!isLoggedIn}
+    >
+      <section className="product-detail-page-layout scan-result-page-layout">
+        <ScanResultCard
+          state={state}
+          viewModel={viewModel}
+          currentAvatarId={currentAvatarId}
+          onRefresh={load}
+          onAvatarClick={handleAvatarClick}
+          onOpenTokenContents={openTokenContentsByAssetId}
+          onOpenReviewModal={handleOpenReviewModal}
+          canOpenInquiryPage={canOpenInquiryPage}
+          onOpenInquiryPage={handleOpenInquiryPage}
+        />
+      </section>
+
+      <ScanTransferConfirmModal
+        open={transferConfirmModalOpen}
+        loading={state.busyTransfer}
+        error={transferModalError}
+        onCancel={closeTransferConfirmModal}
+        onConfirm={confirmTransfer}
+      />
+
+      <ScanTransferSuccessModal
+        open={transferModalOpen}
+        loading={state.busyTransfer}
+        error={transferModalError}
+        canOpenContents={canOpenTransferContents}
+        onClose={closeTransferModal}
+        onOpenContents={openContentsAfterResolve}
+      />
+    </Layout>
+  );
+
   return (
     <>
-      <Layout
-        title="AMOL"
-        mode={isLoggedIn ? "mypage" : "landing"}
-        showHeader
-        hideSettingsButton={!isLoggedIn}
-        hideAnnouncementButton={!isLoggedIn}
-      >
-        <section className="product-detail-page-layout scan-result-page-layout">
-          <ScanResultCard
-            state={state}
-            viewModel={viewModel}
-            currentAvatarId={currentAvatarId}
-            onRefresh={load}
-            onAvatarClick={handleAvatarClick}
-            onOpenTokenContents={openTokenContentsByAssetId}
-            onOpenReviewModal={handleOpenReviewModal}
-            canOpenInquiryPage={canOpenInquiryPage}
-            onOpenInquiryPage={handleOpenInquiryPage}
-          />
-        </section>
-
-        <ScanTransferConfirmModal
-          open={transferConfirmModalOpen}
-          loading={state.busyTransfer}
-          error={transferModalError}
-          onCancel={closeTransferConfirmModal}
-          onConfirm={confirmTransfer}
-        />
-
-        <ScanTransferSuccessModal
-          open={transferModalOpen}
-          loading={state.busyTransfer}
-          error={transferModalError}
-          canOpenContents={canOpenTransferContents}
-          onClose={closeTransferModal}
-          onOpenContents={openContentsAfterResolve}
-        />
-      </Layout>
+      {isWalletOverlay ? (
+        <MobileSwipeDismissPage
+          enabled={swipeDismissEnabled}
+          onDismiss={handleDismiss}
+        >
+          {content}
+        </MobileSwipeDismissPage>
+      ) : (
+        content
+      )}
 
       <ProductBlueprintReviewModal
         open={reviewModalOpen}

@@ -1,20 +1,29 @@
 // frontend/mall/src/pages/ContentsPage.tsx
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/contents-page.css";
 
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 import ContentsDetailPanel from "../features/contents/components/ContentsDetailPanel";
 import ContentsMediaPanel from "../features/contents/components/ContentsMediaPanel";
 import { useContentsPage } from "../features/contents/hooks/useContentsPage";
 import ChatComposerModal from "../features/shared/presentation/components/ChatComposerModal";
 
 export default function ContentsPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const page = useContentsPage();
+
   const [commentModalOpen, setCommentModalOpen] = useState(false);
   const [commentSubmitRequested, setCommentSubmitRequested] = useState(false);
+
+  const isWalletOverlay =
+    page.isMobilePortrait &&
+    location.pathname === "/wallet/contents";
 
   const commentActionDisabled =
     page.commentCard.posting ||
@@ -69,59 +78,91 @@ export default function ContentsPage() {
     void page.commentCard.postComment();
   };
 
+  const handleDismissStart = useCallback(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.querySelectorAll<HTMLVideoElement>("video").forEach((video) => {
+      if (!video.paused) {
+        video.pause();
+      }
+    });
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    navigate("/wallet", {
+      replace: true,
+    });
+  }, [navigate]);
+
+  const content = (
+    <Layout
+      title="AMOL"
+      mode="mypage"
+      showHeader={!page.isMobilePortrait}
+      showFooter={!page.isMobilePortrait || !commentModalOpen}
+      disableFooterPaddingOnDesktop
+      footerProps={
+        page.isMobilePortrait
+          ? {
+              variant: "default",
+              centerActionLabel: "コメント",
+              centerActionDisabled: commentActionDisabled,
+              onCenterActionClick: handleOpenCommentModal,
+            }
+          : {
+              variant: "default",
+            }
+      }
+    >
+      <section className="split-page contents-page">
+        <div className="split-page-content contents-page-content">
+          <ContentsMediaPanel
+            loading={page.loading}
+            error={page.error}
+            metadataUri={page.contents.metadataUri}
+            moderationHidden={page.moderationHidden}
+            hasMediaItems={page.hasMediaItems}
+            mediaItems={page.mediaItems}
+            activeFileIndex={page.activeFileIndex}
+            tokenName={page.tokenName}
+            onPrevFile={page.handlePrevFile}
+            onNextFile={page.handleNextFile}
+            onSelectFile={page.setActiveFileIndex}
+          />
+
+          <ContentsDetailPanel
+            contents={page.contents}
+            tokenName={page.tokenName}
+            tokenIconUrl={page.tokenIconUrl}
+            loading={page.loading}
+            isMobilePortrait={page.isMobilePortrait}
+            commentCard={page.commentCard}
+            resaleDisabled={page.resaleButtonDisabled}
+            resaleLabel={page.resaleButtonLabel}
+            onProductNameClick={page.handleProductNameClick}
+            onBrandNameClick={page.handleBrandNameClick}
+            onResaleClick={page.handleOpenResalePage}
+          />
+        </div>
+      </section>
+    </Layout>
+  );
+
   return (
     <>
-      <Layout
-        title="AMOL"
-        mode="mypage"
-        showHeader={!page.isMobilePortrait}
-        showFooter={!page.isMobilePortrait || !commentModalOpen}
-        disableFooterPaddingOnDesktop
-        footerProps={
-          page.isMobilePortrait
-            ? {
-                variant: "default",
-                centerActionLabel: "コメント",
-                centerActionDisabled: commentActionDisabled,
-                onCenterActionClick: handleOpenCommentModal,
-              }
-            : {
-                variant: "default",
-              }
-        }
-      >
-        <section className="split-page contents-page">
-          <div className="split-page-content contents-page-content">
-            <ContentsMediaPanel
-              loading={page.loading}
-              error={page.error}
-              metadataUri={page.contents.metadataUri}
-              moderationHidden={page.moderationHidden}
-              hasMediaItems={page.hasMediaItems}
-              mediaItems={page.mediaItems}
-              activeFileIndex={page.activeFileIndex}
-              tokenName={page.tokenName}
-              onPrevFile={page.handlePrevFile}
-              onNextFile={page.handleNextFile}
-              onSelectFile={page.setActiveFileIndex}
-            />
-
-            <ContentsDetailPanel
-              contents={page.contents}
-              tokenName={page.tokenName}
-              tokenIconUrl={page.tokenIconUrl}
-              loading={page.loading}
-              isMobilePortrait={page.isMobilePortrait}
-              commentCard={page.commentCard}
-              resaleDisabled={page.resaleButtonDisabled}
-              resaleLabel={page.resaleButtonLabel}
-              onProductNameClick={page.handleProductNameClick}
-              onBrandNameClick={page.handleBrandNameClick}
-              onResaleClick={page.handleOpenResalePage}
-            />
-          </div>
-        </section>
-      </Layout>
+      {isWalletOverlay ? (
+        <MobileSwipeDismissPage
+          enabled={!commentModalOpen}
+          onDismissStart={handleDismissStart}
+          onDismiss={handleDismiss}
+        >
+          {content}
+        </MobileSwipeDismissPage>
+      ) : (
+        content
+      )}
 
       <ChatComposerModal
         open={commentModalOpen}

@@ -1,10 +1,11 @@
-// frontend/amol/src/pages/WalletPage.tsx
+// frontend/mall/src/pages/WalletPage.tsx
 
 import { useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
 import "../styles/wallet-page.css";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import StatePanel from "../components/ui/StatePanel";
 import type { WalletTokenItem } from "../features/shared/types/tokenTypes";
@@ -19,6 +20,7 @@ import { useWalletPage } from "../features/wallet/hooks/useWalletPage";
 
 export default function WalletPage() {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
 
   const {
     avatarId,
@@ -93,7 +95,11 @@ export default function WalletPage() {
       params.set("tokenIconUrl", tokenIconUrl);
     }
 
-    navigate(`/contents?${params.toString()}`);
+    const path = isMobilePortrait
+      ? "/wallet/contents"
+      : "/contents";
+
+    navigate(`${path}?${params.toString()}`);
   };
 
   const handleOpenBrand = (brandId: string) => {
