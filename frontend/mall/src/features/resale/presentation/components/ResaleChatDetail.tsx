@@ -187,7 +187,13 @@ export default function ResaleChatDetail({
   resaleId,
 }: ResaleChatDetailProps) {
   const location = useLocation();
-  const { registerComposer } = useChatWorkspace();
+
+  const {
+    registerComposer,
+    setHeaderTitle,
+    clearHeaderTitle,
+  } = useChatWorkspace();
+
   const unregisterComposerRef = useRef<(() => void) | null>(null);
 
   const routeState =
@@ -312,6 +318,31 @@ export default function ResaleChatDetail({
   useEffect(() => {
     void loadThread();
   }, [loadThread]);
+
+  useEffect(() => {
+    if (!item) {
+      setHeaderTitle("出品");
+      return;
+    }
+
+    const productTitle =
+      item.productName ||
+      item.tokenName ||
+      "出品商品";
+
+    setHeaderTitle(
+      `${productTitle}/出品`,
+    );
+  }, [
+    item,
+    setHeaderTitle,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearHeaderTitle();
+    };
+  }, [clearHeaderTitle]);
 
   const sortedComments = useMemo(
     () => sortComments(comments),

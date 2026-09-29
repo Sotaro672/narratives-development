@@ -18,6 +18,7 @@ import ResaleChatDetail from "../features/resale/presentation/components/ResaleC
 import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 import ChatMessageBubble from "../features/shared/presentation/components/ChatMessageBubble";
 import { useChatWorkspace } from "../features/shared/presentation/context/ChatWorkspaceContext";
+import { getInquiryTypeLabel } from "../features/shared/types/inquiryTypes";
 import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
 
 import "../styles/page-layout.css";
@@ -44,7 +45,12 @@ export default function ChatDetailPage() {
 }
 
 function InquiryChatDetail() {
-  const { registerComposer } = useChatWorkspace();
+  const {
+    registerComposer,
+    setHeaderTitle,
+    clearHeaderTitle,
+  } = useChatWorkspace();
+
   const unregisterComposerRef = useRef<(() => void) | null>(null);
 
   const {
@@ -105,6 +111,29 @@ function InquiryChatDetail() {
       unregisterComposerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!inquiry) {
+      setHeaderTitle("問い合わせ");
+      return;
+    }
+
+    const inquiryLabel =
+      inquiry.inquiryType === "product"
+        ? inquiry.subject || getInquiryTypeLabel(inquiry.inquiryType)
+        : getInquiryTypeLabel(inquiry.inquiryType);
+
+    setHeaderTitle(`${inquiry.productName}/${inquiryLabel}`);
+  }, [
+    inquiry,
+    setHeaderTitle,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearHeaderTitle();
+    };
+  }, [clearHeaderTitle]);
 
   const hasInitialReturnMessage =
     inquiry?.inquiryType !== "product" &&

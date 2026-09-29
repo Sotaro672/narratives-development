@@ -35,12 +35,14 @@ type RegisteredChatWorkspaceComposer = ChatWorkspaceComposer & {
 
 type ChatWorkspaceContextValue = {
   composer: ChatWorkspaceComposer | null;
+  headerTitle: string;
   registerComposer: (composer: ChatWorkspaceComposer) => () => void;
   clearComposer: () => void;
+  setHeaderTitle: (title: string) => void;
+  clearHeaderTitle: () => void;
 };
 
-const ChatWorkspaceContext =
-  createContext<ChatWorkspaceContextValue | null>(null);
+const ChatWorkspaceContext = createContext<ChatWorkspaceContextValue | null>(null);
 
 type ChatWorkspaceProviderProps = {
   children: ReactNode;
@@ -52,27 +54,16 @@ function normalizeComposer(
 ): RegisteredChatWorkspaceComposer {
   return {
     ...composer,
-    placeholder:
-      composer.placeholder?.trim() ||
-      "メッセージを入力",
+    placeholder: composer.placeholder?.trim() || "メッセージを入力",
     files: composer.files ?? [],
     error: composer.error ?? null,
     submitting: composer.submitting ?? false,
     disabled: composer.disabled ?? false,
-    submitLabel:
-      composer.submitLabel?.trim() ||
-      "送信",
-    submittingLabel:
-      composer.submittingLabel?.trim() ||
-      "送信中",
-    maxLength:
-      composer.maxLength === undefined
-        ? 500
-        : composer.maxLength,
+    submitLabel: composer.submitLabel?.trim() || "送信",
+    submittingLabel: composer.submittingLabel?.trim() || "送信中",
+    maxLength: composer.maxLength === undefined ? 500 : composer.maxLength,
     maxFiles: composer.maxFiles ?? 10,
-    accept:
-      composer.accept?.trim() ||
-      "image/*",
+    accept: composer.accept?.trim() || "image/*",
     registrationId,
   };
 }
@@ -88,17 +79,16 @@ export function ChatWorkspaceProvider({
     setRegisteredComposer,
   ] = useState<RegisteredChatWorkspaceComposer | null>(null);
 
+  const [headerTitle, setHeaderTitleState] = useState("");
+
   const registerComposer = useCallback(
     (
       composer: ChatWorkspaceComposer,
     ): (() => void) => {
       registrationIdRef.current += 1;
+      const registrationId = registrationIdRef.current;
 
-      const registrationId =
-        registrationIdRef.current;
-
-      activeRegistrationIdRef.current =
-        registrationId;
+      activeRegistrationIdRef.current = registrationId;
 
       setRegisteredComposer(
         normalizeComposer(
@@ -141,6 +131,19 @@ export function ChatWorkspaceProvider({
     registrationIdRef.current += 1;
     activeRegistrationIdRef.current = null;
     setRegisteredComposer(null);
+  }, []);
+
+  const setHeaderTitle = useCallback(
+    (title: string) => {
+      setHeaderTitleState(
+        title.trim(),
+      );
+    },
+    [],
+  );
+
+  const clearHeaderTitle = useCallback(() => {
+    setHeaderTitleState("");
   }, []);
 
   const composer =
@@ -192,13 +195,19 @@ export function ChatWorkspaceProvider({
     useMemo<ChatWorkspaceContextValue>(
       () => ({
         composer,
+        headerTitle,
         registerComposer,
         clearComposer,
+        setHeaderTitle,
+        clearHeaderTitle,
       }),
       [
         composer,
+        headerTitle,
         registerComposer,
         clearComposer,
+        setHeaderTitle,
+        clearHeaderTitle,
       ],
     );
 

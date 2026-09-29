@@ -30,7 +30,10 @@ import useTradeReturnProposal from "../hooks/useTradeReturnProposal";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
 import useTradeReturnShipment from "../hooks/useTradeReturnShipment";
 import useTradeThread from "../hooks/useTradeThread";
-import { getTradeOrderAction } from "../util/tradeChatDetail";
+import {
+  getTradeOrderAction,
+  getTradeTitle,
+} from "../util/tradeChatDetail";
 import { createTradeDispatchQrPayload } from "../util/tradeDispatchQr";
 
 import TradeMessageCard from "./TradeMessageCard";
@@ -51,7 +54,13 @@ export default function TradeChatDetail({
 }: TradeChatDetailProps) {
   const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
-  const { registerComposer } = useChatWorkspace();
+
+  const {
+    registerComposer,
+    setHeaderTitle,
+    clearHeaderTitle,
+  } = useChatWorkspace();
+
   const unregisterComposerRef = useRef<(() => void) | null>(null);
   const thread = useTradeThread(tradeId);
   const [dispatchQrPreviewOpen, setDispatchQrPreviewOpen] = useState(false);
@@ -192,6 +201,28 @@ export default function TradeChatDetail({
       unregisterComposerRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!thread.trade) {
+      setHeaderTitle("取引");
+      return;
+    }
+
+    setHeaderTitle(
+      getTradeTitle(
+        thread.trade.productName,
+      ),
+    );
+  }, [
+    setHeaderTitle,
+    thread.trade,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearHeaderTitle();
+    };
+  }, [clearHeaderTitle]);
 
   const orderAction = getTradeOrderAction(thread.trade);
 
@@ -387,7 +418,9 @@ export default function TradeChatDetail({
           {!thread.loading && thread.trade ? (
             <div className="chat-detail-page__split">
               <div className="chat-detail-page__left">
-                <TradeThreadHeader trade={thread.trade} />
+                <TradeThreadHeader
+                  trade={thread.trade}
+                />
               </div>
 
               <div className="chat-detail-page__right">
@@ -395,17 +428,25 @@ export default function TradeChatDetail({
                   <div className="chat-detail-page__replies">
                     <ChatMessageBubble
                       senderName={
-                        thread.trade.buyerAvatarName || "購入者"
+                        thread.trade.buyerAvatarName ||
+                        "購入者"
                       }
-                      senderIcon={thread.trade.buyerAvatarIcon}
-                      createdAt={thread.trade.createdAt}
+                      senderIcon={
+                        thread.trade.buyerAvatarIcon
+                      }
+                      createdAt={
+                        thread.trade.createdAt
+                      }
                       content={`${
-                        thread.trade.buyerAvatarName || "購入者"
+                        thread.trade.buyerAvatarName ||
+                        "購入者"
                       }さんが${
-                        thread.trade.productName || "商品"
+                        thread.trade.productName ||
+                        "商品"
                       }を購入しました。`}
                       isMine={
-                        thread.trade.viewerSide === "buyer"
+                        thread.trade.viewerSide ===
+                        "buyer"
                       }
                     />
 
@@ -414,12 +455,17 @@ export default function TradeChatDetail({
                         key={message.id}
                         message={message}
                         trade={thread.trade!}
-                        onReport={report.openMessageReport}
+                        onReport={
+                          report.openMessageReport
+                        }
                         onOpenDispatchQr={() => {
-                          setDispatchQrPreviewOpen(true);
+                          setDispatchQrPreviewOpen(
+                            true,
+                          );
                         }}
                         onOpenReturnShipmentQr={
-                          thread.trade!.viewerSide === "buyer"
+                          thread.trade!.viewerSide ===
+                          "buyer"
                             ? () => {
                                 void returnShipmentFlow.openPersistedShipment();
                               }
@@ -431,15 +477,27 @@ export default function TradeChatDetail({
                     {thread.trade.transferredAt ? (
                       <ChatMessageBubble
                         senderName={
-                          thread.trade.buyerAvatarName || "購入者"
+                          thread.trade
+                            .buyerAvatarName ||
+                          "購入者"
                         }
-                        senderIcon={thread.trade.buyerAvatarIcon}
-                        createdAt={thread.trade.transferredAt}
+                        senderIcon={
+                          thread.trade
+                            .buyerAvatarIcon
+                        }
+                        createdAt={
+                          thread.trade
+                            .transferredAt
+                        }
                         content={`${
-                          thread.trade.buyerAvatarName || "購入者"
+                          thread.trade
+                            .buyerAvatarName ||
+                          "購入者"
                         }さんがトークンを受け取りました。`}
                         isMine={
-                          thread.trade.viewerSide === "buyer"
+                          thread.trade
+                            .viewerSide ===
+                          "buyer"
                         }
                       />
                     ) : null}
@@ -447,9 +505,15 @@ export default function TradeChatDetail({
                     {orderAction ? (
                       <TradeOrderActionPrompt
                         action={orderAction}
-                        processing={orderActionProcessing}
-                        error={orderActionError}
-                        onAction={handleOrderAction}
+                        processing={
+                          orderActionProcessing
+                        }
+                        error={
+                          orderActionError
+                        }
+                        onAction={
+                          handleOrderAction
+                        }
                       />
                     ) : null}
                   </div>
@@ -460,13 +524,27 @@ export default function TradeChatDetail({
                   placeholder="メッセージを入力"
                   files={reply.files}
                   error={reply.error}
-                  submitting={reply.submitting}
-                  canSubmit={reply.canSubmit}
-                  disabled={reply.actionDisabled}
-                  onContentChange={reply.setContent}
-                  onFilesAdd={reply.addFiles}
-                  onRemoveFile={reply.removeFile}
-                  onSubmit={reply.submit}
+                  submitting={
+                    reply.submitting
+                  }
+                  canSubmit={
+                    reply.canSubmit
+                  }
+                  disabled={
+                    reply.actionDisabled
+                  }
+                  onContentChange={
+                    reply.setContent
+                  }
+                  onFilesAdd={
+                    reply.addFiles
+                  }
+                  onRemoveFile={
+                    reply.removeFile
+                  }
+                  onSubmit={
+                    reply.submit
+                  }
                 />
               </div>
             </div>
@@ -517,10 +595,18 @@ export default function TradeChatDetail({
         reason={returnConsultationFlow.reason}
         detail={returnConsultationFlow.detail}
         error={returnConsultationFlow.error}
-        submitting={returnConsultationFlow.submitting}
-        onReasonChange={returnConsultationFlow.setReason}
-        onDetailChange={returnConsultationFlow.setDetail}
-        onCancel={returnConsultationFlow.closeModal}
+        submitting={
+          returnConsultationFlow.submitting
+        }
+        onReasonChange={
+          returnConsultationFlow.setReason
+        }
+        onDetailChange={
+          returnConsultationFlow.setDetail
+        }
+        onCancel={
+          returnConsultationFlow.closeModal
+        }
         onSubmit={() => {
           void returnConsultationFlow.submit();
         }}
@@ -529,19 +615,31 @@ export default function TradeChatDetail({
       <TradeReturnProposalModal
         open={returnProposalFlow.open}
         agreement={returnProposalFlow.agreement}
-        returnRequirement={returnProposalFlow.returnRequirement}
-        refundAmount={returnProposalFlow.refundAmount}
-        refundAmountMax={returnProposalFlow.refundAmountMax}
+        returnRequirement={
+          returnProposalFlow.returnRequirement
+        }
+        refundAmount={
+          returnProposalFlow.refundAmount
+        }
+        refundAmountMax={
+          returnProposalFlow.refundAmountMax
+        }
         error={returnProposalFlow.error}
-        submitting={returnProposalFlow.submitting}
-        onAgreementChange={returnProposalFlow.setAgreement}
+        submitting={
+          returnProposalFlow.submitting
+        }
+        onAgreementChange={
+          returnProposalFlow.setAgreement
+        }
         onReturnRequirementChange={
           returnProposalFlow.setReturnRequirement
         }
         onRefundAmountChange={
           returnProposalFlow.setRefundAmount
         }
-        onCancel={returnProposalFlow.closeModal}
+        onCancel={
+          returnProposalFlow.closeModal
+        }
         onSubmit={() => {
           void returnProposalFlow.submit();
         }}
@@ -551,10 +649,18 @@ export default function TradeChatDetail({
         open={returnAgreementFlow.open}
         proposal={returnAgreementFlow.proposal}
         error={returnAgreementFlow.error}
-        submitting={returnAgreementFlow.submitting}
-        accepting={returnAgreementFlow.accepting}
-        rejecting={returnAgreementFlow.rejecting}
-        onCancel={returnAgreementFlow.closeModal}
+        submitting={
+          returnAgreementFlow.submitting
+        }
+        accepting={
+          returnAgreementFlow.accepting
+        }
+        rejecting={
+          returnAgreementFlow.rejecting
+        }
+        onCancel={
+          returnAgreementFlow.closeModal
+        }
         onAccept={() => {
           void returnAgreementFlow.accept();
         }}
@@ -565,11 +671,19 @@ export default function TradeChatDetail({
 
       <TradeReturnShipmentModal
         open={returnShipmentFlow.open}
-        shipment={returnShipmentFlow.shipment}
-        qrCodePayload={returnShipmentFlow.qrCodePayload}
+        shipment={
+          returnShipmentFlow.shipment
+        }
+        qrCodePayload={
+          returnShipmentFlow.qrCodePayload
+        }
         error={returnShipmentFlow.error}
-        loading={returnShipmentFlow.loading}
-        onCancel={returnShipmentFlow.closeModal}
+        loading={
+          returnShipmentFlow.loading
+        }
+        onCancel={
+          returnShipmentFlow.closeModal
+        }
         onRetryPreparation={() => {
           void returnShipmentFlow.retryPreparation();
         }}
@@ -577,12 +691,22 @@ export default function TradeChatDetail({
 
       <TradeReturnReceiptModal
         open={returnReceiptFlow.open}
-        proposal={returnReceiptFlow.proposal}
-        refundAmount={returnReceiptFlow.refundAmount}
+        proposal={
+          returnReceiptFlow.proposal
+        }
+        refundAmount={
+          returnReceiptFlow.refundAmount
+        }
         error={returnReceiptFlow.error}
-        submitting={returnReceiptFlow.submitting}
-        canSubmit={returnReceiptFlow.canSubmit}
-        onCancel={returnReceiptFlow.closeModal}
+        submitting={
+          returnReceiptFlow.submitting
+        }
+        canSubmit={
+          returnReceiptFlow.canSubmit
+        }
+        onCancel={
+          returnReceiptFlow.closeModal
+        }
         onSubmit={() => {
           void returnReceiptFlow.submit();
         }}

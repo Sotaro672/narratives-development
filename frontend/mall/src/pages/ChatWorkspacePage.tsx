@@ -87,9 +87,14 @@ function ChatWorkspaceContent() {
   const location = useLocation();
   const navigate = useNavigate();
   const isMobile = useMobileChatViewport();
-  const { composer } = useChatWorkspace();
+  const {
+    composer,
+    headerTitle,
+  } = useChatWorkspace();
 
   const isChatListRoute = isChatListPath(location.pathname);
+  const isMobileChatDetail = isMobile && !isChatListRoute;
+
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
     isChatListRoute ? "list" : "detail",
   );
@@ -114,7 +119,10 @@ function ChatWorkspaceContent() {
     pendingBackNavigationRef.current = false;
     clearBackNavigationTimer();
     navigate("/chats", { replace: true });
-  }, [clearBackNavigationTimer, navigate]);
+  }, [
+    clearBackNavigationTimer,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -213,17 +221,25 @@ function ChatWorkspaceContent() {
     mobilePane === "detail" &&
     composer !== null;
 
+  const layoutTitle =
+    isMobileChatDetail
+      ? headerTitle || "チャット"
+      : "AMOL";
+
   return (
     <>
       <Layout
-        title="AMOL"
+        title={layoutTitle}
+        titleClickable={!isMobileChatDetail}
         showFooter={isMobile && isChatListRoute}
         mode="mypage"
         mainClassName="chat-workspace-page-layout"
         disableFooterPaddingOnDesktop
-        showBackButton={isMobile && !isChatListRoute}
+        showBackButton={isMobileChatDetail}
         backButtonLabel="チャット一覧に戻る"
         onBackButtonClick={handleBackToList}
+        hideSettingsButton={isMobileChatDetail}
+        hideAnnouncementButton={isMobileChatDetail}
         footerProps={{
           variant: "default",
         }}

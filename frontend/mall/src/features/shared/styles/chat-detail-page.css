@@ -401,6 +401,10 @@
     padding: 10px 16px 8px;
   }
 
+  .chat-detail-page-layout--inquiry .chat-detail-page__left .chat-detail-page__subject {
+    display: none;
+  }
+
   .chat-detail-page-layout--inquiry .chat-detail-page__right,
   .chat-detail-page-layout--inquiry .chat-detail-page__reply-section {
     min-height: 0;
