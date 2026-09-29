@@ -504,10 +504,7 @@ export default function TokenCommentReplySection(
       )
     : [];
 
-  const replyCount =
-    targetNode?.comment.childCount ??
-    targetNode?.children.length ??
-    0;
+  const replyCount = flattenedReplies.length;
 
   const interactionBusy =
     replyPosting ||

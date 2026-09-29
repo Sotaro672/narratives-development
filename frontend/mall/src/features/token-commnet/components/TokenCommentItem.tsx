@@ -32,6 +32,14 @@ type TokenCommentItemProps = {
   onReport: (commentId: string) => void;
 };
 
+function countDescendantReplies(node: TokenCommentTreeNode): number {
+  return node.children.reduce(
+    (total, childNode) =>
+      total + 1 + countDescendantReplies(childNode),
+    0,
+  );
+}
+
 function getAuthorAvatarId(comment: TokenComment): string {
   if (comment.authorType !== "avatar") {
     return "";
@@ -121,7 +129,8 @@ export default function TokenCommentItem({
   const normalizedCurrentAvatarId = currentAvatarId.trim();
   const normalizedEditingCommentId = editingCommentId?.trim() ?? "";
   const normalizedDeletingCommentId = deletingCommentId?.trim() ?? "";
-  const hasReplies = comment.childCount > 0 || node.children.length > 0;
+  const totalReplyCount = countDescendantReplies(node);
+  const hasReplies = totalReplyCount > 0;
   const isExpanded = Boolean(commentId && expandedIds.has(commentId));
 
   const isOwnComment = Boolean(
@@ -298,7 +307,7 @@ export default function TokenCommentItem({
             >
               {!useDedicatedReplySection && isExpanded
                 ? "返信を非表示"
-                : `返信を表示 (${comment.childCount || node.children.length})`}
+                : `返信を表示 (${totalReplyCount})`}
             </Chip>
           ) : null}
         </div>
