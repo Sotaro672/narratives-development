@@ -1,4 +1,4 @@
-// frontend/amol/src/features/contents/components/ContentsDetailPanel.tsx
+// frontend/mall/src/features/contents/components/ContentsDetailPanel.tsx
 
 import TokenCommentCard from "../../token-commnet/components/TokenCommentSection";
 
@@ -63,8 +63,13 @@ export default function ContentsDetailPanel({
         replyingCommentId={commentCard.replyingCommentId}
         replyBody={commentCard.replyBody}
         replyPosting={commentCard.replyPosting}
+        editingCommentId={commentCard.editingCommentId}
+        editBody={commentCard.editBody}
+        editSaving={commentCard.editSaving}
+        deletingCommentId={commentCard.deletingCommentId}
         onCommentBodyChange={commentCard.setCommentBody}
         onReplyBodyChange={commentCard.setReplyBody}
+        onEditBodyChange={commentCard.setEditBody}
         onPostComment={commentCard.postComment}
         onToggleExpanded={commentCard.toggleExpanded}
         onLikeComment={commentCard.likeComment}
@@ -72,6 +77,10 @@ export default function ContentsDetailPanel({
         onStartReply={commentCard.startReply}
         onCancelReply={commentCard.cancelReply}
         onSubmitReply={commentCard.submitReply}
+        onStartEdit={commentCard.startEdit}
+        onCancelEdit={commentCard.cancelEdit}
+        onSubmitEdit={commentCard.submitEdit}
+        onDeleteComment={commentCard.deleteComment}
       />
     </div>
   );

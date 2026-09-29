@@ -1,4 +1,4 @@
-// frontend\mall\src\features\shared\types\tokenCommentTypes.ts
+// frontend/mall/src/features/shared/types/tokenCommentTypes.ts
 
 export type TokenCommentAuthorType = "avatar" | "brand" | string;
 
@@ -77,6 +77,17 @@ export type TokenCommentReplyInput = {
   tokenBlueprintId: string;
   parentCommentId: string;
   body: string;
+};
+
+export type TokenCommentUpdateInput = {
+  tokenBlueprintId: string;
+  commentId: string;
+  body: string;
+};
+
+export type TokenCommentDeleteInput = {
+  tokenBlueprintId: string;
+  commentId: string;
 };
 
 export type TokenCommentVoteInput = {

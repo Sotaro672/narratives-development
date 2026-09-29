@@ -32,9 +32,16 @@ export function useContentsCommentComposer({
   loading,
   tokenBlueprintId,
 }: UseContentsCommentComposerParams) {
-  const isReplying = Boolean(commentCard.replyingCommentId);
-
+  const editingCommentId = commentCard.editingCommentId?.trim() ?? "";
   const replyingCommentId = commentCard.replyingCommentId?.trim() ?? "";
+  const isEditing = Boolean(editingCommentId);
+  const isReplying = Boolean(replyingCommentId);
+
+  const editingComment = editingCommentId
+    ? commentCard.comments.find(
+        (comment) => comment.commentId?.trim() === editingCommentId,
+      ) ?? null
+    : null;
 
   const replyingComment = replyingCommentId
     ? commentCard.comments.find(
@@ -61,6 +68,12 @@ export function useContentsCommentComposer({
     loading ||
     !tokenBlueprintId;
 
+  const editActionDisabled =
+    commentCard.editSaving ||
+    commentCard.deletingCommentId === editingCommentId ||
+    loading ||
+    !tokenBlueprintId;
+
   const canSubmitComment =
     !commentActionDisabled &&
     commentCard.commentBody.trim().length > 0;
@@ -69,6 +82,12 @@ export function useContentsCommentComposer({
     !replyActionDisabled &&
     Boolean(replyingCommentId) &&
     commentCard.replyBody.trim().length > 0;
+
+  const canSubmitEdit =
+    !editActionDisabled &&
+    Boolean(editingCommentId) &&
+    Boolean(editingComment) &&
+    commentCard.editBody.trim().length > 0;
 
   const handleSubmitComment = useCallback(() => {
     if (!canSubmitComment) {
@@ -91,20 +110,32 @@ export function useContentsCommentComposer({
       return;
     }
 
-    void commentCard.submitReply(
-      targetCommentId,
-    );
+    void commentCard.submitReply(targetCommentId);
   }, [
     canSubmitReply,
     commentCard,
   ]);
 
+  const handleSubmitEdit = useCallback(() => {
+    if (!canSubmitEdit) {
+      return;
+    }
+
+    void commentCard.submitEdit();
+  }, [
+    canSubmitEdit,
+    commentCard,
+  ]);
+
   const composerProps: ComposerProps = {
-    content: isReplying
-      ? commentCard.replyBody
-      : commentCard.commentBody,
-    placeholder:
-      isReplying && replyingToName
+    content: isEditing
+      ? commentCard.editBody
+      : isReplying
+        ? commentCard.replyBody
+        : commentCard.commentBody,
+    placeholder: isEditing
+      ? "コメントを編集…"
+      : isReplying && replyingToName
         ? `@${replyingToName} 返信を書く…`
         : isReplying
           ? "返信を書く…"
@@ -112,32 +143,49 @@ export function useContentsCommentComposer({
     error:
       commentCard.commentsError ||
       undefined,
-    submitting: isReplying
-      ? commentCard.replyPosting
-      : commentCard.posting,
-    canSubmit: isReplying
-      ? canSubmitReply
-      : canSubmitComment,
-    disabled: isReplying
-      ? replyActionDisabled
-      : commentActionDisabled,
-    submitLabel: isReplying
-      ? "返信"
-      : "投稿",
-    submittingLabel: "投稿中...",
-    beforeInput:
-      isReplying && replyingToName
+    submitting: isEditing
+      ? commentCard.editSaving
+      : isReplying
+        ? commentCard.replyPosting
+        : commentCard.posting,
+    canSubmit: isEditing
+      ? canSubmitEdit
+      : isReplying
+        ? canSubmitReply
+        : canSubmitComment,
+    disabled: isEditing
+      ? editActionDisabled
+      : isReplying
+        ? replyActionDisabled
+        : commentActionDisabled,
+    submitLabel: isEditing
+      ? "保存"
+      : isReplying
+        ? "返信"
+        : "投稿",
+    submittingLabel: isEditing
+      ? "保存中..."
+      : "投稿中...",
+    beforeInput: isEditing
+      ? "コメントを編集中"
+      : isReplying && replyingToName
         ? `${replyingToName}に返信しています`
         : undefined,
-    onContentChange: isReplying
-      ? commentCard.setReplyBody
-      : commentCard.setCommentBody,
-    onSubmit: isReplying
-      ? handleSubmitReply
-      : handleSubmitComment,
+    onContentChange: isEditing
+      ? commentCard.setEditBody
+      : isReplying
+        ? commentCard.setReplyBody
+        : commentCard.setCommentBody,
+    onSubmit: isEditing
+      ? handleSubmitEdit
+      : isReplying
+        ? handleSubmitReply
+        : handleSubmitComment,
   };
 
   return {
+    isEditing,
+    editingComment,
     isReplying,
     replyingComment,
     isNestedReply,

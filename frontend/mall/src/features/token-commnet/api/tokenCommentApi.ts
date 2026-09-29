@@ -1,4 +1,5 @@
-// frontend\mall\src\features\token-commnet\api\tokenCommentApi.ts
+// frontend/mall/src/features/token-commnet/api/tokenCommentApi.ts
+
 import {
   requestJson,
   requestVoid,
@@ -8,9 +9,11 @@ import type {
   TokenBlueprintReactionInput,
   TokenBlueprintReviewAggregate,
   TokenComment,
+  TokenCommentDeleteInput,
   TokenCommentListResponse,
   TokenCommentPostInput,
   TokenCommentReplyInput,
+  TokenCommentUpdateInput,
   TokenCommentVoteInput,
 } from "../../shared/types/tokenCommentTypes";
 
@@ -185,6 +188,40 @@ export async function postTokenCommentReply({
       method: "POST",
       auth: "required",
       json: { body },
+    },
+  );
+}
+
+export async function updateTokenComment({
+  tokenBlueprintId,
+  commentId,
+  body,
+}: TokenCommentUpdateInput): Promise<TokenComment> {
+  const response = await requestJson<TokenCommentResponse>(
+    `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(tokenBlueprintId)}/comments/${encodePathSegment(commentId)}`,
+    {
+      method: "PATCH",
+      auth: "required",
+      json: { body },
+      messages: {
+        requestErrorMessage: "コメントの編集に失敗しました。",
+        nonJsonErrorMessage: "コメント編集 API が JSON 以外を返しました。",
+      },
+    },
+  );
+
+  return toTokenComment(response);
+}
+
+export async function deleteTokenComment({
+  tokenBlueprintId,
+  commentId,
+}: TokenCommentDeleteInput): Promise<void> {
+  await requestVoid(
+    `${TOKEN_BLUEPRINT_BASE_PATH}/${encodePathSegment(tokenBlueprintId)}/comments/${encodePathSegment(commentId)}`,
+    {
+      method: "DELETE",
+      auth: "required",
     },
   );
 }

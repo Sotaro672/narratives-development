@@ -72,6 +72,9 @@ export default function ContentsPage() {
         replyPosting={page.commentCard.replyPosting}
         commentsLoading={page.commentCard.commentsLoading}
         commentsError={page.commentCard.commentsError}
+        editingCommentId={page.commentCard.editingCommentId}
+        editSaving={page.commentCard.editSaving}
+        deletingCommentId={page.commentCard.deletingCommentId}
         onBack={page.commentCard.cancelReply}
         onReplyBodyChange={page.commentCard.setReplyBody}
         onSubmitReply={page.commentCard.submitReply}
@@ -79,6 +82,9 @@ export default function ContentsPage() {
         onLike={page.commentCard.likeComment}
         onDislike={page.commentCard.dislikeComment}
         onStartReply={page.commentCard.startReply}
+        onStartEdit={page.commentCard.startEdit}
+        onCancelEdit={page.commentCard.cancelEdit}
+        onDelete={page.commentCard.deleteComment}
       />
     ) : null;
 

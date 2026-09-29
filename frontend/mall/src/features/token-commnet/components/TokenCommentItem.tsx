@@ -20,14 +20,22 @@ type TokenCommentItemProps = {
   currentAvatarId: string;
   node: TokenCommentTreeNode;
   expandedIds: Set<string>;
+  editingCommentId: string | null;
+  deletingCommentId: string | null;
   onToggleExpanded: (commentId: string) => void;
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
+  onStartEdit: (commentId: string) => void;
+  onDelete: (commentId: string) => void | Promise<void>;
   onReport: (commentId: string) => void;
 };
 
 function getAuthorAvatarId(comment: TokenComment): string {
+  if (comment.authorType !== "avatar") {
+    return "";
+  }
+
   return comment.authorId?.trim() || "";
 }
 
@@ -87,9 +95,13 @@ export default function TokenCommentItem({
   tokenBlueprintId,
   currentAvatarId,
   node,
+  editingCommentId,
+  deletingCommentId,
   onLike,
   onDislike,
   onStartReply,
+  onStartEdit,
+  onDelete,
   onReport,
 }: TokenCommentItemProps) {
   const comment = node.comment;
@@ -103,13 +115,28 @@ export default function TokenCommentItem({
   const displayName = getTokenCommentDisplayName(comment);
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const normalizedCurrentAvatarId = currentAvatarId.trim();
+  const normalizedEditingCommentId = editingCommentId?.trim() ?? "";
+  const normalizedDeletingCommentId = deletingCommentId?.trim() ?? "";
   const hasReplies = comment.childCount > 0 || node.children.length > 0;
 
   const isOwnComment = Boolean(
-    normalizedCurrentAvatarId &&
+    comment.authorType === "avatar" &&
+      normalizedCurrentAvatarId &&
       authorAvatarId &&
       normalizedCurrentAvatarId === authorAvatarId,
   );
+
+  const isEditing = Boolean(
+    commentId &&
+      normalizedEditingCommentId === commentId,
+  );
+
+  const isDeleting = Boolean(
+    commentId &&
+      normalizedDeletingCommentId === commentId,
+  );
+
+  const actionDisabled = isDeleting;
 
   const canReport = Boolean(
     normalizedTokenBlueprintId &&
@@ -119,7 +146,7 @@ export default function TokenCommentItem({
   );
 
   const handleLike = () => {
-    if (!commentId) {
+    if (!commentId || actionDisabled) {
       return;
     }
 
@@ -127,7 +154,7 @@ export default function TokenCommentItem({
   };
 
   const handleDislike = () => {
-    if (!commentId) {
+    if (!commentId || actionDisabled) {
       return;
     }
 
@@ -135,15 +162,31 @@ export default function TokenCommentItem({
   };
 
   const handleOpenReplySection = () => {
-    if (!commentId) {
+    if (!commentId || actionDisabled) {
       return;
     }
 
     onStartReply(commentId);
   };
 
+  const handleStartEdit = () => {
+    if (!commentId || !isOwnComment || actionDisabled) {
+      return;
+    }
+
+    onStartEdit(commentId);
+  };
+
+  const handleDelete = () => {
+    if (!commentId || !isOwnComment || actionDisabled) {
+      return;
+    }
+
+    void onDelete(commentId);
+  };
+
   const handleReport = () => {
-    if (!canReport) {
+    if (!canReport || actionDisabled) {
       return;
     }
 
@@ -174,6 +217,7 @@ export default function TokenCommentItem({
           <Chip
             size="sm"
             variant="neutral"
+            disabled={actionDisabled}
             onClick={handleLike}
           >
             👍 {comment.likeCount}
@@ -182,6 +226,7 @@ export default function TokenCommentItem({
           <Chip
             size="sm"
             variant="neutral"
+            disabled={actionDisabled}
             onClick={handleDislike}
           >
             👎 {comment.dislikeCount}
@@ -190,13 +235,36 @@ export default function TokenCommentItem({
           <Chip
             size="sm"
             variant="neutral"
+            disabled={actionDisabled}
             onClick={handleOpenReplySection}
           >
             返信
           </Chip>
 
-          {canReport ? (
+          {isOwnComment ? (
+            <>
+              <Chip
+                size="sm"
+                variant="neutral"
+                selected={isEditing}
+                disabled={actionDisabled}
+                onClick={handleStartEdit}
+              >
+                編集
+              </Chip>
+
+              <Chip
+                size="sm"
+                variant="danger"
+                disabled={actionDisabled}
+                onClick={handleDelete}
+              >
+                {isDeleting ? "削除中..." : "削除"}
+              </Chip>
+            </>
+          ) : canReport ? (
             <ReportFlagButton
+              disabled={actionDisabled}
               label={`${displayName}のコメントを通報`}
               onClick={handleReport}
             />
@@ -206,6 +274,7 @@ export default function TokenCommentItem({
             <Chip
               size="sm"
               variant="neutral"
+              disabled={actionDisabled}
               onClick={handleOpenReplySection}
             >
               返信を表示 ({comment.childCount || node.children.length})

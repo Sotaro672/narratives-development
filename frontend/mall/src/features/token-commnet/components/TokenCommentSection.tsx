@@ -28,8 +28,13 @@ type TokenCommentSectionProps = {
   replyingCommentId: string | null;
   replyBody: string;
   replyPosting: boolean;
+  editingCommentId: string | null;
+  editBody: string;
+  editSaving: boolean;
+  deletingCommentId: string | null;
   onCommentBodyChange: (value: string) => void;
   onReplyBodyChange: (value: string) => void;
+  onEditBodyChange: (value: string) => void;
   onPostComment: () => Promise<void>;
   onToggleExpanded: (commentId: string) => void;
   onLikeComment: (commentId: string) => Promise<void>;
@@ -37,6 +42,10 @@ type TokenCommentSectionProps = {
   onStartReply: (commentId: string) => void;
   onCancelReply: () => void;
   onSubmitReply: (parentCommentId: string) => Promise<void>;
+  onStartEdit: (commentId: string) => void;
+  onCancelEdit: () => void;
+  onSubmitEdit: () => Promise<void>;
+  onDeleteComment: (commentId: string) => Promise<void>;
 };
 
 export default function TokenCommentSection({
@@ -53,8 +62,13 @@ export default function TokenCommentSection({
   replyingCommentId,
   replyBody,
   replyPosting,
+  editingCommentId,
+  editBody,
+  editSaving,
+  deletingCommentId,
   onCommentBodyChange,
   onReplyBodyChange,
+  onEditBodyChange,
   onPostComment,
   onToggleExpanded,
   onLikeComment,
@@ -62,6 +76,10 @@ export default function TokenCommentSection({
   onStartReply,
   onCancelReply,
   onSubmitReply,
+  onStartEdit,
+  onCancelEdit,
+  onSubmitEdit,
+  onDeleteComment,
 }: TokenCommentSectionProps) {
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
@@ -83,10 +101,21 @@ export default function TokenCommentSection({
   } = useReport();
 
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedReplyingCommentId = replyingCommentId?.trim() ?? "";
+  const normalizedEditingCommentId = editingCommentId?.trim() ?? "";
+  const isEditing = Boolean(normalizedEditingCommentId);
+
   const canSubmitReply = Boolean(
-    replyingCommentId &&
-    replyBody.trim() &&
-    !replyPosting,
+    normalizedReplyingCommentId &&
+      replyBody.trim() &&
+      !replyPosting,
+  );
+
+  const canSubmitEdit = Boolean(
+    normalizedEditingCommentId &&
+      editBody.trim() &&
+      !editSaving &&
+      deletingCommentId !== normalizedEditingCommentId,
   );
 
   useEffect(() => {
@@ -143,13 +172,60 @@ export default function TokenCommentSection({
 
   const handleSubmitReply = () => {
     if (
-      !replyingCommentId ||
+      !normalizedReplyingCommentId ||
       !canSubmitReply
     ) {
       return;
     }
 
-    void onSubmitReply(replyingCommentId);
+    void onSubmitReply(normalizedReplyingCommentId);
+  };
+
+  const handleSubmitEdit = () => {
+    if (!canSubmitEdit) {
+      return;
+    }
+
+    void onSubmitEdit();
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    const normalizedCommentId = commentId.trim();
+
+    if (
+      !normalizedCommentId ||
+      deletingCommentId
+    ) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "このコメントを削除します。よろしいですか？",
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    await onDeleteComment(normalizedCommentId);
+  };
+
+  const handleComposerCancel = () => {
+    if (isEditing) {
+      onCancelEdit();
+      return;
+    }
+
+    onCancelReply();
+  };
+
+  const handleComposerSubmit = () => {
+    if (isEditing) {
+      handleSubmitEdit();
+      return;
+    }
+
+    handleSubmitReply();
   };
 
   return (
@@ -184,10 +260,14 @@ export default function TokenCommentSection({
               commentTree={commentTree}
               commentsLoading={commentsLoading}
               expandedIds={expandedIds}
+              editingCommentId={editingCommentId}
+              deletingCommentId={deletingCommentId}
               onToggleExpanded={onToggleExpanded}
               onLike={onLikeComment}
               onDislike={onDislikeComment}
               onStartReply={onStartReply}
+              onStartEdit={onStartEdit}
+              onDelete={handleDeleteComment}
               onReport={handleReportComment}
             />
           </>
@@ -196,18 +276,18 @@ export default function TokenCommentSection({
 
       {!hideCommentForm ? (
         <ChatComposerModal
-          open={Boolean(replyingCommentId)}
-          title="返信する"
-          content={replyBody}
-          placeholder="返信を書く…"
-          submitting={replyPosting}
-          canSubmit={canSubmitReply}
-          submitLabel="返信を投稿"
-          submittingLabel="投稿中..."
+          open={Boolean(normalizedEditingCommentId || normalizedReplyingCommentId)}
+          title={isEditing ? "コメントを編集" : "返信する"}
+          content={isEditing ? editBody : replyBody}
+          placeholder={isEditing ? "コメントを編集…" : "返信を書く…"}
+          submitting={isEditing ? editSaving : replyPosting}
+          canSubmit={isEditing ? canSubmitEdit : canSubmitReply}
+          submitLabel={isEditing ? "保存" : "返信を投稿"}
+          submittingLabel={isEditing ? "保存中..." : "投稿中..."}
           rows={replyRows}
-          onContentChange={onReplyBodyChange}
-          onCancel={onCancelReply}
-          onSubmit={handleSubmitReply}
+          onContentChange={isEditing ? onEditBodyChange : onReplyBodyChange}
+          onCancel={handleComposerCancel}
+          onSubmit={handleComposerSubmit}
         />
       ) : null}
 
