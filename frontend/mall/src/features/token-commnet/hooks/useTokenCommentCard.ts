@@ -1,4 +1,4 @@
-// frontend/amol/src/features/token-commnet/hooks/useTokenCommentCard.ts
+// frontend/mall/src/features/token-commnet/hooks/useTokenCommentCard.ts
 
 import {
   useCallback,
@@ -30,41 +30,26 @@ export type UseTokenCommentCardOptions = {
 
 export type UseTokenCommentCardReturn = {
   comments: TokenComment[];
-  commentTree: ReturnType<
-    typeof buildTokenCommentTree
-  >;
+  commentTree: ReturnType<typeof buildTokenCommentTree>;
   commentsLoading: boolean;
   commentsError: string;
   posting: boolean;
   commentBody: string;
   expandedIds: Set<string>;
+  replyThreadRootCommentId: string | null;
   replyingCommentId: string | null;
   replyBody: string;
   replyPosting: boolean;
-  setCommentBody: (
-    value: string,
-  ) => void;
-  setReplyBody: (
-    value: string,
-  ) => void;
+  setCommentBody: (value: string) => void;
+  setReplyBody: (value: string) => void;
   refreshComments: () => Promise<void>;
   postComment: () => Promise<void>;
-  toggleExpanded: (
-    commentId: string,
-  ) => void;
-  likeComment: (
-    commentId: string,
-  ) => Promise<void>;
-  dislikeComment: (
-    commentId: string,
-  ) => Promise<void>;
-  startReply: (
-    commentId: string,
-  ) => void;
+  toggleExpanded: (commentId: string) => void;
+  likeComment: (commentId: string) => Promise<void>;
+  dislikeComment: (commentId: string) => Promise<void>;
+  startReply: (commentId: string) => void;
   cancelReply: () => void;
-  submitReply: (
-    parentCommentId: string,
-  ) => Promise<void>;
+  submitReply: (parentCommentId: string) => Promise<void>;
 };
 
 type CommentReactionType =
@@ -122,6 +107,13 @@ export function useTokenCommentCard({
   );
 
   const [
+    replyThreadRootCommentId,
+    setReplyThreadRootCommentId,
+  ] = useState<string | null>(
+    null,
+  );
+
+  const [
     replyingCommentId,
     setReplyingCommentId,
   ] = useState<string | null>(
@@ -146,309 +138,333 @@ export function useTokenCommentCard({
     [comments],
   );
 
-  const clearReply = useCallback(
-    () => {
-      setReplyingCommentId(null);
-      setReplyBody("");
-    },
-    [],
-  );
+  const clearReply = useCallback(() => {
+    setReplyThreadRootCommentId(null);
+    setReplyingCommentId(null);
+    setReplyBody("");
+  }, []);
 
   const expandComment = useCallback(
     (commentId: string) => {
-      if (!commentId) {
+      const normalizedCommentId =
+        commentId.trim();
+
+      if (!normalizedCommentId) {
         return;
       }
 
-      setExpandedIds(
-        (current) => {
-          if (
-            current.has(commentId)
-          ) {
-            return current;
-          }
+      setExpandedIds((current) => {
+        if (
+          current.has(
+            normalizedCommentId,
+          )
+        ) {
+          return current;
+        }
 
-          const next =
-            new Set(current);
+        const next =
+          new Set(current);
 
-          next.add(commentId);
+        next.add(
+          normalizedCommentId,
+        );
 
-          return next;
-        },
-      );
+        return next;
+      });
     },
     [],
   );
 
-  const refreshComments =
-    useCallback(async () => {
-      if (!tokenBlueprintId) {
-        setComments([]);
-        setCommentsError("");
+  const refreshComments = useCallback(async () => {
+    if (!tokenBlueprintId) {
+      setComments([]);
+      setCommentsError("");
+      return;
+    }
+
+    setCommentsLoading(true);
+    setCommentsError("");
+
+    try {
+      const response =
+        await fetchTokenComments(
+          tokenBlueprintId,
+        );
+
+      setComments(
+        response.items,
+      );
+    } catch (error) {
+      setComments([]);
+
+      setCommentsError(
+        getErrorMessage(
+          error,
+          "コメントの取得に失敗しました。",
+        ),
+      );
+    } finally {
+      setCommentsLoading(false);
+    }
+  }, [tokenBlueprintId]);
+
+  const postComment = useCallback(async () => {
+    const body =
+      commentBody.trim();
+
+    if (
+      !tokenBlueprintId ||
+      !body ||
+      posting
+    ) {
+      return;
+    }
+
+    setPosting(true);
+    setCommentsError("");
+
+    try {
+      await postTokenComment({
+        tokenBlueprintId,
+        body,
+      });
+
+      setCommentBody("");
+
+      await refreshComments();
+    } catch (error) {
+      setCommentsError(
+        getErrorMessage(
+          error,
+          "コメントの投稿に失敗しました。",
+        ),
+      );
+    } finally {
+      setPosting(false);
+    }
+  }, [
+    commentBody,
+    posting,
+    refreshComments,
+    tokenBlueprintId,
+  ]);
+
+  const toggleExpanded = useCallback(
+    (commentId: string) => {
+      const normalizedCommentId =
+        commentId.trim();
+
+      if (!normalizedCommentId) {
         return;
       }
 
-      setCommentsLoading(true);
-      setCommentsError("");
+      setExpandedIds((current) => {
+        const next =
+          new Set(current);
 
-      try {
-        const response =
-          await fetchTokenComments(
-            tokenBlueprintId,
+        if (
+          next.has(
+            normalizedCommentId,
+          )
+        ) {
+          next.delete(
+            normalizedCommentId,
           );
+        } else {
+          next.add(
+            normalizedCommentId,
+          );
+        }
 
-        setComments(
-          response.items,
-        );
-      } catch (error) {
-        setComments([]);
+        return next;
+      });
+    },
+    [],
+  );
 
-        setCommentsError(
-          getErrorMessage(
-            error,
-            "コメントの取得に失敗しました。",
-          ),
-        );
-      } finally {
-        setCommentsLoading(false);
-      }
-    }, [tokenBlueprintId]);
-
-  const postComment =
-    useCallback(async () => {
-      const body =
-        commentBody.trim();
+  const reactToComment = useCallback(
+    async (
+      commentId: string,
+      reactionType: CommentReactionType,
+    ) => {
+      const normalizedCommentId =
+        commentId.trim();
 
       if (
         !tokenBlueprintId ||
-        !body ||
-        posting
+        !normalizedCommentId
       ) {
         return;
       }
 
-      setPosting(true);
       setCommentsError("");
 
       try {
-        await postTokenComment({
+        const input = {
           tokenBlueprintId,
+          commentId: normalizedCommentId,
+        };
+
+        if (
+          reactionType ===
+          "like"
+        ) {
+          await likeTokenComment(
+            input,
+          );
+        } else {
+          await dislikeTokenComment(
+            input,
+          );
+        }
+
+        await refreshComments();
+      } catch (error) {
+        const fallback =
+          reactionType ===
+          "like"
+            ? "コメントのいいねに失敗しました。"
+            : "コメントのよくないねに失敗しました。";
+
+        setCommentsError(
+          getErrorMessage(
+            error,
+            fallback,
+          ),
+        );
+      }
+    },
+    [
+      refreshComments,
+      tokenBlueprintId,
+    ],
+  );
+
+  const likeComment = useCallback(
+    async (
+      commentId: string,
+    ) => {
+      await reactToComment(
+        commentId,
+        "like",
+      );
+    },
+    [reactToComment],
+  );
+
+  const dislikeComment = useCallback(
+    async (
+      commentId: string,
+    ) => {
+      await reactToComment(
+        commentId,
+        "dislike",
+      );
+    },
+    [reactToComment],
+  );
+
+  const startReply = useCallback(
+    (commentId: string) => {
+      const normalizedCommentId =
+        commentId.trim();
+
+      if (!normalizedCommentId) {
+        return;
+      }
+
+      const targetComment =
+        comments.find(
+          (comment) =>
+            comment.commentId?.trim() ===
+            normalizedCommentId,
+        );
+
+      const rootCommentId =
+        targetComment?.rootCommentId?.trim() ||
+        normalizedCommentId;
+
+      setReplyThreadRootCommentId(
+        rootCommentId,
+      );
+
+      setReplyingCommentId(
+        normalizedCommentId,
+      );
+
+      setReplyBody("");
+
+      expandComment(
+        normalizedCommentId,
+      );
+    },
+    [
+      comments,
+      expandComment,
+    ],
+  );
+
+  const cancelReply = useCallback(() => {
+    clearReply();
+  }, [clearReply]);
+
+  const submitReply = useCallback(
+    async (
+      parentCommentId: string,
+    ) => {
+      const normalizedParentCommentId =
+        parentCommentId.trim();
+
+      const body =
+        replyBody.trim();
+
+      if (
+        !tokenBlueprintId ||
+        !normalizedParentCommentId ||
+        !body ||
+        replyPosting
+      ) {
+        return;
+      }
+
+      setReplyPosting(true);
+      setCommentsError("");
+
+      try {
+        await postTokenCommentReply({
+          tokenBlueprintId,
+          parentCommentId:
+            normalizedParentCommentId,
           body,
         });
 
-        setCommentBody("");
+        clearReply();
+
+        expandComment(
+          normalizedParentCommentId,
+        );
 
         await refreshComments();
       } catch (error) {
         setCommentsError(
           getErrorMessage(
             error,
-            "コメントの投稿に失敗しました。",
+            "返信コメントの投稿に失敗しました。",
           ),
         );
       } finally {
-        setPosting(false);
+        setReplyPosting(false);
       }
-    }, [
-      commentBody,
-      posting,
+    },
+    [
+      clearReply,
+      expandComment,
       refreshComments,
+      replyBody,
+      replyPosting,
       tokenBlueprintId,
-    ]);
-
-  const toggleExpanded =
-    useCallback(
-      (commentId: string) => {
-        if (!commentId) {
-          return;
-        }
-
-        setExpandedIds(
-          (current) => {
-            const next =
-              new Set(current);
-
-            if (
-              next.has(commentId)
-            ) {
-              next.delete(
-                commentId,
-              );
-            } else {
-              next.add(
-                commentId,
-              );
-            }
-
-            return next;
-          },
-        );
-      },
-      [],
-    );
-
-  const reactToComment =
-    useCallback(
-      async (
-        commentId: string,
-        reactionType:
-          CommentReactionType,
-      ) => {
-        if (
-          !tokenBlueprintId ||
-          !commentId
-        ) {
-          return;
-        }
-
-        setCommentsError("");
-
-        try {
-          const input = {
-            tokenBlueprintId,
-            commentId,
-          };
-
-          if (
-            reactionType ===
-            "like"
-          ) {
-            await likeTokenComment(
-              input,
-            );
-          } else {
-            await dislikeTokenComment(
-              input,
-            );
-          }
-
-          await refreshComments();
-        } catch (error) {
-          const fallback =
-            reactionType ===
-            "like"
-              ? "コメントのいいねに失敗しました。"
-              : "コメントのよくないねに失敗しました。";
-
-          setCommentsError(
-            getErrorMessage(
-              error,
-              fallback,
-            ),
-          );
-        }
-      },
-      [
-        refreshComments,
-        tokenBlueprintId,
-      ],
-    );
-
-  const likeComment =
-    useCallback(
-      async (
-        commentId: string,
-      ) => {
-        await reactToComment(
-          commentId,
-          "like",
-        );
-      },
-      [reactToComment],
-    );
-
-  const dislikeComment =
-    useCallback(
-      async (
-        commentId: string,
-      ) => {
-        await reactToComment(
-          commentId,
-          "dislike",
-        );
-      },
-      [reactToComment],
-    );
-
-  const startReply =
-    useCallback(
-      (commentId: string) => {
-        if (!commentId) {
-          return;
-        }
-
-        setReplyingCommentId(
-          commentId,
-        );
-
-        setReplyBody("");
-
-        expandComment(
-          commentId,
-        );
-      },
-      [expandComment],
-    );
-
-  const cancelReply =
-    useCallback(() => {
-      clearReply();
-    }, [clearReply]);
-
-  const submitReply =
-    useCallback(
-      async (
-        parentCommentId: string,
-      ) => {
-        const body =
-          replyBody.trim();
-
-        if (
-          !tokenBlueprintId ||
-          !parentCommentId ||
-          !body ||
-          replyPosting
-        ) {
-          return;
-        }
-
-        setReplyPosting(true);
-        setCommentsError("");
-
-        try {
-          await postTokenCommentReply({
-            tokenBlueprintId,
-            parentCommentId,
-            body,
-          });
-
-          clearReply();
-
-          expandComment(
-            parentCommentId,
-          );
-
-          await refreshComments();
-        } catch (error) {
-          setCommentsError(
-            getErrorMessage(
-              error,
-              "返信コメントの投稿に失敗しました。",
-            ),
-          );
-        } finally {
-          setReplyPosting(false);
-        }
-      },
-      [
-        clearReply,
-        expandComment,
-        refreshComments,
-        replyBody,
-        replyPosting,
-        tokenBlueprintId,
-      ],
-    );
+    ],
+  );
 
   useEffect(() => {
     if (!autoFetch) {
@@ -469,6 +485,9 @@ export function useTokenCommentCard({
     setExpandedIds(
       new Set(),
     );
+    setReplyThreadRootCommentId(
+      null,
+    );
     setReplyingCommentId(
       null,
     );
@@ -484,6 +503,7 @@ export function useTokenCommentCard({
     posting,
     commentBody,
     expandedIds,
+    replyThreadRootCommentId,
     replyingCommentId,
     replyBody,
     replyPosting,

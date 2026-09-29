@@ -17,6 +17,7 @@ import "./mobile-swipe-dismiss-page.css";
 type MobileSwipeDismissPageProps = {
   children: ReactNode;
   enabled?: boolean;
+  dismissGestureEnabled?: boolean;
   className?: string;
   onDismissStart?: () => void;
   onDismiss: () => void | Promise<void>;
@@ -106,6 +107,7 @@ const MobileSwipeDismissPage = forwardRef<
   {
     children,
     enabled = true,
+    dismissGestureEnabled = true,
     className,
     onDismissStart,
     onDismiss,
@@ -158,7 +160,6 @@ const MobileSwipeDismissPage = forwardRef<
 
   const returnToStart = useCallback(() => {
     clearAnimationTimer();
-
     setPhase("returning");
     setTranslateY(0);
 
@@ -192,10 +193,16 @@ const MobileSwipeDismissPage = forwardRef<
       animationTimerRef.current = null;
       finishDismiss();
     }, DISMISS_ANIMATION_MS);
-  }, [clearAnimationTimer, finishDismiss]);
+  }, [
+    clearAnimationTimer,
+    finishDismiss,
+  ]);
 
   const requestDismiss = useCallback(() => {
-    if (!enabled || phase === "dismissing") {
+    if (
+      !enabled ||
+      phase === "dismissing"
+    ) {
       return;
     }
 
@@ -235,11 +242,36 @@ const MobileSwipeDismissPage = forwardRef<
   ]);
 
   useEffect(() => {
-    if (!enabled || typeof document === "undefined") {
+    if (
+      !enabled ||
+      dismissGestureEnabled
+    ) {
       return;
     }
 
-    const previousOverflow = document.body.style.overflow;
+    clearAnimationTimer();
+    resetGesture();
+    suppressClickRef.current = false;
+    setTranslateY(0);
+    setPhase("idle");
+  }, [
+    clearAnimationTimer,
+    dismissGestureEnabled,
+    enabled,
+    resetGesture,
+  ]);
+
+  useEffect(() => {
+    if (
+      !enabled ||
+      typeof document === "undefined"
+    ) {
+      return;
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
     const previousOverscrollBehavior =
       document.body.style.overscrollBehavior;
 
@@ -247,7 +279,9 @@ const MobileSwipeDismissPage = forwardRef<
     document.body.style.overscrollBehavior = "none";
 
     return () => {
-      document.body.style.overflow = previousOverflow;
+      document.body.style.overflow =
+        previousOverflow;
+
       document.body.style.overscrollBehavior =
         previousOverscrollBehavior;
     };
@@ -256,7 +290,11 @@ const MobileSwipeDismissPage = forwardRef<
   useEffect(() => {
     const page = pageRef.current;
 
-    if (!page || !enabled) {
+    if (
+      !page ||
+      !enabled ||
+      !dismissGestureEnabled
+    ) {
       return;
     }
 
@@ -278,8 +316,14 @@ const MobileSwipeDismissPage = forwardRef<
         return;
       }
 
-      const blocked = hasScrolledAncestor(event.target, page);
-      const now = performance.now();
+      const blocked =
+        hasScrolledAncestor(
+          event.target,
+          page,
+        );
+
+      const now =
+        performance.now();
 
       gestureRef.current = {
         active: true,
@@ -298,7 +342,8 @@ const MobileSwipeDismissPage = forwardRef<
     };
 
     const handleTouchMove = (event: TouchEvent) => {
-      const gesture = gestureRef.current;
+      const gesture =
+        gestureRef.current;
 
       if (
         !gesture.active ||
@@ -308,37 +353,63 @@ const MobileSwipeDismissPage = forwardRef<
         return;
       }
 
-      const touch = event.touches[0];
+      const touch =
+        event.touches[0];
 
       if (!touch) {
         return;
       }
 
-      const deltaX = touch.clientX - gesture.startX;
-      const deltaY = touch.clientY - gesture.startY;
+      const deltaX =
+        touch.clientX -
+        gesture.startX;
+
+      const deltaY =
+        touch.clientY -
+        gesture.startY;
 
       if (!gesture.dragging) {
-        const distance = Math.hypot(deltaX, deltaY);
+        const distance =
+          Math.hypot(
+            deltaX,
+            deltaY,
+          );
 
-        if (distance < DIRECTION_LOCK_DISTANCE) {
+        if (
+          distance <
+          DIRECTION_LOCK_DISTANCE
+        ) {
           return;
         }
 
-        const isDownward = deltaY > 0;
-        const isVertical = Math.abs(deltaY) > Math.abs(deltaX);
+        const isDownward =
+          deltaY > 0;
 
-        if (!isDownward || !isVertical) {
+        const isVertical =
+          Math.abs(deltaY) >
+          Math.abs(deltaX);
+
+        if (
+          !isDownward ||
+          !isVertical
+        ) {
           gesture.blocked = true;
           return;
         }
 
-        if (hasScrolledAncestor(event.target, page)) {
+        if (
+          hasScrolledAncestor(
+            event.target,
+            page,
+          )
+        ) {
           gesture.blocked = true;
           return;
         }
 
         gesture.dragging = true;
         suppressClickRef.current = true;
+
         notifyDismissStart();
         setPhase("dragging");
       }
@@ -349,43 +420,87 @@ const MobileSwipeDismissPage = forwardRef<
 
       event.preventDefault();
 
-      const now = performance.now();
-      const elapsed = Math.max(1, now - gesture.lastTime);
-      const movement = touch.clientY - gesture.lastY;
+      const now =
+        performance.now();
 
-      gesture.velocityY = movement / elapsed;
-      gesture.lastY = touch.clientY;
-      gesture.lastTime = now;
+      const elapsed =
+        Math.max(
+          1,
+          now - gesture.lastTime,
+        );
 
-      setTranslateY(Math.max(0, deltaY));
+      const movement =
+        touch.clientY -
+        gesture.lastY;
+
+      gesture.velocityY =
+        movement / elapsed;
+
+      gesture.lastY =
+        touch.clientY;
+
+      gesture.lastTime =
+        now;
+
+      setTranslateY(
+        Math.max(
+          0,
+          deltaY,
+        ),
+      );
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
-      const gesture = gestureRef.current;
+      const gesture =
+        gestureRef.current;
 
-      if (!gesture.active || !gesture.dragging) {
+      if (
+        !gesture.active ||
+        !gesture.dragging
+      ) {
         resetGesture();
         return;
       }
 
-      const touch = event.changedTouches[0];
-      const endY = touch?.clientY ?? gesture.lastY;
-      const distance = Math.max(0, endY - gesture.startY);
-      const totalElapsed = Math.max(
-        1,
-        performance.now() - gesture.startTime,
-      );
-      const averageVelocity = distance / totalElapsed;
-      const velocity = Math.max(
-        gesture.velocityY,
-        averageVelocity,
-      );
+      const touch =
+        event.changedTouches[0];
+
+      const endY =
+        touch?.clientY ??
+        gesture.lastY;
+
+      const distance =
+        Math.max(
+          0,
+          endY -
+            gesture.startY,
+        );
+
+      const totalElapsed =
+        Math.max(
+          1,
+          performance.now() -
+            gesture.startTime,
+        );
+
+      const averageVelocity =
+        distance /
+        totalElapsed;
+
+      const velocity =
+        Math.max(
+          gesture.velocityY,
+          averageVelocity,
+        );
 
       const shouldDismiss =
-        distance >= DISMISS_DISTANCE ||
+        distance >=
+          DISMISS_DISTANCE ||
         (
-          distance >= MIN_FAST_DISMISS_DISTANCE &&
-          velocity >= DISMISS_VELOCITY
+          distance >=
+            MIN_FAST_DISMISS_DISTANCE &&
+          velocity >=
+            DISMISS_VELOCITY
         );
 
       gesture.active = false;
@@ -400,7 +515,8 @@ const MobileSwipeDismissPage = forwardRef<
     };
 
     const handleTouchCancel = () => {
-      const gesture = gestureRef.current;
+      const gesture =
+        gestureRef.current;
 
       if (gesture.dragging) {
         returnToStart();
@@ -410,29 +526,61 @@ const MobileSwipeDismissPage = forwardRef<
       resetGesture();
     };
 
-    page.addEventListener("touchstart", handleTouchStart, {
-      passive: true,
-    });
+    page.addEventListener(
+      "touchstart",
+      handleTouchStart,
+      {
+        passive: true,
+      },
+    );
 
-    page.addEventListener("touchmove", handleTouchMove, {
-      passive: false,
-    });
+    page.addEventListener(
+      "touchmove",
+      handleTouchMove,
+      {
+        passive: false,
+      },
+    );
 
-    page.addEventListener("touchend", handleTouchEnd, {
-      passive: true,
-    });
+    page.addEventListener(
+      "touchend",
+      handleTouchEnd,
+      {
+        passive: true,
+      },
+    );
 
-    page.addEventListener("touchcancel", handleTouchCancel, {
-      passive: true,
-    });
+    page.addEventListener(
+      "touchcancel",
+      handleTouchCancel,
+      {
+        passive: true,
+      },
+    );
 
     return () => {
-      page.removeEventListener("touchstart", handleTouchStart);
-      page.removeEventListener("touchmove", handleTouchMove);
-      page.removeEventListener("touchend", handleTouchEnd);
-      page.removeEventListener("touchcancel", handleTouchCancel);
+      page.removeEventListener(
+        "touchstart",
+        handleTouchStart,
+      );
+
+      page.removeEventListener(
+        "touchmove",
+        handleTouchMove,
+      );
+
+      page.removeEventListener(
+        "touchend",
+        handleTouchEnd,
+      );
+
+      page.removeEventListener(
+        "touchcancel",
+        handleTouchCancel,
+      );
     };
   }, [
+    dismissGestureEnabled,
     dismissPage,
     enabled,
     notifyDismissStart,
@@ -459,15 +607,18 @@ const MobileSwipeDismissPage = forwardRef<
     suppressClickRef.current = false;
   };
 
-  const style: CSSProperties | undefined = enabled
-    ? {
-        transform: `translate3d(0, ${translateY}px, 0)`,
-      }
-    : undefined;
+  const style: CSSProperties | undefined =
+    enabled
+      ? {
+          transform: `translate3d(0, ${translateY}px, 0)`,
+        }
+      : undefined;
 
   const rootClassName = [
     "mobile-swipe-dismiss-page",
-    enabled ? "mobile-swipe-dismiss-page--enabled" : "",
+    enabled
+      ? "mobile-swipe-dismiss-page--enabled"
+      : "",
     phase === "dragging"
       ? "mobile-swipe-dismiss-page--dragging"
       : "",
@@ -489,6 +640,11 @@ const MobileSwipeDismissPage = forwardRef<
       style={style}
       onClickCapture={handleClickCapture}
       data-swipe-dismiss-phase={phase}
+      data-swipe-dismiss-gesture-enabled={
+        dismissGestureEnabled
+          ? "true"
+          : "false"
+      }
     >
       {children}
     </div>

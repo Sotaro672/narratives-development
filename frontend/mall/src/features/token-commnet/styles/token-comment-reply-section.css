@@ -116,7 +116,7 @@
 .token-comment-reply-section__list {
   display: grid;
   min-width: 0;
-  gap: 16px;
+  gap: 18px;
 }
 
 .token-comment-reply-section__reply-node {
@@ -127,14 +127,27 @@
 
 .token-comment-reply-section__comment {
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
-.token-comment-reply-section__comment:not(:first-child) {
-  padding-top: 14px;
+.token-comment-reply-section__comment[data-reply-depth="0"] {
+  margin-left: 0 !important;
+}
+
+.token-comment-reply-section__comment[data-reply-depth="1"] {
+  max-width: calc(100% - 24px);
+}
+
+.token-comment-reply-section__comment[data-reply-depth="2"],
+.token-comment-reply-section__comment[data-reply-depth="3"],
+.token-comment-reply-section__comment[data-reply-depth="4"],
+.token-comment-reply-section__comment[data-reply-depth="5"] {
+  max-width: calc(100% - 48px);
 }
 
 .token-comment-reply-section__reply-node + .token-comment-reply-section__reply-node {
-  padding-top: 14px;
+  padding-top: 16px;
   border-top: 1px solid #f3f4f6;
 }
 
@@ -172,6 +185,21 @@
   margin-top: 10px;
 }
 
+.token-comment-reply-section__comment[data-reply-target="true"] {
+  position: relative;
+}
+
+.token-comment-reply-section__comment[data-reply-target="true"]::before {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  width: 2px;
+  border-radius: 9999px;
+  background: #d1d5db;
+  content: "";
+}
+
 @media (max-width: 640px) {
   .token-comment-reply-section__header {
     min-height: calc(50px + env(safe-area-inset-top));
@@ -199,7 +227,7 @@
   }
 
   .token-comment-reply-section__list {
-    gap: 14px;
+    gap: 16px;
   }
 
   .token-comment-reply-section__reply-node {
@@ -213,6 +241,10 @@
 
   .token-comment-reply-section .token-comment-item__date {
     justify-self: start;
+  }
+
+  .token-comment-reply-section__comment[data-reply-target="true"]::before {
+    left: -6px;
   }
 }
 

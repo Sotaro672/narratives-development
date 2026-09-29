@@ -26,7 +26,6 @@ export default function ContentsPage() {
     location.pathname === "/wallet/contents";
 
   const {
-    isReplying,
     composerProps,
   } = useContentsCommentComposer({
     commentCard: page.commentCard,
@@ -36,8 +35,7 @@ export default function ContentsPage() {
 
   const isReplySectionOpen =
     page.isMobilePortrait &&
-    isReplying &&
-    Boolean(page.commentCard.replyingCommentId);
+    Boolean(page.commentCard.replyThreadRootCommentId);
 
   const {
     swipeDismissRef,
@@ -62,24 +60,27 @@ export default function ContentsPage() {
     />
   );
 
-  const replySection = page.commentCard.replyingCommentId ? (
-    <TokenCommentReplySection
-      commentId={page.commentCard.replyingCommentId}
-      tokenBlueprintId={page.contents.tokenBlueprintId}
-      commentTree={page.commentCard.commentTree}
-      expandedIds={page.commentCard.expandedIds}
-      replyBody={page.commentCard.replyBody}
-      replyPosting={page.commentCard.replyPosting}
-      commentsLoading={page.commentCard.commentsLoading}
-      commentsError={page.commentCard.commentsError}
-      onBack={page.commentCard.cancelReply}
-      onReplyBodyChange={page.commentCard.setReplyBody}
-      onSubmitReply={page.commentCard.submitReply}
-      onToggleExpanded={page.commentCard.toggleExpanded}
-      onLike={page.commentCard.likeComment}
-      onDislike={page.commentCard.dislikeComment}
-    />
-  ) : null;
+  const replySection =
+    page.commentCard.replyThreadRootCommentId ? (
+      <TokenCommentReplySection
+        commentId={page.commentCard.replyThreadRootCommentId}
+        replyingCommentId={page.commentCard.replyingCommentId}
+        tokenBlueprintId={page.contents.tokenBlueprintId}
+        commentTree={page.commentCard.commentTree}
+        expandedIds={page.commentCard.expandedIds}
+        replyBody={page.commentCard.replyBody}
+        replyPosting={page.commentCard.replyPosting}
+        commentsLoading={page.commentCard.commentsLoading}
+        commentsError={page.commentCard.commentsError}
+        onBack={page.commentCard.cancelReply}
+        onReplyBodyChange={page.commentCard.setReplyBody}
+        onSubmitReply={page.commentCard.submitReply}
+        onToggleExpanded={page.commentCard.toggleExpanded}
+        onLike={page.commentCard.likeComment}
+        onDislike={page.commentCard.dislikeComment}
+        onStartReply={page.commentCard.startReply}
+      />
+    ) : null;
 
   const mainContent = (
     <Layout
@@ -192,7 +193,7 @@ export default function ContentsPage() {
   return (
     <MobileSwipeDismissPage
       ref={swipeDismissRef}
-      enabled={!isReplySectionOpen}
+      dismissGestureEnabled={!isReplySectionOpen}
       onDismissStart={handleDismissStart}
       onDismiss={handleDismiss}
     >
