@@ -9,12 +9,11 @@ import {
   type ChangeEvent,
   type CompositionEvent,
 } from "react";
-import {
-  ImagePlus,
-  X,
-} from "lucide-react";
+import { createPortal } from "react-dom";
+import { ImagePlus, X } from "lucide-react";
 
 import IconButton from "../ui/IconButton";
+
 import "./mobile-composer-footer.css";
 import "./footer.css";
 
@@ -109,9 +108,11 @@ export default function MobileComposerFooter({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const lastEmittedContentRef = useRef(content);
+
   const [draft, setDraft] = useState(content);
 
   const inputDisabled = disabled || submitting;
+
   const supportsFiles =
     typeof onFilesAdd === "function" &&
     typeof onRemoveFile === "function";
@@ -130,14 +131,17 @@ export default function MobileComposerFooter({
     inputDisabled ||
     !canSubmit;
 
-  const emitContentChange = useCallback((value: string): void => {
-    if (lastEmittedContentRef.current === value) {
-      return;
-    }
+  const emitContentChange = useCallback(
+    (value: string): void => {
+      if (lastEmittedContentRef.current === value) {
+        return;
+      }
 
-    lastEmittedContentRef.current = value;
-    onContentChange(value);
-  }, [onContentChange]);
+      lastEmittedContentRef.current = value;
+      onContentChange(value);
+    },
+    [onContentChange],
+  );
 
   useEffect(() => {
     if (isComposingRef.current) {
@@ -145,6 +149,7 @@ export default function MobileComposerFooter({
     }
 
     lastEmittedContentRef.current = content;
+
     setDraft((currentDraft) =>
       currentDraft === content
         ? currentDraft
@@ -167,6 +172,7 @@ export default function MobileComposerFooter({
     );
 
     textarea.style.height = `${nextHeight}px`;
+
     textarea.style.overflowY =
       textarea.scrollHeight > 96
         ? "auto"
@@ -186,11 +192,10 @@ export default function MobileComposerFooter({
 
     const root = document.documentElement;
     const visualViewport = window.visualViewport;
+
     let animationFrameId: number | null = null;
 
     const updateKeyboardOffset = (): void => {
-      const layoutViewportHeight = window.innerHeight;
-
       if (!visualViewport) {
         footer.style.setProperty(
           "--mobile-composer-keyboard-offset",
@@ -199,13 +204,16 @@ export default function MobileComposerFooter({
         return;
       }
 
-      const visibleViewportBottom =
-        visualViewport.height +
-        visualViewport.offsetTop;
+      const layoutViewportHeight = window.innerHeight;
+
+      const visualViewportBottom =
+        visualViewport.offsetTop +
+        visualViewport.height;
 
       const keyboardOffset = Math.max(
         0,
-        layoutViewportHeight - visibleViewportBottom,
+        layoutViewportHeight -
+          visualViewportBottom,
       );
 
       footer.style.setProperty(
@@ -215,7 +223,8 @@ export default function MobileComposerFooter({
     };
 
     const updateComposerHeight = (): void => {
-      const height = footer.getBoundingClientRect().height;
+      const height =
+        footer.getBoundingClientRect().height;
 
       root.style.setProperty(
         "--mobile-composer-height",
@@ -225,14 +234,18 @@ export default function MobileComposerFooter({
 
     const updateLayout = (): void => {
       if (animationFrameId !== null) {
-        window.cancelAnimationFrame(animationFrameId);
+        window.cancelAnimationFrame(
+          animationFrameId,
+        );
       }
 
-      animationFrameId = window.requestAnimationFrame(() => {
-        animationFrameId = null;
-        updateKeyboardOffset();
-        updateComposerHeight();
-      });
+      animationFrameId =
+        window.requestAnimationFrame(() => {
+          animationFrameId = null;
+
+          updateKeyboardOffset();
+          updateComposerHeight();
+        });
     };
 
     const resizeObserver =
@@ -266,11 +279,23 @@ export default function MobileComposerFooter({
       { passive: true },
     );
 
+    document.addEventListener(
+      "focusin",
+      updateLayout,
+    );
+
+    document.addEventListener(
+      "focusout",
+      updateLayout,
+    );
+
     updateLayout();
 
     return () => {
       if (animationFrameId !== null) {
-        window.cancelAnimationFrame(animationFrameId);
+        window.cancelAnimationFrame(
+          animationFrameId,
+        );
       }
 
       resizeObserver?.disconnect();
@@ -295,6 +320,16 @@ export default function MobileComposerFooter({
         updateLayout,
       );
 
+      document.removeEventListener(
+        "focusin",
+        updateLayout,
+      );
+
+      document.removeEventListener(
+        "focusout",
+        updateLayout,
+      );
+
       footer.style.removeProperty(
         "--mobile-composer-keyboard-offset",
       );
@@ -314,9 +349,11 @@ export default function MobileComposerFooter({
   const handleCompositionEnd = (
     event: CompositionEvent<HTMLTextAreaElement>,
   ): void => {
-    const nextValue = event.currentTarget.value;
+    const nextValue =
+      event.currentTarget.value;
 
     isComposingRef.current = false;
+
     setDraft(nextValue);
     emitContentChange(nextValue);
   };
@@ -324,7 +361,8 @@ export default function MobileComposerFooter({
   const handleContentChange = (
     event: ChangeEvent<HTMLTextAreaElement>,
   ): void => {
-    const nextValue = event.currentTarget.value;
+    const nextValue =
+      event.currentTarget.value;
 
     setDraft(nextValue);
 
@@ -375,11 +413,16 @@ export default function MobileComposerFooter({
     void onSubmit();
   };
 
-  return (
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  return createPortal(
     <footer
       ref={footerRef}
       className="mobile-composer-footer"
       aria-busy={submitting || undefined}
+      data-mobile-swipe-dismiss-ignore="true"
     >
       {supportsFiles && files.length > 0 ? (
         <div
@@ -453,8 +496,12 @@ export default function MobileComposerFooter({
           aria-label={placeholder}
           disabled={inputDisabled}
           enterKeyHint="enter"
-          onCompositionStart={handleCompositionStart}
-          onCompositionEnd={handleCompositionEnd}
+          onCompositionStart={
+            handleCompositionStart
+          }
+          onCompositionEnd={
+            handleCompositionEnd
+          }
           onChange={handleContentChange}
         />
 
@@ -470,6 +517,7 @@ export default function MobileComposerFooter({
             : submitLabel}
         </button>
       </div>
-    </footer>
+    </footer>,
+    document.body,
   );
 }

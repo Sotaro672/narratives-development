@@ -1,17 +1,25 @@
 /* frontend/mall/src/components/layout/mobile-composer-footer.css */
 
 .mobile-composer-footer {
-  --mobile-composer-safe-area-bottom: max(0px, calc(env(safe-area-inset-bottom) - var(--mobile-composer-keyboard-offset, 0px)));
+  --mobile-composer-safe-area-bottom: max(
+    0px,
+    calc(
+      env(safe-area-inset-bottom) -
+      var(--mobile-composer-keyboard-offset, 0px)
+    )
+  );
   position: fixed;
   right: 0;
   bottom: var(--mobile-composer-keyboard-offset, 0px);
   left: 0;
-  z-index: var(--footer-nav-z-index, 40);
+  z-index: 1300;
   display: none;
+  width: 100%;
   box-sizing: border-box;
   padding: 8px 10px calc(8px + var(--mobile-composer-safe-area-bottom));
   border-top: 1px solid #e5e7eb;
   background: #fff;
+  transform: translateZ(0);
   transition: bottom 80ms linear;
   will-change: bottom;
 }
