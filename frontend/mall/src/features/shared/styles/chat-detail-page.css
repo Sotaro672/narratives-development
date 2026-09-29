@@ -347,6 +347,16 @@
   gap: 8px;
 }
 
+.chat-detail-page__desktop-attach-button {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  min-height: 42px;
+  flex: 0 0 42px;
+  padding: 0;
+  border-radius: 9999px;
+}
+
 .chat-detail-page__desktop-composer-row .textbox-field {
   min-width: 0;
   flex: 1 1 auto;

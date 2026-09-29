@@ -1,11 +1,10 @@
 // frontend/mall/src/features/shared/presentation/components/ChatInlineComposer.tsx
 
-import {
-  type KeyboardEvent,
-  useRef,
-} from "react";
+import { ImagePlus } from "lucide-react";
+import { type KeyboardEvent, useRef } from "react";
 
 import Button from "../../../../components/ui/Button";
+import IconButton from "../../../../components/ui/IconButton";
 import Textbox from "../../../../components/ui/Textbox";
 
 type ChatInlineComposerProps = {
@@ -39,27 +38,16 @@ export default function ChatInlineComposer({
 }: ChatInlineComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputDisabled = disabled || submitting;
-  const supportsFiles =
-    typeof onFilesAdd === "function" &&
-    typeof onRemoveFile === "function";
+  const supportsFiles = typeof onFilesAdd === "function" && typeof onRemoveFile === "function";
 
-  const handleKeyDown = (
-    event: KeyboardEvent<HTMLTextAreaElement>,
-  ): void => {
-    if (
-      event.key !== "Enter" ||
-      event.shiftKey ||
-      event.nativeEvent.isComposing
-    ) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) {
       return;
     }
 
     event.preventDefault();
 
-    if (
-      inputDisabled ||
-      !canSubmit
-    ) {
+    if (inputDisabled || !canSubmit) {
       return;
     }
 
@@ -79,12 +67,7 @@ export default function ChatInlineComposer({
               disabled={inputDisabled}
               hidden
               onChange={(event) => {
-                const selectedFiles = Array.from(
-                  event.currentTarget.files ?? [],
-                ).filter((file) =>
-                  file.type.startsWith("image/"),
-                );
-
+                const selectedFiles = Array.from(event.currentTarget.files ?? []).filter((file) => file.type.startsWith("image/"));
                 event.currentTarget.value = "";
 
                 if (selectedFiles.length === 0) {
@@ -95,17 +78,19 @@ export default function ChatInlineComposer({
               }}
             />
 
-            <Button
+            <IconButton
               type="button"
               variant="ghost"
-              size="sm"
+              size="md"
+              className="chat-detail-page__desktop-attach-button"
+              aria-label="画像を追加"
               disabled={inputDisabled}
               onClick={() => {
                 fileInputRef.current?.click();
               }}
             >
-              画像
-            </Button>
+              <ImagePlus size={22} aria-hidden="true" />
+            </IconButton>
           </>
         ) : null}
 
@@ -150,10 +135,7 @@ export default function ChatInlineComposer({
       ) : null}
 
       {error ? (
-        <p
-          className="chat-detail-page__desktop-composer-error"
-          role="alert"
-        >
+        <p className="chat-detail-page__desktop-composer-error" role="alert">
           {error}
         </p>
       ) : null}
