@@ -104,6 +104,36 @@
   margin-top: 8px;
 }
 
+.contents-page__reply-composer-header {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contents-page__reply-composer-label {
+  min-width: 0;
+  overflow: hidden;
+  color: #6b7280;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contents-page__reply-composer-close {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  padding: 0;
+  border-radius: 9999px;
+}
+
 .token-review-aggregate {
   display: flex;
   align-items: center;
@@ -291,6 +321,22 @@
     font-size: 16px;
   }
 
+  .contents-page__reply-composer-header {
+    gap: 8px;
+  }
+
+  .contents-page__reply-composer-label {
+    font-size: 12px;
+  }
+
+  .contents-page__reply-composer-close {
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    flex-basis: 30px;
+  }
+
   .token-review-aggregate {
     flex-wrap: wrap;
     gap: 8px;
@@ -312,7 +358,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .contents-page__dismiss-button {
+  .contents-page__dismiss-button,
+  .token-comment-author--button {
     transition: none;
   }
 }

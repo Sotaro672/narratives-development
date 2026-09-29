@@ -4,7 +4,7 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, X } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import "../styles/page-layout.css";
@@ -31,14 +31,27 @@ export default function ContentsPage() {
     page.isMobilePortrait &&
     location.pathname === "/wallet/contents";
 
+  const isReplying =
+    Boolean(page.commentCard.replyingCommentId);
+
   const commentActionDisabled =
     page.commentCard.posting ||
+    page.loading ||
+    !page.contents.tokenBlueprintId;
+
+  const replyActionDisabled =
+    page.commentCard.replyPosting ||
     page.loading ||
     !page.contents.tokenBlueprintId;
 
   const canSubmitComment =
     !commentActionDisabled &&
     page.commentCard.commentBody.trim().length > 0;
+
+  const canSubmitReply =
+    !replyActionDisabled &&
+    Boolean(page.commentCard.replyingCommentId) &&
+    page.commentCard.replyBody.trim().length > 0;
 
   const handleSubmitComment = useCallback(() => {
     if (!canSubmitComment) {
@@ -50,6 +63,33 @@ export default function ContentsPage() {
     canSubmitComment,
     page.commentCard,
   ]);
+
+  const handleSubmitReply = useCallback(() => {
+    const replyingCommentId =
+      page.commentCard.replyingCommentId;
+
+    if (
+      !replyingCommentId ||
+      !canSubmitReply
+    ) {
+      return;
+    }
+
+    void page.commentCard.submitReply(
+      replyingCommentId,
+    );
+  }, [
+    canSubmitReply,
+    page.commentCard,
+  ]);
+
+  const handleCancelReply = useCallback(() => {
+    if (page.commentCard.replyPosting) {
+      return;
+    }
+
+    page.commentCard.cancelReply();
+  }, [page.commentCard]);
 
   const handleDismissStart = useCallback(() => {
     if (typeof document === "undefined") {
@@ -151,16 +191,75 @@ export default function ContentsPage() {
 
       {page.isMobilePortrait ? (
         <MobileComposerFooter
-          content={page.commentCard.commentBody}
-          placeholder="コメントを書く…"
-          error={page.commentCard.commentsError || undefined}
-          submitting={page.commentCard.posting}
-          canSubmit={canSubmitComment}
-          disabled={commentActionDisabled}
-          submitLabel="投稿"
+          content={
+            isReplying
+              ? page.commentCard.replyBody
+              : page.commentCard.commentBody
+          }
+          placeholder={
+            isReplying
+              ? "返信を書く…"
+              : "コメントを書く…"
+          }
+          error={
+            page.commentCard.commentsError ||
+            undefined
+          }
+          submitting={
+            isReplying
+              ? page.commentCard.replyPosting
+              : page.commentCard.posting
+          }
+          canSubmit={
+            isReplying
+              ? canSubmitReply
+              : canSubmitComment
+          }
+          disabled={
+            isReplying
+              ? replyActionDisabled
+              : commentActionDisabled
+          }
+          submitLabel={
+            isReplying
+              ? "返信"
+              : "投稿"
+          }
           submittingLabel="投稿中..."
-          onContentChange={page.commentCard.setCommentBody}
-          onSubmit={handleSubmitComment}
+          beforeInput={
+            isReplying ? (
+              <div className="contents-page__reply-composer-header">
+                <span className="contents-page__reply-composer-label">
+                  返信中
+                </span>
+
+                <IconButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="contents-page__reply-composer-close"
+                  aria-label="返信をキャンセル"
+                  disabled={page.commentCard.replyPosting}
+                  onClick={handleCancelReply}
+                >
+                  <X
+                    size={18}
+                    aria-hidden="true"
+                  />
+                </IconButton>
+              </div>
+            ) : undefined
+          }
+          onContentChange={
+            isReplying
+              ? page.commentCard.setReplyBody
+              : page.commentCard.setCommentBody
+          }
+          onSubmit={
+            isReplying
+              ? handleSubmitReply
+              : handleSubmitComment
+          }
         />
       ) : null}
     </>
