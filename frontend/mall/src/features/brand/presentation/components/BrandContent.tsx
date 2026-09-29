@@ -38,7 +38,9 @@ export default function BrandContent({
         <div className="brand-page-profile-body">
           <h1>{brandName || "名称未設定のブランド"}</h1>
 
-          {companyName ? <p className="brand-page-company">{companyName}</p> : null}
+          {companyName ? (
+            <p className="brand-page-company">{companyName}</p>
+          ) : null}
 
           {websiteUrl ? <BrandWebsiteLink url={websiteUrl} /> : null}
         </div>
@@ -49,6 +51,7 @@ export default function BrandContent({
           <SectionHeader
             title="説明"
             titleAs="h2"
+            titleSize="md"
             right={
               <ReportFlagButton
                 label="ブランドを通報"

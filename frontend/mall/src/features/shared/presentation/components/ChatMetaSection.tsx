@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/presentation/components/ChatMetaSection.tsx
+// frontend/mall/src/features/shared/presentation/components/ChatMetaSection.tsx
 
 import type { ReactNode } from "react";
 
@@ -36,7 +36,7 @@ export default function ChatMetaSection({
       <SectionHeader
         title={title}
         titleAs="h3"
-        className="ui-section-header--title-sm"
+        titleSize="sm"
       />
 
       <InfoList

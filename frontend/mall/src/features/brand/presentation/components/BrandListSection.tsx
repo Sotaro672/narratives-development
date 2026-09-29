@@ -1,4 +1,4 @@
-// frontend/amol/src/features/brand/presentation/components/BrandListSection.tsx
+// frontend/mall/src/features/brand/presentation/components/BrandListSection.tsx
 
 import { useNavigate } from "react-router-dom";
 
@@ -25,7 +25,11 @@ export default function BrandListSection({
   if (listIds.length === 0) {
     return (
       <section className="brand-page-section">
-        <SectionHeader title="出品中のリスト" titleAs="h2" />
+        <SectionHeader
+          title="出品中のリスト"
+          titleAs="h2"
+          titleSize="md"
+        />
 
         <TextState variant="empty" className="brand-page-empty">
           現在このブランドの出品中リストはありません。
@@ -40,6 +44,7 @@ export default function BrandListSection({
         <SectionHeader
           title="出品中のリスト"
           titleAs="h2"
+          titleSize="md"
           right={<span>{listIds.length}件</span>}
         />
 
@@ -72,6 +77,7 @@ export default function BrandListSection({
       <SectionHeader
         title="出品中のリスト"
         titleAs="h2"
+        titleSize="md"
         right={<span>{listItems.length}件</span>}
       />
 

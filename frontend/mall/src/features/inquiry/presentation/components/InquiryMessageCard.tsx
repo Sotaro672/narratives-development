@@ -67,7 +67,7 @@ export default function InquiryMessageCard({
           <SectionHeader
             title="問い合わせ内容"
             titleAs="h3"
-            className="ui-section-header--title-sm"
+            titleSize="sm"
           />
 
           <p className="chat-detail-page__content">

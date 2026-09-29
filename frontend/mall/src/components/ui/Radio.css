@@ -1,13 +1,14 @@
-/*frontend\mall\src\components\ui\Radio.css*/
+/* frontend/mall/src/components/ui/Radio.css */
+
 .ui-radio {
   width: 100%;
 }
 
 .ui-radio__label {
   display: flex;
+  width: 100%;
   align-items: flex-start;
   gap: 10px;
-  width: 100%;
   color: var(--color-text, #111827);
   font-size: 0.95rem;
   line-height: 1.5;
@@ -113,4 +114,46 @@
 
 .ui-radio--disabled .ui-radio__control {
   background: #f3f4f6;
+}
+
+.ui-radio--card {
+  min-width: 0;
+  min-height: 48px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  background: var(--color-surface, #ffffff);
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ui-radio--card:not(.ui-radio--disabled):hover {
+  border-color: #9ca3af;
+}
+
+.ui-radio--card:has(.ui-radio__input:checked) {
+  border-color: var(--color-text, #111827);
+  background: var(--color-surface-subtle, #f9fafb);
+  box-shadow: 0 0 0 1px var(--color-text, #111827);
+}
+
+.ui-radio--card .ui-radio__label {
+  min-height: 48px;
+  box-sizing: border-box;
+  align-items: center;
+  padding: 12px 14px;
+}
+
+.ui-radio--card .ui-radio__control {
+  margin-top: 0;
+}
+
+.ui-radio--card.ui-radio--error {
+  border-color: #dc2626;
+}
+
+.ui-radio--card.ui-radio--disabled {
+  background: var(--color-surface-subtle, #f9fafb);
 }

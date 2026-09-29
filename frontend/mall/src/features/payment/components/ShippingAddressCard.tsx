@@ -25,6 +25,7 @@ export function ShippingAddressCard({
       <SectionHeader
         title="配送先情報"
         titleAs="h2"
+        titleSize="md"
         className="payment-page__section-header"
         right={
           <TextButton type="button" onClick={onGoToShippingAddress}>
@@ -36,7 +37,9 @@ export function ShippingAddressCard({
       {primaryShippingAddress ? (
         <div className="payment-page__shipping-address">
           {userFullName ? (
-            <p className="payment-page__shipping-address-name">{userFullName}</p>
+            <p className="payment-page__shipping-address-name">
+              {userFullName}
+            </p>
           ) : null}
 
           {shippingAddressLabel.split("\n").map((line, index) => (

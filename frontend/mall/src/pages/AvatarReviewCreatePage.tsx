@@ -328,6 +328,7 @@ export default function AvatarReviewCreatePage() {
                   id="avatar-review-good"
                   name="avatar-review-evaluation"
                   value="good"
+                  variant="card"
                   checked={evaluation === "good"}
                   disabled={submitting}
                   label="良かった"
@@ -340,6 +341,7 @@ export default function AvatarReviewCreatePage() {
                   id="avatar-review-disappointed"
                   name="avatar-review-evaluation"
                   value="disappointed"
+                  variant="card"
                   checked={
                     evaluation === "disappointed"
                   }

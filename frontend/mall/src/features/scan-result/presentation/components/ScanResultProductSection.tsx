@@ -85,7 +85,7 @@ export default function ScanResultProductSection(
     <section>
       <SectionHeader
         title={title}
-        className="ui-section-header--title-sm"
+        titleSize="sm"
         right={
           owned === true ? (
             <Badge variant="success" size="md">
@@ -182,7 +182,7 @@ export default function ScanResultProductSection(
           <SectionHeader
             title="採寸"
             titleAs="h2"
-            className="ui-section-header--title-sm"
+            titleSize="sm"
           />
 
           <InfoList>

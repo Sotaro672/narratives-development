@@ -63,7 +63,11 @@ export function PaymentItemsCard({
 
   return (
     <Card as="section" variant="panel" className="payment-page__card">
-      <SectionHeader title="注文内容" titleAs="h2" />
+      <SectionHeader
+        title="注文内容"
+        titleAs="h2"
+        titleSize="md"
+      />
 
       {cartItems.length > 0 ? (
         <ul className="payment-page__items">
@@ -82,7 +86,9 @@ export function PaymentItemsCard({
                     <p className="payment-page__item-meta">{modelLabel}</p>
                   ) : null}
 
-                  <p className="payment-page__item-meta">数量: {item.qty}</p>
+                  <p className="payment-page__item-meta">
+                    数量: {item.qty}
+                  </p>
                 </div>
 
                 <p className="payment-page__item-price">

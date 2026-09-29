@@ -26,7 +26,6 @@ export default function OrderDetailSummary({
   return (
     <section className="order-detail-page__section order-detail-page__summary">
       <SectionHeader
-        className="ui-section-header--title-sm"
         title={
           <span className="order-detail-page__order-id">
             <span className="order-detail-page__order-id-text">
@@ -41,6 +40,7 @@ export default function OrderDetailSummary({
           </span>
         }
         titleAs="h1"
+        titleSize="sm"
         eyebrow={`注文日時: ${order.createdAt ? formatDateTime(order.createdAt) : "-"}`}
         right={
           <Badge variant="neutral" size="md">

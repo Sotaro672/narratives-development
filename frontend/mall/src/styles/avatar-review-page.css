@@ -91,36 +91,6 @@
 
 .avatar-review-page fieldset .ui-radio {
   min-width: 0;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 12px;
-  background: var(--color-surface, #ffffff);
-  transition:
-    border-color 160ms ease,
-    background-color 160ms ease,
-    box-shadow 160ms ease;
-}
-
-.avatar-review-page fieldset .ui-radio:hover:not(.ui-radio--disabled) {
-  border-color: #9ca3af;
-}
-
-.avatar-review-page fieldset .ui-radio:has(.ui-radio__input:checked) {
-  border-color: var(--color-text, #111827);
-  background: var(--color-surface-subtle, #f9fafb);
-  box-shadow: 0 0 0 1px var(--color-text, #111827);
-}
-
-.avatar-review-page fieldset .ui-radio__label {
-  width: 100%;
-  min-height: 52px;
-  box-sizing: border-box;
-  align-items: center;
-  padding: 14px 16px;
-  cursor: pointer;
-}
-
-.avatar-review-page fieldset .ui-radio__content {
-  min-width: 0;
 }
 
 .avatar-review-page__comment-field {

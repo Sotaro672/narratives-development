@@ -163,7 +163,11 @@ export default function DispatchPage() {
           </p>
 
           <section>
-            <SectionHeader title="配送会社" titleAs="h2" />
+            <SectionHeader
+              title="配送会社"
+              titleAs="h2"
+              titleSize="md"
+            />
 
             <div
               className="dispatch-page__option-list"
@@ -215,7 +219,11 @@ export default function DispatchPage() {
           </section>
 
           <section>
-            <SectionHeader title="箱のサイズ" titleAs="h2" />
+            <SectionHeader
+              title="箱のサイズ"
+              titleAs="h2"
+              titleSize="md"
+            />
 
             <p className="content-page-description">
               梱包後の箱の3辺合計に収まるサイズを選択してください。重量や配送地域による料金差はありません。
@@ -278,7 +286,11 @@ export default function DispatchPage() {
             variant="panel"
             className="dispatch-page__summary-card"
           >
-            <SectionHeader title="発送内容" titleAs="h2" />
+            <SectionHeader
+              title="発送内容"
+              titleAs="h2"
+              titleSize="md"
+            />
 
             <InfoList
               className="dispatch-page__summary-list"

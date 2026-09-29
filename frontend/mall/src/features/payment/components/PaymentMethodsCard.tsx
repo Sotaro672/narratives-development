@@ -32,6 +32,7 @@ export function PaymentMethodsCard({
       <SectionHeader
         title="支払い方法"
         titleAs="h2"
+        titleSize="md"
         className="payment-page__section-header"
         right={
           <TextButton type="button" onClick={onGoToPaymentMethod}>
@@ -46,7 +47,6 @@ export function PaymentMethodsCard({
             <Radio
               key={method.id}
               variant="card"
-              className="payment-page__payment-method"
               name="paymentMethod"
               value={method.id}
               checked={selectedPaymentMethodId === method.id}

@@ -45,12 +45,7 @@
   gap: 12px;
 }
 
-.payout-bank-account-page__account-type-option {
-  min-height: 48px;
-}
-
 .payout-bank-account-page__account-type-option .ui-radio__label {
-  align-items: center;
   justify-content: center;
   gap: 8px;
   height: 100%;
