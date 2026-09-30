@@ -103,6 +103,7 @@ func NewAvatarReviewUsecase(
 
 type ListAvatarReviewsInput struct {
 	RevieweeAvatarID string
+	Evaluation       *avatarreviewdom.Evaluation
 	Page             int
 	PerPage          int
 }
@@ -121,6 +122,12 @@ type ListAvatarReviewsResult struct {
 // ListByRevieweeAvatarID returns one public page of reviews received by an
 // Avatar together with the current aggregate evaluation counts.
 //
+// Evaluation is optional. When omitted, all reviews are returned. When set,
+// only reviews matching the specified evaluation are returned.
+//
+// GoodCount and DisappointedCount always represent the full aggregate counts.
+// Total represents the number of reviews matching the current filter.
+//
 // No reviews is a normal result. In that case Items is an empty slice and all
 // summary counts are zero.
 func (u *AvatarReviewUsecase) ListByRevieweeAvatarID(
@@ -136,6 +143,15 @@ func (u *AvatarReviewUsecase) ListByRevieweeAvatarID(
 		len(revieweeAvatarID) > avatarreviewdom.MaxReferenceIDLength ||
 		strings.Contains(revieweeAvatarID, "/") {
 		return ListAvatarReviewsResult{}, avatarreviewdom.ErrInvalidRevieweeAvatarID
+	}
+
+	if input.Evaluation != nil {
+		switch *input.Evaluation {
+		case avatarreviewdom.EvaluationGood,
+			avatarreviewdom.EvaluationDisappointed:
+		default:
+			return ListAvatarReviewsResult{}, avatarreviewdom.ErrInvalidEvaluation
+		}
 	}
 
 	page := input.Page
@@ -161,6 +177,7 @@ func (u *AvatarReviewUsecase) ListByRevieweeAvatarID(
 		ctx,
 		avatarreviewdom.ListByRevieweeAvatarIDParams{
 			RevieweeAvatarID: revieweeAvatarID,
+			Evaluation:       input.Evaluation,
 			Limit:            perPage + 1,
 			Offset:           offset,
 		},
@@ -186,11 +203,21 @@ func (u *AvatarReviewUsecase) ListByRevieweeAvatarID(
 		return ListAvatarReviewsResult{}, err
 	}
 
+	total := summary.Total
+	if input.Evaluation != nil {
+		switch *input.Evaluation {
+		case avatarreviewdom.EvaluationGood:
+			total = summary.GoodCount
+		case avatarreviewdom.EvaluationDisappointed:
+			total = summary.DisappointedCount
+		}
+	}
+
 	return ListAvatarReviewsResult{
 		AvatarID:          revieweeAvatarID,
 		GoodCount:         summary.GoodCount,
 		DisappointedCount: summary.DisappointedCount,
-		Total:             summary.Total,
+		Total:             total,
 		Page:              page,
 		PerPage:           perPage,
 		HasNext:           hasNext,
@@ -218,7 +245,7 @@ type GetAvatarReviewStatusResult struct {
 }
 
 // GetStatusByOrderItem resolves whether the authenticated buyer can create an
-// Avatar Review for one completed Resale order item and whether that review
+// Avatar Review for one completed Resale transaction and whether the review
 // has already been submitted.
 //
 // The same authoritative Trade and Order checks used by Create are performed.

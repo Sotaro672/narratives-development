@@ -101,10 +101,19 @@ func (r *AvatarReviewRepositoryFS) GetByTradeID(
 
 // ListByRevieweeAvatarID retrieves Avatar Reviews received by one Avatar.
 //
-// Firestore query:
+// Firestore query without evaluation filter:
 //
 //	avatarReviews
 //	  where revieweeAvatarId == {avatarId}
+//	  order by createdAt desc
+//	  offset {offset}
+//	  limit {limit}
+//
+// Firestore query with evaluation filter:
+//
+//	avatarReviews
+//	  where revieweeAvatarId == {avatarId}
+//	  where evaluation == {good|disappointed}
 //	  order by createdAt desc
 //	  offset {offset}
 //	  limit {limit}
@@ -122,12 +131,32 @@ func (r *AvatarReviewRepositoryFS) ListByRevieweeAvatarID(
 	if revieweeAvatarID == "" {
 		return nil, avatarreviewdom.ErrInvalidRevieweeAvatarID
 	}
+
 	if params.Limit <= 0 || params.Offset < 0 {
 		return nil, avatarreviewdom.ErrInvalidPagination
 	}
 
+	if params.Evaluation != nil {
+		switch *params.Evaluation {
+		case avatarreviewdom.EvaluationGood,
+			avatarreviewdom.EvaluationDisappointed:
+		default:
+			return nil, avatarreviewdom.ErrInvalidEvaluation
+		}
+	}
+
 	query := r.col().
-		Where("revieweeAvatarId", "==", revieweeAvatarID).
+		Where("revieweeAvatarId", "==", revieweeAvatarID)
+
+	if params.Evaluation != nil {
+		query = query.Where(
+			"evaluation",
+			"==",
+			string(*params.Evaluation),
+		)
+	}
+
+	query = query.
 		OrderBy("createdAt", firestore.Desc).
 		Offset(params.Offset).
 		Limit(params.Limit)
@@ -154,6 +183,15 @@ func (r *AvatarReviewRepositoryFS) ListByRevieweeAvatarID(
 		if review.RevieweeAvatarID != revieweeAvatarID {
 			return nil, fmt.Errorf(
 				"avatar review %s: %w: reviewee avatar id mismatch",
+				snap.Ref.ID,
+				ErrInvalidAvatarReviewDocumentData,
+			)
+		}
+
+		if params.Evaluation != nil &&
+			review.Evaluation != *params.Evaluation {
+			return nil, fmt.Errorf(
+				"avatar review %s: %w: evaluation mismatch",
 				snap.Ref.ID,
 				ErrInvalidAvatarReviewDocumentData,
 			)
@@ -282,6 +320,7 @@ func (r *AvatarReviewRepositoryFS) EnsureSummaryByRevieweeAvatarID(
 	if revieweeAvatarID == "" {
 		return avatarreviewdom.ErrInvalidRevieweeAvatarID
 	}
+
 	if now.IsZero() {
 		return avatarreviewdom.ErrInvalidCreatedAt
 	}

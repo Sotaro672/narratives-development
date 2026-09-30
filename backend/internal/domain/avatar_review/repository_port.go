@@ -36,9 +36,11 @@ type ReviewSummary struct {
 }
 
 // ListByRevieweeAvatarIDParams specifies one page of reviews received by an Avatar.
+// Evaluation is optional. When nil, all evaluations are returned.
 // Offset is zero-based. Limit must be positive.
 type ListByRevieweeAvatarIDParams struct {
 	RevieweeAvatarID string
+	Evaluation       *Evaluation
 	Limit            int
 	Offset           int
 }
@@ -68,6 +70,7 @@ type Repository interface {
 	GetByTradeID(ctx context.Context, tradeID string) (Review, error)
 
 	// ListByRevieweeAvatarID retrieves reviews received by one Avatar.
+	// Evaluation is optional. When nil, all evaluations are returned.
 	// Implementations should return an empty slice, not ErrNotFound, when no
 	// reviews exist. Results should be ordered by CreatedAt descending.
 	ListByRevieweeAvatarID(

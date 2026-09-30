@@ -22,8 +22,15 @@
 
 .avatar-review-page__summary-item {
   display: flex;
+  min-width: 0;
   flex-direction: column;
+  align-items: flex-start;
   gap: 6px;
+  text-align: left;
+}
+
+.avatar-review-page__summary-item.ui-card--interactive {
+  cursor: pointer;
 }
 
 .avatar-review-page__summary-item strong {

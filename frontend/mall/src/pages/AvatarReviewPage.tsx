@@ -9,6 +9,7 @@ import Pagination from "../components/ui/Pagination";
 import TextState from "../components/ui/TextState";
 import {
   fetchAvatarReviews,
+  type AvatarReviewEvaluation,
   type AvatarReviewPageResponse,
 } from "../features/avatar-review/api/avatarReviewApi";
 import { getPublicAvatar } from "../features/avatar/api/avatarApi";
@@ -41,12 +42,16 @@ export default function AvatarReviewPage() {
 
   const [avatarName, setAvatarName] = useState("");
   const [result, setResult] = useState<AvatarReviewPageResponse | null>(null);
+  const [evaluationFilter, setEvaluationFilter] = useState<AvatarReviewEvaluation | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
-    async (nextPage: number) => {
+    async (
+      nextPage: number,
+      evaluation: AvatarReviewEvaluation | null = evaluationFilter,
+    ) => {
       const id = avatarId.trim();
 
       if (!id) {
@@ -65,6 +70,7 @@ export default function AvatarReviewPage() {
             avatarId: id,
             page: nextPage,
             perPage: PER_PAGE,
+            evaluation: evaluation ?? undefined,
           }),
         ]);
 
@@ -81,16 +87,30 @@ export default function AvatarReviewPage() {
         setLoading(false);
       }
     },
-    [avatarId],
+    [avatarId, evaluationFilter],
   );
 
   useEffect(() => {
     void load(1);
   }, [load]);
 
+  const handleFilterChange = (evaluation: AvatarReviewEvaluation) => {
+    const nextEvaluation =
+      evaluationFilter === evaluation ? null : evaluation;
+
+    setEvaluationFilter(nextEvaluation);
+  };
+
   const totalPages = result
     ? Math.max(1, Math.ceil(result.total / result.perPage))
     : 1;
+
+  const emptyMessage =
+    evaluationFilter === "good"
+      ? "良かった評価はまだありません。"
+      : evaluationFilter === "disappointed"
+        ? "残念だった評価はまだありません。"
+        : "まだ評価はありません。";
 
   return (
     <Layout title="AMOL" mode="mypage">
@@ -115,12 +135,32 @@ export default function AvatarReviewPage() {
               </h1>
 
               <div className="avatar-review-page__summary">
-                <Card variant="panel" className="avatar-review-page__summary-item">
+                <Card
+                  variant="panel"
+                  interactive
+                  highlighted={evaluationFilter === "good"}
+                  className="avatar-review-page__summary-item"
+                  aria-pressed={evaluationFilter === "good"}
+                  aria-label={`良かった ${result.goodCount}件で絞り込む`}
+                  onClick={() => {
+                    handleFilterChange("good");
+                  }}
+                >
                   <span>良かった</span>
                   <strong>{result.goodCount}</strong>
                 </Card>
 
-                <Card variant="panel" className="avatar-review-page__summary-item">
+                <Card
+                  variant="panel"
+                  interactive
+                  highlighted={evaluationFilter === "disappointed"}
+                  className="avatar-review-page__summary-item"
+                  aria-pressed={evaluationFilter === "disappointed"}
+                  aria-label={`残念だった ${result.disappointedCount}件で絞り込む`}
+                  onClick={() => {
+                    handleFilterChange("disappointed");
+                  }}
+                >
                   <span>残念だった</span>
                   <strong>{result.disappointedCount}</strong>
                 </Card>
@@ -129,7 +169,7 @@ export default function AvatarReviewPage() {
 
             {result.items.length === 0 ? (
               <TextState variant="empty" className="avatar-review-page__empty">
-                まだ評価はありません。
+                {emptyMessage}
               </TextState>
             ) : (
               <div className="avatar-review-page__list">

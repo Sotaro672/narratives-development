@@ -56,22 +56,35 @@ function normalizeOrderId(orderId: string): string {
 }
 
 function normalizeOrderItemIndex(orderItemIndex: number): number {
-  if (
-    !Number.isInteger(orderItemIndex) ||
-    orderItemIndex < 0
-  ) {
+  if (!Number.isInteger(orderItemIndex) || orderItemIndex < 0) {
     throw new Error("orderItemIndex is invalid");
   }
 
   return orderItemIndex;
 }
 
+function normalizeEvaluation(
+  evaluation: AvatarReviewEvaluation | undefined,
+): AvatarReviewEvaluation | undefined {
+  if (evaluation === undefined) {
+    return undefined;
+  }
+
+  if (evaluation !== "good" && evaluation !== "disappointed") {
+    throw new Error("evaluation is invalid");
+  }
+
+  return evaluation;
+}
+
 export async function fetchAvatarReviews(args: {
   avatarId: string;
   page?: number;
   perPage?: number;
+  evaluation?: AvatarReviewEvaluation;
 }): Promise<AvatarReviewPageResponse> {
   const avatarId = args.avatarId.trim();
+  const evaluation = normalizeEvaluation(args.evaluation);
 
   if (!avatarId) {
     throw new Error("avatarId is empty");
@@ -84,6 +97,7 @@ export async function fetchAvatarReviews(args: {
       query: {
         page: args.page ?? 1,
         perPage: args.perPage ?? 20,
+        evaluation,
       },
       unwrapData: true,
       messages: {
@@ -132,12 +146,10 @@ export async function createAvatarReview(
   const orderItemIndex = normalizeOrderItemIndex(
     args.orderItemIndex,
   );
+  const evaluation = normalizeEvaluation(args.evaluation);
   const comment = args.comment.trim();
 
-  if (
-    args.evaluation !== "good" &&
-    args.evaluation !== "disappointed"
-  ) {
+  if (!evaluation) {
     throw new Error("evaluation is invalid");
   }
 
@@ -153,7 +165,7 @@ export async function createAvatarReview(
       json: {
         orderId,
         orderItemIndex,
-        evaluation: args.evaluation,
+        evaluation,
         comment,
       },
       unwrapData: true,

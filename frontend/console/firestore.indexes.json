@@ -422,6 +422,17 @@
         { "fieldPath": "__name__", "order": "DESCENDING" }
       ],
       "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "avatarReviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "revieweeAvatarId", "order": "ASCENDING" },
+        { "fieldPath": "evaluation", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" },
+        { "fieldPath": "__name__", "order": "DESCENDING" }
+      ],
+      "density": "SPARSE_ALL"
     }
   ],
   "fieldOverrides": []

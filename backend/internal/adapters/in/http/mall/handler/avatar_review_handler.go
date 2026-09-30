@@ -51,7 +51,7 @@ func NewAvatarReviewHandler(
 //
 // Supported:
 //
-//	GET  /mall/avatar-reviews/{avatarId}?page=1&perPage=20
+//	GET  /mall/avatar-reviews/{avatarId}?page=1&perPage=20&evaluation=good
 //	GET  /mall/me/avatar-reviews/order-items/{orderId}/{itemIndex}
 //	POST /mall/me/avatar-reviews
 func (h *AvatarReviewHandler) ServeHTTP(
@@ -140,7 +140,14 @@ type createAvatarReviewRequest struct {
 // Public list
 // ============================================================
 
-// GET /mall/avatar-reviews/{avatarId}?page=1&perPage=20
+// GET /mall/avatar-reviews/{avatarId}?page=1&perPage=20&evaluation=good
+//
+// evaluation is optional. Supported values:
+//
+//	good
+//	disappointed
+//
+// When evaluation is omitted, all reviews are returned.
 //
 // Returns one page of reviews received by the specified Avatar together with
 // public aggregate evaluation counts.
@@ -167,10 +174,19 @@ func (h *AvatarReviewHandler) listByAvatar(
 		return
 	}
 
+	evaluation, ok := parseAvatarReviewEvaluationQuery(
+		w,
+		r,
+	)
+	if !ok {
+		return
+	}
+
 	result, err := h.uc.ListByRevieweeAvatarID(
 		r.Context(),
 		usecase.ListAvatarReviewsInput{
 			RevieweeAvatarID: avatarID,
+			Evaluation:       evaluation,
 			Page:             page,
 			PerPage:          perPage,
 		},
@@ -233,6 +249,34 @@ func parseAvatarReviewPositiveIntQuery(
 	}
 
 	return value, true
+}
+
+// parseAvatarReviewEvaluationQuery parses the optional public evaluation
+// filter. Omitted evaluation means no filtering.
+func parseAvatarReviewEvaluationQuery(
+	w http.ResponseWriter,
+	r *http.Request,
+) (*avatarreviewdom.Evaluation, bool) {
+	raw := strings.TrimSpace(
+		r.URL.Query().Get("evaluation"),
+	)
+	if raw == "" {
+		return nil, true
+	}
+
+	evaluation := avatarreviewdom.Evaluation(raw)
+
+	switch evaluation {
+	case avatarreviewdom.EvaluationGood,
+		avatarreviewdom.EvaluationDisappointed:
+		return &evaluation, true
+	default:
+		badRequest(
+			w,
+			"invalid_evaluation",
+		)
+		return nil, false
+	}
 }
 
 // ============================================================
@@ -596,6 +640,18 @@ func writeAvatarReviewErr(
 			http.StatusBadRequest,
 			map[string]string{
 				"error": "invalid_pagination",
+			},
+		)
+
+	case errors.Is(
+		err,
+		avatarreviewdom.ErrInvalidEvaluation,
+	):
+		writeJSON(
+			w,
+			http.StatusBadRequest,
+			map[string]string{
+				"error": "invalid_evaluation",
 			},
 		)
 
