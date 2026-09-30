@@ -1,20 +1,13 @@
 // frontend/mall/src/pages/ScanResultPage.tsx
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import MobileComposerFooter from "../components/layout/MobileComposerFooter";
-import MobileSwipeDismissPage, {
-  type MobileSwipeDismissPageHandle,
-} from "../components/layout/MobileSwipeDismissPage";
+import MobileSwipeDismissPage, { type MobileSwipeDismissPageHandle } from "../components/layout/MobileSwipeDismissPage";
 import IconButton from "../components/ui/IconButton";
 import RatingSelect from "../components/ui/RatingSelect";
 
@@ -30,8 +23,7 @@ export default function ScanResultPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobilePortrait = useMobilePortrait();
-  const swipeDismissRef =
-    useRef<MobileSwipeDismissPageHandle | null>(null);
+  const swipeDismissRef = useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const [reviewBody, setReviewBody] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
@@ -55,19 +47,13 @@ export default function ScanResultPage() {
   } = useScanResultPage();
 
   const isLoggedIn = state.authAvailable === true;
-  const isLoggedInMobile =
-    isLoggedIn &&
-    isMobilePortrait;
+  const isLoggedInMobile = isLoggedIn && isMobilePortrait;
 
   const isWalletOverlay =
     isLoggedInMobile &&
-    (
-      location.pathname === "/wallet/scan-result" ||
-      location.pathname.startsWith("/wallet/scan-result/")
-    );
+    (location.pathname === "/wallet/scan-result" || location.pathname.startsWith("/wallet/scan-result/"));
 
-  const productBlueprintId =
-    state.previewState?.raw.productBlueprintId?.trim() ?? "";
+  const productBlueprintId = state.previewState?.raw.productBlueprintId?.trim() ?? "";
 
   const canSubmitReview =
     isLoggedInMobile &&
@@ -79,16 +65,10 @@ export default function ScanResultPage() {
     reviewRating >= 1 &&
     reviewRating <= 5;
 
-  const swipeDismissEnabled =
-    isWalletOverlay &&
-    !transferConfirmModalOpen &&
-    !transferModalOpen;
+  const swipeDismissEnabled = isWalletOverlay && !transferConfirmModalOpen && !transferModalOpen;
 
   useEffect(() => {
-    if (
-      !isLoggedInMobile ||
-      isWalletOverlay
-    ) {
+    if (!isLoggedInMobile || isWalletOverlay) {
       return;
     }
 
@@ -98,37 +78,20 @@ export default function ScanResultPage() {
       return;
     }
 
-    const searchParams =
-      new URLSearchParams(location.search);
+    const searchParams = new URLSearchParams(location.search);
+    searchParams.set("productId", productId);
 
-    searchParams.set(
-      "productId",
-      productId,
-    );
-
-    navigate(
-      `/wallet/scan-result?${searchParams.toString()}`,
-      {
-        replace: true,
-      },
-    );
-  }, [
-    isLoggedInMobile,
-    isWalletOverlay,
-    location.search,
-    navigate,
-    state.productId,
-  ]);
+    navigate(`/wallet/scan-result?${searchParams.toString()}`, {
+      replace: true,
+    });
+  }, [isLoggedInMobile, isWalletOverlay, location.search, navigate, state.productId]);
 
   const handleSubmitReview = useCallback(async () => {
     if (!canSubmitReview) {
       return;
     }
 
-    const ok = await submitReview(
-      reviewBody,
-      reviewRating,
-    );
+    const ok = await submitReview(reviewBody, reviewRating);
 
     if (!ok) {
       return;
@@ -136,12 +99,7 @@ export default function ScanResultPage() {
 
     setReviewBody("");
     setReviewRating(5);
-  }, [
-    canSubmitReview,
-    reviewBody,
-    reviewRating,
-    submitReview,
-  ]);
+  }, [canSubmitReview, reviewBody, reviewRating, submitReview]);
 
   const handleOpenInquiryPage = useCallback(() => {
     const productId = state.productId.trim();
@@ -150,48 +108,27 @@ export default function ScanResultPage() {
       return;
     }
 
-    const searchParams =
-      new URLSearchParams({
-        productId,
-      });
-
-    navigate(
-      `/inquiries/new?${searchParams.toString()}`,
-    );
-  }, [
-    navigate,
-    state.productId,
-  ]);
+    const searchParams = new URLSearchParams({ productId });
+    navigate(`/inquiries/new?${searchParams.toString()}`);
+  }, [navigate, state.productId]);
 
   const handleAvatarClick = useCallback(
     (avatarId: string) => {
-      const normalizedAvatarId =
-        avatarId.trim();
-
-      const normalizedCurrentAvatarId =
-        currentAvatarId.trim();
+      const normalizedAvatarId = avatarId.trim();
+      const normalizedCurrentAvatarId = currentAvatarId.trim();
 
       if (!normalizedAvatarId) {
         return;
       }
 
-      if (
-        normalizedCurrentAvatarId &&
-        normalizedAvatarId ===
-          normalizedCurrentAvatarId
-      ) {
+      if (normalizedCurrentAvatarId && normalizedAvatarId === normalizedCurrentAvatarId) {
         navigate("/wallet");
         return;
       }
 
-      navigate(
-        `/avatars/${encodeURIComponent(normalizedAvatarId)}`,
-      );
+      navigate(`/avatars/${encodeURIComponent(normalizedAvatarId)}`);
     },
-    [
-      currentAvatarId,
-      navigate,
-    ],
+    [currentAvatarId, navigate],
   );
 
   const handleDismiss = useCallback(() => {
@@ -200,10 +137,9 @@ export default function ScanResultPage() {
     });
   }, [navigate]);
 
-  const handleDismissButtonClick =
-    useCallback(() => {
-      swipeDismissRef.current?.dismiss();
-    }, []);
+  const handleDismissButtonClick = useCallback(() => {
+    swipeDismissRef.current?.dismiss();
+  }, []);
 
   const isResalePurchase =
     state.transferResult?.matchedItemType === "resale" ||
@@ -222,10 +158,7 @@ export default function ScanResultPage() {
         title="AMOL"
         mode={isLoggedIn ? "mypage" : "landing"}
         showHeader={!isLoggedInMobile}
-        showFooter={
-          isLoggedIn &&
-          !isLoggedInMobile
-        }
+        showFooter={isLoggedIn && !isLoggedInMobile}
         hideSettingsButton={!isLoggedIn}
         hideAnnouncementButton={!isLoggedIn}
         disableFooterPaddingOnDesktop
@@ -256,6 +189,9 @@ export default function ScanResultPage() {
           className={[
             "product-detail-page-layout",
             "scan-result-page-layout",
+            isWalletOverlay
+              ? "scan-result-page-layout--with-dismiss-control"
+              : "",
             isLoggedInMobile
               ? "scan-result-page-layout--with-review-composer"
               : "",
@@ -301,19 +237,14 @@ export default function ScanResultPage() {
           error={state.postReviewError}
           submitting={state.postingReview}
           canSubmit={canSubmitReview}
-          disabled={
-            state.loading ||
-            !productBlueprintId
-          }
+          disabled={state.loading || !productBlueprintId}
           submitLabel="投稿"
           submittingLabel="投稿中..."
           onContentChange={setReviewBody}
           onSubmit={handleSubmitReview}
           beforeInput={
             <div className="scan-result-mobile-review-rating">
-              <span className="scan-result-mobile-review-rating__label">
-                評価
-              </span>
+              <span className="scan-result-mobile-review-rating__label">評価</span>
 
               <RatingSelect
                 value={reviewRating}

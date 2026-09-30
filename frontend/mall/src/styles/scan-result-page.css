@@ -154,6 +154,10 @@
 }
 
 @media (max-width: 959px) {
+  .scan-result-page-layout--with-dismiss-control {
+    padding-top: calc(24px + 42px);
+  }
+
   .scan-result-page-layout--with-review-composer {
     padding-bottom: calc(var(--mobile-composer-height, 56px) + 24px);
   }
