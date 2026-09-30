@@ -8,6 +8,7 @@ import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import MobileComposerFooter from "../components/layout/MobileComposerFooter";
 import MobileSwipeDismissPage, { type MobileSwipeDismissPageHandle } from "../components/layout/MobileSwipeDismissPage";
+import Button from "../components/ui/Button";
 import IconButton from "../components/ui/IconButton";
 import RatingSelect from "../components/ui/RatingSelect";
 
@@ -193,6 +194,18 @@ export default function ScanResultPage() {
                 aria-hidden="true"
               />
             </IconButton>
+
+            {canOpenInquiryPage ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                className="scan-result-page__inquiry-button"
+                onClick={handleOpenInquiryPage}
+              >
+                お問い合わせ
+              </Button>
+            ) : null}
           </div>
         ) : null}
 
