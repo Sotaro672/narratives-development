@@ -110,9 +110,40 @@
 }
 
 .product-review__votes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
   margin: 0;
   color: #777;
   font-size: 12px;
+  line-height: 1.5;
+}
+
+.product-review__helpful-button {
+  width: auto;
+  min-width: 0;
+  padding: 0;
+  color: #555;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.product-review__helpful-button:hover:not(:disabled) {
+  color: #111827;
+  text-decoration: underline;
+}
+
+.product-review__helpful-button:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.product-review__helpful-count {
+  color: #777;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.5;
 }
 
@@ -146,6 +177,12 @@
   .product-review__author-name,
   .product-review__body {
     font-size: 13px;
+  }
+
+  .product-review__votes,
+  .product-review__helpful-button,
+  .product-review__helpful-count {
+    font-size: 12px;
   }
 
   .product-review__toggle {

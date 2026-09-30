@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"math"
+	"strings"
 	"time"
 
 	applicationport "narratives/internal/application/port"
@@ -246,6 +247,7 @@ func (uc *ProductBlueprintReviewUsecase) resolveAssigneeNameByMemberID(ctx conte
 //     AvatarName / AvatarIcon を詰めて返す
 //   - AvatarRepo 未設定でも一覧自体は返す（name/icon は空）
 //   - Avatar 取得失敗は best-effort でスキップ（画面表示優先）
+
 func (uc *ProductBlueprintReviewUsecase) ListByProductBlueprintID(
 	ctx context.Context,
 	productBlueprintID string,
@@ -360,6 +362,48 @@ func (uc *ProductBlueprintReviewUsecase) CreateProductBlueprintReview(
 	}
 
 	return uc.ReviewRepo.Create(ctx, entity)
+}
+
+// ============================================================
+// Public API: Helpful vote
+// ============================================================
+
+type PutProductBlueprintReviewHelpfulVoteInput struct {
+	ProductBlueprintID string
+	ReviewID           string
+	AvatarID           string
+}
+
+// PutProductBlueprintReviewHelpfulVote registers a single helpful vote.
+// The repository owns idempotency for the same avatar/review pair.
+// Voting for a review authored by the same avatar is forbidden.
+func (uc *ProductBlueprintReviewUsecase) PutProductBlueprintReviewHelpfulVote(
+	ctx context.Context,
+	in PutProductBlueprintReviewHelpfulVoteInput,
+) (pbr.Review, error) {
+	if uc == nil || uc.ReviewRepo == nil {
+		return pbr.Review{}, pbr.ErrInternal
+	}
+
+	productBlueprintID := strings.TrimSpace(in.ProductBlueprintID)
+	reviewID := strings.TrimSpace(in.ReviewID)
+	avatarID := strings.TrimSpace(in.AvatarID)
+	if productBlueprintID == "" || reviewID == "" || avatarID == "" {
+		return pbr.Review{}, pbr.ErrInvalid
+	}
+
+	review, err := uc.ReviewRepo.GetByProductBlueprintID(ctx, productBlueprintID, reviewID)
+	if err != nil {
+		return pbr.Review{}, err
+	}
+	if review.Status != pbr.ReviewStatusPublished {
+		return pbr.Review{}, pbr.ErrForbidden
+	}
+	if strings.TrimSpace(review.AvatarID) == avatarID {
+		return pbr.Review{}, pbr.ErrForbidden
+	}
+
+	return uc.ReviewRepo.PutHelpfulVote(ctx, productBlueprintID, reviewID, avatarID)
 }
 
 // ============================================================

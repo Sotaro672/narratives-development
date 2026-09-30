@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
+import { putProductReviewHelpfulVote } from "../../../shared/api/productReviewApi";
 import { getOptionalAuthHeaders } from "../../../../lib/authHeaders";
 
 import { createScanResultPageViewModel } from "../../application/scanPageViewModelFactory";
@@ -691,6 +692,55 @@ export function useScanResultPage() {
     ],
   );
 
+  const voteHelpfulReview = useCallback(
+    async (
+      targetProductBlueprintId: string,
+      reviewId: string,
+    ): Promise<void> => {
+      const pbId = targetProductBlueprintId.trim();
+      const normalizedReviewId = reviewId.trim();
+
+      if (!pbId) {
+        throw new Error("productBlueprintId is empty");
+      }
+
+      if (!normalizedReviewId) {
+        throw new Error("reviewId is empty");
+      }
+
+      const updated = await putProductReviewHelpfulVote({
+        productBlueprintId: pbId,
+        reviewId: normalizedReviewId,
+      });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      setReviews((current) => {
+        if (!current) {
+          return current;
+        }
+
+        return {
+          ...current,
+          items: current.items.map((review) => {
+            if (review.id !== updated.id) {
+              return review;
+            }
+
+            return {
+              ...review,
+              helpfulVotes: updated.helpfulVotes,
+              totalVotes: updated.totalVotes,
+            };
+          }),
+        };
+      });
+    },
+    [],
+  );
+
   const nextReviewsPage = useCallback(async () => {
     if (
       busyReviews ||
@@ -758,6 +808,7 @@ export function useScanResultPage() {
     loadReviews,
     loadOwnedState,
     submitReview,
+    voteHelpfulReview,
     nextReviewsPage,
     prevReviewsPage,
     openContentsAfterResolve,

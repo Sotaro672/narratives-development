@@ -70,6 +70,10 @@ func (r *ProductBlueprintReviewRepositoryFS) reviewDoc(productBlueprintID, revie
 	return r.reviewsCol(productBlueprintID).Doc(reviewID)
 }
 
+func (r *ProductBlueprintReviewRepositoryFS) helpfulVoteDoc(productBlueprintID, reviewID, avatarID string) *firestore.DocumentRef {
+	return r.reviewDoc(productBlueprintID, reviewID).Collection("helpfulVotes").Doc(avatarID)
+}
+
 // ============================================================
 // ✅ Initializer (for ProductBlueprintUsecase)
 // ============================================================
@@ -570,20 +574,86 @@ func emptyProductReviewSummary(productBlueprintID string, status pbr.ReviewStatu
 	return pbr.ProductReviewSummary{ProductBlueprintID: productBlueprintID, Status: string(status)}
 }
 
-func (r *ProductBlueprintReviewRepositoryFS) IncrementHelpful(
+func (r *ProductBlueprintReviewRepositoryFS) PutHelpfulVote(
 	ctx context.Context,
+	productBlueprintID string,
 	reviewID string,
+	avatarID string,
 ) (pbr.Review, error) {
-	// subcollection 構造のため reviewID単体では特定できない
-	return pbr.Review{}, pbr.ErrInvalid
-}
+	if r == nil || r.client == nil {
+		return pbr.Review{}, pbr.ErrInternal
+	}
 
-func (r *ProductBlueprintReviewRepositoryFS) IncrementNotHelpful(
-	ctx context.Context,
-	reviewID string,
-) (pbr.Review, error) {
-	// subcollection 構造のため reviewID単体では特定できない
-	return pbr.Review{}, pbr.ErrInvalid
+	pbID := strings.TrimSpace(productBlueprintID)
+	id := strings.TrimSpace(reviewID)
+	voterAvatarID := strings.TrimSpace(avatarID)
+	if pbID == "" || id == "" || voterAvatarID == "" {
+		return pbr.Review{}, pbr.ErrInvalid
+	}
+
+	reviewDoc := r.reviewDoc(pbID, id)
+	voteDoc := r.helpfulVoteDoc(pbID, id, voterAvatarID)
+	var updated pbr.Review
+
+	err := r.client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		snap, err := tx.Get(reviewDoc)
+		if err != nil {
+			if isNotFound(err) {
+				return pbr.ErrNotFound
+			}
+			return err
+		}
+
+		current, err := decodeReviewDoc(snap.Ref.ID, snap.Data())
+		if err != nil {
+			return err
+		}
+		if current.ProductBlueprintID != pbID {
+			return pbr.ErrInvalid
+		}
+		if current.AvatarID == voterAvatarID {
+			return pbr.ErrForbidden
+		}
+		if current.Status != pbr.ReviewStatusPublished {
+			return pbr.ErrForbidden
+		}
+
+		if _, err := tx.Get(voteDoc); err == nil {
+			updated = current
+			return nil
+		} else if !isNotFound(err) {
+			return err
+		}
+
+		if err := current.AddHelpfulVote(); err != nil {
+			return err
+		}
+
+		now := r.now().UTC()
+		if err := tx.Create(voteDoc, map[string]any{
+			"avatarId":           voterAvatarID,
+			"productBlueprintId": pbID,
+			"reviewId":           id,
+			"createdAt":          now,
+		}); err != nil {
+			return err
+		}
+
+		if err := tx.Update(reviewDoc, []firestore.Update{
+			{Path: "helpfulVotes", Value: current.HelpfulVotes},
+			{Path: "totalVotes", Value: current.TotalVotes},
+		}); err != nil {
+			return err
+		}
+
+		updated = current
+		return nil
+	})
+	if err != nil {
+		return pbr.Review{}, err
+	}
+
+	return updated, nil
 }
 
 // ============================================================

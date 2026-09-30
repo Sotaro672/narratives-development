@@ -39,7 +39,7 @@ type Filter struct {
 
 // Patch は部分更新用。
 // 口コミ編集・ステータス変更・モデレーション理由など、更新対象を絞って扱う。
-// ※ 投票系は専用メソッド（Increment）に分ける設計を推奨。
+// 投票系は専用メソッドに分ける。
 type Patch struct {
 	Body   *string `json:"body"`
 	Rating *Rating `json:"rating"`
@@ -54,7 +54,7 @@ type Patch struct {
 }
 
 // AllowedSortColumns は repository 実装側で Sort.Column をバリデートするための許可カラム。
-// （DB実装でカラム名が変わる場合は adapter 側でマッピングしてもOK）
+// DB実装でカラム名が変わる場合は adapter 側でマッピングしてもよい。
 var AllowedSortColumns = map[string]struct{}{
 	"createdAt":    {},
 	"updatedAt":    {},
@@ -75,7 +75,7 @@ type Repository interface {
 
 	// ProductBlueprint 配下の review を親IDとreviewIDで取得する。
 	// Firestore の階層構造上、reviewID 単体では親ドキュメントを特定できないため、
-	// 通報・モデレーション等ではこのメソッドを使用する。
+	// 通報・モデレーション・投票等ではこのメソッドを使用する。
 	GetByProductBlueprintID(
 		ctx context.Context,
 		productBlueprintID string,
@@ -92,7 +92,7 @@ type Repository interface {
 		patch Patch,
 	) (Review, error)
 
-	// 商品単位での新着レビュー（Amazonの「新しい順」相当を作りやすい）
+	// 商品単位での新着レビュー。
 	ListByProductBlueprintID(
 		ctx context.Context,
 		productBlueprintID string,
@@ -100,16 +100,23 @@ type Repository interface {
 		page domcommon.Page,
 	) (domcommon.PageResult[Review], error)
 
-	// 集計（商品詳細の「星◯◯個、レビュー数」用）
+	// 集計（商品詳細の平均評価・レビュー数等）。
 	GetProductSummary(
 		ctx context.Context,
 		productBlueprintID string,
 		status ReviewStatus,
 	) (ProductReviewSummary, error)
 
-	// 投票（役に立った / 役に立たなかった）
-	IncrementHelpful(ctx context.Context, reviewID string) (Review, error)
-	IncrementNotHelpful(ctx context.Context, reviewID string) (Review, error)
+	// 参考になった投票を登録する。
+	// avatarID を投票記録の一意キーとして扱い、同一アバターから同一レビューへの
+	// 再投票では集計値を増加させない冪等な操作とする。
+	// また、自身が投稿したレビューへの投票は ErrForbidden とする。
+	PutHelpfulVote(
+		ctx context.Context,
+		productBlueprintID string,
+		reviewID string,
+		avatarID string,
+	) (Review, error)
 }
 
 // ======================================

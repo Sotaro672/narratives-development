@@ -38,6 +38,10 @@ export type ProductReviewSectionProps = {
   emptyText?: string;
   showHelpfulVotes?: boolean;
   onAvatarClick?: (avatarId: string) => void;
+  onHelpfulVote?: (
+    productBlueprintId: string,
+    reviewId: string,
+  ) => void | Promise<void>;
   className?: string;
 };
 
@@ -57,9 +61,14 @@ export default function ProductReviewSection({
   emptyText = "まだレビューはありません。",
   showHelpfulVotes = false,
   onAvatarClick,
+  onHelpfulVote,
   className,
 }: ProductReviewSectionProps) {
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
+  const [helpfulVotingReviewIds, setHelpfulVotingReviewIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [helpfulVoteError, setHelpfulVoteError] = useState("");
 
   const {
     target,
@@ -103,6 +112,51 @@ export default function ProductReviewSection({
     });
   };
 
+  const handleHelpfulVote = async (review: ProductReviewItem) => {
+    const reviewId = review.id?.trim() || "";
+    const reviewAvatarId = review.avatarId?.trim() || "";
+
+    if (
+      !normalizedProductBlueprintId ||
+      !normalizedCurrentAvatarId ||
+      !reviewId ||
+      !onHelpfulVote
+    ) {
+      return;
+    }
+
+    if (reviewAvatarId && reviewAvatarId === normalizedCurrentAvatarId) {
+      return;
+    }
+
+    if (helpfulVotingReviewIds.has(reviewId)) {
+      return;
+    }
+
+    setHelpfulVoteError("");
+    setHelpfulVotingReviewIds((current) => {
+      const next = new Set(current);
+      next.add(reviewId);
+      return next;
+    });
+
+    try {
+      await onHelpfulVote(normalizedProductBlueprintId, reviewId);
+    } catch (caught) {
+      setHelpfulVoteError(
+        caught instanceof Error
+          ? caught.message
+          : "参考になったの投票に失敗しました。",
+      );
+    } finally {
+      setHelpfulVotingReviewIds((current) => {
+        const next = new Set(current);
+        next.delete(reviewId);
+        return next;
+      });
+    }
+  };
+
   return (
     <>
       <section className={["product-review", className].filter(Boolean).join(" ")}>
@@ -137,6 +191,10 @@ export default function ProductReviewSection({
           <Alert variant="error">{safeErrorMessage}</Alert>
         ) : null}
 
+        {helpfulVoteError ? (
+          <Alert variant="error">{helpfulVoteError}</Alert>
+        ) : null}
+
         {!loading && !safeErrorMessage && safeItems.length === 0 ? (
           <TextState variant="empty">{emptyText}</TextState>
         ) : null}
@@ -151,7 +209,9 @@ export default function ProductReviewSection({
                   productBlueprintId={normalizedProductBlueprintId}
                   currentAvatarId={normalizedCurrentAvatarId}
                   showHelpfulVotes={showHelpfulVotes}
+                  helpfulVoting={helpfulVotingReviewIds.has(review.id)}
                   onAvatarClick={onAvatarClick}
+                  onHelpfulVote={onHelpfulVote ? handleHelpfulVote : undefined}
                   onReport={handleReport}
                 />
               ))}
@@ -193,14 +253,18 @@ function ProductReviewItemView({
   productBlueprintId,
   currentAvatarId,
   showHelpfulVotes,
+  helpfulVoting,
   onAvatarClick,
+  onHelpfulVote,
   onReport,
 }: {
   review: ProductReviewItem;
   productBlueprintId: string;
   currentAvatarId: string;
   showHelpfulVotes: boolean;
+  helpfulVoting: boolean;
   onAvatarClick?: (avatarId: string) => void;
+  onHelpfulVote?: (review: ProductReviewItem) => void | Promise<void>;
   onReport?: (review: ProductReviewItem) => void;
 }) {
   const reviewId = review.id?.trim() || "";
@@ -209,6 +273,9 @@ function ProductReviewItemView({
   const avatarIcon = review.avatarIcon?.trim() || "";
   const reviewBody = review.body?.trim() || "";
   const reviewedAt = review.reviewedAt?.trim() || "";
+  const helpfulVotes = Number.isFinite(review.helpfulVotes)
+    ? Math.max(0, Number(review.helpfulVotes))
+    : 0;
   const canOpenAvatar = Boolean(avatarId && onAvatarClick);
   const isOwnReview = Boolean(
     currentAvatarId &&
@@ -221,6 +288,14 @@ function ProductReviewItemView({
       reviewId &&
       !isOwnReview &&
       onReport,
+  );
+  const canVoteHelpful = Boolean(
+    showHelpfulVotes &&
+      productBlueprintId &&
+      currentAvatarId &&
+      reviewId &&
+      !isOwnReview &&
+      onHelpfulVote,
   );
 
   const avatarContent = (
@@ -279,12 +354,24 @@ function ProductReviewItemView({
         <p className="product-review__body">{reviewBody}</p>
       ) : null}
 
-      {showHelpfulVotes &&
-      Number.isFinite(review.helpfulVotes) &&
-      Number.isFinite(review.totalVotes) ? (
-        <p className="product-review__votes">
-          参考になった: {Number(review.helpfulVotes)} / {Number(review.totalVotes)}
-        </p>
+      {showHelpfulVotes ? (
+        <div className="product-review__votes">
+          {canVoteHelpful ? (
+            <TextButton
+              className="product-review__helpful-button"
+              disabled={helpfulVoting}
+              onClick={() => void onHelpfulVote?.(review)}
+            >
+              {helpfulVoting ? "投票中..." : "参考になった"}
+            </TextButton>
+          ) : (
+            <span>参考になった</span>
+          )}
+
+          <span className="product-review__helpful-count">
+            {helpfulVotes}
+          </span>
+        </div>
       ) : null}
     </article>
   );
