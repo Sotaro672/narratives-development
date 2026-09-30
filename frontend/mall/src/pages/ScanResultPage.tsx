@@ -51,12 +51,13 @@ export default function ScanResultPage() {
 
   const isWalletOverlay =
     isLoggedInMobile &&
-    (location.pathname === "/wallet/scan-result" || location.pathname.startsWith("/wallet/scan-result/"));
+    (location.pathname === "/wallet/scan-result" ||
+      location.pathname.startsWith("/wallet/scan-result/"));
 
   const productBlueprintId = state.previewState?.raw.productBlueprintId?.trim() ?? "";
 
   const canSubmitReview =
-    isLoggedInMobile &&
+    isLoggedIn &&
     !state.loading &&
     !state.postingReview &&
     Boolean(productBlueprintId) &&
@@ -65,7 +66,10 @@ export default function ScanResultPage() {
     reviewRating >= 1 &&
     reviewRating <= 5;
 
-  const swipeDismissEnabled = isWalletOverlay && !transferConfirmModalOpen && !transferModalOpen;
+  const swipeDismissEnabled =
+    isWalletOverlay &&
+    !transferConfirmModalOpen &&
+    !transferModalOpen;
 
   useEffect(() => {
     if (!isLoggedInMobile || isWalletOverlay) {
@@ -121,7 +125,10 @@ export default function ScanResultPage() {
         return;
       }
 
-      if (normalizedCurrentAvatarId && normalizedAvatarId === normalizedCurrentAvatarId) {
+      if (
+        normalizedCurrentAvatarId &&
+        normalizedAvatarId === normalizedCurrentAvatarId
+      ) {
         navigate("/wallet");
         return;
       }
@@ -161,6 +168,8 @@ export default function ScanResultPage() {
         showFooter={isLoggedIn && !isLoggedInMobile}
         hideSettingsButton={!isLoggedIn}
         hideAnnouncementButton={!isLoggedIn}
+        actionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
+        onActionButtonClick={canOpenInquiryPage ? handleOpenInquiryPage : undefined}
         disableFooterPaddingOnDesktop
       >
         {isWalletOverlay ? (
@@ -207,8 +216,15 @@ export default function ScanResultPage() {
             onAvatarClick={handleAvatarClick}
             onOpenTokenContents={openTokenContentsByAssetId}
             tokenContentsDisabled={!isLoggedIn}
-            canOpenInquiryPage={canOpenInquiryPage}
-            onOpenInquiryPage={handleOpenInquiryPage}
+            reviewBody={reviewBody}
+            reviewRating={reviewRating}
+            reviewSubmitting={state.postingReview}
+            reviewError={state.postReviewError}
+            reviewCanSubmit={canSubmitReview}
+            reviewDisabled={state.loading || !productBlueprintId}
+            onReviewBodyChange={setReviewBody}
+            onReviewRatingChange={setReviewRating}
+            onSubmitReview={handleSubmitReview}
           />
         </section>
 
@@ -244,7 +260,9 @@ export default function ScanResultPage() {
           onSubmit={handleSubmitReview}
           beforeInput={
             <div className="scan-result-mobile-review-rating">
-              <span className="scan-result-mobile-review-rating__label">評価</span>
+              <span className="scan-result-mobile-review-rating__label">
+                評価
+              </span>
 
               <RatingSelect
                 value={reviewRating}

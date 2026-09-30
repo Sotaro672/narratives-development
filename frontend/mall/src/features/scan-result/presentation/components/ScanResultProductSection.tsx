@@ -3,7 +3,6 @@
 import { useNavigate } from "react-router-dom";
 
 import Badge from "../../../../components/ui/Badge";
-import Button from "../../../../components/ui/Button";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Tab from "../../../../components/ui/Tab";
@@ -29,8 +28,6 @@ type ScanResultProductSectionProps = {
   swatch: string;
   measurementEntries: ScanDisplayRowViewModel[];
   alcoholInfo?: ScanAlcoholInfo | null;
-  canOpenInquiryPage: boolean;
-  onOpenInquiryPage: () => void;
 };
 
 function hasAlcoholDisplayInfo(alcoholInfo?: ScanAlcoholInfo | null): boolean {
@@ -68,8 +65,6 @@ export default function ScanResultProductSection(
     swatch,
     measurementEntries,
     alcoholInfo,
-    canOpenInquiryPage,
-    onOpenInquiryPage,
   } = props;
 
   const isAlcohol = alcoholInfo?.isAlcohol === true;
@@ -92,23 +87,11 @@ export default function ScanResultProductSection(
         title={title}
         titleSize="sm"
         right={
-          <div className="scan-result-product-header-actions">
-            {owned === true ? (
-              <Badge variant="success" size="md">
-                Owned
-              </Badge>
-            ) : null}
-
-            {canOpenInquiryPage ? (
-              <Button
-                type="button"
-                className="scan-result-desktop-inquiry-button"
-                onClick={onOpenInquiryPage}
-              >
-                問い合わせ
-              </Button>
-            ) : null}
-          </div>
+          owned === true ? (
+            <Badge variant="success" size="md">
+              Owned
+            </Badge>
+          ) : null
         }
       />
 
@@ -166,9 +149,7 @@ export default function ScanResultProductSection(
         {isAlcohol ? (
           <>
             <InfoRow label="容量">{alcoholInfo?.volumeLabel || "-"}</InfoRow>
-            <InfoRow label="ヴィンテージ">
-              {alcoholInfo?.vintage || "-"}
-            </InfoRow>
+            <InfoRow label="ヴィンテージ">{alcoholInfo?.vintage || "-"}</InfoRow>
             <InfoRow label="地域・産地">{alcoholInfo?.region || "-"}</InfoRow>
             <InfoRow label="原材料">{alcoholInfo?.material || "-"}</InfoRow>
             <InfoRow label="アルコール度数">

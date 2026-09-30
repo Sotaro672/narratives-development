@@ -1,7 +1,10 @@
 // frontend/mall/src/features/scan-result/presentation/components/ScanResultCard.tsx
 
 import Button from "../../../../components/ui/Button";
+import RatingSelect from "../../../../components/ui/RatingSelect";
 import SectionCard from "../../../../components/ui/SectionCard";
+import SectionHeader from "../../../../components/ui/SectionHeader";
+import Textbox from "../../../../components/ui/Textbox";
 import TextState from "../../../../components/ui/TextState";
 
 import type { ScanResultPageViewModel } from "../../application/scanPageViewModelFactory";
@@ -19,8 +22,15 @@ type ScanResultCardProps = {
   onAvatarClick: (avatarId: string) => void;
   onOpenTokenContents: (assetId: string) => void | Promise<void>;
   tokenContentsDisabled?: boolean;
-  canOpenInquiryPage: boolean;
-  onOpenInquiryPage: () => void;
+  reviewBody: string;
+  reviewRating: number;
+  reviewSubmitting: boolean;
+  reviewError?: string | null;
+  reviewCanSubmit: boolean;
+  reviewDisabled: boolean;
+  onReviewBodyChange: (value: string) => void;
+  onReviewRatingChange: (value: number) => void;
+  onSubmitReview: () => void | Promise<void>;
 };
 
 export default function ScanResultCard(props: ScanResultCardProps) {
@@ -32,8 +42,15 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     onAvatarClick,
     onOpenTokenContents,
     tokenContentsDisabled = false,
-    canOpenInquiryPage,
-    onOpenInquiryPage,
+    reviewBody,
+    reviewRating,
+    reviewSubmitting,
+    reviewError,
+    reviewCanSubmit,
+    reviewDisabled,
+    onReviewBodyChange,
+    onReviewRatingChange,
+    onSubmitReview,
   } = props;
 
   if (state.loading) {
@@ -71,6 +88,16 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const productBlueprintId = state.previewState?.raw.productBlueprintId?.trim() ?? "";
   const tokenCardDisabled = tokenContentsDisabled || !token?.canOpenTokenContents;
 
+  const handleReviewSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!reviewCanSubmit) {
+      return;
+    }
+
+    void onSubmitReview();
+  };
+
   return (
     <div className="scan-result-desktop-grid">
       <div className="scan-result-desktop-main">
@@ -98,8 +125,6 @@ export default function ScanResultCard(props: ScanResultCardProps) {
           swatch={product.swatch}
           measurementEntries={product.measurementEntries}
           alcoholInfo={product.alcoholInfo}
-          canOpenInquiryPage={canOpenInquiryPage}
-          onOpenInquiryPage={onOpenInquiryPage}
         />
 
         {token ? (
@@ -121,13 +146,55 @@ export default function ScanResultCard(props: ScanResultCardProps) {
       </div>
 
       <aside className="scan-result-desktop-side">
-        {canOpenInquiryPage ? (
-          <div className="scan-result-review-actions scan-result-mobile-inquiry-action">
-            <Button type="button" onClick={onOpenInquiryPage}>
-              問い合わせ
-            </Button>
-          </div>
-        ) : null}
+        <section className="scan-result-desktop-review-form">
+          <SectionHeader
+            title="レビューを投稿"
+            titleAs="h2"
+            titleSize="sm"
+          />
+
+          <form
+            className="scan-result-desktop-review-form__body"
+            onSubmit={handleReviewSubmit}
+          >
+            <div className="scan-result-desktop-review-form__rating">
+              <span className="scan-result-desktop-review-form__label">
+                評価
+              </span>
+
+              <RatingSelect
+                value={reviewRating}
+                onChange={onReviewRatingChange}
+                disabled={reviewSubmitting || reviewDisabled}
+                ariaLabel="商品評価"
+              />
+            </div>
+
+            <Textbox
+              value={reviewBody}
+              rows={4}
+              placeholder="レビューを書く…"
+              aria-label="レビュー本文"
+              disabled={reviewSubmitting || reviewDisabled}
+              onChange={(event) => {
+                onReviewBodyChange(event.currentTarget.value);
+              }}
+            />
+
+            {reviewError ? (
+              <TextState variant="error">{reviewError}</TextState>
+            ) : null}
+
+            <div className="scan-result-desktop-review-form__actions">
+              <Button
+                type="submit"
+                disabled={!reviewCanSubmit}
+              >
+                {reviewSubmitting ? "投稿中..." : "投稿"}
+              </Button>
+            </div>
+          </form>
+        </section>
 
         <div className="scan-result-review-scroll">
           <ProductReviewSection
