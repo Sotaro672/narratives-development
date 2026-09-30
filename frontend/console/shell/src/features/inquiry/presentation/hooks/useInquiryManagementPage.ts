@@ -40,7 +40,6 @@ export type InquiryManagementFilterOption = {
 
 export type InquiryManagementRowViewModel = {
   inquiryId: string;
-  subject: string;
   inquiryType: string;
   customerName: string;
   status: string;
@@ -86,19 +85,6 @@ function getInquiryId(
   item: InquiryManagementItem,
 ): string {
   return item.inquiry.id;
-}
-
-function getSubject(
-  item: InquiryManagementItem,
-): string {
-  if (
-    item.inquiry.inquiryType === "return_unopened" ||
-    item.inquiry.inquiryType === "return_opened"
-  ) {
-    return "";
-  }
-
-  return textOrDash(item.inquiry.subject);
 }
 
 function getInquiryType(
@@ -194,7 +180,6 @@ function toRowViewModel(
 ): InquiryManagementRowViewModel {
   return {
     inquiryId: getInquiryId(item),
-    subject: getSubject(item),
     inquiryType: getInquiryType(item),
     customerName: getCustomerName(item),
     status: getStatus(item),

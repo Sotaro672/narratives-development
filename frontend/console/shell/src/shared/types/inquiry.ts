@@ -73,7 +73,6 @@ export type Inquiry = {
   orderId?: string;
   orderItemIndex?: number;
   avatarId: string;
-  subject?: string;
   content: string;
   status: InquiryStatus;
   inquiryType: InquiryType;

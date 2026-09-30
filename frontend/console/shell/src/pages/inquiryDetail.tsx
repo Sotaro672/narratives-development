@@ -19,7 +19,6 @@ import ReplyModal from "../features/inquiry/presentation/components/replyModal";
 import { useInquiryDetailPage } from "../features/inquiry/presentation/hooks/useInquiryDetailPage";
 import { useInquiryReply } from "../features/inquiry/presentation/hooks/useInquiryReply";
 import { useOpenedReturnRefund } from "../features/inquiry/presentation/hooks/useOpenedReturnRefund";
-import { textOrDash } from "../features/inquiry/presentation/utils/inquiryDetailView";
 import {
   getInquiryStatusButtonVariant,
   getInquiryStatusLabel,
@@ -140,11 +139,6 @@ export default function InquiryDetail() {
     onClearPageError: clearErrorMessage,
   });
 
-  const title =
-    inquiry?.inquiryType === "product"
-      ? textOrDash(inquiry.subject)
-      : "";
-
   const status =
     getInquiryStatusLabel(inquiry?.status);
 
@@ -164,12 +158,6 @@ export default function InquiryDetail() {
       <Badge variant="secondary">
         {inquiryType}
       </Badge>
-
-      {title ? (
-        <span className="inq-detail__page-title-text">
-          {title}
-        </span>
-      ) : null}
     </div>
   );
 

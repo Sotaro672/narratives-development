@@ -3,7 +3,6 @@
 import Layout from "../components/layout/Layout";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
-import Input from "../components/ui/Input";
 import MediaUploader from "../components/ui/MediaUploader";
 import Textbox from "../components/ui/Textbox";
 import { useInquiryCreatePage } from "../features/inquiry/presentation/hooks/useInquiryCreatePage";
@@ -14,8 +13,6 @@ export default function InquiryCreatePage() {
   const {
     navigate,
     productId,
-    subject,
-    setSubject,
     content,
     setContent,
     mediaItems,
@@ -96,18 +93,6 @@ export default function InquiryCreatePage() {
           >
             <input type="hidden" name="productId" value={productId} />
             <input type="hidden" name="inquiryType" value="product" />
-
-            <Input
-              id="inquiry-subject"
-              name="subject"
-              label="件名"
-              type="text"
-              value={subject}
-              placeholder="例: 商品の状態について"
-              maxLength={120}
-              disabled={formDisabled}
-              onChange={(event) => setSubject(event.target.value)}
-            />
 
             <Textbox
               id="inquiry-content"
