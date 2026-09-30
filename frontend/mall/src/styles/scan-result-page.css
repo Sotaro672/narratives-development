@@ -197,6 +197,10 @@
 }
 
 @media (min-width: 960px) {
+  .scan-result-page-layout {
+    padding-top: 12px;
+  }
+
   .scan-result-page__dismiss-control {
     display: none;
   }
@@ -207,11 +211,6 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
     gap: 20px;
-  }
-
-  .scan-result-desktop-main,
-  .scan-result-desktop-side {
-    padding-top: 24px;
   }
 
   .scan-result-desktop-side {

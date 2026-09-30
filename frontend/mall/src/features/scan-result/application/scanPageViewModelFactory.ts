@@ -1,4 +1,4 @@
-// frontend/amol/src/features/scan-result/application/scanPageViewModelFactory.ts
+// frontend/mall/src/features/scan-result/application/scanPageViewModelFactory.ts
 
 import { rgbToCssColor } from "../../../components/utils/color";
 import type {
@@ -131,7 +131,10 @@ function createQualityAssuranceTabs(
 ): string[] {
   const rawValue = patch?.categoryFields?.qualityAssurance;
   if (!Array.isArray(rawValue)) return [];
-  return rawValue.map(toDisplayText).filter(Boolean);
+
+  return rawValue
+    .map(toDisplayText)
+    .filter(Boolean);
 }
 
 function createMeasurementEntries(
@@ -144,7 +147,7 @@ function createMeasurementEntries(
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([label, value]) => ({
       label,
-      value: `${value}cm`,
+      value: `${value}mm`,
     }));
 }
 
