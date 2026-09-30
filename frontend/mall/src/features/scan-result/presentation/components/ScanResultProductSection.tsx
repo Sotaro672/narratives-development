@@ -3,6 +3,7 @@
 import { useNavigate } from "react-router-dom";
 
 import Badge from "../../../../components/ui/Badge";
+import Button from "../../../../components/ui/Button";
 import InfoList, { InfoRow } from "../../../../components/ui/InfoList";
 import SectionHeader from "../../../../components/ui/SectionHeader";
 import Tab from "../../../../components/ui/Tab";
@@ -28,6 +29,8 @@ type ScanResultProductSectionProps = {
   swatch: string;
   measurementEntries: ScanDisplayRowViewModel[];
   alcoholInfo?: ScanAlcoholInfo | null;
+  canOpenInquiryPage: boolean;
+  onOpenInquiryPage: () => void;
 };
 
 function hasAlcoholDisplayInfo(alcoholInfo?: ScanAlcoholInfo | null): boolean {
@@ -65,6 +68,8 @@ export default function ScanResultProductSection(
     swatch,
     measurementEntries,
     alcoholInfo,
+    canOpenInquiryPage,
+    onOpenInquiryPage,
   } = props;
 
   const isAlcohol = alcoholInfo?.isAlcohol === true;
@@ -87,11 +92,23 @@ export default function ScanResultProductSection(
         title={title}
         titleSize="sm"
         right={
-          owned === true ? (
-            <Badge variant="success" size="md">
-              Owned
-            </Badge>
-          ) : null
+          <div className="scan-result-product-header-actions">
+            {owned === true ? (
+              <Badge variant="success" size="md">
+                Owned
+              </Badge>
+            ) : null}
+
+            {canOpenInquiryPage ? (
+              <Button
+                type="button"
+                className="scan-result-desktop-inquiry-button"
+                onClick={onOpenInquiryPage}
+              >
+                問い合わせ
+              </Button>
+            ) : null}
+          </div>
         }
       />
 

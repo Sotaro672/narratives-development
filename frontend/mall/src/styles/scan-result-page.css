@@ -51,6 +51,18 @@
   min-width: 0;
 }
 
+.scan-result-product-header-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.scan-result-desktop-inquiry-button {
+  display: none;
+}
+
 .scan-result-quality-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -84,6 +96,11 @@
 
 .scan-result-measurements {
   margin-top: 14px;
+}
+
+.scan-result-token-card {
+  margin-top: 24px;
+  margin-bottom: 24px;
 }
 
 .scan-transfer-modal__review {
@@ -190,6 +207,14 @@
   .scan-result-desktop-main .ui-section-card,
   .scan-result-desktop-side .ui-section-card {
     margin-bottom: 20px;
+  }
+
+  .scan-result-desktop-inquiry-button {
+    display: inline-flex;
+  }
+
+  .scan-result-mobile-inquiry-action {
+    display: none;
   }
 }
 

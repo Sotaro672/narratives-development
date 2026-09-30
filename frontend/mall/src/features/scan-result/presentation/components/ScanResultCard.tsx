@@ -68,12 +68,8 @@ export default function ScanResultCard(props: ScanResultCardProps) {
   const { product, token } = viewModel;
   const owned = state.ownedByWallet;
   const ownedError = state.ownedByWalletError ?? "";
-  const productBlueprintId =
-    state.previewState?.raw.productBlueprintId?.trim() ?? "";
-
-  const tokenCardDisabled =
-    tokenContentsDisabled ||
-    !token?.canOpenTokenContents;
+  const productBlueprintId = state.previewState?.raw.productBlueprintId?.trim() ?? "";
+  const tokenCardDisabled = tokenContentsDisabled || !token?.canOpenTokenContents;
 
   return (
     <div className="scan-result-desktop-grid">
@@ -102,31 +98,32 @@ export default function ScanResultCard(props: ScanResultCardProps) {
           swatch={product.swatch}
           measurementEntries={product.measurementEntries}
           alcoholInfo={product.alcoholInfo}
+          canOpenInquiryPage={canOpenInquiryPage}
+          onOpenInquiryPage={onOpenInquiryPage}
         />
 
         {token ? (
-          <TokenSummaryCard
-            brandName={token.brandName}
-            tokenName={token.tokenName}
-            tokenIcon={token.tokenIcon}
-            symbol={token.symbol}
-            onClick={
-              tokenCardDisabled
-                ? undefined
-                : () => void onOpenTokenContents(token.assetId)
-            }
-            disabled={tokenCardDisabled}
-          />
+          <div className="scan-result-token-card">
+            <TokenSummaryCard
+              brandName={token.brandName}
+              tokenName={token.tokenName}
+              tokenIcon={token.tokenIcon}
+              symbol={token.symbol}
+              onClick={
+                tokenCardDisabled
+                  ? undefined
+                  : () => void onOpenTokenContents(token.assetId)
+              }
+              disabled={tokenCardDisabled}
+            />
+          </div>
         ) : null}
       </div>
 
       <aside className="scan-result-desktop-side">
         {canOpenInquiryPage ? (
-          <div className="scan-result-review-actions">
-            <Button
-              type="button"
-              onClick={onOpenInquiryPage}
-            >
+          <div className="scan-result-review-actions scan-result-mobile-inquiry-action">
+            <Button type="button" onClick={onOpenInquiryPage}>
               問い合わせ
             </Button>
           </div>
