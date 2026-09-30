@@ -905,7 +905,6 @@ func writeInquiryErr(w http.ResponseWriter, err error) {
 		errors.Is(err, refunddom.ErrInvalidReturnRefundAmount),
 		errors.Is(err, inquirydom.ErrInvalidProductID),
 		errors.Is(err, inquirydom.ErrInvalidAvatarID),
-		errors.Is(err, inquirydom.ErrInvalidSubject),
 		errors.Is(err, inquirydom.ErrInvalidContent),
 		errors.Is(err, inquirydom.ErrInvalidStatus),
 		errors.Is(err, inquirydom.ErrInvalidInquiryType),

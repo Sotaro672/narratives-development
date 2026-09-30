@@ -150,7 +150,6 @@ func (h *InquiryHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // avatarId は request body では受け取らず、AvatarContextMiddleware 由来で解決します。
 type createInquiryRequest struct {
 	ProductID   string                 `json:"productId"`
-	Subject     string                 `json:"subject"`
 	Content     string                 `json:"content"`
 	InquiryType string                 `json:"inquiryType"`
 	Images      []createInquiryImageIn `json:"images"`
@@ -252,7 +251,6 @@ func (h *InquiryHandler) create(w http.ResponseWriter, r *http.Request) {
 		"",
 		req.ProductID,
 		avatarID,
-		req.Subject,
 		req.Content,
 		inquirydom.InquiryStatusOpen,
 		now,
@@ -622,7 +620,6 @@ func inquiryHTTPStatus(err error) int {
 		errors.Is(err, inquirydom.ErrInvalidOrderID),
 		errors.Is(err, inquirydom.ErrInvalidOrderItemIndex),
 		errors.Is(err, inquirydom.ErrInvalidAvatarID),
-		errors.Is(err, inquirydom.ErrInvalidSubject),
 		errors.Is(err, inquirydom.ErrInvalidContent),
 		errors.Is(err, inquirydom.ErrInvalidStatus),
 		errors.Is(err, inquirydom.ErrInvalidInquiryType),

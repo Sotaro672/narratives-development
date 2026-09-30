@@ -178,15 +178,6 @@ func buildInquiryCreatedMailBody(
 		),
 	)
 
-	if strings.TrimSpace(inq.Subject) != "" {
-		b.WriteString(
-			fmt.Sprintf(
-				"件名: %s\n",
-				inq.Subject,
-			),
-		)
-	}
-
 	if strings.TrimSpace(inq.Content) != "" {
 		b.WriteString("本文:\n")
 		b.WriteString(inq.Content)

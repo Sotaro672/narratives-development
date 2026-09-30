@@ -20,7 +20,6 @@ type InquiryPatch struct {
 	ProductID      *string
 	OrderID        *string
 	OrderItemIndex *int
-	Subject        *string
 	Content        *string
 	Status         *InquiryStatus
 	InquiryType    *InquiryType

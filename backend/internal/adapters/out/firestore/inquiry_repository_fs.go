@@ -339,9 +339,6 @@ func inquiryToDocData(in idom.Inquiry) map[string]any {
 		"updatedAt":   in.UpdatedAt.UTC(),
 	}
 
-	if in.InquiryType == idom.InquiryTypeProduct {
-		m["subject"] = in.Subject
-	}
 	if in.OrderID != "" {
 		m["orderId"] = in.OrderID
 	}
@@ -440,10 +437,6 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 	if err != nil {
 		return idom.Inquiry{}, err
 	}
-	subject, err := firestoreOptionalString(data, "subject")
-	if err != nil {
-		return idom.Inquiry{}, err
-	}
 	content, err := firestoreRequiredString(data, "content")
 	if err != nil {
 		return idom.Inquiry{}, err
@@ -504,7 +497,6 @@ func docToInquiry(doc *firestore.DocumentSnapshot) (idom.Inquiry, error) {
 		ProductID:   productID,
 		OrderID:     ptrOrEmpty(orderID),
 		AvatarID:    avatarID,
-		Subject:     ptrOrEmpty(subject),
 		Content:     content,
 		Status:      idom.InquiryStatus(statusText),
 		InquiryType: inquiryType,
@@ -769,9 +761,6 @@ func applyInquiryPatchToDomain(in *idom.Inquiry, patch idom.InquiryPatch) error 
 		orderItemIndex := *patch.OrderItemIndex
 		in.OrderItemIndex = &orderItemIndex
 	}
-	if patch.Subject != nil {
-		in.Subject = *patch.Subject
-	}
 	if patch.Content != nil {
 		in.Content = *patch.Content
 	}
@@ -924,8 +913,6 @@ func mapInquirySort(sort idom.Sort) (string, firestore.Direction) {
 		return "orderItemIndex", sortDirection(sort)
 	case "avatarid", "avatar_id":
 		return "avatarId", sortDirection(sort)
-	case "subject":
-		return "subject", sortDirection(sort)
 	case "status":
 		return "status", sortDirection(sort)
 	case "inquirytype", "inquiry_type":
@@ -984,8 +971,6 @@ func searchText(in idom.Inquiry) string {
 	}
 	b.WriteString(" ")
 	b.WriteString(in.AvatarID)
-	b.WriteString(" ")
-	b.WriteString(in.Subject)
 	b.WriteString(" ")
 	b.WriteString(in.Content)
 	b.WriteString(" ")

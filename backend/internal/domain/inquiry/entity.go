@@ -65,8 +65,6 @@ type ImageFile struct {
 //
 // Product inquiries are identified in the mall context by productId + avatarId.
 // Return inquiries are identified by orderId + orderItemIndex + avatarId.
-// Product inquiries require Subject.
-// Return inquiries do not use Subject.
 // Images are part of the inquiry aggregate.
 // Replies are NOT stored in Inquiry.Content.
 // Replies should be stored in Firestore subcollection:
@@ -86,7 +84,6 @@ type Inquiry struct {
 	OrderID        string        `json:"orderId,omitempty"`
 	OrderItemIndex *int          `json:"orderItemIndex,omitempty"`
 	AvatarID       string        `json:"avatarId"`
-	Subject        string        `json:"subject,omitempty"`
 	Content        string        `json:"content"`
 	Status         InquiryStatus `json:"status"`
 	InquiryType    InquiryType   `json:"inquiryType"`
@@ -166,7 +163,6 @@ var (
 	ErrInvalidOrderID        = errors.New("inquiry: invalid orderId")
 	ErrInvalidOrderItemIndex = errors.New("inquiry: invalid orderItemIndex")
 	ErrInvalidAvatarID       = errors.New("inquiry: invalid avatarId")
-	ErrInvalidSubject        = errors.New("inquiry: invalid subject")
 	ErrInvalidContent        = errors.New("inquiry: invalid content")
 	ErrInvalidStatus         = errors.New("inquiry: invalid status")
 	ErrInvalidInquiryType    = errors.New("inquiry: invalid inquiryType")
@@ -223,7 +219,6 @@ func NewProduct(
 	id string,
 	productID string,
 	avatarID string,
-	subject string,
 	content string,
 	status InquiryStatus,
 	createdAt time.Time,
@@ -233,7 +228,6 @@ func NewProduct(
 		ID:          id,
 		ProductID:   productID,
 		AvatarID:    avatarID,
-		Subject:     subject,
 		Content:     content,
 		Status:      status,
 		InquiryType: InquiryTypeProduct,
@@ -970,10 +964,6 @@ func validateInquiryIdentity(i Inquiry) error {
 			return ErrInquiryInvalidWorkflow
 		}
 
-		if strings.TrimSpace(i.Subject) == "" {
-			return ErrInvalidSubject
-		}
-
 	case InquiryTypeReturnUnopened,
 		InquiryTypeReturnOpened:
 		if i.OrderID == "" {
@@ -982,10 +972,6 @@ func validateInquiryIdentity(i Inquiry) error {
 
 		if i.OrderItemIndex == nil || *i.OrderItemIndex < 0 {
 			return ErrInvalidOrderItemIndex
-		}
-
-		if strings.TrimSpace(i.Subject) != "" {
-			return ErrInvalidSubject
 		}
 	}
 
