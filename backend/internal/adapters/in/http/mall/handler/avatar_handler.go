@@ -13,17 +13,20 @@ import (
 )
 
 type AvatarHandler struct {
-	uc             *avataruc.AvatarUsecase
-	registrationUC *avataruc.AvatarRegistrationUsecase
+	uc                     *avataruc.AvatarUsecase
+	registrationUC         *avataruc.AvatarRegistrationUsecase
+	identityVerificationUC *avataruc.IdentityVerificationUsecase
 }
 
 func NewAvatarHandler(
 	avatarUC *avataruc.AvatarUsecase,
 	registrationUC *avataruc.AvatarRegistrationUsecase,
+	identityVerificationUC *avataruc.IdentityVerificationUsecase,
 ) http.Handler {
 	return &AvatarHandler{
-		uc:             avatarUC,
-		registrationUC: registrationUC,
+		uc:                     avatarUC,
+		registrationUC:         registrationUC,
+		identityVerificationUC: identityVerificationUC,
 	}
 }
 
@@ -46,7 +49,6 @@ func (h *AvatarHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			notFound(w)
 			return
 		}
-
 		h.get(w, r, id)
 		return
 
@@ -122,7 +124,16 @@ func (h *AvatarHandler) post(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, toAvatarResponse(created))
+	identityVerified := false
+	if h.identityVerificationUC != nil {
+		identityVerified, err = h.identityVerificationUC.IsVerified(ctx, created.UserID)
+		if err != nil {
+			writeAvatarErr(w, err)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, toAvatarResponse(created, identityVerified))
 }
 
 func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
@@ -148,7 +159,16 @@ func (h *AvatarHandler) get(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toAvatarResponse(avatar))
+	identityVerified := false
+	if h.identityVerificationUC != nil {
+		identityVerified, err = h.identityVerificationUC.IsVerified(ctx, avatar.UserID)
+		if err != nil {
+			writeAvatarErr(w, err)
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, toAvatarResponse(avatar, identityVerified))
 }
 
 func writeAvatarErr(w http.ResponseWriter, err error) {

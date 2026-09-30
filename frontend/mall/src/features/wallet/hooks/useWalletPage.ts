@@ -1,4 +1,4 @@
-// frontend/amol/src/features/wallet/hooks/useWalletPage.ts
+// frontend/mall/src/features/wallet/hooks/useWalletPage.ts
 
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
@@ -29,6 +29,7 @@ export function useWalletPage() {
   const [avatarName, setAvatarName] = useState("");
   const [avatarIcon, setAvatarIcon] = useState("");
   const [profile, setProfile] = useState("");
+  const [identityVerified, setIdentityVerified] = useState(false);
 
   const [wallet, setWallet] = useState<WalletDTO | null>(null);
   const [walletTokens, setWalletTokens] = useState<WalletTokenItem[]>([]);
@@ -71,6 +72,7 @@ export function useWalletPage() {
       setTokenError("");
       setOrderLoading(true);
       setOrderError("");
+      setIdentityVerified(false);
 
       try {
         const meAvatar = await getMyAvatar();
@@ -103,6 +105,7 @@ export function useWalletPage() {
         setAvatarName(viewedAvatar.avatarName);
         setAvatarIcon(viewedAvatar.avatarIcon ?? "");
         setProfile(viewedAvatar.profile ?? "");
+        setIdentityVerified(viewedAvatar.identityVerified);
 
         if (!nextIsOwnAvatar) {
           setWallet(null);
@@ -174,6 +177,7 @@ export function useWalletPage() {
             "ウォレット情報の取得に失敗しました。",
           ),
         );
+        setIdentityVerified(false);
         setWallet(null);
         setWalletTokens([]);
         setOrderHistory([]);
@@ -200,6 +204,7 @@ export function useWalletPage() {
     avatarName,
     avatarIcon,
     profile,
+    identityVerified,
     wallet,
     walletTokens,
     orderHistory,

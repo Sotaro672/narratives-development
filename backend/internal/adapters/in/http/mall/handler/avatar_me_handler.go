@@ -28,20 +28,23 @@ type MeAvatarResolver interface {
 }
 
 type MeAvatarHandler struct {
-	Repo     MeAvatarResolver
-	AvatarUC *avataruc.AvatarUsecase
-	ReportUC *avataruc.ReportUsecase
+	Repo                   MeAvatarResolver
+	AvatarUC               *avataruc.AvatarUsecase
+	ReportUC               *avataruc.ReportUsecase
+	IdentityVerificationUC *avataruc.IdentityVerificationUsecase
 }
 
 func NewMeAvatarHandler(
 	repo MeAvatarResolver,
 	avatarUC *avataruc.AvatarUsecase,
 	reportUC *avataruc.ReportUsecase,
+	identityVerificationUC *avataruc.IdentityVerificationUsecase,
 ) http.Handler {
 	return &MeAvatarHandler{
-		Repo:     repo,
-		AvatarUC: avatarUC,
-		ReportUC: reportUC,
+		Repo:                   repo,
+		AvatarUC:               avatarUC,
+		ReportUC:               reportUC,
+		IdentityVerificationUC: identityVerificationUC,
 	}
 }
 
@@ -204,6 +207,22 @@ func (h *MeAvatarHandler) updateAvatarPatchByUID(
 	return avatarID, out, nil
 }
 
+func (h *MeAvatarHandler) resolveIdentityVerified(
+	ctx context.Context,
+	userID string,
+) (bool, error) {
+	if h == nil || h.IdentityVerificationUC == nil {
+		return false, nil
+	}
+
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return false, avatardom.ErrInvalidUserID
+	}
+
+	return h.IdentityVerificationUC.IsVerified(ctx, userID)
+}
+
 func (h *MeAvatarHandler) handleGet(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -231,7 +250,17 @@ func (h *MeAvatarHandler) handleGet(
 		return
 	}
 
-	out, err := newMeAvatarResponse(avatarID, patch)
+	identityVerified, err := h.resolveIdentityVerified(r.Context(), patch.UserID)
+	if err != nil {
+		writeMeAvatarErr(w, err)
+		return
+	}
+
+	out, err := newMeAvatarResponse(
+		avatarID,
+		patch,
+		identityVerified,
+	)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return
@@ -322,7 +351,17 @@ func (h *MeAvatarHandler) handlePatch(
 		return
 	}
 
-	out, err := newMeAvatarResponse(avatarID, outPatch)
+	identityVerified, err := h.resolveIdentityVerified(r.Context(), outPatch.UserID)
+	if err != nil {
+		writeMeAvatarErr(w, err)
+		return
+	}
+
+	out, err := newMeAvatarResponse(
+		avatarID,
+		outPatch,
+		identityVerified,
+	)
 	if err != nil {
 		writeMeAvatarErr(w, err)
 		return

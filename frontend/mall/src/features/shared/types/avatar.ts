@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/types/avatar.ts
+// frontend/mall/src/features/shared/types/avatar.ts
 
 export type AvatarFormMode = "create" | "edit";
 
@@ -26,6 +26,7 @@ export type AvatarMutationResponse = {
   walletAddress?: string | null;
   profile?: string | null;
   externalLink?: string | null;
+  identityVerified: boolean;
 };
 
 export type MyAvatarResponse = {
@@ -36,6 +37,20 @@ export type MyAvatarResponse = {
   walletAddress: string;
   profile?: string | null;
   externalLink?: string | null;
+  identityVerified: boolean;
+};
+
+export type PublicAvatarResponse = {
+  avatarId: string;
+  userId: string;
+  avatarName: string;
+  avatarIcon?: string | null;
+  walletAddress?: string | null;
+  profile?: string | null;
+  externalLink?: string | null;
+  identityVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AvatarPayloadBase = {

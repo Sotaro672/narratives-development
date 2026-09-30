@@ -1,8 +1,9 @@
-// frontend/amol/src/features/wallet/components/WalletProfile.tsx
+// frontend/mall/src/features/wallet/components/WalletProfile.tsx
 
 import { useEffect, useState, type KeyboardEvent } from "react";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 
+import Badge from "../../../components/ui/Badge";
 import { fetchAvatarReviews } from "../../avatar-review/api/avatarReviewApi";
 
 type WalletProfileProps = {
@@ -10,6 +11,7 @@ type WalletProfileProps = {
   avatarName: string;
   avatarIcon: string;
   profile: string;
+  identityVerified: boolean;
   isOwnAvatar: boolean;
   onClick?: () => void;
 };
@@ -19,6 +21,7 @@ export default function WalletProfile({
   avatarName,
   avatarIcon,
   profile,
+  identityVerified,
   isOwnAvatar,
   onClick,
 }: WalletProfileProps) {
@@ -130,6 +133,14 @@ export default function WalletProfile({
       <div className="wallet-page-profile__body">
         {avatarName ? (
           <div className="wallet-page-profile__name">{avatarName}</div>
+        ) : null}
+
+        {identityVerified ? (
+          <div className="wallet-page-profile__verification">
+            <Badge variant="success" size="sm">
+              本人確認済み
+            </Badge>
+          </div>
         ) : null}
 
         <div

@@ -27,6 +27,7 @@ export default function WalletPage() {
     avatarName,
     avatarIcon,
     profile,
+    identityVerified,
     walletTokens,
     orderHistory,
     activeTab,
@@ -95,9 +96,7 @@ export default function WalletPage() {
       params.set("tokenIconUrl", tokenIconUrl);
     }
 
-    const path = isMobilePortrait
-      ? "/wallet/contents"
-      : "/contents";
+    const path = isMobilePortrait ? "/wallet/contents" : "/contents";
 
     navigate(`${path}?${params.toString()}`);
   };
@@ -135,10 +134,7 @@ export default function WalletPage() {
   const renderTokenList = () => (
     <div className="wallet-page-token-list">
       {tokenLoading ? (
-        <StatePanel
-          variant="loading"
-          title="読み込み中です..."
-        />
+        <StatePanel variant="loading" title="読み込み中です..." />
       ) : null}
 
       {!tokenLoading && tokenError ? (
@@ -147,16 +143,11 @@ export default function WalletPage() {
         </div>
       ) : null}
 
-      {!tokenLoading && !tokenError && !hasTokens ? (
-        <WalletTokenEmpty />
-      ) : null}
+      {!tokenLoading && !tokenError && !hasTokens ? <WalletTokenEmpty /> : null}
 
       {!tokenLoading && !tokenError && hasTokens
         ? walletTokens.map((token) => (
-            <div
-              key={token.assetId}
-              className="wallet-page-token-list__item"
-            >
+            <div key={token.assetId} className="wallet-page-token-list__item">
               <WalletTokenContentsCard
                 tokenIconUrl={token.metadata?.image || null}
                 tokenName={token.metadata?.name || ""}
@@ -179,6 +170,7 @@ export default function WalletPage() {
               avatarName={avatarName}
               avatarIcon={avatarIcon}
               profile={profile}
+              identityVerified={identityVerified}
               isOwnAvatar
               onClick={handleOpenAvatarReviews}
             />
@@ -187,10 +179,7 @@ export default function WalletPage() {
           </aside>
 
           <div className="wallet-page-layout__main">
-            <WalletTabs
-              activeTab={activeTab}
-              onChange={setActiveTab}
-            />
+            <WalletTabs activeTab={activeTab} onChange={setActiveTab} />
 
             {activeTab === "history" ? (
               <WalletHistoryPanel
@@ -206,9 +195,7 @@ export default function WalletPage() {
             {activeTab === "tokens" ? renderTokenList() : null}
 
             {activeTab === "resales" ? (
-              <WalletResalePanel
-                onItemClick={handleOpenResaleDetail}
-              />
+              <WalletResalePanel onItemClick={handleOpenResaleDetail} />
             ) : null}
           </div>
         </div>

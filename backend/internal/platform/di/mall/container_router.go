@@ -129,6 +129,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 		avatarH = mallhandler.NewAvatarHandler(
 			cont.AvatarUC,
 			cont.AvatarRegistrationUC,
+			cont.IdentityVerificationUC,
 		)
 	}
 
@@ -200,6 +201,7 @@ func Register(mux *http.ServeMux, cont *Container) {
 			cont.MeAvatarResolver,
 			cont.AvatarUC,
 			cont.ReportUC,
+			cont.IdentityVerificationUC,
 		)
 	}
 

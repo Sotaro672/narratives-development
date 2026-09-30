@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/PublicWalletPage.tsx
+// frontend/mall/src/pages/PublicWalletPage.tsx
 
 import { useNavigate } from "react-router-dom";
 
@@ -22,6 +22,7 @@ export default function PublicWalletPage() {
     avatarName,
     avatarIcon,
     profile,
+    identityVerified,
     isOwnAvatar,
     loading,
     error,
@@ -81,10 +82,7 @@ export default function PublicWalletPage() {
 
   return (
     <>
-      <Layout
-        title={pageTitle || "AMOL"}
-        mode="mypage"
-      >
+      <Layout title={pageTitle || "AMOL"} mode="mypage">
         <section className="content-page-section wallet-page">
           <div className="wallet-page-layout">
             <aside className="wallet-page-layout__profile">
@@ -107,6 +105,7 @@ export default function PublicWalletPage() {
                     avatarName={avatarName}
                     avatarIcon={avatarIcon}
                     profile={profile}
+                    identityVerified={identityVerified}
                     isOwnAvatar={isOwnAvatar}
                     onClick={handleOpenAvatarReviews}
                   />

@@ -1,4 +1,4 @@
-// frontend/amol/src/features/avatar/api/avatarApi.ts
+// frontend/mall/src/features/avatar/api/avatarApi.ts
 
 import { HttpError, requestJson } from "../../../lib/http";
 import type {
@@ -6,6 +6,7 @@ import type {
   AvatarPayloadBase,
   CreateAvatarPayload,
   MyAvatarResponse,
+  PublicAvatarResponse,
 } from "../../shared/types/avatar";
 
 export async function getMyAvatar(): Promise<MyAvatarResponse | null> {
@@ -20,11 +21,15 @@ export async function getMyAvatar(): Promise<MyAvatarResponse | null> {
   }
 }
 
-export async function getPublicAvatar({ avatarId }: { avatarId: string }): Promise<MyAvatarResponse | null> {
+export async function getPublicAvatar({
+  avatarId,
+}: {
+  avatarId: string;
+}): Promise<PublicAvatarResponse | null> {
   if (!avatarId) throw new Error("avatarIdが指定されていません。");
 
   try {
-    return await requestJson<MyAvatarResponse>(
+    return await requestJson<PublicAvatarResponse>(
       `/mall/avatars/${encodeURIComponent(avatarId)}`,
       { method: "GET" },
     );
