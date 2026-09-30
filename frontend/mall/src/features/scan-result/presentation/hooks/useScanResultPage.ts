@@ -711,7 +711,7 @@ export function useScanResultPage() {
         throw new Error("reviewId is empty");
       }
 
-      const updated = await putProductReviewHelpfulVote({
+      await putProductReviewHelpfulVote({
         productBlueprintId: pbId,
         reviewId: normalizedReviewId,
       });
@@ -720,28 +720,12 @@ export function useScanResultPage() {
         return;
       }
 
-      setReviews((current) => {
-        if (!current) {
-          return current;
-        }
-
-        return {
-          ...current,
-          items: current.items.map((review) => {
-            if (review.id !== updated.id) {
-              return review;
-            }
-
-            return {
-              ...review,
-              helpfulVotes: updated.helpfulVotes,
-              totalVotes: updated.totalVotes,
-            };
-          }),
-        };
-      });
+      await loadReviews(reviewPage);
     },
-    [],
+    [
+      loadReviews,
+      reviewPage,
+    ],
   );
 
   const deleteReview = useCallback(

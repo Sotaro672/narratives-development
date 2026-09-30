@@ -21,17 +21,6 @@
       "density": "SPARSE_ALL"
     },
     {
-      "collectionGroup": "billingAddresses",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "userId", "order": "ASCENDING" },
-        { "fieldPath": "isDefault", "order": "DESCENDING" },
-        { "fieldPath": "updatedAt", "order": "DESCENDING" },
-        { "fieldPath": "__name__", "order": "DESCENDING" }
-      ],
-      "density": "SPARSE_ALL"
-    },
-    {
       "collectionGroup": "brands",
       "queryScope": "COLLECTION",
       "fields": [
@@ -217,6 +206,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "helpfulVotes", "order": "DESCENDING" },
         { "fieldPath": "reviewedAt", "order": "DESCENDING" },
         { "fieldPath": "__name__", "order": "DESCENDING" }
       ],

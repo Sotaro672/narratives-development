@@ -384,6 +384,9 @@ func (r *ProductBlueprintReviewRepositoryFS) List(
 		orderDir = firestore.Asc
 	}
 	q = q.OrderBy(mapSortField(sortCol), orderDir)
+	if sortCol == "helpfulVotes" {
+		q = q.OrderBy("reviewedAt", firestore.Desc)
+	}
 
 	pn := page.Number
 	pp := page.PerPage
@@ -450,7 +453,7 @@ func (r *ProductBlueprintReviewRepositoryFS) ListByProductBlueprintID(
 	}
 
 	f := pbr.Filter{ProductBlueprintID: &pbID, Status: &status}
-	return r.List(ctx, f, domcommon.Sort{Column: "reviewedAt", Order: domcommon.SortDesc}, page)
+	return r.List(ctx, f, domcommon.Sort{Column: "helpfulVotes", Order: domcommon.SortDesc}, page)
 }
 
 func (r *ProductBlueprintReviewRepositoryFS) GetProductSummary(
