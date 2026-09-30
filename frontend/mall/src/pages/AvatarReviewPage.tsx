@@ -5,6 +5,7 @@ import { useParams } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
 import Card from "../components/ui/Card";
+import MediaIcon from "../components/ui/MediaIcon";
 import Pagination from "../components/ui/Pagination";
 import TextState from "../components/ui/TextState";
 import {
@@ -173,45 +174,43 @@ export default function AvatarReviewPage() {
               </TextState>
             ) : (
               <div className="avatar-review-page__list">
-                {result.items.map((review) => (
-                  <Card
-                    key={review.id}
-                    as="article"
-                    variant="panel"
-                    className="avatar-review-card"
-                  >
-                    <div className="avatar-review-card__header">
-                      <div className="avatar-review-card__reviewer">
-                        {review.reviewerAvatarIcon ? (
-                          <img
+                {result.items.map((review) => {
+                  const reviewerName = review.reviewerAvatarName.trim() || "アバター";
+
+                  return (
+                    <Card
+                      key={review.id}
+                      as="article"
+                      variant="panel"
+                      className="avatar-review-card"
+                    >
+                      <div className="avatar-review-card__header">
+                        <div className="avatar-review-card__reviewer">
+                          <MediaIcon
                             src={review.reviewerAvatarIcon}
-                            alt=""
+                            alt={review.reviewerAvatarIcon ? reviewerName : ""}
+                            fallback={reviewerName.slice(0, 1)}
+                            size="sm"
+                            shape="circle"
                             className="avatar-review-card__reviewer-icon"
                           />
-                        ) : (
-                          <div
-                            className="avatar-review-card__reviewer-icon avatar-review-card__reviewer-icon--fallback"
-                            aria-hidden="true"
-                          >
-                            {review.reviewerAvatarName.trim().charAt(0) || "A"}
-                          </div>
-                        )}
 
-                        <strong className="avatar-review-card__reviewer-name">
-                          {review.reviewerAvatarName || "アバター"}
-                        </strong>
+                          <strong className="avatar-review-card__reviewer-name">
+                            {reviewerName}
+                          </strong>
+                        </div>
+
+                        <time className="avatar-review-card__date">
+                          {formatCreatedAt(review.createdAt)}
+                        </time>
                       </div>
 
-                      <time className="avatar-review-card__date">
-                        {formatCreatedAt(review.createdAt)}
-                      </time>
-                    </div>
-
-                    <p className="avatar-review-card__comment">
-                      {review.comment}
-                    </p>
-                  </Card>
-                ))}
+                      <p className="avatar-review-card__comment">
+                        {review.comment}
+                      </p>
+                    </Card>
+                  );
+                })}
               </div>
             )}
 

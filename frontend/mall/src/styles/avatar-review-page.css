@@ -50,11 +50,29 @@
   gap: 12px;
 }
 
-.avatar-review-card__evaluation {
+.avatar-review-card__reviewer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar-review-card__reviewer-icon {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+}
+
+.avatar-review-card__reviewer-name {
+  min-width: 0;
+  overflow: hidden;
   font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .avatar-review-card__date {
+  flex: 0 0 auto;
   font-size: 12px;
   opacity: 0.65;
 }
