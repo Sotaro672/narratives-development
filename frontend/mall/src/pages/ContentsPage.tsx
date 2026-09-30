@@ -49,6 +49,7 @@ export default function ContentsPage() {
       contents={page.contents}
       tokenName={page.tokenName}
       tokenIconUrl={page.tokenIconUrl}
+      tokenDescription={page.tokenDescription}
       loading={page.loading}
       isMobilePortrait={page.isMobilePortrait}
       commentCard={page.commentCard}

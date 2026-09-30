@@ -13,6 +13,7 @@ type ContentsDetailPanelProps = {
   contents: ContentsSearchParams;
   tokenName: string;
   tokenIconUrl: string;
+  tokenDescription: string;
   loading: boolean;
   isMobilePortrait: boolean;
   commentCard: TokenCommentCardController;
@@ -27,6 +28,7 @@ export default function ContentsDetailPanel({
   contents,
   tokenName,
   tokenIconUrl,
+  tokenDescription,
   loading,
   isMobilePortrait,
   commentCard,
@@ -42,6 +44,7 @@ export default function ContentsDetailPanel({
         contents={contents}
         tokenName={tokenName}
         tokenIconUrl={tokenIconUrl}
+        tokenDescription={tokenDescription}
         resaleDisabled={resaleDisabled}
         resaleLabel={resaleLabel}
         onProductNameClick={onProductNameClick}

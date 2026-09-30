@@ -8,6 +8,7 @@ type ContentsTokenSummaryCardProps = {
   contents: ContentsSearchParams;
   tokenName: string;
   tokenIconUrl: string;
+  tokenDescription: string;
   resaleDisabled: boolean;
   resaleLabel: string;
   onProductNameClick: () => void;
@@ -19,6 +20,7 @@ export default function ContentsTokenSummaryCard({
   contents,
   tokenName,
   tokenIconUrl,
+  tokenDescription,
   resaleDisabled,
   resaleLabel,
   onProductNameClick,
@@ -77,6 +79,7 @@ export default function ContentsTokenSummaryCard({
       <TokenReviewAggregateCard
         tokenBlueprintId={contents.tokenBlueprintId}
         productId={contents.productId}
+        tokenDescription={tokenDescription}
         resaleDisabled={resaleDisabled}
         resaleLabel={resaleLabel}
         onResaleClick={onResaleClick}

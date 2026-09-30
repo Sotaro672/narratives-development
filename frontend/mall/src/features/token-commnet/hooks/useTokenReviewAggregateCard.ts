@@ -1,4 +1,4 @@
-// frontend/amol/src/features/token-commnet/hooks/useTokenReviewAggregateCard.ts
+// frontend/mall/src/features/token-commnet/hooks/useTokenReviewAggregateCard.ts
 
 import {
   useCallback,
@@ -35,116 +35,97 @@ export function useTokenReviewAggregateCard({
   const [
     aggregate,
     setAggregate,
-  ] =
-    useState<TokenBlueprintReviewAggregate | null>(
-      null,
-    );
+  ] = useState<TokenBlueprintReviewAggregate | null>(null);
 
   const [
     loading,
     setLoading,
   ] = useState(false);
 
-  const enabled =
-    Boolean(tokenBlueprintId);
+  const enabled = Boolean(tokenBlueprintId);
 
-  const likeCount =
-    aggregate?.likeCount ?? 0;
+  const likeCount = aggregate?.likeCount ?? 0;
 
-  const dislikeCount =
-    aggregate?.dislikeCount ?? 0;
+  const dislikeCount = aggregate?.dislikeCount ?? 0;
 
-  const commentCount =
-    aggregate?.totalCommentCount ?? 0;
+  const commentCount = aggregate?.topLevelCommentCount ?? 0;
 
-  const refreshAggregate =
-    useCallback(async () => {
-      if (!tokenBlueprintId) {
-        setAggregate(null);
-        return;
-      }
+  const refreshAggregate = useCallback(async () => {
+    if (!tokenBlueprintId) {
+      setAggregate(null);
+      return;
+    }
 
-      setLoading(true);
+    setLoading(true);
 
-      try {
-        const result =
-          await fetchTokenBlueprintReviewAggregate(
-            tokenBlueprintId,
-          );
+    try {
+      const result = await fetchTokenBlueprintReviewAggregate(
+        tokenBlueprintId,
+      );
 
-        setAggregate(result);
-      } catch {
-        setAggregate(null);
-      } finally {
-        setLoading(false);
-      }
-    }, [tokenBlueprintId]);
+      setAggregate(result);
+    } catch {
+      setAggregate(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [tokenBlueprintId]);
 
-  const handleLike =
-    useCallback(async () => {
-      if (
-        !tokenBlueprintId ||
-        loading
-      ) {
-        return;
-      }
+  const handleLike = useCallback(async () => {
+    if (!tokenBlueprintId || loading) {
+      return;
+    }
 
-      setLoading(true);
+    setLoading(true);
 
-      try {
-        await upsertTokenBlueprintReaction({
-          tokenBlueprintId,
-          type: "like",
-        });
+    try {
+      await upsertTokenBlueprintReaction({
+        tokenBlueprintId,
+        type: "like",
+      });
 
-        const result =
-          await fetchTokenBlueprintReviewAggregate(
-            tokenBlueprintId,
-          );
+      const result = await fetchTokenBlueprintReviewAggregate(
+        tokenBlueprintId,
+      );
 
-        setAggregate(result);
-      } catch {
-        return;
-      } finally {
-        setLoading(false);
-      }
-    }, [
-      loading,
-      tokenBlueprintId,
-    ]);
+      setAggregate(result);
+    } catch {
+      return;
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    loading,
+    tokenBlueprintId,
+  ]);
 
-  const handleDislike =
-    useCallback(async () => {
-      if (
-        !tokenBlueprintId ||
-        loading
-      ) {
-        return;
-      }
+  const handleDislike = useCallback(async () => {
+    if (!tokenBlueprintId || loading) {
+      return;
+    }
 
-      setLoading(true);
+    setLoading(true);
 
-      try {
-        await upsertTokenBlueprintReaction({
-          tokenBlueprintId,
-          type: "dislike",
-        });
+    try {
+      await upsertTokenBlueprintReaction({
+        tokenBlueprintId,
+        type: "dislike",
+      });
 
-        const result =
-          await fetchTokenBlueprintReviewAggregate(
-            tokenBlueprintId,
-          );
+      const result = await fetchTokenBlueprintReviewAggregate(
+        tokenBlueprintId,
+      );
 
-        setAggregate(result);
-      } catch {
-        return;
-      } finally {
-        setLoading(false);
-      }
-    }, [
-      loading,
-      tokenBlueprintId,
-    ]);
+      setAggregate(result);
+    } catch {
+      return;
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    loading,
+    tokenBlueprintId,
+  ]);
 
   useEffect(() => {
     void refreshAggregate();

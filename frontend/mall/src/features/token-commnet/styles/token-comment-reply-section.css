@@ -190,8 +190,43 @@
   flex: 0 0 auto;
   align-items: center;
   justify-content: flex-end;
-  gap: 4px;
+  gap: 6px;
   margin-left: auto;
+}
+
+.token-comment-reply-section .token-comment-item__author-actions .text-button {
+  flex: 0 0 auto;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.token-comment-reply-section .token-comment-item__author-actions .text-button:hover {
+  color: #4b5563;
+}
+
+.token-comment-reply-section .token-comment-item__author-actions .text-button:disabled {
+  color: #9ca3af;
+  opacity: 1;
+}
+
+.token-comment-reply-section .token-comment-item__edit-button.text-button[aria-pressed="true"] {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.token-comment-reply-section .token-comment-item__delete-button.text-button {
+  color: #6b7280;
+}
+
+.token-comment-reply-section .token-comment-item__delete-button.text-button:hover {
+  color: #4b5563;
+}
+
+.token-comment-reply-section .token-comment-item__delete-button.text-button:disabled {
+  color: #9ca3af;
 }
 
 .token-comment-reply-section .token-comment-item__author-actions .report-flag-button {
@@ -367,8 +402,12 @@
     flex: 0 0 auto;
     align-items: center;
     justify-content: flex-end;
-    gap: 4px;
+    gap: 6px;
     margin-left: auto;
+  }
+
+  .token-comment-reply-section .token-comment-item__author-actions .text-button {
+    font-size: 12px;
   }
 
   .token-comment-reply-section .token-comment-item__date {

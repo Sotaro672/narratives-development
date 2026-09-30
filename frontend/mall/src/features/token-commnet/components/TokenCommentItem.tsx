@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import Chip from "../../../components/ui/Chip";
 import MediaIcon from "../../../components/ui/MediaIcon";
+import TextButton from "../../../components/ui/TextButton";
 import { formatDateTime } from "../../../components/utils/date";
 import ReportFlagButton from "../../shared/presentation/components/ReportFlagButton";
 import type {
@@ -238,24 +239,22 @@ export default function TokenCommentItem({
             <div className="token-comment-item__author-actions">
               {isOwnComment ? (
                 <>
-                  <Chip
-                    size="sm"
-                    variant="neutral"
-                    selected={isEditing}
+                  <TextButton
+                    className="token-comment-item__edit-button"
+                    aria-pressed={isEditing}
                     disabled={actionDisabled}
                     onClick={handleStartEdit}
                   >
                     編集
-                  </Chip>
+                  </TextButton>
 
-                  <Chip
-                    size="sm"
-                    variant="danger"
+                  <TextButton
+                    className="token-comment-item__delete-button"
                     disabled={actionDisabled}
                     onClick={handleDelete}
                   >
                     {isDeleting ? "削除中..." : "削除"}
-                  </Chip>
+                  </TextButton>
                 </>
               ) : canReport ? (
                 <ReportFlagButton

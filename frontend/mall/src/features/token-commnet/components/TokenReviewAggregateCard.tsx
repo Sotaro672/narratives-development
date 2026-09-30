@@ -1,9 +1,10 @@
 // frontend/mall/src/features/token-commnet/components/TokenReviewAggregateCard.tsx
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import Badge from "../../../components/ui/Badge";
 import Chip from "../../../components/ui/Chip";
+import TextButton from "../../../components/ui/TextButton";
 import { getMyAvatar } from "../../avatar/api/avatarApi";
 import ReportModal from "../../report/components/ReportModal";
 import { useReport } from "../../report/hooks/useReport";
@@ -11,9 +12,12 @@ import { useAuthState } from "../../shared/hooks/useAuthState";
 import ReportFlagButton from "../../shared/presentation/components/ReportFlagButton";
 import { useTokenReviewAggregateCard } from "../hooks/useTokenReviewAggregateCard";
 
+const DESCRIPTION_COLLAPSE_THRESHOLD = 80;
+
 type TokenReviewAggregateCardProps = {
   tokenBlueprintId: string;
   productId: string;
+  tokenDescription?: string | null;
   resaleDisabled?: boolean;
   resaleLabel?: string;
   onResaleClick?: () => void;
@@ -22,12 +26,15 @@ type TokenReviewAggregateCardProps = {
 export default function TokenReviewAggregateCard({
   tokenBlueprintId,
   productId,
+  tokenDescription,
   resaleDisabled = false,
   resaleLabel = "出品",
   onResaleClick,
 }: TokenReviewAggregateCardProps) {
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const descriptionId = useId();
 
   const {
     target,
@@ -58,7 +65,15 @@ export default function TokenReviewAggregateCard({
   });
 
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
+  const normalizedTokenDescription = tokenDescription?.trim() ?? "";
   const canTap = enabled && !loading;
+  const isDescriptionExpandable =
+    normalizedTokenDescription.length > DESCRIPTION_COLLAPSE_THRESHOLD;
+
+  const displayedDescription =
+    isDescriptionExpandable && !descriptionExpanded
+      ? `${normalizedTokenDescription.slice(0, DESCRIPTION_COLLAPSE_THRESHOLD).trimEnd()}…`
+      : normalizedTokenDescription;
 
   const canOpenResalePage =
     canTap &&
@@ -105,6 +120,10 @@ export default function TokenReviewAggregateCard({
     };
   }, [authResolved, isLoggedIn]);
 
+  useEffect(() => {
+    setDescriptionExpanded(false);
+  }, [tokenDescription]);
+
   const handleOpenResalePage = () => {
     if (!canOpenResalePage) {
       return;
@@ -146,6 +165,15 @@ export default function TokenReviewAggregateCard({
           <span>{dislikeCount}</span>
         </Chip>
 
+        <Badge
+          variant="neutral"
+          size="md"
+          aria-label={`コメント ${commentCount} 件`}
+        >
+          <span aria-hidden="true">💬</span>
+          <span>{commentCount}</span>
+        </Badge>
+
         <Chip
           variant="neutral"
           size="md"
@@ -156,23 +184,36 @@ export default function TokenReviewAggregateCard({
           <span>{resaleLabel}</span>
         </Chip>
 
+        <span className="token-review-aggregate__spacer" />
+
         <ReportFlagButton
           label="トークンを通報"
           disabled={!canReport}
           onClick={handleOpenReport}
         />
-
-        <span className="token-review-aggregate__spacer" />
-
-        <Badge
-          variant="neutral"
-          size="md"
-          aria-label={`コメント ${commentCount} 件`}
-        >
-          <span aria-hidden="true">💬</span>
-          <span>{commentCount}</span>
-        </Badge>
       </div>
+
+      {normalizedTokenDescription ? (
+        <div className="token-review-description">
+          <p
+            id={descriptionId}
+            className="token-review-description__text"
+          >
+            {displayedDescription}
+          </p>
+
+          {isDescriptionExpandable ? (
+            <TextButton
+              className="token-review-description__toggle"
+              aria-expanded={descriptionExpanded}
+              aria-controls={descriptionId}
+              onClick={() => setDescriptionExpanded((current) => !current)}
+            >
+              {descriptionExpanded ? "閉じる" : "詳しく見る"}
+            </TextButton>
+          ) : null}
+        </div>
+      ) : null}
 
       <ReportModal
         open={isOpen}
