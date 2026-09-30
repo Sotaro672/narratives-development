@@ -35,7 +35,7 @@ import (
 //       - childCount        // direct children count
 //       - deleted
 //       - createdAt
-//       - updatedAt
+//       - updatedAt         // nil until body is edited
 //
 //       - reactions/{actorType_actorId} -> CommentReaction
 //
@@ -140,6 +140,7 @@ func NextReactionType(current, pressed ReactionType) (ReactionType, error) {
 	if err := current.Validate(); err != nil {
 		return "", err
 	}
+
 	if err := pressed.Validate(); err != nil {
 		return "", err
 	}
@@ -147,9 +148,11 @@ func NextReactionType(current, pressed ReactionType) (ReactionType, error) {
 	if pressed == ReactionComment {
 		return ReactionComment, nil
 	}
+
 	if current == pressed {
 		return ReactionComment, nil
 	}
+
 	return pressed, nil
 }
 
@@ -224,6 +227,7 @@ func (a *TokenBlueprintReviewAggregate) ApplyReaction(
 	if err := oldType.Validate(); err != nil {
 		return err
 	}
+
 	if err := newType.Validate(); err != nil {
 		return err
 	}
@@ -323,12 +327,15 @@ func NewTokenBlueprintReaction(
 	if tokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	if actorID == "" {
 		return nil, fmt.Errorf("%w: actorID", ErrInvalidID)
 	}
+
 	if err := actorType.Validate(); err != nil {
 		return nil, err
 	}
+
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
@@ -362,6 +369,7 @@ func (r *TokenBlueprintReaction) ReactionDocumentID() (string, error) {
 	if r.ActorID == "" {
 		return "", fmt.Errorf("%w: actorID", ErrInvalidID)
 	}
+
 	if err := r.ActorType.Validate(); err != nil {
 		return "", err
 	}
@@ -393,7 +401,7 @@ type Comment struct {
 	Deleted bool
 
 	CreatedAt time.Time
-	UpdatedAt time.Time
+	UpdatedAt *time.Time
 }
 
 // NewTopLevelComment creates a top-level comment.
@@ -412,15 +420,19 @@ func NewTopLevelComment(
 	if commentID == "" {
 		return nil, fmt.Errorf("%w: commentID", ErrInvalidID)
 	}
+
 	if tokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	if authorID == "" {
 		return nil, fmt.Errorf("%w: authorID", ErrInvalidID)
 	}
+
 	if err := authorType.Validate(); err != nil {
 		return nil, err
 	}
+
 	if body == "" {
 		return nil, ErrEmptyBody
 	}
@@ -439,7 +451,7 @@ func NewTopLevelComment(
 		ChildCount:       0,
 		Deleted:          false,
 		CreatedAt:        now,
-		UpdatedAt:        now,
+		UpdatedAt:        nil,
 	}, nil
 }
 
@@ -462,30 +474,39 @@ func NewReplyComment(
 	if commentID == "" {
 		return nil, fmt.Errorf("%w: commentID", ErrInvalidID)
 	}
+
 	if tokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	if parent == nil {
 		return nil, ErrInvalidParent
 	}
+
 	if parent.TokenBlueprintID != tokenBlueprintID {
 		return nil, ErrInvalidParent
 	}
+
 	if parent.Deleted {
 		return nil, ErrDeletedComment
 	}
+
 	if authorID == "" {
 		return nil, fmt.Errorf("%w: authorID", ErrInvalidID)
 	}
+
 	if err := authorType.Validate(); err != nil {
 		return nil, err
 	}
+
 	if body == "" {
 		return nil, ErrEmptyBody
 	}
+
 	if parent.Depth < 0 {
 		return nil, ErrInvalidDepth
 	}
+
 	if parent.RootCommentID == "" {
 		return nil, fmt.Errorf("%w: parent.RootCommentID", ErrInvalidID)
 	}
@@ -504,7 +525,7 @@ func NewReplyComment(
 		ChildCount:       0,
 		Deleted:          false,
 		CreatedAt:        now,
-		UpdatedAt:        now,
+		UpdatedAt:        nil,
 	}, nil
 }
 
@@ -521,34 +542,38 @@ func (c *Comment) UpdateBody(
 	if body == "" {
 		return ErrEmptyBody
 	}
+
 	if c.Deleted {
 		return ErrDeletedComment
 	}
 
 	c.Body = body
-	c.UpdatedAt = now
+	updatedAt := now
+	c.UpdatedAt = &updatedAt
 	return nil
 }
 
 // MarkDeleted keeps the comment node but clears visible content.
 // Existing descendants can remain attached to this node.
-func (c *Comment) MarkDeleted(now time.Time) {
+// UpdatedAt is intentionally not changed because it represents body edits only.
+func (c *Comment) MarkDeleted(_ time.Time) {
 	c.Deleted = true
 	c.Body = ""
-	c.UpdatedAt = now
 }
 
 // ApplyReaction changes counters based on actor's reaction change (old -> new).
+// UpdatedAt is intentionally not changed because it represents body edits only.
 // The per-actor reaction document is stored under:
 // comments/{commentId}/reactions/{actorType_actorId}
 func (c *Comment) ApplyReaction(
 	oldType,
 	newType ReactionType,
-	now time.Time,
+	_ time.Time,
 ) error {
 	if err := oldType.Validate(); err != nil {
 		return err
 	}
+
 	if err := newType.Validate(); err != nil {
 		return err
 	}
@@ -560,22 +585,23 @@ func (c *Comment) ApplyReaction(
 
 	c.LikeCount += ld
 	c.DislikeCount += dd
-	c.UpdatedAt = now
 	return nil
 }
 
-func (c *Comment) IncrementChildCount(now time.Time) {
+// IncrementChildCount changes only the direct child counter.
+// UpdatedAt is intentionally not changed because it represents body edits only.
+func (c *Comment) IncrementChildCount(_ time.Time) {
 	c.ChildCount += 1
-	c.UpdatedAt = now
 }
 
-func (c *Comment) DecrementChildCount(now time.Time) error {
+// DecrementChildCount changes only the direct child counter.
+// UpdatedAt is intentionally not changed because it represents body edits only.
+func (c *Comment) DecrementChildCount(_ time.Time) error {
 	if c.ChildCount-1 < 0 {
 		return ErrNegativeCounter
 	}
 
 	c.ChildCount -= 1
-	c.UpdatedAt = now
 	return nil
 }
 
@@ -606,15 +632,19 @@ func NewCommentReaction(
 	if tokenBlueprintID == "" {
 		return nil, fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	if commentID == "" {
 		return nil, fmt.Errorf("%w: commentID", ErrInvalidID)
 	}
+
 	if actorID == "" {
 		return nil, fmt.Errorf("%w: actorID", ErrInvalidID)
 	}
+
 	if err := actorType.Validate(); err != nil {
 		return nil, err
 	}
+
 	if err := t.Validate(); err != nil {
 		return nil, err
 	}
@@ -649,6 +679,7 @@ func (r *CommentReaction) ReactionDocumentID() (string, error) {
 	if r.ActorID == "" {
 		return "", fmt.Errorf("%w: actorID", ErrInvalidID)
 	}
+
 	if err := r.ActorType.Validate(); err != nil {
 		return "", err
 	}
@@ -665,21 +696,27 @@ func ValidateComment(c *Comment) error {
 	if c == nil {
 		return ErrInvalidParent
 	}
+
 	if c.CommentID == "" {
 		return fmt.Errorf("%w: commentID", ErrInvalidID)
 	}
+
 	if c.TokenBlueprintID == "" {
 		return fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	if c.AuthorID == "" {
 		return fmt.Errorf("%w: authorID", ErrInvalidID)
 	}
+
 	if err := c.AuthorType.Validate(); err != nil {
 		return err
 	}
+
 	if c.Depth < 0 {
 		return ErrInvalidDepth
 	}
+
 	if c.RootCommentID == "" {
 		return fmt.Errorf("%w: rootCommentID", ErrInvalidID)
 	}
@@ -687,12 +724,15 @@ func ValidateComment(c *Comment) error {
 	if c.IsTopLevel() {
 		return nil
 	}
+
 	if c.ParentCommentID == "" {
 		return ErrInvalidParent
 	}
+
 	if c.Depth == 0 {
 		return ErrInvalidDepth
 	}
+
 	if c.RootCommentID == c.CommentID {
 		return ErrInvalidParent
 	}
@@ -713,18 +753,23 @@ func ValidateCommentParentRelation(
 	if err := ValidateComment(parent); err != nil {
 		return err
 	}
+
 	if err := ValidateComment(child); err != nil {
 		return err
 	}
+
 	if parent.TokenBlueprintID != tokenBlueprintID {
 		return ErrInvalidParent
 	}
+
 	if child.TokenBlueprintID != tokenBlueprintID {
 		return ErrInvalidParent
 	}
+
 	if child.ParentCommentID != parent.CommentID {
 		return ErrInvalidParent
 	}
+
 	if child.Depth != parent.Depth+1 {
 		return ErrInvalidParent
 	}
@@ -733,6 +778,7 @@ func ValidateCommentParentRelation(
 	if parent.IsTopLevel() {
 		expectedRootCommentID = parent.CommentID
 	}
+
 	if child.RootCommentID != expectedRootCommentID {
 		return ErrInvalidParent
 	}
@@ -746,15 +792,19 @@ func ValidateTokenBlueprintReaction(
 	if r == nil {
 		return ErrInvalidParent
 	}
+
 	if r.TokenBlueprintID == "" {
 		return fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	if r.ActorID == "" {
 		return fmt.Errorf("%w: actorID", ErrInvalidID)
 	}
+
 	if err := r.ActorType.Validate(); err != nil {
 		return err
 	}
+
 	if err := r.Type.Validate(); err != nil {
 		return err
 	}
@@ -766,18 +816,23 @@ func ValidateCommentReaction(r *CommentReaction) error {
 	if r == nil {
 		return ErrInvalidParent
 	}
+
 	if r.TokenBlueprintID == "" {
 		return fmt.Errorf("%w: tokenBlueprintID", ErrInvalidID)
 	}
+
 	if r.CommentID == "" {
 		return fmt.Errorf("%w: commentID", ErrInvalidID)
 	}
+
 	if r.ActorID == "" {
 		return fmt.Errorf("%w: actorID", ErrInvalidID)
 	}
+
 	if err := r.ActorType.Validate(); err != nil {
 		return err
 	}
+
 	if err := r.Type.Validate(); err != nil {
 		return err
 	}

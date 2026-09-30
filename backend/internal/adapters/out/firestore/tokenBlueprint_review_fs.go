@@ -387,12 +387,8 @@ func (r *commentRepoFS) UpdateUnderParent(ctx context.Context, tokenBlueprintID,
 	if patch.ChildCount != nil {
 		updates = append(updates, firestore.Update{Path: "ChildCount", Value: *patch.ChildCount})
 	}
-
 	if patch.UpdatedAt != nil {
 		updates = append(updates, firestore.Update{Path: "UpdatedAt", Value: *patch.UpdatedAt})
-	} else {
-		now := time.Now()
-		updates = append(updates, firestore.Update{Path: "UpdatedAt", Value: now})
 	}
 
 	_, err := docRef.Update(ctx, updates)

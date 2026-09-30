@@ -62,6 +62,7 @@ func (q *TokenBlueprintReviewConsoleQuery) ResolveBrandActor(ctx context.Context
 	if err := q.validateConfigured(); err != nil {
 		return ConsoleTokenBlueprintReviewBrandActor{}, err
 	}
+
 	if tokenBlueprintID == "" {
 		return ConsoleTokenBlueprintReviewBrandActor{}, ErrConsoleTokenBlueprintIDRequired
 	}
@@ -134,13 +135,13 @@ type ConsoleTokenBlueprintCommentReadModel struct {
 	BrandName        string  `json:"brandName"`
 	BrandIcon        *string `json:"brandIcon"`
 
-	Body         string `json:"body"`
-	LikeCount    int64  `json:"likeCount"`
-	DislikeCount int64  `json:"dislikeCount"`
-	ChildCount   int64  `json:"childCount"`
-	Deleted      bool   `json:"deleted"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
+	Body         string  `json:"body"`
+	LikeCount    int64   `json:"likeCount"`
+	DislikeCount int64   `json:"dislikeCount"`
+	ChildCount   int64   `json:"childCount"`
+	Deleted      bool    `json:"deleted"`
+	CreatedAt    string  `json:"createdAt"`
+	UpdatedAt    *string `json:"updatedAt"`
 }
 
 type ConsoleTokenBlueprintCommentListReadModel struct {
@@ -184,6 +185,7 @@ func (q *TokenBlueprintReviewConsoleQuery) ListAggregatesByCompanyTokenBlueprint
 	if err := q.validateConfigured(); err != nil {
 		return ConsoleTokenBlueprintReviewAggregateListReadModel{}, err
 	}
+
 	if in.CompanyID == "" {
 		return ConsoleTokenBlueprintReviewAggregateListReadModel{}, ErrConsoleCompanyIDRequired
 	}
@@ -225,9 +227,11 @@ func (q *TokenBlueprintReviewConsoleQuery) ListCommentsByTokenBlueprintID(
 	if err := q.validateConfigured(); err != nil {
 		return ConsoleTokenBlueprintCommentListReadModel{}, err
 	}
+
 	if in.CompanyID == "" {
 		return ConsoleTokenBlueprintCommentListReadModel{}, ErrConsoleCompanyIDRequired
 	}
+
 	if in.TokenBlueprintID == "" {
 		return ConsoleTokenBlueprintCommentListReadModel{}, ErrConsoleTokenBlueprintIDRequired
 	}
@@ -294,7 +298,7 @@ func (q *TokenBlueprintReviewConsoleQuery) ToCommentReadModel(view usecase.Comme
 		ChildCount:   comment.ChildCount,
 		Deleted:      comment.Deleted,
 		CreatedAt:    formatRFC3339NanoUTC(comment.CreatedAt),
-		UpdatedAt:    formatRFC3339NanoUTC(comment.UpdatedAt),
+		UpdatedAt:    formatOptionalRFC3339NanoUTC(comment.UpdatedAt),
 	}
 }
 
@@ -367,5 +371,15 @@ func formatRFC3339NanoUTC(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
+
 	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func formatOptionalRFC3339NanoUTC(t *time.Time) *string {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+
+	formatted := t.UTC().Format(time.RFC3339Nano)
+	return &formatted
 }

@@ -18,9 +18,24 @@ func formatContractDetailTime(
 func formatOptionalContractDetailTime(
 	value *time.Time,
 ) string {
-	if value == nil {
+	if value == nil || value.IsZero() {
 		return ""
 	}
 
 	return formatContractDetailTime(*value)
+}
+
+func formatOptionalContractDetailTimePointer(
+	value *time.Time,
+) *string {
+	if value == nil || value.IsZero() {
+		return nil
+	}
+
+	formatted := formatContractDetailTime(*value)
+	if formatted == "" {
+		return nil
+	}
+
+	return &formatted
 }

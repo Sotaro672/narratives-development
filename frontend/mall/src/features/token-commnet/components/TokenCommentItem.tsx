@@ -23,6 +23,7 @@ type TokenCommentItemProps = {
   editingCommentId: string | null;
   deletingCommentId: string | null;
   useDedicatedReplySection: boolean;
+  replyToName?: string;
   onToggleExpanded: (commentId: string) => void;
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
@@ -108,6 +109,7 @@ export default function TokenCommentItem({
   editingCommentId,
   deletingCommentId,
   useDedicatedReplySection,
+  replyToName = "",
   onToggleExpanded,
   onLike,
   onDislike,
@@ -125,6 +127,7 @@ export default function TokenCommentItem({
   const commentId = comment.commentId?.trim() || "";
   const authorAvatarId = getAuthorAvatarId(comment);
   const displayName = getTokenCommentDisplayName(comment);
+  const normalizedReplyToName = replyToName.trim();
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const normalizedCurrentAvatarId = currentAvatarId.trim();
   const normalizedEditingCommentId = editingCommentId?.trim() ?? "";
@@ -132,6 +135,9 @@ export default function TokenCommentItem({
   const totalReplyCount = countDescendantReplies(node);
   const hasReplies = totalReplyCount > 0;
   const isExpanded = Boolean(commentId && expandedIds.has(commentId));
+  const showReplyMention =
+    comment.depth >= 2 &&
+    Boolean(normalizedReplyToName);
 
   const isOwnComment = Boolean(
     comment.authorType === "avatar" &&
@@ -270,6 +276,13 @@ export default function TokenCommentItem({
         </div>
 
         <p className="token-comment-item__text">
+          {showReplyMention ? (
+            <>
+              <span className="token-comment-item__mention">
+                @{normalizedReplyToName}
+              </span>{" "}
+            </>
+          ) : null}
           {comment.body}
         </p>
 
@@ -331,6 +344,11 @@ export default function TokenCommentItem({
               editingCommentId={editingCommentId}
               deletingCommentId={deletingCommentId}
               useDedicatedReplySection={useDedicatedReplySection}
+              replyToName={
+                childNode.comment.depth >= 2
+                  ? displayName
+                  : ""
+              }
               onToggleExpanded={onToggleExpanded}
               onLike={onLike}
               onDislike={onDislike}

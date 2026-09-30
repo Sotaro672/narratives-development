@@ -86,8 +86,8 @@ type MallTokenBlueprintCommentReadModel struct {
 	ChildCount   int64  `json:"ChildCount"`
 	Deleted      bool   `json:"Deleted"`
 
-	CreatedAt string `json:"CreatedAt"`
-	UpdatedAt string `json:"UpdatedAt"`
+	CreatedAt string  `json:"CreatedAt"`
+	UpdatedAt *string `json:"UpdatedAt"`
 }
 
 type MallTokenBlueprintCommentListReadModel struct {
@@ -240,7 +240,7 @@ func (q *TokenBlueprintReviewMallQuery) ToCommentReadModel(
 		Deleted:      c.Deleted,
 
 		CreatedAt: formatRFC3339NanoUTC(c.CreatedAt),
-		UpdatedAt: formatRFC3339NanoUTC(c.UpdatedAt),
+		UpdatedAt: formatOptionalRFC3339NanoUTC(c.UpdatedAt),
 	}
 }
 
@@ -260,4 +260,13 @@ func formatRFC3339NanoUTC(t time.Time) string {
 		return ""
 	}
 	return t.UTC().Format(time.RFC3339Nano)
+}
+
+func formatOptionalRFC3339NanoUTC(t *time.Time) *string {
+	if t == nil || t.IsZero() {
+		return nil
+	}
+
+	formatted := t.UTC().Format(time.RFC3339Nano)
+	return &formatted
 }

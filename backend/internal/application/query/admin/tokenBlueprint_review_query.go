@@ -102,8 +102,8 @@ type ContractTokenBlueprintReviewRow struct {
 	ReportCount  int    `json:"reportCount"`
 	Deleted      bool   `json:"deleted"`
 
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	CreatedAt string  `json:"createdAt"`
+	UpdatedAt *string `json:"updatedAt"`
 }
 
 func (q *ContractTokenBlueprintReviewQuery) List(
@@ -216,7 +216,7 @@ func (q *ContractTokenBlueprintReviewQuery) List(
 			ReportCount:      reportCount,
 			Deleted:          comment.Deleted,
 			CreatedAt:        formatContractDetailTime(comment.CreatedAt),
-			UpdatedAt:        formatContractDetailTime(comment.UpdatedAt),
+			UpdatedAt:        formatOptionalContractDetailTimePointer(comment.UpdatedAt),
 		})
 	}
 

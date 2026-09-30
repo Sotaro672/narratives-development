@@ -255,6 +255,11 @@
   word-break: break-word;
 }
 
+.token-comment-item__mention {
+  color: #2563eb;
+  font-weight: 600;
+}
+
 .token-comment-item__actions {
   display: flex;
   flex-wrap: wrap;

@@ -54,6 +54,7 @@ type FilterComment struct {
 }
 
 // PatchComment is a partial update model for comment doc.
+// UpdatedAt is set only when the comment body is edited.
 type PatchComment struct {
 	Body         *string    `json:"body"`
 	Deleted      *bool      `json:"deleted"`
@@ -64,39 +65,39 @@ type PatchComment struct {
 }
 
 // NewBodyPatchFromComment creates a patch for persisting an edited comment body.
+// UpdatedAt is included because body editing is the only trigger for comment UpdatedAt.
 func NewBodyPatchFromComment(
 	comment Comment,
 ) PatchComment {
 	return PatchComment{
 		Body:      &comment.Body,
-		UpdatedAt: &comment.UpdatedAt,
+		UpdatedAt: comment.UpdatedAt,
 	}
 }
 
 // NewDeletePatchFromComment creates a patch for persisting a logically deleted comment.
+// Deletion does not change UpdatedAt because UpdatedAt represents body edits only.
 func NewDeletePatchFromComment(
 	comment Comment,
 ) PatchComment {
 	return PatchComment{
-		Body:      &comment.Body,
-		Deleted:   &comment.Deleted,
-		UpdatedAt: &comment.UpdatedAt,
+		Body:    &comment.Body,
+		Deleted: &comment.Deleted,
 	}
 }
 
 // NewChildCountPatchFromComment creates a patch for persisting only the
-// direct child count of a comment.
+// direct child count of a comment. Child count changes do not change UpdatedAt.
 func NewChildCountPatchFromComment(
 	comment Comment,
 ) PatchComment {
 	return PatchComment{
 		ChildCount: &comment.ChildCount,
-		UpdatedAt:  &comment.UpdatedAt,
 	}
 }
 
 // NewReactionCountPatchFromComment creates a patch for persisting only
-// reaction-related counters of a comment.
+// reaction-related counters of a comment. Reaction changes do not change UpdatedAt.
 func NewReactionCountPatchFromComment(
 	comment Comment,
 ) PatchComment {
@@ -104,7 +105,6 @@ func NewReactionCountPatchFromComment(
 		LikeCount:    &comment.LikeCount,
 		DislikeCount: &comment.DislikeCount,
 		ChildCount:   &comment.ChildCount,
-		UpdatedAt:    &comment.UpdatedAt,
 	}
 }
 
