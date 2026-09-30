@@ -36,6 +36,8 @@ export default function ScanResultPage() {
     canOpenTransferContents,
     load,
     submitReview,
+    voteHelpfulReview,
+    deleteReview,
     openContentsAfterResolve,
     openTokenContentsByAssetId,
     transferConfirmModalOpen,
@@ -225,6 +227,8 @@ export default function ScanResultPage() {
             onReviewBodyChange={setReviewBody}
             onReviewRatingChange={setReviewRating}
             onSubmitReview={handleSubmitReview}
+            onHelpfulVote={voteHelpfulReview}
+            onDeleteReview={deleteReview}
           />
         </section>
 

@@ -136,6 +136,7 @@ func (uc *ProductBlueprintReviewUsecase) ListCompanyReviewAggregatesWithNames(
 	if start > totalCount {
 		start = totalCount
 	}
+
 	end := start + page.PerPage
 	if end > totalCount {
 		end = totalCount
@@ -404,6 +405,77 @@ func (uc *ProductBlueprintReviewUsecase) PutProductBlueprintReviewHelpfulVote(
 	}
 
 	return uc.ReviewRepo.PutHelpfulVote(ctx, productBlueprintID, reviewID, avatarID)
+}
+
+// ============================================================
+// Public API: Author remove
+// ============================================================
+
+type RemoveProductBlueprintReviewByAvatarInput struct {
+	ProductBlueprintID string
+	ReviewID           string
+	AvatarID           string
+}
+
+// RemoveProductBlueprintReviewByAvatar soft-removes a review by its author.
+// Only the avatar that created the review can remove it.
+// Calling this command for an already REMOVED review is idempotent.
+func (uc *ProductBlueprintReviewUsecase) RemoveProductBlueprintReviewByAvatar(
+	ctx context.Context,
+	in RemoveProductBlueprintReviewByAvatarInput,
+) (pbr.Review, error) {
+	if uc == nil || uc.ReviewRepo == nil {
+		return pbr.Review{}, pbr.ErrInternal
+	}
+
+	productBlueprintID := strings.TrimSpace(in.ProductBlueprintID)
+	reviewID := strings.TrimSpace(in.ReviewID)
+	avatarID := strings.TrimSpace(in.AvatarID)
+	if productBlueprintID == "" || reviewID == "" || avatarID == "" {
+		return pbr.Review{}, pbr.ErrInvalid
+	}
+
+	review, err := uc.ReviewRepo.GetByProductBlueprintID(
+		ctx,
+		productBlueprintID,
+		reviewID,
+	)
+	if err != nil {
+		return pbr.Review{}, err
+	}
+
+	if strings.TrimSpace(review.AvatarID) != avatarID {
+		return pbr.Review{}, pbr.ErrForbidden
+	}
+
+	if review.Status == pbr.ReviewStatusRemoved {
+		return review, nil
+	}
+
+	now := uc.now().UTC()
+	if err := review.Remove("deleted_by_author", now, avatarID); err != nil {
+		return pbr.Review{}, err
+	}
+
+	status := review.Status
+	updatedAt := review.UpdatedAt
+	updatedBy := review.UpdatedBy
+	moderationReason := ""
+	if review.ModerationReason != nil {
+		moderationReason = *review.ModerationReason
+	}
+
+	return uc.ReviewRepo.UpdateByProductBlueprintID(
+		ctx,
+		productBlueprintID,
+		reviewID,
+		pbr.Patch{
+			Status:           &status,
+			ModerationReason: &moderationReason,
+			UpdatedAt:        &updatedAt,
+			UpdatedBy:        &updatedBy,
+		},
+	)
 }
 
 // ============================================================

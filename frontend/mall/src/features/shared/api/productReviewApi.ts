@@ -34,3 +34,34 @@ export async function putProductReviewHelpfulVote(args: {
     },
   );
 }
+
+export async function deleteOwnProductReview(args: {
+  productBlueprintId: string;
+  reviewId: string;
+  headers?: HeadersInit;
+}): Promise<ProductBlueprintReview> {
+  const productBlueprintId = args.productBlueprintId.trim();
+  const reviewId = args.reviewId.trim();
+
+  if (!productBlueprintId) {
+    throw new Error("product review delete: productBlueprintId is empty");
+  }
+
+  if (!reviewId) {
+    throw new Error("product review delete: reviewId is empty");
+  }
+
+  return requestJson<ProductBlueprintReview>(
+    `/mall/me/catalog/product-blueprints/${encodeURIComponent(productBlueprintId)}/reviews/${encodeURIComponent(reviewId)}`,
+    {
+      method: "DELETE",
+      auth: "required",
+      headers: args.headers,
+      messages: {
+        requestErrorMessage: "deleteOwnProductReview failed",
+        nonJsonErrorMessage: "deleteOwnProductReview failed: response is not json",
+        invalidJsonErrorMessage: "deleteOwnProductReview failed: invalid json",
+      },
+    },
+  );
+}

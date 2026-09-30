@@ -31,6 +31,14 @@ type ScanResultCardProps = {
   onReviewBodyChange: (value: string) => void;
   onReviewRatingChange: (value: number) => void;
   onSubmitReview: () => void | Promise<void>;
+  onHelpfulVote: (
+    productBlueprintId: string,
+    reviewId: string,
+  ) => void | Promise<void>;
+  onDeleteReview: (
+    productBlueprintId: string,
+    reviewId: string,
+  ) => void | Promise<void>;
 };
 
 export default function ScanResultCard(props: ScanResultCardProps) {
@@ -51,6 +59,8 @@ export default function ScanResultCard(props: ScanResultCardProps) {
     onReviewBodyChange,
     onReviewRatingChange,
     onSubmitReview,
+    onHelpfulVote,
+    onDeleteReview,
   } = props;
 
   if (state.loading) {
@@ -186,10 +196,7 @@ export default function ScanResultCard(props: ScanResultCardProps) {
             ) : null}
 
             <div className="scan-result-desktop-review-form__actions">
-              <Button
-                type="submit"
-                disabled={!reviewCanSubmit}
-              >
+              <Button type="submit" disabled={!reviewCanSubmit}>
                 {reviewSubmitting ? "投稿中..." : "投稿"}
               </Button>
             </div>
@@ -206,6 +213,8 @@ export default function ScanResultCard(props: ScanResultCardProps) {
             errorMessage={state.reviewsError}
             showHelpfulVotes
             onAvatarClick={onAvatarClick}
+            onHelpfulVote={onHelpfulVote}
+            onDeleteOwnReview={onDeleteReview}
           />
         </div>
       </aside>

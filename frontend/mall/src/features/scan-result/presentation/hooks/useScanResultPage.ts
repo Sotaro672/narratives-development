@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { getMyAvatar } from "../../../avatar/api/avatarApi";
-import { putProductReviewHelpfulVote } from "../../../shared/api/productReviewApi";
+import {
+  deleteOwnProductReview,
+  putProductReviewHelpfulVote,
+} from "../../../shared/api/productReviewApi";
 import { getOptionalAuthHeaders } from "../../../../lib/authHeaders";
 
 import { createScanResultPageViewModel } from "../../application/scanPageViewModelFactory";
@@ -741,6 +744,54 @@ export function useScanResultPage() {
     [],
   );
 
+  const deleteReview = useCallback(
+    async (
+      targetProductBlueprintId: string,
+      reviewId: string,
+    ): Promise<void> => {
+      const pbId = targetProductBlueprintId.trim();
+      const normalizedReviewId = reviewId.trim();
+
+      if (!pbId) {
+        throw new Error("productBlueprintId is empty");
+      }
+
+      if (!normalizedReviewId) {
+        throw new Error("reviewId is empty");
+      }
+
+      await deleteOwnProductReview({
+        productBlueprintId: pbId,
+        reviewId: normalizedReviewId,
+      });
+
+      if (!mountedRef.current) {
+        return;
+      }
+
+      setReviews((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const nextItems = current.items.filter(
+          (review) => review.id !== normalizedReviewId,
+        );
+
+        if (nextItems.length === current.items.length) {
+          return current;
+        }
+
+        return {
+          ...current,
+          items: nextItems,
+          total: Math.max(0, current.total - 1),
+        };
+      });
+    },
+    [],
+  );
+
   const nextReviewsPage = useCallback(async () => {
     if (
       busyReviews ||
@@ -809,6 +860,7 @@ export function useScanResultPage() {
     loadOwnedState,
     submitReview,
     voteHelpfulReview,
+    deleteReview,
     nextReviewsPage,
     prevReviewsPage,
     openContentsAfterResolve,

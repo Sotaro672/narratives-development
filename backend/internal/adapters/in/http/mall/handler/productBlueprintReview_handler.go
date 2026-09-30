@@ -44,6 +44,11 @@ type ProductBlueprintReviewService interface {
 		ctx context.Context,
 		in uc.PutProductBlueprintReviewHelpfulVoteInput,
 	) (pbr.Review, error)
+
+	RemoveProductBlueprintReviewByAvatar(
+		ctx context.Context,
+		in uc.RemoveProductBlueprintReviewByAvatarInput,
+	) (pbr.Review, error)
 }
 
 // ProductBlueprintReviewReportService owns purchaser-side reporting of
@@ -100,6 +105,8 @@ func (h *ProductBlueprintReviewHandler) ServeHTTP(w http.ResponseWriter, r *http
 	switch route.Kind {
 	case productBlueprintReviewRouteCollection:
 		h.handleReviewCollection(w, r, route.ProductBlueprintID, isMe)
+	case productBlueprintReviewRouteItem:
+		h.handleReviewItem(w, r, route.ProductBlueprintID, route.ReviewID, isMe)
 	case productBlueprintReviewRouteReport:
 		h.handleReport(w, r, route.ProductBlueprintID, route.ReviewID, isMe)
 	case productBlueprintReviewRouteHelpful:
@@ -131,6 +138,26 @@ func (h *ProductBlueprintReviewHandler) handleReviewCollection(
 	}
 
 	h.handleList(w, r, productBlueprintID)
+}
+
+func (h *ProductBlueprintReviewHandler) handleReviewItem(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+	reviewID string,
+	isMe bool,
+) {
+	if !isMe {
+		http.NotFound(w, r)
+		return
+	}
+
+	if r.Method != http.MethodDelete {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	h.handleDeleteMe(w, r, productBlueprintID, reviewID)
 }
 
 func (h *ProductBlueprintReviewHandler) handleReport(
@@ -264,6 +291,34 @@ func (h *ProductBlueprintReviewHandler) handleCreateMe(
 	}
 
 	writeJSON(w, http.StatusCreated, toCatalogReviewDTO(created))
+}
+
+func (h *ProductBlueprintReviewHandler) handleDeleteMe(
+	w http.ResponseWriter,
+	r *http.Request,
+	productBlueprintID string,
+	reviewID string,
+) {
+	avatarID, ok := middleware.CurrentAvatarID(r)
+	if !ok || avatarID == "" {
+		writeJSONError(w, http.StatusUnauthorized, "missing avatarId")
+		return
+	}
+
+	removed, err := h.svc.RemoveProductBlueprintReviewByAvatar(
+		r.Context(),
+		uc.RemoveProductBlueprintReviewByAvatarInput{
+			ProductBlueprintID: productBlueprintID,
+			ReviewID:           reviewID,
+			AvatarID:           avatarID,
+		},
+	)
+	if err != nil {
+		writeDomainError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toCatalogReviewDTO(removed))
 }
 
 func (h *ProductBlueprintReviewHandler) handleHelpfulMe(
@@ -453,6 +508,7 @@ type productBlueprintReviewRouteKind int
 
 const (
 	productBlueprintReviewRouteCollection productBlueprintReviewRouteKind = iota
+	productBlueprintReviewRouteItem
 	productBlueprintReviewRouteReport
 	productBlueprintReviewRouteHelpful
 )
@@ -485,6 +541,18 @@ func parseProductBlueprintReviewRoute(
 		return productBlueprintReviewRoute{
 			Kind:               productBlueprintReviewRouteCollection,
 			ProductBlueprintID: parts[1],
+		}, true
+	}
+
+	if len(parts) == 4 &&
+		parts[0] == "product-blueprints" &&
+		parts[1] != "" &&
+		parts[2] == "reviews" &&
+		parts[3] != "" {
+		return productBlueprintReviewRoute{
+			Kind:               productBlueprintReviewRouteItem,
+			ProductBlueprintID: parts[1],
+			ReviewID:           parts[3],
 		}, true
 	}
 

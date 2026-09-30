@@ -42,6 +42,10 @@ export type ProductReviewSectionProps = {
     productBlueprintId: string,
     reviewId: string,
   ) => void | Promise<void>;
+  onDeleteOwnReview?: (
+    productBlueprintId: string,
+    reviewId: string,
+  ) => void | Promise<void>;
   className?: string;
 };
 
@@ -62,13 +66,18 @@ export default function ProductReviewSection({
   showHelpfulVotes = false,
   onAvatarClick,
   onHelpfulVote,
+  onDeleteOwnReview,
   className,
 }: ProductReviewSectionProps) {
   const [reviewsExpanded, setReviewsExpanded] = useState(false);
   const [helpfulVotingReviewIds, setHelpfulVotingReviewIds] = useState<Set<string>>(
     () => new Set(),
   );
+  const [deletingReviewIds, setDeletingReviewIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [helpfulVoteError, setHelpfulVoteError] = useState("");
+  const [deleteReviewError, setDeleteReviewError] = useState("");
 
   const {
     target,
@@ -157,6 +166,56 @@ export default function ProductReviewSection({
     }
   };
 
+  const handleDeleteOwnReview = async (review: ProductReviewItem) => {
+    const reviewId = review.id?.trim() || "";
+    const reviewAvatarId = review.avatarId?.trim() || "";
+
+    if (
+      !normalizedProductBlueprintId ||
+      !normalizedCurrentAvatarId ||
+      !reviewId ||
+      !reviewAvatarId ||
+      reviewAvatarId !== normalizedCurrentAvatarId ||
+      !onDeleteOwnReview
+    ) {
+      return;
+    }
+
+    if (deletingReviewIds.has(reviewId)) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "このレビューを削除します。よろしいですか？",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeleteReviewError("");
+    setDeletingReviewIds((current) => {
+      const next = new Set(current);
+      next.add(reviewId);
+      return next;
+    });
+
+    try {
+      await onDeleteOwnReview(normalizedProductBlueprintId, reviewId);
+    } catch (caught) {
+      setDeleteReviewError(
+        caught instanceof Error
+          ? caught.message
+          : "レビューの削除に失敗しました。",
+      );
+    } finally {
+      setDeletingReviewIds((current) => {
+        const next = new Set(current);
+        next.delete(reviewId);
+        return next;
+      });
+    }
+  };
+
   return (
     <>
       <section className={["product-review", className].filter(Boolean).join(" ")}>
@@ -195,6 +254,10 @@ export default function ProductReviewSection({
           <Alert variant="error">{helpfulVoteError}</Alert>
         ) : null}
 
+        {deleteReviewError ? (
+          <Alert variant="error">{deleteReviewError}</Alert>
+        ) : null}
+
         {!loading && !safeErrorMessage && safeItems.length === 0 ? (
           <TextState variant="empty">{emptyText}</TextState>
         ) : null}
@@ -210,8 +273,12 @@ export default function ProductReviewSection({
                   currentAvatarId={normalizedCurrentAvatarId}
                   showHelpfulVotes={showHelpfulVotes}
                   helpfulVoting={helpfulVotingReviewIds.has(review.id)}
+                  deleting={deletingReviewIds.has(review.id)}
                   onAvatarClick={onAvatarClick}
                   onHelpfulVote={onHelpfulVote ? handleHelpfulVote : undefined}
+                  onDeleteOwnReview={
+                    onDeleteOwnReview ? handleDeleteOwnReview : undefined
+                  }
                   onReport={handleReport}
                 />
               ))}
@@ -254,8 +321,10 @@ function ProductReviewItemView({
   currentAvatarId,
   showHelpfulVotes,
   helpfulVoting,
+  deleting,
   onAvatarClick,
   onHelpfulVote,
+  onDeleteOwnReview,
   onReport,
 }: {
   review: ProductReviewItem;
@@ -263,8 +332,10 @@ function ProductReviewItemView({
   currentAvatarId: string;
   showHelpfulVotes: boolean;
   helpfulVoting: boolean;
+  deleting: boolean;
   onAvatarClick?: (avatarId: string) => void;
   onHelpfulVote?: (review: ProductReviewItem) => void | Promise<void>;
+  onDeleteOwnReview?: (review: ProductReviewItem) => void | Promise<void>;
   onReport?: (review: ProductReviewItem) => void;
 }) {
   const reviewId = review.id?.trim() || "";
@@ -288,6 +359,13 @@ function ProductReviewItemView({
       reviewId &&
       !isOwnReview &&
       onReport,
+  );
+  const canDeleteOwnReview = Boolean(
+    productBlueprintId &&
+      currentAvatarId &&
+      reviewId &&
+      isOwnReview &&
+      onDeleteOwnReview,
   );
   const canVoteHelpful = Boolean(
     showHelpfulVotes &&
@@ -342,7 +420,15 @@ function ProductReviewItemView({
           <div className="product-review__author">{avatarContent}</div>
         )}
 
-        {canReport ? (
+        {canDeleteOwnReview ? (
+          <TextButton
+            className="product-review__delete-button"
+            disabled={deleting}
+            onClick={() => void onDeleteOwnReview?.(review)}
+          >
+            {deleting ? "削除中..." : "削除"}
+          </TextButton>
+        ) : canReport ? (
           <ReportFlagButton
             label={`${avatarName}のレビューを通報`}
             onClick={() => onReport?.(review)}
