@@ -74,6 +74,7 @@ export default function TokenCommentSection({
   onLikeComment,
   onDislikeComment,
   onStartReply,
+  onCancelReply,
   onSubmitReply,
   onStartEdit,
   onCancelEdit,
@@ -226,6 +227,7 @@ export default function TokenCommentSection({
               onLike={onLikeComment}
               onDislike={onDislikeComment}
               onStartReply={onStartReply}
+              onCancelReply={onCancelReply}
               onReplyBodyChange={onReplyBodyChange}
               onSubmitReply={onSubmitReply}
               onStartEdit={onStartEdit}

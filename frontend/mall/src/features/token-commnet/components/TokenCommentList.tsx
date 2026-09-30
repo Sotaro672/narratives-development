@@ -20,6 +20,7 @@ type TokenCommentListProps = {
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
+  onCancelReply: () => void;
   onReplyBodyChange: (value: string) => void;
   onSubmitReply: (parentCommentId: string) => Promise<void>;
   onStartEdit: (commentId: string) => void;
@@ -43,6 +44,7 @@ export default function TokenCommentList({
   onLike,
   onDislike,
   onStartReply,
+  onCancelReply,
   onReplyBodyChange,
   onSubmitReply,
   onStartEdit,
@@ -88,6 +90,7 @@ export default function TokenCommentList({
           onLike={onLike}
           onDislike={onDislike}
           onStartReply={onStartReply}
+          onCancelReply={onCancelReply}
           onReplyBodyChange={onReplyBodyChange}
           onSubmitReply={onSubmitReply}
           onStartEdit={onStartEdit}

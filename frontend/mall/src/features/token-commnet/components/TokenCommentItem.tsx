@@ -34,6 +34,7 @@ type TokenCommentItemProps = {
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
+  onCancelReply: () => void;
   onReplyBodyChange: (value: string) => void;
   onSubmitReply: (parentCommentId: string) => Promise<void>;
   onStartEdit: (commentId: string) => void;
@@ -124,6 +125,7 @@ export default function TokenCommentItem({
   onLike,
   onDislike,
   onStartReply,
+  onCancelReply,
   onReplyBodyChange,
   onSubmitReply,
   onStartEdit,
@@ -173,6 +175,7 @@ export default function TokenCommentItem({
   );
 
   const actionDisabled = isDeleting;
+  const replyActionDisabled = actionDisabled || (isReplying && replyPosting);
 
   const canReport = Boolean(
     normalizedTokenBlueprintId &&
@@ -197,8 +200,13 @@ export default function TokenCommentItem({
     void onDislike(commentId);
   };
 
-  const handleStartReply = () => {
-    if (!commentId || actionDisabled) {
+  const handleReplyAction = () => {
+    if (!commentId || replyActionDisabled) {
+      return;
+    }
+
+    if (!useDedicatedReplySection && isReplying) {
+      onCancelReply();
       return;
     }
 
@@ -354,10 +362,12 @@ export default function TokenCommentItem({
             size="sm"
             variant="neutral"
             selected={isReplying}
-            disabled={actionDisabled}
-            onClick={handleStartReply}
+            disabled={replyActionDisabled}
+            onClick={handleReplyAction}
           >
-            返信
+            {!useDedicatedReplySection && isReplying
+              ? "キャンセル"
+              : "返信"}
           </Chip>
 
           {hasReplies ? (
@@ -402,6 +412,7 @@ export default function TokenCommentItem({
               onLike={onLike}
               onDislike={onDislike}
               onStartReply={onStartReply}
+              onCancelReply={onCancelReply}
               onReplyBodyChange={onReplyBodyChange}
               onSubmitReply={onSubmitReply}
               onStartEdit={onStartEdit}
