@@ -311,7 +311,10 @@ func Register(mux *http.ServeMux, cont *Container) {
 
 	// Avatar review
 	if cont.AvatarReviewUC != nil {
-		avatarReviewH = mallhandler.NewAvatarReviewHandler(cont.AvatarReviewUC)
+		avatarReviewH = mallhandler.NewAvatarReviewHandler(
+			cont.AvatarReviewUC,
+			cont.AvatarUC,
+		)
 	}
 
 	// Inquiry

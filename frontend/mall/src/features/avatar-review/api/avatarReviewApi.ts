@@ -12,6 +12,8 @@ export type AvatarReviewItem = {
   orderId: string;
   orderItemIndex: number;
   reviewerAvatarId: string;
+  reviewerAvatarName: string;
+  reviewerAvatarIcon: string | null;
   revieweeAvatarId: string;
   evaluation: AvatarReviewEvaluation;
   comment: string;

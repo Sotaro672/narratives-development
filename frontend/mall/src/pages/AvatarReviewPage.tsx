@@ -181,17 +181,26 @@ export default function AvatarReviewPage() {
                     className="avatar-review-card"
                   >
                     <div className="avatar-review-card__header">
-                      <strong
-                        className={
-                          review.evaluation === "good"
-                            ? "avatar-review-card__evaluation avatar-review-card__evaluation--good"
-                            : "avatar-review-card__evaluation avatar-review-card__evaluation--disappointed"
-                        }
-                      >
-                        {review.evaluation === "good"
-                          ? "良かった"
-                          : "残念だった"}
-                      </strong>
+                      <div className="avatar-review-card__reviewer">
+                        {review.reviewerAvatarIcon ? (
+                          <img
+                            src={review.reviewerAvatarIcon}
+                            alt=""
+                            className="avatar-review-card__reviewer-icon"
+                          />
+                        ) : (
+                          <div
+                            className="avatar-review-card__reviewer-icon avatar-review-card__reviewer-icon--fallback"
+                            aria-hidden="true"
+                          >
+                            {review.reviewerAvatarName.trim().charAt(0) || "A"}
+                          </div>
+                        )}
+
+                        <strong className="avatar-review-card__reviewer-name">
+                          {review.reviewerAvatarName || "アバター"}
+                        </strong>
+                      </div>
 
                       <time className="avatar-review-card__date">
                         {formatCreatedAt(review.createdAt)}

@@ -2,10 +2,12 @@
 package mallHandler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	usecase "narratives/internal/application/usecase"
 	avatarreviewdom "narratives/internal/domain/avatar_review"
@@ -36,14 +38,17 @@ const (
 // accepted from the request body. Reviewee identity is resolved from the
 // authoritative Trade and Order snapshots.
 type AvatarReviewHandler struct {
-	uc *usecase.AvatarReviewUsecase
+	uc       *usecase.AvatarReviewUsecase
+	avatarUC *usecase.AvatarUsecase
 }
 
 func NewAvatarReviewHandler(
 	uc *usecase.AvatarReviewUsecase,
+	avatarUC *usecase.AvatarUsecase,
 ) http.Handler {
 	return &AvatarReviewHandler{
-		uc: uc,
+		uc:       uc,
+		avatarUC: avatarUC,
 	}
 }
 
@@ -136,6 +141,81 @@ type createAvatarReviewRequest struct {
 	Comment    string                     `json:"comment"`
 }
 
+type avatarReviewItemResponse struct {
+	ID string `json:"id"`
+
+	TradeID        string `json:"tradeId"`
+	OrderID        string `json:"orderId"`
+	OrderItemIndex int    `json:"orderItemIndex"`
+
+	ReviewerAvatarID   string  `json:"reviewerAvatarId"`
+	ReviewerAvatarName string  `json:"reviewerAvatarName"`
+	ReviewerAvatarIcon *string `json:"reviewerAvatarIcon"`
+
+	RevieweeAvatarID string                     `json:"revieweeAvatarId"`
+	Evaluation       avatarreviewdom.Evaluation `json:"evaluation"`
+	Comment          string                     `json:"comment"`
+	CreatedAt        time.Time                  `json:"createdAt"`
+}
+
+type avatarReviewListResponse struct {
+	AvatarID          string                     `json:"avatarId"`
+	GoodCount         int64                      `json:"goodCount"`
+	DisappointedCount int64                      `json:"disappointedCount"`
+	Total             int64                      `json:"total"`
+	Page              int                        `json:"page"`
+	PerPage           int                        `json:"perPage"`
+	HasNext           bool                       `json:"hasNext"`
+	Items             []avatarReviewItemResponse `json:"items"`
+}
+
+type avatarReviewReviewerProfile struct {
+	AvatarName string
+	AvatarIcon *string
+}
+
+func (h *AvatarReviewHandler) resolveAvatarReviewReviewerProfile(
+	ctx context.Context,
+	avatarID string,
+) avatarReviewReviewerProfile {
+	avatarID = strings.TrimSpace(avatarID)
+	if avatarID == "" || h == nil || h.avatarUC == nil {
+		return avatarReviewReviewerProfile{}
+	}
+
+	avatar, err := h.avatarUC.GetByID(ctx, avatarID)
+	if err != nil {
+		// The review itself remains public even when the reviewer Avatar is no
+		// longer available or cannot temporarily be resolved. The frontend can
+		// render its fallback Avatar UI from empty profile values.
+		return avatarReviewReviewerProfile{}
+	}
+
+	return avatarReviewReviewerProfile{
+		AvatarName: strings.TrimSpace(avatar.AvatarName),
+		AvatarIcon: avatarIconURL(avatar.AvatarIcon),
+	}
+}
+
+func toAvatarReviewItemResponse(
+	review avatarreviewdom.Review,
+	profile avatarReviewReviewerProfile,
+) avatarReviewItemResponse {
+	return avatarReviewItemResponse{
+		ID:                 review.ID,
+		TradeID:            review.TradeID,
+		OrderID:            review.OrderID,
+		OrderItemIndex:     review.OrderItemIndex,
+		ReviewerAvatarID:   review.ReviewerAvatarID,
+		ReviewerAvatarName: profile.AvatarName,
+		ReviewerAvatarIcon: profile.AvatarIcon,
+		RevieweeAvatarID:   review.RevieweeAvatarID,
+		Evaluation:         review.Evaluation,
+		Comment:            review.Comment,
+		CreatedAt:          review.CreatedAt.UTC(),
+	}
+}
+
 // ============================================================
 // Public list
 // ============================================================
@@ -150,7 +230,8 @@ type createAvatarReviewRequest struct {
 // When evaluation is omitted, all reviews are returned.
 //
 // Returns one page of reviews received by the specified Avatar together with
-// public aggregate evaluation counts.
+// public aggregate evaluation counts. Each review also includes the current
+// public Avatar name and icon of its reviewer.
 func (h *AvatarReviewHandler) listByAvatar(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -196,11 +277,53 @@ func (h *AvatarReviewHandler) listByAvatar(
 		return
 	}
 
+	profileCache := make(
+		map[string]avatarReviewReviewerProfile,
+		len(result.Items),
+	)
+	items := make(
+		[]avatarReviewItemResponse,
+		0,
+		len(result.Items),
+	)
+
+	for _, review := range result.Items {
+		reviewerAvatarID := strings.TrimSpace(review.ReviewerAvatarID)
+
+		profile, exists := profileCache[reviewerAvatarID]
+		if !exists {
+			profile = h.resolveAvatarReviewReviewerProfile(
+				r.Context(),
+				reviewerAvatarID,
+			)
+			profileCache[reviewerAvatarID] = profile
+		}
+
+		items = append(
+			items,
+			toAvatarReviewItemResponse(
+				review,
+				profile,
+			),
+		)
+	}
+
+	response := avatarReviewListResponse{
+		AvatarID:          result.AvatarID,
+		GoodCount:         result.GoodCount,
+		DisappointedCount: result.DisappointedCount,
+		Total:             result.Total,
+		Page:              result.Page,
+		PerPage:           result.PerPage,
+		HasNext:           result.HasNext,
+		Items:             items,
+	}
+
 	writeJSON(
 		w,
 		http.StatusOK,
 		map[string]any{
-			"data": result,
+			"data": response,
 		},
 	)
 }
@@ -453,11 +576,19 @@ func (h *AvatarReviewHandler) create(
 		return
 	}
 
+	profile := h.resolveAvatarReviewReviewerProfile(
+		r.Context(),
+		created.ReviewerAvatarID,
+	)
+
 	writeJSON(
 		w,
 		http.StatusCreated,
 		map[string]any{
-			"data": created,
+			"data": toAvatarReviewItemResponse(
+				created,
+				profile,
+			),
 		},
 	)
 }
