@@ -338,7 +338,40 @@ function ReplyComment({
       style={{ marginLeft: `${indent}px` }}
     >
       <div className="token-comment-item__header">
-        <ReplyCommentAuthor comment={comment} />
+        <div className="token-comment-item__author-row">
+          <ReplyCommentAuthor comment={comment} />
+
+          <div className="token-comment-item__author-actions">
+            {isOwnComment ? (
+              <>
+                <Chip
+                  size="sm"
+                  variant="neutral"
+                  selected={isEditing}
+                  disabled={actionDisabled}
+                  onClick={handleStartEdit}
+                >
+                  編集
+                </Chip>
+
+                <Chip
+                  size="sm"
+                  variant="danger"
+                  disabled={actionDisabled}
+                  onClick={handleDelete}
+                >
+                  {isDeleting ? "削除中..." : "削除"}
+                </Chip>
+              </>
+            ) : canReport ? (
+              <ReportFlagButton
+                disabled={actionDisabled}
+                label={`${displayName}のコメントを通報`}
+                onClick={handleReport}
+              />
+            ) : null}
+          </div>
+        </div>
 
         {comment.createdAt ? (
           <time
@@ -389,35 +422,6 @@ function ReplyComment({
         >
           返信
         </Chip>
-
-        {isOwnComment ? (
-          <>
-            <Chip
-              size="sm"
-              variant="neutral"
-              selected={isEditing}
-              disabled={actionDisabled}
-              onClick={handleStartEdit}
-            >
-              編集
-            </Chip>
-
-            <Chip
-              size="sm"
-              variant="danger"
-              disabled={actionDisabled}
-              onClick={handleDelete}
-            >
-              {isDeleting ? "削除中..." : "削除"}
-            </Chip>
-          </>
-        ) : canReport ? (
-          <ReportFlagButton
-            disabled={actionDisabled}
-            label={`${displayName}のコメントを通報`}
-            onClick={handleReport}
-          />
-        ) : null}
       </div>
     </article>
   );

@@ -161,11 +161,41 @@
   gap: 10px;
 }
 
+.token-comment-item__author-row {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.token-comment-item__author-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.token-comment-item__author-actions .report-flag-button {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex: 0 0 28px;
+  font-size: 14px;
+}
+
 .token-comment-author {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 8px;
+}
+
+.token-comment-item__author-row .token-comment-author {
+  max-width: 100%;
+  flex: 0 1 auto;
 }
 
 .token-comment-author--button {
@@ -231,12 +261,6 @@
   align-items: center;
   gap: 8px;
   margin-top: 10px;
-}
-
-.token-comment-item__actions .report-flag-button {
-  width: 28px;
-  height: 28px;
-  font-size: 14px;
 }
 
 .token-comment-item__reply-count {
@@ -390,6 +414,15 @@
   .token-comment-item__header {
     display: grid;
     gap: 4px;
+  }
+
+  .token-comment-item__author-row {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .token-comment-item__author-actions {
+    flex: 0 0 auto;
   }
 
   .token-comment-item__date {
