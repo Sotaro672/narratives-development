@@ -1,9 +1,6 @@
 // frontend/mall/src/features/token-commnet/api/tokenCommentApi.ts
 
-import {
-  requestJson,
-  requestVoid,
-} from "../../../lib/http";
+import { requestJson, requestVoid } from "../../../lib/http";
 
 import type {
   TokenBlueprintReactionInput,
@@ -44,7 +41,7 @@ type TokenCommentResponse = {
   ChildCount: number;
   Deleted: boolean;
   CreatedAt: string;
-  UpdatedAt: string;
+  UpdatedAt: string | null;
   AuthorAvatarName: string;
   AuthorAvatarIcon: string | null;
   BrandName: string;
@@ -90,7 +87,7 @@ function toTokenComment(
     childCount: value.ChildCount,
     deleted: value.Deleted,
     createdAt: value.CreatedAt,
-    updatedAt: value.UpdatedAt,
+    updatedAt: value.UpdatedAt ?? null,
     authorAvatarName: value.AuthorAvatarName,
     authorAvatarIcon: value.AuthorAvatarIcon,
     brandName: value.BrandName,

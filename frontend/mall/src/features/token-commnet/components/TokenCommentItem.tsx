@@ -35,8 +35,7 @@ type TokenCommentItemProps = {
 
 function countDescendantReplies(node: TokenCommentTreeNode): number {
   return node.children.reduce(
-    (total, childNode) =>
-      total + 1 + countDescendantReplies(childNode),
+    (total, childNode) => total + 1 + countDescendantReplies(childNode),
     0,
   );
 }
@@ -135,9 +134,8 @@ export default function TokenCommentItem({
   const totalReplyCount = countDescendantReplies(node);
   const hasReplies = totalReplyCount > 0;
   const isExpanded = Boolean(commentId && expandedIds.has(commentId));
-  const showReplyMention =
-    comment.depth >= 2 &&
-    Boolean(normalizedReplyToName);
+  const isEdited = Boolean(comment.updatedAt?.trim());
+  const showReplyMention = comment.depth >= 2 && Boolean(normalizedReplyToName);
 
   const isOwnComment = Boolean(
     comment.authorType === "avatar" &&
@@ -147,13 +145,11 @@ export default function TokenCommentItem({
   );
 
   const isEditing = Boolean(
-    commentId &&
-      normalizedEditingCommentId === commentId,
+    commentId && normalizedEditingCommentId === commentId,
   );
 
   const isDeleting = Boolean(
-    commentId &&
-      normalizedDeletingCommentId === commentId,
+    commentId && normalizedDeletingCommentId === commentId,
   );
 
   const actionDisabled = isDeleting;
@@ -232,6 +228,12 @@ export default function TokenCommentItem({
         <div className="token-comment-item__header">
           <div className="token-comment-item__author-row">
             <TokenCommentAuthor comment={comment} />
+
+            {isEdited ? (
+              <span className="token-comment-item__edited">
+                編集済み
+              </span>
+            ) : null}
 
             <div className="token-comment-item__author-actions">
               {isOwnComment ? (

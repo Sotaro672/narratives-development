@@ -218,6 +218,7 @@ function ReplyComment({
   const normalizedDeletingCommentId = deletingCommentId?.trim() ?? "";
   const authorAvatarId = getAuthorAvatarId(comment);
   const displayName = getTokenCommentDisplayName(comment);
+  const isEdited = Boolean(comment.updatedAt?.trim());
 
   if (!commentId) {
     return null;
@@ -339,7 +340,15 @@ function ReplyComment({
     >
       <div className="token-comment-item__header">
         <div className="token-comment-item__author-row">
-          <ReplyCommentAuthor comment={comment} />
+          <div className="token-comment-item__author-meta">
+            <ReplyCommentAuthor comment={comment} />
+
+            {isEdited ? (
+              <span className="token-comment-item__edited">
+                編集済み
+              </span>
+            ) : null}
+          </div>
 
           <div className="token-comment-item__author-actions">
             {isOwnComment ? (

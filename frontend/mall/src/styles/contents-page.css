@@ -169,12 +169,22 @@
   gap: 6px;
 }
 
+.token-comment-item__edited {
+  flex: 0 0 auto;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .token-comment-item__author-actions {
   display: flex;
   min-width: 0;
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
+  margin-left: auto;
 }
 
 .token-comment-item__author-actions .report-flag-button {
@@ -428,6 +438,7 @@
 
   .token-comment-item__author-actions {
     flex: 0 0 auto;
+    margin-left: auto;
   }
 
   .token-comment-item__date {

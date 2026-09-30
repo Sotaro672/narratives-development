@@ -47,7 +47,7 @@ export type TokenComment = {
   childCount: number;
   deleted: boolean;
   createdAt: string;
-  updatedAt: string;
+  updatedAt: string | null;
   authorAvatarName?: string | null;
   authorAvatarIcon?: string | null;
   brandName?: string | null;

@@ -159,14 +159,71 @@
 
 .token-comment-reply-section .token-comment-item__header {
   display: flex;
+  width: 100%;
   min-width: 0;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
 }
 
+.token-comment-reply-section .token-comment-item__author-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.token-comment-reply-section .token-comment-item__author-meta {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.token-comment-reply-section .token-comment-item__author-actions {
+  display: flex;
+  min-width: max-content;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.token-comment-reply-section .token-comment-item__author-actions .report-flag-button {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex: 0 0 28px;
+  font-size: 14px;
+}
+
 .token-comment-reply-section .token-comment-author {
   min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.token-comment-reply-section .token-comment-author__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.token-comment-reply-section .token-comment-item__edited {
+  flex: 0 0 auto;
+  color: #9ca3af;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .token-comment-reply-section .token-comment-item__text {
@@ -268,7 +325,50 @@
 
   .token-comment-reply-section .token-comment-item__header {
     display: grid;
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: minmax(0, 1fr);
     gap: 4px;
+  }
+
+  .token-comment-reply-section .token-comment-item__author-row {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .token-comment-reply-section .token-comment-item__author-meta {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 0;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .token-comment-reply-section .token-comment-author {
+    min-width: 0;
+    max-width: 100%;
+    flex: 0 1 auto;
+    overflow: hidden;
+  }
+
+  .token-comment-reply-section .token-comment-item__edited {
+    flex: 0 0 auto;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  .token-comment-reply-section .token-comment-item__author-actions {
+    display: flex;
+    min-width: max-content;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    margin-left: auto;
   }
 
   .token-comment-reply-section .token-comment-item__date {
