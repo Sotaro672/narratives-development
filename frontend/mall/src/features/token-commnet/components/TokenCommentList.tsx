@@ -10,6 +10,9 @@ type TokenCommentListProps = {
   commentTree: TokenCommentTreeNode[];
   commentsLoading: boolean;
   expandedIds: Set<string>;
+  replyingCommentId: string | null;
+  replyBody: string;
+  replyPosting: boolean;
   editingCommentId: string | null;
   deletingCommentId: string | null;
   useDedicatedReplySection: boolean;
@@ -17,6 +20,8 @@ type TokenCommentListProps = {
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
+  onReplyBodyChange: (value: string) => void;
+  onSubmitReply: (parentCommentId: string) => Promise<void>;
   onStartEdit: (commentId: string) => void;
   onDelete: (commentId: string) => void | Promise<void>;
   onReport: (commentId: string) => void;
@@ -28,6 +33,9 @@ export default function TokenCommentList({
   commentTree,
   commentsLoading,
   expandedIds,
+  replyingCommentId,
+  replyBody,
+  replyPosting,
   editingCommentId,
   deletingCommentId,
   useDedicatedReplySection,
@@ -35,6 +43,8 @@ export default function TokenCommentList({
   onLike,
   onDislike,
   onStartReply,
+  onReplyBodyChange,
+  onSubmitReply,
   onStartEdit,
   onDelete,
   onReport,
@@ -68,6 +78,9 @@ export default function TokenCommentList({
           currentAvatarId={currentAvatarId}
           node={node}
           expandedIds={expandedIds}
+          replyingCommentId={replyingCommentId}
+          replyBody={replyBody}
+          replyPosting={replyPosting}
           editingCommentId={editingCommentId}
           deletingCommentId={deletingCommentId}
           useDedicatedReplySection={useDedicatedReplySection}
@@ -75,6 +88,8 @@ export default function TokenCommentList({
           onLike={onLike}
           onDislike={onDislike}
           onStartReply={onStartReply}
+          onReplyBodyChange={onReplyBodyChange}
+          onSubmitReply={onSubmitReply}
           onStartEdit={onStartEdit}
           onDelete={onDelete}
           onReport={onReport}

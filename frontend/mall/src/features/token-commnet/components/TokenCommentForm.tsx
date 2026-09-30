@@ -1,8 +1,10 @@
 // frontend/mall/src/features/token-commnet/components/TokenCommentForm.tsx
 
-import type { ChangeEvent } from "react";
+import type {
+  ChangeEvent,
+  KeyboardEvent,
+} from "react";
 
-import Button from "../../../components/ui/Button";
 import Textbox from "../../../components/ui/Textbox";
 
 type TokenCommentFormProps = {
@@ -11,8 +13,6 @@ type TokenCommentFormProps = {
   loading?: boolean;
   rows?: number;
   placeholder?: string;
-  buttonLabel?: string;
-  postingLabel?: string;
   onChange: (value: string) => void;
   onSubmit: () => void | Promise<void>;
 };
@@ -23,8 +23,6 @@ export default function TokenCommentForm({
   loading = false,
   rows = 4,
   placeholder = "コメントを書く…",
-  buttonLabel = "投稿",
-  postingLabel = "投稿中...",
   onChange,
   onSubmit,
 }: TokenCommentFormProps) {
@@ -44,6 +42,19 @@ export default function TokenCommentForm({
     void onSubmit();
   };
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (
+      event.key !== "Enter" ||
+      event.shiftKey ||
+      event.nativeEvent.isComposing
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    handleSubmit();
+  };
+
   return (
     <div className="token-comment-form">
       <Textbox
@@ -53,11 +64,8 @@ export default function TokenCommentForm({
         disabled={disabled}
         placeholder={placeholder}
         onChange={handleChange}
+        onKeyDown={handleKeyDown}
       />
-
-      <Button type="button" size="sm" disabled={!canSubmit} onClick={handleSubmit}>
-        {posting ? postingLabel : buttonLabel}
-      </Button>
     </div>
   );
 }

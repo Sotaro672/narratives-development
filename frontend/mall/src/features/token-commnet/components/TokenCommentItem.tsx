@@ -16,11 +16,16 @@ import {
   getTokenCommentDisplayName,
 } from "../../shared/types/tokenCommentTypes";
 
+import TokenCommentForm from "./TokenCommentForm";
+
 type TokenCommentItemProps = {
   tokenBlueprintId: string;
   currentAvatarId: string;
   node: TokenCommentTreeNode;
   expandedIds: Set<string>;
+  replyingCommentId: string | null;
+  replyBody: string;
+  replyPosting: boolean;
   editingCommentId: string | null;
   deletingCommentId: string | null;
   useDedicatedReplySection: boolean;
@@ -29,6 +34,8 @@ type TokenCommentItemProps = {
   onLike: (commentId: string) => void | Promise<void>;
   onDislike: (commentId: string) => void | Promise<void>;
   onStartReply: (commentId: string) => void;
+  onReplyBodyChange: (value: string) => void;
+  onSubmitReply: (parentCommentId: string) => Promise<void>;
   onStartEdit: (commentId: string) => void;
   onDelete: (commentId: string) => void | Promise<void>;
   onReport: (commentId: string) => void;
@@ -106,6 +113,9 @@ export default function TokenCommentItem({
   currentAvatarId,
   node,
   expandedIds,
+  replyingCommentId,
+  replyBody,
+  replyPosting,
   editingCommentId,
   deletingCommentId,
   useDedicatedReplySection,
@@ -114,6 +124,8 @@ export default function TokenCommentItem({
   onLike,
   onDislike,
   onStartReply,
+  onReplyBodyChange,
+  onSubmitReply,
   onStartEdit,
   onDelete,
   onReport,
@@ -130,6 +142,7 @@ export default function TokenCommentItem({
   const normalizedReplyToName = replyToName.trim();
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
   const normalizedCurrentAvatarId = currentAvatarId.trim();
+  const normalizedReplyingCommentId = replyingCommentId?.trim() ?? "";
   const normalizedEditingCommentId = editingCommentId?.trim() ?? "";
   const normalizedDeletingCommentId = deletingCommentId?.trim() ?? "";
   const totalReplyCount = countDescendantReplies(node);
@@ -143,6 +156,12 @@ export default function TokenCommentItem({
       normalizedCurrentAvatarId &&
       authorAvatarId &&
       normalizedCurrentAvatarId === authorAvatarId,
+  );
+
+  const isReplying = Boolean(
+    !useDedicatedReplySection &&
+      commentId &&
+      normalizedReplyingCommentId === commentId,
   );
 
   const isEditing = Boolean(
@@ -184,6 +203,14 @@ export default function TokenCommentItem({
     }
 
     onStartReply(commentId);
+  };
+
+  const handleSubmitReply = () => {
+    if (!commentId || actionDisabled || replyPosting || !replyBody.trim()) {
+      return;
+    }
+
+    void onSubmitReply(commentId);
   };
 
   const handleToggleReplies = () => {
@@ -287,6 +314,23 @@ export default function TokenCommentItem({
           {comment.body}
         </p>
 
+        {isReplying ? (
+          <div className="token-comment-item__reply-form">
+            <TokenCommentForm
+              value={replyBody}
+              posting={replyPosting}
+              rows={1}
+              placeholder={
+                comment.depth >= 1
+                  ? `@${displayName} 返信を書く…`
+                  : "返信を書く…"
+              }
+              onChange={onReplyBodyChange}
+              onSubmit={handleSubmitReply}
+            />
+          </div>
+        ) : null}
+
         <div className="token-comment-item__actions">
           <Chip
             size="sm"
@@ -309,6 +353,7 @@ export default function TokenCommentItem({
           <Chip
             size="sm"
             variant="neutral"
+            selected={isReplying}
             disabled={actionDisabled}
             onClick={handleStartReply}
           >
@@ -342,6 +387,9 @@ export default function TokenCommentItem({
               currentAvatarId={currentAvatarId}
               node={childNode}
               expandedIds={expandedIds}
+              replyingCommentId={replyingCommentId}
+              replyBody={replyBody}
+              replyPosting={replyPosting}
               editingCommentId={editingCommentId}
               deletingCommentId={deletingCommentId}
               useDedicatedReplySection={useDedicatedReplySection}
@@ -354,6 +402,8 @@ export default function TokenCommentItem({
               onLike={onLike}
               onDislike={onDislike}
               onStartReply={onStartReply}
+              onReplyBodyChange={onReplyBodyChange}
+              onSubmitReply={onSubmitReply}
               onStartEdit={onStartEdit}
               onDelete={onDelete}
               onReport={onReport}

@@ -74,7 +74,6 @@ export default function TokenCommentSection({
   onLikeComment,
   onDislikeComment,
   onStartReply,
-  onCancelReply,
   onSubmitReply,
   onStartEdit,
   onCancelEdit,
@@ -101,15 +100,7 @@ export default function TokenCommentSection({
   } = useReport();
 
   const normalizedTokenBlueprintId = tokenBlueprintId.trim();
-  const normalizedReplyingCommentId = replyingCommentId?.trim() ?? "";
   const normalizedEditingCommentId = editingCommentId?.trim() ?? "";
-  const isEditing = Boolean(normalizedEditingCommentId);
-
-  const canSubmitReply = Boolean(
-    normalizedReplyingCommentId &&
-      replyBody.trim() &&
-      !replyPosting,
-  );
 
   const canSubmitEdit = Boolean(
     normalizedEditingCommentId &&
@@ -147,10 +138,7 @@ export default function TokenCommentSection({
     return () => {
       cancelled = true;
     };
-  }, [
-    authResolved,
-    isLoggedIn,
-  ]);
+  }, [authResolved, isLoggedIn]);
 
   const handleReportComment = (commentId: string) => {
     const normalizedCommentId = commentId.trim();
@@ -170,17 +158,6 @@ export default function TokenCommentSection({
     });
   };
 
-  const handleSubmitReply = () => {
-    if (
-      !normalizedReplyingCommentId ||
-      !canSubmitReply
-    ) {
-      return;
-    }
-
-    void onSubmitReply(normalizedReplyingCommentId);
-  };
-
   const handleSubmitEdit = () => {
     if (!canSubmitEdit) {
       return;
@@ -192,10 +169,7 @@ export default function TokenCommentSection({
   const handleDeleteComment = async (commentId: string) => {
     const normalizedCommentId = commentId.trim();
 
-    if (
-      !normalizedCommentId ||
-      deletingCommentId
-    ) {
+    if (!normalizedCommentId || deletingCommentId) {
       return;
     }
 
@@ -208,24 +182,6 @@ export default function TokenCommentSection({
     }
 
     await onDeleteComment(normalizedCommentId);
-  };
-
-  const handleComposerCancel = () => {
-    if (isEditing) {
-      onCancelEdit();
-      return;
-    }
-
-    onCancelReply();
-  };
-
-  const handleComposerSubmit = () => {
-    if (isEditing) {
-      handleSubmitEdit();
-      return;
-    }
-
-    handleSubmitReply();
   };
 
   return (
@@ -260,6 +216,9 @@ export default function TokenCommentSection({
               commentTree={commentTree}
               commentsLoading={commentsLoading}
               expandedIds={expandedIds}
+              replyingCommentId={replyingCommentId}
+              replyBody={replyBody}
+              replyPosting={replyPosting}
               editingCommentId={editingCommentId}
               deletingCommentId={deletingCommentId}
               useDedicatedReplySection={hideCommentForm}
@@ -267,6 +226,8 @@ export default function TokenCommentSection({
               onLike={onLikeComment}
               onDislike={onDislikeComment}
               onStartReply={onStartReply}
+              onReplyBodyChange={onReplyBodyChange}
+              onSubmitReply={onSubmitReply}
               onStartEdit={onStartEdit}
               onDelete={handleDeleteComment}
               onReport={handleReportComment}
@@ -277,18 +238,18 @@ export default function TokenCommentSection({
 
       {!hideCommentForm ? (
         <ChatComposerModal
-          open={Boolean(normalizedEditingCommentId || normalizedReplyingCommentId)}
-          title={isEditing ? "コメントを編集" : "返信する"}
-          content={isEditing ? editBody : replyBody}
-          placeholder={isEditing ? "コメントを編集…" : "返信を書く…"}
-          submitting={isEditing ? editSaving : replyPosting}
-          canSubmit={isEditing ? canSubmitEdit : canSubmitReply}
-          submitLabel={isEditing ? "保存" : "返信を投稿"}
-          submittingLabel={isEditing ? "保存中..." : "投稿中..."}
+          open={Boolean(normalizedEditingCommentId)}
+          title="コメントを編集"
+          content={editBody}
+          placeholder="コメントを編集…"
+          submitting={editSaving}
+          canSubmit={canSubmitEdit}
+          submitLabel="保存"
+          submittingLabel="保存中..."
           rows={replyRows}
-          onContentChange={isEditing ? onEditBodyChange : onReplyBodyChange}
-          onCancel={handleComposerCancel}
-          onSubmit={handleComposerSubmit}
+          onContentChange={onEditBodyChange}
+          onCancel={onCancelEdit}
+          onSubmit={handleSubmitEdit}
         />
       ) : null}
 
