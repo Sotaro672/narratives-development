@@ -39,12 +39,6 @@ function getErrorMessage(
     : fallbackMessage;
 }
 
-function getInquiryTitle(
-  inquiry: InquiryDetail | null,
-): string {
-  return inquiry?.subject || "チャット詳細";
-}
-
 export function useInquiryDetailPage() {
   const { inquiryId } = useParams<InquiryDetailRouteParams>();
 
@@ -261,8 +255,6 @@ export function useInquiryDetailPage() {
     closingInquiry,
   ]);
 
-  const title = getInquiryTitle(inquiry);
-
   const shouldShowClosePrompt =
     inquiry?.status === "resolved";
 
@@ -275,7 +267,6 @@ export function useInquiryDetailPage() {
 
   return {
     inquiryId,
-    title,
     inquiry,
     replies,
     sortedReplies,

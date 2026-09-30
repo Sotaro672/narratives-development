@@ -86,10 +86,7 @@ export default function InquiryMessageCard({
 }
 
 function getInquiryTitle(inquiry: InquiryDetail): string {
-  const inquiryLabel =
-    inquiry.inquiryType === "product"
-      ? inquiry.subject || getInquiryTypeLabel(inquiry.inquiryType)
-      : getInquiryTypeLabel(inquiry.inquiryType);
+  const inquiryLabel = getInquiryTypeLabel(inquiry.inquiryType);
 
   return `${inquiry.productName}/${inquiryLabel}`;
 }

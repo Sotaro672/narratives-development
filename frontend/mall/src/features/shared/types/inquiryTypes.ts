@@ -1,4 +1,4 @@
-// frontend/amol/src/features/shared/types/inquiryTypes.ts
+// frontend/mall/src/features/shared/types/inquiryTypes.ts
 
 export const INQUIRY_STATUSES = [
   "open",
@@ -65,7 +65,6 @@ export type InquiryImage = {
 
 export type CreateProductInquiryRequest = {
   productId: string;
-  subject: string;
   content: string;
   inquiryType: "product";
   images: InquiryImageUpload[];
@@ -85,7 +84,6 @@ export type Inquiry = {
   orderId?: string;
   orderItemIndex?: number;
   avatarId: string;
-  subject?: string;
   content: string;
   status: InquiryStatus;
   inquiryType: InquiryType;

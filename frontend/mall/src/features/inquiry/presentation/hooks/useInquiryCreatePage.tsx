@@ -1,4 +1,4 @@
-// frontend/amol/src/features/inquiry/presentation/hooks/useInquiryCreatePage.tsx
+// frontend/mall/src/features/inquiry/presentation/hooks/useInquiryCreatePage.tsx
 
 import {
   type ChangeEvent,
@@ -81,11 +81,6 @@ export function useInquiryCreatePage() {
   }, [productId]);
 
   const [
-    subject,
-    setSubject,
-  ] = useState("");
-
-  const [
     content,
     setContent,
   ] = useState("");
@@ -135,7 +130,6 @@ export function useInquiryCreatePage() {
 
   const canSubmit =
     Boolean(productId) &&
-    Boolean(subject.trim()) &&
     Boolean(content.trim()) &&
     !submitting &&
     !submitted;
@@ -358,8 +352,6 @@ export function useInquiryCreatePage() {
         const payload:
           CreateInquiryRequest = {
             productId,
-            subject:
-              subject.trim(),
             content:
               content.trim(),
             inquiryType:
@@ -373,7 +365,6 @@ export function useInquiryCreatePage() {
         );
 
         setSubmitted(true);
-        setSubject("");
         setContent("");
         clearMediaItems();
       } catch (caught) {
@@ -392,7 +383,6 @@ export function useInquiryCreatePage() {
       content,
       mediaItems,
       productId,
-      subject,
     ]);
 
   const handleBackToScanResult =
@@ -408,8 +398,6 @@ export function useInquiryCreatePage() {
     productId,
     backTo,
 
-    subject,
-    setSubject,
     content,
     setContent,
     mediaItems,

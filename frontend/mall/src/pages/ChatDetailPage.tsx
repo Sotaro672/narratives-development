@@ -118,11 +118,7 @@ function InquiryChatDetail() {
       return;
     }
 
-    const inquiryLabel =
-      inquiry.inquiryType === "product"
-        ? inquiry.subject || getInquiryTypeLabel(inquiry.inquiryType)
-        : getInquiryTypeLabel(inquiry.inquiryType);
-
+    const inquiryLabel = getInquiryTypeLabel(inquiry.inquiryType);
     setHeaderTitle(`${inquiry.productName}/${inquiryLabel}`);
   }, [
     inquiry,
