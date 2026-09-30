@@ -134,27 +134,22 @@ export function useInquiryCreatePage() {
     !submitting &&
     !submitted;
 
-  const handleFilesSelected =
+  const handleFilesAdd =
     useCallback(
-      (
-        event:
-          ChangeEvent<HTMLInputElement>,
-      ) => {
-        const files = Array.from(
-          event.target.files ?? [],
-        ).filter((file) =>
-          file.type.startsWith(
-            "image/",
-          ),
-        );
+      (files: File[]) => {
+        const imageFiles =
+          files.filter((file) =>
+            file.type.startsWith(
+              "image/",
+            ),
+          );
 
-        if (files.length === 0) {
-          event.target.value = "";
+        if (imageFiles.length === 0) {
           return;
         }
 
         const nextItems =
-          files.map(
+          imageFiles.map(
             (
               file,
             ): InquiryMediaItem => {
@@ -188,10 +183,24 @@ export function useInquiryCreatePage() {
             ...nextItems,
           ],
         );
-
-        event.target.value = "";
       },
       [],
+    );
+
+  const handleFilesSelected =
+    useCallback(
+      (
+        event:
+          ChangeEvent<HTMLInputElement>,
+      ) => {
+        const files = Array.from(
+          event.target.files ?? [],
+        );
+
+        handleFilesAdd(files);
+        event.target.value = "";
+      },
+      [handleFilesAdd],
     );
 
   const handleRemoveMediaItem =
@@ -245,6 +254,26 @@ export function useInquiryCreatePage() {
         );
       },
       [],
+    );
+
+  const handleRemoveMediaFile =
+    useCallback(
+      (index: number) => {
+        const target =
+          mediaItems[index];
+
+        if (!target) {
+          return;
+        }
+
+        handleRemoveMediaItem(
+          target.id,
+        );
+      },
+      [
+        handleRemoveMediaItem,
+        mediaItems,
+      ],
     );
 
   const handleCarouselScroll =
@@ -411,8 +440,10 @@ export function useInquiryCreatePage() {
     canSubmit,
 
     submitInquiry,
+    handleFilesAdd,
     handleFilesSelected,
     handleRemoveMediaItem,
+    handleRemoveMediaFile,
     handleCarouselScroll,
     handleMoveToSlide,
     handleBackToScanResult,

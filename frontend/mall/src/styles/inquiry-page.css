@@ -42,6 +42,10 @@
   gap: 24px;
 }
 
+.inquiry-page__desktop-fields {
+  display: contents;
+}
+
 .inquiry-page__meta {
   display: grid;
   gap: 6px;
@@ -69,6 +73,17 @@
 
 .inquiry-page__submit {
   width: 100%;
+}
+
+@media (max-width: 959px) {
+  .inquiry-page__container {
+    padding-bottom: calc(var(--mobile-composer-height, 56px) + 24px);
+  }
+
+  .inquiry-page__desktop-fields,
+  .inquiry-page__submit {
+    display: none;
+  }
 }
 
 @media (max-width: 640px) {
