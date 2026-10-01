@@ -88,6 +88,16 @@
     padding-bottom: 0;
   }
 
+  .chat-workspace-page__mobile-swipe .layout-shell {
+    min-height: 0;
+  }
+
+  .chat-workspace-page__mobile-swipe .chat-workspace-page-layout {
+    height: calc(100dvh - var(--amol-header-height, 72px));
+    min-height: 0;
+    max-height: calc(100dvh - var(--amol-header-height, 72px));
+  }
+
   .chat-workspace-page__rail {
     display: flex;
     width: 200%;
@@ -140,6 +150,13 @@
     height: 100dvh;
     min-height: 0;
     max-height: 100dvh;
+    padding-bottom: var(--footer-nav-height);
+  }
+
+  .chat-workspace-page__mobile-swipe .chat-workspace-page-layout.layout-main--with-footer {
+    height: calc(100dvh - var(--amol-header-height, 72px));
+    min-height: 0;
+    max-height: calc(100dvh - var(--amol-header-height, 72px));
     padding-bottom: var(--footer-nav-height);
   }
 }

@@ -15,6 +15,7 @@ import {
 
 import Layout from "../components/layout/Layout";
 import MobileComposerFooter from "../components/layout/MobileComposerFooter";
+import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDismissPage";
 import StatePanel from "../components/ui/StatePanel";
 import ChatListPane from "../features/inquiry/presentation/components/ChatListPane";
 import {
@@ -110,6 +111,7 @@ function ChatWorkspaceContent() {
 
   const isChatListRoute = isChatListPath(location.pathname);
   const isMobileChatDetail = isMobile && !isChatListRoute;
+  const useMobileListSwipe = isMobile && isChatListRoute;
 
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
     isChatListRoute ? "list" : "detail",
@@ -135,10 +137,7 @@ function ChatWorkspaceContent() {
     pendingBackNavigationRef.current = false;
     clearBackNavigationTimer();
     navigate("/chats", { replace: true });
-  }, [
-    clearBackNavigationTimer,
-    navigate,
-  ]);
+  }, [clearBackNavigationTimer, navigate]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -212,6 +211,10 @@ function ChatWorkspaceContent() {
     navigate,
   ]);
 
+  const handleDismissList = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
   const handleRailTransitionEnd = useCallback(
     (event: TransitionEvent<HTMLDivElement>) => {
       if (
@@ -248,71 +251,86 @@ function ChatWorkspaceContent() {
   const layoutTitle =
     isMobileChatDetail
       ? headerTitle || "チャット"
-      : "AMOL";
+      : "チャット";
 
   const backButtonLabel =
     hasDetailReturnTarget
       ? "前の画面に戻る"
       : "チャット一覧に戻る";
 
+  const workspaceContent = (
+    <Layout
+      title={layoutTitle}
+      titleClickable={false}
+      showHeader={!useMobileListSwipe}
+      showFooter={isMobile && isChatListRoute}
+      mode="mypage"
+      mainClassName="chat-workspace-page-layout"
+      disableFooterPaddingOnDesktop
+      showBackButton={isMobileChatDetail}
+      backButtonLabel={backButtonLabel}
+      onBackButtonClick={handleBackToList}
+      hideSettingsButton={isMobileChatDetail}
+      hideAnnouncementButton={isMobileChatDetail}
+      footerProps={{
+        variant: "default",
+      }}
+    >
+      <div className={workspaceClassName}>
+        <div
+          className="chat-workspace-page__rail"
+          onTransitionEnd={handleRailTransitionEnd}
+        >
+          <aside
+            className="chat-workspace-page__list"
+            aria-label="チャット一覧"
+            aria-hidden={
+              isMobile && mobilePane === "detail"
+                ? true
+                : undefined
+            }
+          >
+            <ChatListPane />
+          </aside>
+
+          <section
+            className="chat-workspace-page__detail"
+            aria-label="チャット詳細"
+            aria-hidden={
+              isMobile && mobilePane === "list"
+                ? true
+                : undefined
+            }
+          >
+            {isChatListRoute ? (
+              <div className="chat-workspace-page__empty">
+                <StatePanel
+                  variant="empty"
+                  title="チャットを選択してください。"
+                />
+              </div>
+            ) : (
+              <Outlet />
+            )}
+          </section>
+        </div>
+      </div>
+    </Layout>
+  );
+
   return (
     <>
-      <Layout
-        title={layoutTitle}
-        titleClickable={!isMobileChatDetail}
-        showFooter={isMobile && isChatListRoute}
-        mode="mypage"
-        mainClassName="chat-workspace-page-layout"
-        disableFooterPaddingOnDesktop
-        showBackButton={isMobileChatDetail}
-        backButtonLabel={backButtonLabel}
-        onBackButtonClick={handleBackToList}
-        hideSettingsButton={isMobileChatDetail}
-        hideAnnouncementButton={isMobileChatDetail}
-        footerProps={{
-          variant: "default",
-        }}
-      >
-        <div className={workspaceClassName}>
-          <div
-            className="chat-workspace-page__rail"
-            onTransitionEnd={handleRailTransitionEnd}
-          >
-            <aside
-              className="chat-workspace-page__list"
-              aria-label="チャット一覧"
-              aria-hidden={
-                isMobile && mobilePane === "detail"
-                  ? true
-                  : undefined
-              }
-            >
-              <ChatListPane />
-            </aside>
-
-            <section
-              className="chat-workspace-page__detail"
-              aria-label="チャット詳細"
-              aria-hidden={
-                isMobile && mobilePane === "list"
-                  ? true
-                  : undefined
-              }
-            >
-              {isChatListRoute ? (
-                <div className="chat-workspace-page__empty">
-                  <StatePanel
-                    variant="empty"
-                    title="チャットを選択してください。"
-                  />
-                </div>
-              ) : (
-                <Outlet />
-              )}
-            </section>
-          </div>
-        </div>
-      </Layout>
+      {useMobileListSwipe ? (
+        <MobileSwipeRightDismissPage
+          title="チャット"
+          className="chat-workspace-page__mobile-swipe"
+          onDismiss={handleDismissList}
+        >
+          {workspaceContent}
+        </MobileSwipeRightDismissPage>
+      ) : (
+        workspaceContent
+      )}
 
       {shouldShowMobileComposer ? (
         <MobileComposerFooter

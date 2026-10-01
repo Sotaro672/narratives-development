@@ -14,6 +14,7 @@ import {
 } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDismissPage";
 import StatePanel from "../components/ui/StatePanel";
 import AnnouncementListPane from "../features/announcement/presentation/components/AnnouncementListPane";
 
@@ -76,6 +77,7 @@ export default function AnnouncementWorkspacePage() {
   const isMobile = useMobileAnnouncementViewport();
 
   const isAnnouncementListRoute = isAnnouncementListPath(location.pathname);
+  const useMobileListSwipe = isMobile && isAnnouncementListRoute;
 
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
     isAnnouncementListRoute ? "list" : "detail",
@@ -167,6 +169,10 @@ export default function AnnouncementWorkspacePage() {
     navigate,
   ]);
 
+  const handleDismissList = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
   const handleRailTransitionEnd = useCallback(
     (event: TransitionEvent<HTMLDivElement>) => {
       if (
@@ -194,15 +200,17 @@ export default function AnnouncementWorkspacePage() {
     .filter(Boolean)
     .join(" ");
 
-  return (
+  const workspaceContent = (
     <Layout
-      title="AMOL"
+      title="告知"
+      titleClickable={false}
+      showHeader={!useMobileListSwipe}
       showFooter={isMobile}
       mode="mypage"
       mainClassName="announcement-workspace-page-layout"
       disableFooterPaddingOnDesktop
       showBackButton={isMobile && !isAnnouncementListRoute}
-      backButtonLabel="通知一覧に戻る"
+      backButtonLabel="告知一覧に戻る"
       onBackButtonClick={handleBackToList}
       footerProps={{
         variant: "default",
@@ -215,7 +223,7 @@ export default function AnnouncementWorkspacePage() {
         >
           <aside
             className="announcement-workspace-page__list"
-            aria-label="通知一覧"
+            aria-label="告知一覧"
             aria-hidden={
               isMobile && mobilePane === "detail"
                 ? true
@@ -227,7 +235,7 @@ export default function AnnouncementWorkspacePage() {
 
           <section
             className="announcement-workspace-page__detail"
-            aria-label="通知詳細"
+            aria-label="告知詳細"
             aria-hidden={
               isMobile && mobilePane === "list"
                 ? true
@@ -238,7 +246,7 @@ export default function AnnouncementWorkspacePage() {
               <div className="announcement-workspace-page__empty">
                 <StatePanel
                   variant="empty"
-                  title="通知を選択してください。"
+                  title="告知を選択してください。"
                 />
               </div>
             ) : (
@@ -249,4 +257,18 @@ export default function AnnouncementWorkspacePage() {
       </div>
     </Layout>
   );
+
+  if (useMobileListSwipe) {
+    return (
+      <MobileSwipeRightDismissPage
+        title="告知"
+        className="announcement-workspace-page__mobile-swipe"
+        onDismiss={handleDismissList}
+      >
+        {workspaceContent}
+      </MobileSwipeRightDismissPage>
+    );
+  }
+
+  return workspaceContent;
 }
