@@ -75,6 +75,9 @@ export default function ResaleDetailPage() {
   const handleDismiss = () => {
     navigate("/wallet", {
       replace: true,
+      state: {
+        walletTab: "resales",
+      },
     });
   };
 
