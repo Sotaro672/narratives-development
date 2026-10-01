@@ -1,4 +1,4 @@
-// frontend/mall/src/pages/InquiryPage.tsx
+// frontend/mall/src/pages/IssueReportPage.tsx
 
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
@@ -10,14 +10,14 @@ import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDi
 import Alert from "../components/ui/Alert";
 import StatePanel from "../components/ui/StatePanel";
 import ContactUploadProgressModal from "../features/contact/components/ContactUploadProgressModal";
-import { useSettingsInquiryPage } from "../features/contact/hooks/useSettingsInquiryPage";
+import { useIssueReportPage } from "../features/contact/hooks/useIssueReportPage";
 import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 
 import "../styles/page-layout.css";
 import "../features/shared/styles/chat-detail-page.css";
 import "../styles/inquiry-page.css";
 
-export default function InquiryPage() {
+export default function IssueReportPage() {
   const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
 
@@ -30,7 +30,7 @@ export default function InquiryPage() {
     uploadFileProgress,
     uploadFileIndex,
     uploadFileCount,
-  } = useSettingsInquiryPage();
+  } = useIssueReportPage();
 
   const shouldShowMobileComposer =
     isMobilePortrait &&
@@ -59,7 +59,8 @@ export default function InquiryPage() {
 
   const pageContent = (
     <Layout
-      title="AMOL"
+      title="障害報告"
+      titleClickable={false}
       mode="mypage"
       showHeader={!isMobilePortrait}
       showFooter={false}
@@ -74,12 +75,14 @@ export default function InquiryPage() {
           <div className="settings-inquiry-page">
             <div className="settings-inquiry-page__content">
               <header className="settings-inquiry-page__header">
-                <h1 className="settings-inquiry-page__title">
-                  問い合わせ
-                </h1>
+                {!isMobilePortrait ? (
+                  <h1 className="settings-inquiry-page__title">
+                    障害報告
+                  </h1>
+                ) : null}
 
                 <p className="settings-inquiry-page__description">
-                  AMOLへのお問い合わせ内容を入力してください。
+                  AMOLで発生している不具合や障害の内容を入力してください。
                 </p>
               </header>
 
@@ -102,7 +105,7 @@ export default function InquiryPage() {
               {!loadingUser && !userError ? (
                 <div className="settings-inquiry-page__notice">
                   <p className="settings-inquiry-page__description">
-                    お問い合わせ内容によっては、ご回答までにお時間をいただく場合があります。
+                    障害の内容によっては、確認や対応にお時間をいただく場合があります。
                   </p>
                 </div>
               ) : null}
@@ -121,7 +124,7 @@ export default function InquiryPage() {
     <>
       {isMobilePortrait ? (
         <MobileSwipeRightDismissPage
-          title="問い合わせ"
+          title="障害報告"
           enabled
           dismissGestureEnabled
           onDismiss={handleDismiss}

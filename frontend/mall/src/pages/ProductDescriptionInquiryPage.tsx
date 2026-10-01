@@ -1,4 +1,4 @@
-// frontend/mall/src/pages/InquiryCreatePage.tsx
+// frontend/mall/src/pages/ProductDescriptionInquiryPage.tsx
 
 import { useMemo } from "react";
 import { ChevronLeft } from "lucide-react";
@@ -11,7 +11,7 @@ import Button from "../components/ui/Button";
 import Checkbox from "../components/ui/Checkbox";
 import IconButton from "../components/ui/IconButton";
 import StatePanel from "../components/ui/StatePanel";
-import { useInquiryCreatePage } from "../features/inquiry/presentation/hooks/useInquiryCreatePage";
+import { useProductDescriptionInquiryPage } from "../features/inquiry/presentation/hooks/useProductDescriptionInquiryPage";
 import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 import type { ChatComposerConfig } from "../features/shared/types/chatComposer";
 
@@ -19,7 +19,7 @@ import "../styles/page-layout.css";
 import "../features/shared/styles/chat-detail-page.css";
 import "../styles/inquiry-page.css";
 
-export default function InquiryCreatePage() {
+export default function ProductDescriptionInquiryPage() {
   const isMobilePortrait = useMobilePortrait();
 
   const {
@@ -43,14 +43,14 @@ export default function InquiryCreatePage() {
     handleFilesAdd,
     handleRemoveFile,
     handleBackToScanResult,
-  } = useInquiryCreatePage();
+  } = useProductDescriptionInquiryPage();
 
   const product = productViewModel?.product ?? null;
 
   const composer = useMemo<ChatComposerConfig>(
     () => ({
       content,
-      placeholder: "問い合わせ内容を入力",
+      placeholder: "商品について確認したい内容を入力",
       files,
       error,
       submitting,
@@ -105,7 +105,7 @@ export default function InquiryCreatePage() {
   return (
     <>
       <Layout
-        title="AMOL"
+        title="商品説明"
         mode="mypage"
         showHeader={!isMobilePortrait}
         showFooter={false}
@@ -201,7 +201,6 @@ export default function InquiryCreatePage() {
                                     aria-hidden="true"
                                   />
                                 ) : null}
-
                                 <span>{product.color}</span>
                               </span>
                             ) : (
@@ -235,7 +234,7 @@ export default function InquiryCreatePage() {
                     </IconButton>
 
                     <span className="inquiry-create-page__mobile-product-name">
-                      {product?.title || (productLoading ? "読み込み中..." : "商品詳細")}
+                      商品説明
                     </span>
                   </div>
 
@@ -247,7 +246,7 @@ export default function InquiryCreatePage() {
                         </h2>
 
                         <p className="inquiry-create-page__policy-description">
-                          お問い合わせを送信する前に、以下の内容をご確認ください。
+                          商品について問い合わせる前に、以下の内容をご確認ください。
                         </p>
                       </header>
 
@@ -276,7 +275,7 @@ export default function InquiryCreatePage() {
 
                     <div className="inquiry-create-page__agreement">
                       <Checkbox
-                        id="inquiry-privacy-agreement"
+                        id="product-description-privacy-agreement"
                         label="プライバシーポリシーに同意する"
                         checked={agreedToPrivacyPolicy}
                         disabled={

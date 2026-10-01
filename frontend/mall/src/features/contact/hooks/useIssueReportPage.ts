@@ -1,4 +1,4 @@
-// frontend/mall/src/features/contact/hooks/useSettingsInquiryPage.ts
+// frontend/mall/src/features/contact/hooks/useIssueReportPage.ts
 
 import {
   useEffect,
@@ -12,7 +12,7 @@ import type { ChatComposerConfig } from "../../shared/types/chatComposer";
 import { useContactAttachments } from "./useContactAttachments";
 import { useContactSubmit } from "./useContactSubmit";
 
-export function useSettingsInquiryPage() {
+export function useIssueReportPage() {
   const auth = getAuth();
   const currentUser = auth.currentUser;
 
@@ -118,7 +118,7 @@ export function useSettingsInquiryPage() {
   const composer = useMemo<ChatComposerConfig>(
     () => ({
       content: message,
-      placeholder: "お問い合わせ内容を入力",
+      placeholder: "発生している不具合や障害の内容を入力",
       files,
       error: null,
       submitting,

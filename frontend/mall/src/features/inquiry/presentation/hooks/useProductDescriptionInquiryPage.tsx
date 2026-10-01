@@ -1,4 +1,4 @@
-// frontend/mall/src/features/inquiry/presentation/hooks/useInquiryCreatePage.tsx
+// frontend/mall/src/features/inquiry/presentation/hooks/useProductDescriptionInquiryPage.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -18,7 +18,7 @@ const PRODUCT_INQUIRY_TYPE = "product" as const;
 const MAX_FILES = 10;
 const PRIVACY_POLICY_PATH = "/assets/privacy-policy.txt";
 
-export function useInquiryCreatePage() {
+export function useProductDescriptionInquiryPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -55,6 +55,7 @@ export function useInquiryCreatePage() {
       setProductViewModel(null);
       setProductLoading(false);
       setProductError(null);
+
       return () => {
         cancelled = true;
       };
@@ -226,7 +227,7 @@ export function useInquiryCreatePage() {
       const message =
         caught instanceof Error
           ? caught.message
-          : "問い合わせの送信に失敗しました。";
+          : "商品説明についての問い合わせの送信に失敗しました。";
 
       setError(message);
     } finally {
