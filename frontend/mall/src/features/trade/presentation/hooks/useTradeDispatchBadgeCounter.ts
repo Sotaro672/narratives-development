@@ -1,4 +1,5 @@
-//frontend\mall\src\features\trade\presentation\hooks\useTradeDispatchBadgeCounter.ts
+// frontend/mall/src/features/trade/presentation/hooks/useTradeDispatchBadgeCounter.ts
+
 import { useCallback, useEffect, useState } from "react";
 
 import { fetchMyTradeChats } from "../../infrastructure/tradeApi";
@@ -56,7 +57,25 @@ export function useTradeDispatchBadgeCounter(
           !trade.isDispatched,
       ).length;
 
-      setBadgeCount(dispatchWaitingCount);
+      const unreadMessageCount = result.items.reduce(
+        (total, trade) => {
+          const unreadCount =
+            Number.isFinite(trade.unreadMessageCount)
+              ? Math.max(
+                  0,
+                  Math.floor(trade.unreadMessageCount),
+                )
+              : 0;
+
+          return total + unreadCount;
+        },
+        0,
+      );
+
+      setBadgeCount(
+        dispatchWaitingCount +
+          unreadMessageCount,
+      );
     } catch (caught) {
       setBadgeCount(0);
       setError(toError(caught));
