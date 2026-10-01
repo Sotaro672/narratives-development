@@ -1,9 +1,10 @@
-// frontend/amol/src/pages/PaymentPage.tsx
+// frontend/mall/src/pages/PaymentPage.tsx
 
 import { useNavigate, useParams } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDismissPage";
 import Button from "../components/ui/Button";
 import TextState from "../components/ui/TextState";
 import { PaymentErrorModal } from "../features/payment/components/PaymentErrorModal";
@@ -44,41 +45,45 @@ export default function PaymentPage() {
     navigate,
   });
 
-  if (isLoading) {
-    return (
-      <>
-        <Layout
-          title="AMOL"
-          mode="mypage"
-          showFooter={isMobilePortrait}
-          hideSettingsButton
-          mainClassName="payment-page"
-        >
-          <section className="payment-page__section">
-            <TextState variant="loading">
-              決済情報を読み込んでいます。
-            </TextState>
-          </section>
-        </Layout>
-
-        <PaymentErrorModal
-          message={modalMessage}
-          onClose={closeErrorModal}
-        />
-      </>
-    );
+  function handleDismiss() {
+    navigate(-1);
   }
 
-  return (
-    <>
-      <Layout
-        title="AMOL"
-        mode="mypage"
-        showFooter={isMobilePortrait}
-        hideSettingsButton
-        mainClassName="payment-page"
-      >
-        <section className="payment-page__section">
+  const showMobilePurchaseFooter =
+    isMobilePortrait &&
+    !isLoading;
+
+  const pageContent = (
+    <Layout
+      title={isMobilePortrait ? "" : "AMOL"}
+      titleClickable={!isMobilePortrait}
+      mode="mypage"
+      showHeader={!isMobilePortrait}
+      showFooter={showMobilePurchaseFooter}
+      hideSettingsButton
+      mainClassName={[
+        "payment-page",
+        isMobilePortrait ? "payment-page--mobile-swipe" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      footerProps={
+        showMobilePurchaseFooter
+          ? {
+              variant: "action",
+              buttonLabel: paymentButtonLabel,
+              disabled: isPaymentDisabled,
+              onButtonClick: handleSubmitPayment,
+            }
+          : undefined
+      }
+    >
+      <section className="payment-page__section">
+        {isLoading ? (
+          <TextState variant="loading">
+            決済情報を読み込んでいます。
+          </TextState>
+        ) : (
           <div className="payment-page__content">
             <div className="payment-page__left-column">
               <PaymentItemsCard
@@ -105,19 +110,36 @@ export default function PaymentPage() {
                 onGoToPaymentMethod={handleGoToPaymentMethod}
               />
 
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                disabled={isPaymentDisabled}
-                onClick={() => void handleSubmitPayment()}
-              >
-                {paymentButtonLabel}
-              </Button>
+              {!isMobilePortrait ? (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={isPaymentDisabled}
+                  onClick={() => void handleSubmitPayment()}
+                >
+                  {paymentButtonLabel}
+                </Button>
+              ) : null}
             </div>
           </div>
-        </section>
-      </Layout>
+        )}
+      </section>
+    </Layout>
+  );
+
+  return (
+    <>
+      {isMobilePortrait ? (
+        <MobileSwipeRightDismissPage
+          title="お支払い"
+          onDismiss={handleDismiss}
+        >
+          {pageContent}
+        </MobileSwipeRightDismissPage>
+      ) : (
+        pageContent
+      )}
 
       <PaymentErrorModal
         message={modalMessage}

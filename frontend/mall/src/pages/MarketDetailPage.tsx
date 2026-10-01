@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 
 import { addResaleCartItem } from "../features/cart/api/cartApi";
 import MarketDetailContent from "../features/market/presentation/components/MarketDetailContent";
@@ -58,17 +59,26 @@ export default function MarketDetailPage() {
 
   async function handleAddToCartAndOpenCart(): Promise<void> {
     const added = await handleAddToCart();
-    if (!added) return;
+
+    if (!added) {
+      return;
+    }
+
     navigate("/cart");
   }
 
   function handleOpenSellerAvatar() {
-    if (!sellerAvatarId) return;
+    if (!sellerAvatarId) {
+      return;
+    }
+
     navigate(`/avatars/${encodeURIComponent(sellerAvatarId)}`);
   }
 
   function handleOpenResaleChat() {
-    if (!normalizedResaleId) return;
+    if (!normalizedResaleId) {
+      return;
+    }
 
     navigate(`/chats/resales/${encodeURIComponent(normalizedResaleId)}`, {
       state: {
@@ -79,14 +89,22 @@ export default function MarketDetailPage() {
   }
 
   function handleOpenResaleReport() {
-    if (!normalizedResaleId || reportSubmitting) return;
+    if (!normalizedResaleId || reportSubmitting) {
+      return;
+    }
 
     openResaleReport({
       resaleId: normalizedResaleId,
     });
   }
 
-  return (
+  function handleDismiss() {
+    navigate("/market", {
+      replace: true,
+    });
+  }
+
+  const content = (
     <Layout
       title="AMOL"
       titleClickable
@@ -122,5 +140,15 @@ export default function MarketDetailPage() {
         onClose={closeReport}
       />
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeDismissPage onDismiss={handleDismiss}>
+      {content}
+    </MobileSwipeDismissPage>
   );
 }

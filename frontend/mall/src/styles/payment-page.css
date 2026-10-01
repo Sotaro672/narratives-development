@@ -163,6 +163,12 @@
   margin: 0;
 }
 
+@media (max-width: 959px) {
+  .layout-main.payment-page--mobile-swipe {
+    min-height: calc(100dvh - var(--amol-header-height, 72px));
+  }
+}
+
 @media (min-width: 768px) {
   .payment-page__section {
     padding-top: 40px;
