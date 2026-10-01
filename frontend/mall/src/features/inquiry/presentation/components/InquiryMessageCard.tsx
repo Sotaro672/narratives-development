@@ -52,15 +52,15 @@ export default function InquiryMessageCard({
         </h2>
 
         <div className="chat-detail-page__header-meta">
-          <Badge variant={statusVariant}>
-            {statusLabel}
-          </Badge>
-
           {!isProductInquiry && orderId ? (
             <TextLink onClick={handleOpenOrderDetail}>
               注文詳細を見る
             </TextLink>
           ) : null}
+
+          <Badge variant={statusVariant}>
+            {statusLabel}
+          </Badge>
         </div>
       </div>
 
@@ -87,7 +87,6 @@ export default function InquiryMessageCard({
 
 function getInquiryTitle(inquiry: InquiryDetail): string {
   const inquiryLabel = getInquiryTypeLabel(inquiry.inquiryType);
-
   return `${inquiry.productName}/${inquiryLabel}`;
 }
 

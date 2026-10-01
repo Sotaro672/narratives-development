@@ -59,7 +59,63 @@ function getChatId(item: ChatListItem): string {
   }
 }
 
-async function loadInquiryItems(signal?: AbortSignal): Promise<InquiryChatListItem[]> {
+function dedupeResaleChatItems(
+  items: ResaleChatListItemDTO[],
+): ResaleChatListItemDTO[] {
+  const itemsByResaleId = new Map<string, ResaleChatListItemDTO>();
+
+  items.forEach((item) => {
+    const resaleId = item.resaleId.trim();
+
+    if (!resaleId) {
+      return;
+    }
+
+    const currentItem = itemsByResaleId.get(resaleId);
+
+    if (!currentItem) {
+      itemsByResaleId.set(resaleId, {
+        ...item,
+        resaleId,
+      });
+      return;
+    }
+
+    const currentTime = getComparableTime(currentItem.latestActivityAt);
+    const nextTime = getComparableTime(item.latestActivityAt);
+
+    const latestItem =
+      nextTime >= currentTime
+        ? item
+        : currentItem;
+
+    const chatSource =
+      currentItem.chatSource === "owner" ||
+      item.chatSource === "owner"
+        ? "owner"
+        : "market";
+
+    itemsByResaleId.set(resaleId, {
+      ...latestItem,
+      resaleId,
+      chatSource,
+      commentCount: Math.max(
+        currentItem.commentCount,
+        item.commentCount,
+      ),
+      unreadCommentCount: Math.max(
+        currentItem.unreadCommentCount,
+        item.unreadCommentCount,
+      ),
+    });
+  });
+
+  return Array.from(itemsByResaleId.values());
+}
+
+async function loadInquiryItems(
+  signal?: AbortSignal,
+): Promise<InquiryChatListItem[]> {
   const result = await listMeInquiries({
     page: 1,
     perPage: 100,
@@ -76,20 +132,26 @@ async function loadInquiryItems(signal?: AbortSignal): Promise<InquiryChatListIt
   }));
 }
 
-async function loadResaleItems(signal?: AbortSignal): Promise<ResaleChatListItem[]> {
+async function loadResaleItems(
+  signal?: AbortSignal,
+): Promise<ResaleChatListItem[]> {
   const result = await fetchMyResaleChats();
 
   if (signal?.aborted) {
     return [];
   }
 
-  return result.items.map((resale) => ({
-    ...resale,
-    chatKind: "resale",
-  }));
+  return dedupeResaleChatItems(result.items)
+    .filter((resale) => resale.status !== "sold")
+    .map((resale) => ({
+      ...resale,
+      chatKind: "resale",
+    }));
 }
 
-async function loadTradeItems(signal?: AbortSignal): Promise<TradeChatListItem[]> {
+async function loadTradeItems(
+  signal?: AbortSignal,
+): Promise<TradeChatListItem[]> {
   const result = await fetchMyTradeChats({ signal });
 
   if (signal?.aborted) {
@@ -239,7 +301,7 @@ export function useInquiryListPage() {
 
     navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
       state: {
-        source: item.chatSource,
+        source: nextItem.chatSource,
         resale: nextItem,
       },
     });

@@ -155,7 +155,18 @@ export default function TradeMessageCard({
   const returnShipmentReadySystemMessage =
     isReturnShipmentReadySystemMessage(message);
 
+  const canOpenDispatchQr =
+    isMine &&
+    dispatchSystemMessage &&
+    Boolean(onOpenDispatchQr);
+
+  const canOpenReturnShipmentQr =
+    isMine &&
+    returnShipmentReadySystemMessage &&
+    Boolean(onOpenReturnShipmentQr);
+
   const images = message.images ?? [];
+
   const previewImage =
     previewImageIndex !== null
       ? images[previewImageIndex] ?? null
@@ -169,11 +180,8 @@ export default function TradeMessageCard({
   const hasAfterContent =
     images.length > 0 ||
     Boolean(returnConsultationDetail) ||
-    (dispatchSystemMessage && Boolean(onOpenDispatchQr)) ||
-    (
-      returnShipmentReadySystemMessage &&
-      Boolean(onOpenReturnShipmentQr)
-    );
+    canOpenDispatchQr ||
+    canOpenReturnShipmentQr;
 
   const handlePreviewPrevious = (): void => {
     if (
@@ -263,7 +271,7 @@ export default function TradeMessageCard({
                 </p>
               ) : null}
 
-              {dispatchSystemMessage && onOpenDispatchQr ? (
+              {canOpenDispatchQr && onOpenDispatchQr ? (
                 <TextLink
                   className="trade-chat-detail__dispatch-qr-link"
                   onClick={onOpenDispatchQr}
@@ -272,8 +280,7 @@ export default function TradeMessageCard({
                 </TextLink>
               ) : null}
 
-              {returnShipmentReadySystemMessage &&
-              onOpenReturnShipmentQr ? (
+              {canOpenReturnShipmentQr && onOpenReturnShipmentQr ? (
                 <TextLink
                   className="trade-chat-detail__dispatch-qr-link"
                   onClick={onOpenReturnShipmentQr}

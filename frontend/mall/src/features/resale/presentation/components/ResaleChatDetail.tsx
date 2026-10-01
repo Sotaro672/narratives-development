@@ -614,13 +614,6 @@ function ResaleThreadHeader({
       </h2>
 
       <div className="chat-detail-page__header-meta">
-        <Badge
-          variant="info"
-          size="md"
-        >
-          {getResaleStatusLabel(item.status)}
-        </Badge>
-
         {showDetailLink && detailPath ? (
           <div className="trade-chat-detail__detail-links">
             <Link
@@ -631,6 +624,13 @@ function ResaleThreadHeader({
             </Link>
           </div>
         ) : null}
+
+        <Badge
+          variant="info"
+          size="md"
+        >
+          {getResaleStatusLabel(item.status)}
+        </Badge>
       </div>
     </div>
   );

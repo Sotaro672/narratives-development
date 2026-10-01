@@ -458,11 +458,16 @@ export default function TradeChatDetail({
                         onReport={
                           report.openMessageReport
                         }
-                        onOpenDispatchQr={() => {
-                          setDispatchQrPreviewOpen(
-                            true,
-                          );
-                        }}
+                        onOpenDispatchQr={
+                          thread.trade!.viewerSide ===
+                          "seller"
+                            ? () => {
+                                setDispatchQrPreviewOpen(
+                                  true,
+                                );
+                              }
+                            : undefined
+                        }
                         onOpenReturnShipmentQr={
                           thread.trade!.viewerSide ===
                           "buyer"
@@ -714,6 +719,7 @@ export default function TradeChatDetail({
 
       <Preview
         open={
+          thread.trade?.viewerSide === "seller" &&
           dispatchQrPreviewOpen &&
           Boolean(dispatchQrPayload)
         }

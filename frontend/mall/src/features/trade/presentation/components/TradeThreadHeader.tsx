@@ -65,10 +65,6 @@ export default function TradeThreadHeader({
       </h2>
 
       <div className="chat-detail-page__header-meta">
-        <Badge variant="info">
-          {getTradeStatusLabel(trade)}
-        </Badge>
-
         {resaleDetailPath || orderDetailPath ? (
           <div className="trade-chat-detail__detail-links">
             {resaleDetailPath ? (
@@ -90,6 +86,10 @@ export default function TradeThreadHeader({
             ) : null}
           </div>
         ) : null}
+
+        <Badge variant="info">
+          {getTradeStatusLabel(trade)}
+        </Badge>
       </div>
     </div>
   );
