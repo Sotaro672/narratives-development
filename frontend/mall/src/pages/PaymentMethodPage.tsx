@@ -1,18 +1,23 @@
 // frontend/mall/src/pages/PaymentMethodPage.tsx
 
+import { useCallback, useState } from "react";
 import { Elements } from "@stripe/react-stripe-js";
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import PaymentMethodCardholderCard from "../features/payment-method/components/PaymentMethodCardholderCard";
-import PaymentMethodForm from "../features/payment-method/components/PaymentMethodForm";
+import PaymentMethodForm, {
+  type PaymentMethodFormState,
+} from "../features/payment-method/components/PaymentMethodForm";
 import PaymentMethodStatusCard from "../features/payment-method/components/PaymentMethodStatusCard";
 import usePaymentMethodPage from "../features/payment-method/hooks/usePaymentMethodPage";
 
 import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/payment-method-page.css";
+
+const PAYMENT_METHOD_FORM_ID = "payment-method-form";
 
 export default function PaymentMethodPage() {
   const {
@@ -30,18 +35,42 @@ export default function PaymentMethodPage() {
     handleCompleted,
   } = usePaymentMethodPage();
 
+  const [formState, setFormState] = useState<PaymentMethodFormState>({
+    submitting: false,
+    canSubmit: false,
+  });
+
   const registrationDisabled =
     isCreatingIntent ||
     isLoading ||
     !stripePromise ||
     !normalizedCardholderName;
 
+  const handleFormStateChange = useCallback(
+    (nextState: PaymentMethodFormState) => {
+      setFormState(nextState);
+    },
+    [],
+  );
+
+  const footerAction =
+    clientSecret && stripePromise
+      ? {
+          buttonLabel: formState.submitting ? "登録中..." : "このカードを登録する",
+          disabled: !formState.canSubmit,
+          buttonType: "submit" as const,
+          buttonForm: PAYMENT_METHOD_FORM_ID,
+        }
+      : {
+          buttonLabel: isCreatingIntent ? "作成中..." : "支払方法を登録",
+          disabled: registrationDisabled,
+          onButtonClick: handleCreateSetupIntent,
+        };
+
   return (
-    <Layout
+    <SettingsSwipePage
       title="支払方法"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={footerAction}
     >
       <section className="page-section settings-page">
         <div className="payment-method-page-content">
@@ -72,6 +101,7 @@ export default function PaymentMethodPage() {
                 variant="primary"
                 size="lg"
                 fullWidth
+                className="settings-page__desktop-action"
                 disabled={registrationDisabled}
                 aria-busy={isCreatingIntent}
                 onClick={handleCreateSetupIntent}
@@ -88,8 +118,7 @@ export default function PaymentMethodPage() {
                 </p>
 
                 <p className="payment-method-page-test-warning-card__text">
-                  ここはテスト環境です。実際のクレジットカードは登録せず、
-                  テスト用クレジットカードのみを登録してください。
+                  ここはテスト環境です。実際のクレジットカードは登録せず、テスト用クレジットカードのみを登録してください。
                 </p>
 
                 <div className="payment-method-page-test-warning-card__example">
@@ -110,15 +139,17 @@ export default function PaymentMethodPage() {
           {clientSecret && stripePromise ? (
             <Elements stripe={stripePromise}>
               <PaymentMethodForm
+                formId={PAYMENT_METHOD_FORM_ID}
                 cardholderName={normalizedCardholderName}
                 clientSecret={clientSecret}
                 stripeCustomerId={stripeCustomerId}
                 onCompleted={handleCompleted}
+                onSubmitStateChange={handleFormStateChange}
               />
             </Elements>
           ) : null}
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

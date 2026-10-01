@@ -11,10 +11,11 @@ import {
 
 import "../styles/page-layout.css";
 import "../styles/form.css";
+import "../styles/settings-page.css";
 
-import Layout from "../components/layout/Layout";
-import Input from "../components/ui/Input";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
 
 export default function PasswordPage() {
   const navigate = useNavigate();
@@ -54,7 +55,7 @@ export default function PasswordPage() {
       window.alert(
         "パスワード再設定メールを送信しました。メール内のリンクを開いて新しいパスワードを設定してください。",
       );
-      navigate("/settings");
+      navigate(-1);
     } catch (error) {
       console.error(error);
 
@@ -84,13 +85,15 @@ export default function PasswordPage() {
   };
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="パスワード変更"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={{
+        buttonLabel: saving ? "送信中..." : "再設定メールを送信",
+        disabled: saving,
+        onButtonClick: handleSave,
+      }}
     >
-      <section className="page-section">
+      <section className="page-section settings-page">
         <p className="page-description">
           現在のパスワードを入力すると、登録メールアドレス宛にパスワード再設定メールを送信します。
         </p>
@@ -102,14 +105,14 @@ export default function PasswordPage() {
             label="現在のパスワード"
             type="password"
             value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
+            onChange={(event) => setCurrentPassword(event.target.value)}
             placeholder="現在のパスワードを入力"
             autoComplete="current-password"
             disabled={saving}
           />
         </div>
 
-        <div className="page-actions">
+        <div className="page-actions settings-page__desktop-action">
           <Button
             variant="primary"
             size="md"
@@ -120,6 +123,6 @@ export default function PasswordPage() {
           </Button>
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

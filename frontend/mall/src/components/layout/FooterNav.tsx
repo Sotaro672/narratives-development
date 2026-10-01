@@ -30,16 +30,16 @@ type FooterNavProps =
       variant: "action";
       buttonLabel: string;
       disabled?: boolean;
-      onButtonClick: () => void | Promise<void>;
+      buttonType?: "button" | "submit";
+      buttonForm?: string;
+      onButtonClick?: () => void | Promise<void>;
     };
 
 export default function FooterNav(props: FooterNavProps) {
   const [avatarIcon, setAvatarIcon] = useState("");
 
   useEffect(() => {
-    if (props.variant === "action") {
-      return;
-    }
+    if (props.variant === "action") return;
 
     const auth = getAuth();
 
@@ -64,18 +64,25 @@ export default function FooterNav(props: FooterNavProps) {
     const {
       buttonLabel,
       disabled = false,
+      buttonType = "button",
+      buttonForm,
       onButtonClick,
     } = props;
 
     return (
       <footer className="footer-nav--action">
         <Button
-          type="button"
+          type={buttonType}
+          form={buttonForm}
           variant="primary"
           size="lg"
           fullWidth
           className="footer-nav__action-button"
-          onClick={() => void onButtonClick()}
+          onClick={
+            onButtonClick
+              ? () => void onButtonClick()
+              : undefined
+          }
           disabled={disabled}
           aria-label={buttonLabel}
         >
@@ -107,14 +114,9 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          <ShoppingBag
-            className="footer-nav__svg-icon"
-            strokeWidth={2.2}
-          />
+          <ShoppingBag className="footer-nav__svg-icon" strokeWidth={2.2} />
         </span>
-        <span className="footer-nav__label">
-          モール
-        </span>
+        <span className="footer-nav__label">モール</span>
       </NavLink>
 
       <NavLink
@@ -125,14 +127,9 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          <Store
-            className="footer-nav__svg-icon"
-            strokeWidth={2.2}
-          />
+          <Store className="footer-nav__svg-icon" strokeWidth={2.2} />
         </span>
-        <span className="footer-nav__label">
-          マーケット
-        </span>
+        <span className="footer-nav__label">マーケット</span>
       </NavLink>
 
       {hasCenterAction ? (
@@ -147,14 +144,9 @@ export default function FooterNav(props: FooterNavProps) {
           aria-label={centerActionLabel}
         >
           <span className="footer-nav__icon" aria-hidden="true">
-            <MessageCircle
-              className="footer-nav__svg-icon"
-              strokeWidth={2.2}
-            />
+            <MessageCircle className="footer-nav__svg-icon" strokeWidth={2.2} />
           </span>
-          <span className="footer-nav__label">
-            {centerActionLabel}
-          </span>
+          <span className="footer-nav__label">{centerActionLabel}</span>
         </button>
       ) : (
         <NavLink
@@ -165,14 +157,9 @@ export default function FooterNav(props: FooterNavProps) {
           }
         >
           <span className="footer-nav__icon" aria-hidden="true">
-            <ScanLine
-              className="footer-nav__svg-icon"
-              strokeWidth={2.2}
-            />
+            <ScanLine className="footer-nav__svg-icon" strokeWidth={2.2} />
           </span>
-          <span className="footer-nav__label">
-            スキャン
-          </span>
+          <span className="footer-nav__label">スキャン</span>
         </NavLink>
       )}
 
@@ -184,14 +171,9 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          <Heart
-            className="footer-nav__svg-icon"
-            strokeWidth={2.2}
-          />
+          <Heart className="footer-nav__svg-icon" strokeWidth={2.2} />
         </span>
-        <span className="footer-nav__label">
-          お気に入り
-        </span>
+        <span className="footer-nav__label">お気に入り</span>
       </NavLink>
 
       <NavLink
@@ -203,21 +185,12 @@ export default function FooterNav(props: FooterNavProps) {
       >
         <span className="footer-nav__icon" aria-hidden="true">
           {avatarIcon ? (
-            <img
-              src={avatarIcon}
-              alt=""
-              className="footer-nav__avatar-icon"
-            />
+            <img src={avatarIcon} alt="" className="footer-nav__avatar-icon" />
           ) : (
-            <UserRound
-              className="footer-nav__svg-icon"
-              strokeWidth={2.2}
-            />
+            <UserRound className="footer-nav__svg-icon" strokeWidth={2.2} />
           )}
         </span>
-        <span className="footer-nav__label">
-          ウォレット
-        </span>
+        <span className="footer-nav__label">ウォレット</span>
       </NavLink>
     </footer>
   );

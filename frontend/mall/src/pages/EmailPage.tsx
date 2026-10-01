@@ -11,10 +11,11 @@ import {
 
 import "../styles/page-layout.css";
 import "../styles/form.css";
+import "../styles/settings-page.css";
 
-import Layout from "../components/layout/Layout";
-import Input from "../components/ui/Input";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
 
 export default function EmailPage() {
   const navigate = useNavigate();
@@ -44,9 +45,7 @@ export default function EmailPage() {
       }
 
       if (trimmedCurrentEmail === trimmedNewEmail) {
-        window.alert(
-          "新しいメールアドレスは現在のメールアドレスと別のものを入力してください。",
-        );
+        window.alert("新しいメールアドレスは現在のメールアドレスと別のものを入力してください。");
         return;
       }
 
@@ -62,11 +61,7 @@ export default function EmailPage() {
       }
 
       const emailForCredential = user.email ?? trimmedCurrentEmail;
-
-      const credential = EmailAuthProvider.credential(
-        emailForCredential,
-        password,
-      );
+      const credential = EmailAuthProvider.credential(emailForCredential, password);
 
       await reauthenticateWithCredential(user, credential);
 
@@ -75,10 +70,8 @@ export default function EmailPage() {
         handleCodeInApp: false,
       });
 
-      window.alert(
-        "新しいメールアドレス宛に確認メールを送信しました。メール内のリンクを開いて変更を完了してください。",
-      );
-      navigate("/settings");
+      window.alert("新しいメールアドレス宛に確認メールを送信しました。メール内のリンクを開いて変更を完了してください。");
+      navigate(-1);
     } catch (error) {
       console.error(error);
 
@@ -103,9 +96,7 @@ export default function EmailPage() {
           window.alert("現在のメールアドレスまたは認証情報が一致しません。");
           break;
         case "auth/operation-not-allowed":
-          window.alert(
-            "メールアドレス変更が許可されていません。Firebase のメール確認設定を確認してください。",
-          );
+          window.alert("メールアドレス変更が許可されていません。Firebase のメール確認設定を確認してください。");
           break;
         default:
           window.alert("メールアドレスの更新に失敗しました。");
@@ -117,13 +108,15 @@ export default function EmailPage() {
   };
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="メールアドレス変更"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={{
+        buttonLabel: saving ? "送信中..." : "確認メールを送信",
+        disabled: saving,
+        onButtonClick: handleSave,
+      }}
     >
-      <section className="page-section">
+      <section className="page-section settings-page">
         <p className="page-description">
           現在の情報を入力してメールアドレスを変更してください。
         </p>
@@ -135,7 +128,7 @@ export default function EmailPage() {
             label="現在のメールアドレス"
             type="email"
             value={currentEmail}
-            onChange={(e) => setCurrentEmail(e.target.value)}
+            onChange={(event) => setCurrentEmail(event.target.value)}
             placeholder="現在のメールアドレスを入力"
             autoComplete="email"
             disabled={saving}
@@ -147,7 +140,7 @@ export default function EmailPage() {
             label="新しいメールアドレス"
             type="email"
             value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
+            onChange={(event) => setNewEmail(event.target.value)}
             placeholder="新しいメールアドレスを入力"
             autoComplete="off"
             disabled={saving}
@@ -159,14 +152,14 @@ export default function EmailPage() {
             label="パスワード"
             type="password"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(event) => setPassword(event.target.value)}
             placeholder="パスワードを入力"
             autoComplete="current-password"
             disabled={saving}
           />
         </div>
 
-        <div className="page-actions">
+        <div className="page-actions settings-page__desktop-action">
           <Button
             variant="primary"
             size="md"
@@ -177,6 +170,6 @@ export default function EmailPage() {
           </Button>
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

@@ -1,6 +1,6 @@
 // frontend/mall/src/pages/PayoutAccountPage.tsx
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import TextState from "../components/ui/TextState";
@@ -23,17 +23,18 @@ export default function PayoutAccountPage() {
   } = usePayoutAccountPage();
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="売上受取口座"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={{
+        buttonLabel: actionLabel,
+        disabled: isLoading,
+        onButtonClick: handleOpenRegistration,
+      }}
     >
       <section className="page-section settings-page payout-account-page">
         <div className="payout-account-page__content">
           <p className="content-page-description payout-account-page__description">
-            再販売で発生した売上の受取口座を登録します。
-            登録した口座は、再販売の売上を受け取る際に使用されます。
+            再販売で発生した売上の受取口座を登録します。登録した口座は、再販売の売上を受け取る際に使用されます。
           </p>
 
           <PayoutAccountStatusCard
@@ -52,7 +53,7 @@ export default function PayoutAccountPage() {
             type="button"
             size="lg"
             fullWidth
-            className="payout-account-page__action"
+            className="payout-account-page__action settings-page__desktop-action"
             onClick={handleOpenRegistration}
             disabled={isLoading}
           >
@@ -64,6 +65,6 @@ export default function PayoutAccountPage() {
           </TextState>
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

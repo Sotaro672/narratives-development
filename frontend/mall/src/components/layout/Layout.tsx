@@ -30,7 +30,9 @@ type FooterProps =
       variant: "action";
       buttonLabel: string;
       disabled?: boolean;
-      onButtonClick: () => void | Promise<void>;
+      buttonType?: "button" | "submit";
+      buttonForm?: string;
+      onButtonClick?: () => void | Promise<void>;
     };
 
 type LayoutProps = {

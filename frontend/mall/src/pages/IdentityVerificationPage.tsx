@@ -1,6 +1,6 @@
 // frontend/mall/src/pages/IdentityVerificationPage.tsx
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import StatePanel from "../components/ui/StatePanel";
@@ -16,6 +16,7 @@ function formatVerifiedAt(value: string | undefined): string | null {
   }
 
   const date = new Date(value);
+
   if (Number.isNaN(date.getTime())) {
     return null;
   }
@@ -40,16 +41,23 @@ export default function IdentityVerificationPage() {
     verify,
   } = useIdentityVerification();
 
-  const verifiedAt = formatVerifiedAt(
-    verification?.verifiedAt,
-  );
+  const verifiedAt = formatVerifiedAt(verification?.verifiedAt);
+
+  const footerAction =
+    !isLoading && verification && !isVerified
+      ? {
+          buttonLabel: isVerifying ? "本人確認中..." : "本人確認を行う",
+          disabled: isVerifying,
+          onButtonClick: () => {
+            void verify();
+          },
+        }
+      : undefined;
 
   return (
-    <Layout
-      title="AMOL"
-      titleClickable
-      mode="mypage"
-      showFooter
+    <SettingsSwipePage
+      title="本人確認"
+      footerAction={footerAction}
     >
       <section className="page-section content-page-section settings-page identity-verification-page">
         <p className="content-page-description">
@@ -123,22 +131,20 @@ export default function IdentityVerificationPage() {
                   variant="primary"
                   size="lg"
                   fullWidth
-                  className="identity-verification-page__verify-button"
+                  className="identity-verification-page__verify-button settings-page__desktop-action"
                   disabled={isVerifying}
                   aria-busy={isVerifying}
                   onClick={() => {
                     void verify();
                   }}
                 >
-                  {isVerifying
-                    ? "本人確認中..."
-                    : "本人確認を行う"}
+                  {isVerifying ? "本人確認中..." : "本人確認を行う"}
                 </Button>
               </>
             )}
           </>
         ) : null}
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

@@ -1,6 +1,6 @@
 // frontend/mall/src/features/payment-method/components/PaymentMethodForm.tsx
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 
@@ -10,18 +10,27 @@ import Card from "../../../components/ui/Card";
 import TextState from "../../../components/ui/TextState";
 import type { ConfirmedCardPayload } from "../../shared/types/paymentMethods";
 
+export type PaymentMethodFormState = {
+  submitting: boolean;
+  canSubmit: boolean;
+};
+
 type PaymentMethodFormProps = {
+  formId?: string;
   cardholderName: string;
   clientSecret: string;
   stripeCustomerId: string;
   onCompleted: (payload: ConfirmedCardPayload) => Promise<void> | void;
+  onSubmitStateChange?: (state: PaymentMethodFormState) => void;
 };
 
 export default function PaymentMethodForm({
+  formId,
   cardholderName,
   clientSecret,
   stripeCustomerId,
   onCompleted,
+  onSubmitStateChange,
 }: PaymentMethodFormProps) {
   const stripe = useStripe();
   const elements = useElements();
@@ -29,6 +38,19 @@ export default function PaymentMethodForm({
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [isCardComplete, setIsCardComplete] = useState(false);
+
+  const canSubmit =
+    Boolean(stripe) &&
+    Boolean(elements) &&
+    !submitting &&
+    isCardComplete;
+
+  useEffect(() => {
+    onSubmitStateChange?.({
+      submitting,
+      canSubmit,
+    });
+  }, [submitting, canSubmit, onSubmitStateChange]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -122,7 +144,11 @@ export default function PaymentMethodForm({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="payment-method-page-form">
+    <form
+      id={formId}
+      onSubmit={handleSubmit}
+      className="payment-method-page-form"
+    >
       <Card variant="panel">
         <TextState variant="muted">カード情報</TextState>
 
@@ -162,12 +188,12 @@ export default function PaymentMethodForm({
         </Alert>
       ) : null}
 
-      <div className="payment-method-page-form__actions">
+      <div className="payment-method-page-form__actions settings-page__desktop-action">
         <Button
           type="submit"
           variant="primary"
           fullWidth
-          disabled={!stripe || !elements || submitting || !isCardComplete}
+          disabled={!canSubmit}
           aria-busy={submitting}
         >
           {submitting ? "登録中..." : "このカードを登録する"}
