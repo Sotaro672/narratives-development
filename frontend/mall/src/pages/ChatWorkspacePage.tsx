@@ -137,7 +137,10 @@ function ChatWorkspaceContent() {
     pendingBackNavigationRef.current = false;
     clearBackNavigationTimer();
     navigate("/chats", { replace: true });
-  }, [clearBackNavigationTimer, navigate]);
+  }, [
+    clearBackNavigationTimer,
+    navigate,
+  ]);
 
   useEffect(() => {
     if (!isMobile) {
@@ -245,8 +248,7 @@ function ChatWorkspaceContent() {
   const shouldShowMobileComposer =
     isMobile &&
     !isChatListRoute &&
-    mobilePane === "detail" &&
-    composer !== null;
+    mobilePane === "detail";
 
   const layoutTitle =
     isMobileChatDetail
@@ -332,25 +334,8 @@ function ChatWorkspaceContent() {
         workspaceContent
       )}
 
-      {shouldShowMobileComposer ? (
-        <MobileComposerFooter
-          content={composer.content}
-          placeholder={composer.placeholder}
-          files={composer.files}
-          error={composer.error}
-          submitting={composer.submitting}
-          canSubmit={composer.canSubmit}
-          disabled={composer.disabled}
-          submitLabel={composer.submitLabel}
-          submittingLabel={composer.submittingLabel}
-          maxLength={composer.maxLength}
-          maxFiles={composer.maxFiles}
-          accept={composer.accept}
-          onContentChange={composer.onContentChange}
-          onFilesAdd={composer.onFilesAdd}
-          onRemoveFile={composer.onRemoveFile}
-          onSubmit={composer.onSubmit}
-        />
+      {shouldShowMobileComposer && composer ? (
+        <MobileComposerFooter {...composer} />
       ) : null}
     </>
   );
