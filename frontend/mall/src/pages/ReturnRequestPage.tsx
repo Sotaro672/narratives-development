@@ -224,7 +224,7 @@ export default function ReturnRequestPage() {
       submitting,
       canSubmit,
       disabled: !returnConditionsCompleted,
-      submitLabel: "返品を申請する",
+      submitLabel: "返品申請",
       submittingLabel: "申請中...",
       maxLength: null,
       onContentChange: handleReasonChange,
