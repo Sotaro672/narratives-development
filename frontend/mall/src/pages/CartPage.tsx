@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDismissPage";
 import CartContent from "../features/cart/presentation/components/CartContent";
 import CartPageEmpty from "../features/cart/presentation/components/CartPageEmpty";
 import CartPageError from "../features/cart/presentation/components/CartPageError";
@@ -47,12 +48,26 @@ export default function CartPage() {
     navigate(normalizedPath);
   }
 
-  return (
+  function handleDismiss() {
+    navigate(-1);
+  }
+
+  const content = (
     <Layout
       title="AMOL"
       mode="mypage"
       showFooter={isMobilePortrait}
       hideSettingsButton
+      footerProps={
+        isMobilePortrait
+          ? {
+              variant: "action",
+              buttonLabel: "購入する",
+              disabled: isPurchaseDisabled,
+              onButtonClick: handlePurchase,
+            }
+          : undefined
+      }
     >
       <section className="content-page-section cart-page-section-root">
         {loading ? <CartPageLoading /> : null}
@@ -74,6 +89,7 @@ export default function CartPage() {
             totalAmount={totalAmount}
             removingItemKey={removingItemKey}
             isPurchaseDisabled={isPurchaseDisabled}
+            showPurchaseButton={!isMobilePortrait}
             onRemoveItem={removeItem}
             onOpenItem={handleOpenItem}
             onPurchase={handlePurchase}
@@ -81,5 +97,15 @@ export default function CartPage() {
         ) : null}
       </section>
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeRightDismissPage onDismiss={handleDismiss}>
+      {content}
+    </MobileSwipeRightDismissPage>
   );
 }

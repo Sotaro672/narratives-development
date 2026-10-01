@@ -10,6 +10,7 @@ type CartContentProps = {
   totalAmount: number;
   removingItemKey: string;
   isPurchaseDisabled: boolean;
+  showPurchaseButton?: boolean;
   onRemoveItem: (item: CartDisplayItem) => void | Promise<void>;
   onOpenItem: (path: string) => void;
   onPurchase: () => void;
@@ -20,6 +21,7 @@ export default function CartContent({
   totalAmount,
   removingItemKey,
   isPurchaseDisabled,
+  showPurchaseButton = true,
   onRemoveItem,
   onOpenItem,
   onPurchase,
@@ -48,15 +50,17 @@ export default function CartContent({
       <div className="cart-page-summary-column">
         <CartSummary itemCount={items.length} totalAmount={totalAmount} />
 
-        <Button
-          type="button"
-          size="lg"
-          className="cart-page-purchase-button"
-          disabled={isPurchaseDisabled}
-          onClick={onPurchase}
-        >
-          購入する
-        </Button>
+        {showPurchaseButton ? (
+          <Button
+            type="button"
+            size="lg"
+            className="cart-page-purchase-button"
+            disabled={isPurchaseDisabled}
+            onClick={onPurchase}
+          >
+            購入する
+          </Button>
+        ) : null}
       </div>
     </div>
   );
