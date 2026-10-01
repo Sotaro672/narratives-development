@@ -10,33 +10,16 @@ import {
   type ReactNode,
 } from "react";
 
-export type ChatWorkspaceComposer = {
-  content: string;
-  placeholder?: string;
-  files?: File[];
-  error?: string | null;
-  submitting?: boolean;
-  canSubmit: boolean;
-  disabled?: boolean;
-  submitLabel?: string;
-  submittingLabel?: string;
-  maxLength?: number | null;
-  maxFiles?: number;
-  accept?: string;
-  onContentChange: (value: string) => void;
-  onFilesAdd?: (files: File[]) => void;
-  onRemoveFile?: (index: number) => void;
-  onSubmit: () => void | Promise<void>;
-};
+import type { ChatComposerConfig } from "../../types/chatComposer";
 
-type RegisteredChatWorkspaceComposer = ChatWorkspaceComposer & {
+type RegisteredChatWorkspaceComposer = ChatComposerConfig & {
   registrationId: number;
 };
 
 type ChatWorkspaceContextValue = {
-  composer: ChatWorkspaceComposer | null;
+  composer: ChatComposerConfig | null;
   headerTitle: string;
-  registerComposer: (composer: ChatWorkspaceComposer) => () => void;
+  registerComposer: (composer: ChatComposerConfig) => () => void;
   clearComposer: () => void;
   setHeaderTitle: (title: string) => void;
   clearHeaderTitle: () => void;
@@ -49,7 +32,7 @@ type ChatWorkspaceProviderProps = {
 };
 
 function normalizeComposer(
-  composer: ChatWorkspaceComposer,
+  composer: ChatComposerConfig,
   registrationId: number,
 ): RegisteredChatWorkspaceComposer {
   return {
@@ -73,54 +56,30 @@ export function ChatWorkspaceProvider({
 }: ChatWorkspaceProviderProps) {
   const registrationIdRef = useRef(0);
   const activeRegistrationIdRef = useRef<number | null>(null);
-
-  const [
-    registeredComposer,
-    setRegisteredComposer,
-  ] = useState<RegisteredChatWorkspaceComposer | null>(null);
-
+  const [registeredComposer, setRegisteredComposer] = useState<RegisteredChatWorkspaceComposer | null>(null);
   const [headerTitle, setHeaderTitleState] = useState("");
 
   const registerComposer = useCallback(
-    (
-      composer: ChatWorkspaceComposer,
-    ): (() => void) => {
+    (composer: ChatComposerConfig): (() => void) => {
       registrationIdRef.current += 1;
       const registrationId = registrationIdRef.current;
-
       activeRegistrationIdRef.current = registrationId;
-
-      setRegisteredComposer(
-        normalizeComposer(
-          composer,
-          registrationId,
-        ),
-      );
+      setRegisteredComposer(normalizeComposer(composer, registrationId));
 
       return () => {
         queueMicrotask(() => {
-          if (
-            activeRegistrationIdRef.current !==
-            registrationId
-          ) {
+          if (activeRegistrationIdRef.current !== registrationId) {
             return;
           }
 
           activeRegistrationIdRef.current = null;
+          setRegisteredComposer((currentComposer) => {
+            if (!currentComposer || currentComposer.registrationId !== registrationId) {
+              return currentComposer;
+            }
 
-          setRegisteredComposer(
-            (currentComposer) => {
-              if (
-                !currentComposer ||
-                currentComposer.registrationId !==
-                  registrationId
-              ) {
-                return currentComposer;
-              }
-
-              return null;
-            },
-          );
+            return null;
+          });
         });
       };
     },
@@ -133,101 +92,70 @@ export function ChatWorkspaceProvider({
     setRegisteredComposer(null);
   }, []);
 
-  const setHeaderTitle = useCallback(
-    (title: string) => {
-      setHeaderTitleState(
-        title.trim(),
-      );
-    },
-    [],
-  );
+  const setHeaderTitle = useCallback((title: string) => {
+    setHeaderTitleState(title.trim());
+  }, []);
 
   const clearHeaderTitle = useCallback(() => {
     setHeaderTitleState("");
   }, []);
 
-  const composer =
-    useMemo<ChatWorkspaceComposer | null>(
-      () => {
-        if (!registeredComposer) {
-          return null;
-        }
+  const composer = useMemo<ChatComposerConfig | null>(() => {
+    if (!registeredComposer) {
+      return null;
+    }
 
-        return {
-          content:
-            registeredComposer.content,
-          placeholder:
-            registeredComposer.placeholder,
-          files:
-            registeredComposer.files,
-          error:
-            registeredComposer.error,
-          submitting:
-            registeredComposer.submitting,
-          canSubmit:
-            registeredComposer.canSubmit,
-          disabled:
-            registeredComposer.disabled,
-          submitLabel:
-            registeredComposer.submitLabel,
-          submittingLabel:
-            registeredComposer.submittingLabel,
-          maxLength:
-            registeredComposer.maxLength,
-          maxFiles:
-            registeredComposer.maxFiles,
-          accept:
-            registeredComposer.accept,
-          onContentChange:
-            registeredComposer.onContentChange,
-          onFilesAdd:
-            registeredComposer.onFilesAdd,
-          onRemoveFile:
-            registeredComposer.onRemoveFile,
-          onSubmit:
-            registeredComposer.onSubmit,
-        };
-      },
-      [registeredComposer],
-    );
+    return {
+      content: registeredComposer.content,
+      placeholder: registeredComposer.placeholder,
+      files: registeredComposer.files,
+      error: registeredComposer.error,
+      submitting: registeredComposer.submitting,
+      canSubmit: registeredComposer.canSubmit,
+      disabled: registeredComposer.disabled,
+      submitLabel: registeredComposer.submitLabel,
+      submittingLabel: registeredComposer.submittingLabel,
+      maxLength: registeredComposer.maxLength,
+      maxFiles: registeredComposer.maxFiles,
+      accept: registeredComposer.accept,
+      onContentChange: registeredComposer.onContentChange,
+      onFilesAdd: registeredComposer.onFilesAdd,
+      onRemoveFile: registeredComposer.onRemoveFile,
+      onSubmit: registeredComposer.onSubmit,
+    };
+  }, [registeredComposer]);
 
-  const value =
-    useMemo<ChatWorkspaceContextValue>(
-      () => ({
-        composer,
-        headerTitle,
-        registerComposer,
-        clearComposer,
-        setHeaderTitle,
-        clearHeaderTitle,
-      }),
-      [
-        composer,
-        headerTitle,
-        registerComposer,
-        clearComposer,
-        setHeaderTitle,
-        clearHeaderTitle,
-      ],
-    );
+  const value = useMemo<ChatWorkspaceContextValue>(
+    () => ({
+      composer,
+      headerTitle,
+      registerComposer,
+      clearComposer,
+      setHeaderTitle,
+      clearHeaderTitle,
+    }),
+    [
+      composer,
+      headerTitle,
+      registerComposer,
+      clearComposer,
+      setHeaderTitle,
+      clearHeaderTitle,
+    ],
+  );
 
   return (
-    <ChatWorkspaceContext.Provider
-      value={value}
-    >
+    <ChatWorkspaceContext.Provider value={value}>
       {children}
     </ChatWorkspaceContext.Provider>
   );
 }
 
 export function useChatWorkspace(): ChatWorkspaceContextValue {
-  const context =
-    useContext(ChatWorkspaceContext);
+  const context = useContext(ChatWorkspaceContext);
 
   if (!context) {
-    throw new Error(
-      "useChatWorkspace must be used within ChatWorkspaceProvider.",
-    );
+    throw new Error("useChatWorkspace must be used within ChatWorkspaceProvider.");
   }
 
   return context;

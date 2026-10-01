@@ -2,7 +2,7 @@
 
 import {
   useEffect,
-  useRef,
+  useMemo,
 } from "react";
 import { useParams } from "react-router-dom";
 
@@ -18,6 +18,7 @@ import ResaleChatDetail from "../features/resale/presentation/components/ResaleC
 import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 import ChatMessageBubble from "../features/shared/presentation/components/ChatMessageBubble";
 import { useChatWorkspace } from "../features/shared/presentation/context/ChatWorkspaceContext";
+import type { ChatComposerConfig } from "../features/shared/types/chatComposer";
 import { getInquiryTypeLabel } from "../features/shared/types/inquiryTypes";
 import TradeChatDetail from "../features/trade/presentation/components/TradeChatDetail";
 
@@ -51,8 +52,6 @@ function InquiryChatDetail() {
     clearHeaderTitle,
   } = useChatWorkspace();
 
-  const unregisterComposerRef = useRef<(() => void) | null>(null);
-
   const {
     inquiry,
     sortedReplies,
@@ -74,8 +73,8 @@ function InquiryChatDetail() {
     handleCloseInquiry,
   } = useInquiryDetailPage();
 
-  useEffect(() => {
-    unregisterComposerRef.current = registerComposer({
+  const composer = useMemo<ChatComposerConfig>(
+    () => ({
       content: replyContent,
       placeholder: "返信内容を入力",
       files: replyFiles,
@@ -90,27 +89,27 @@ function InquiryChatDetail() {
       onFilesAdd: addReplyFiles,
       onRemoveFile: removeReplyFile,
       onSubmit: submitReply,
-    });
-  }, [
-    addReplyFiles,
-    canSubmitReply,
-    postingReply,
-    registerComposer,
-    removeReplyFile,
-    replyActionDisabled,
-    replyContent,
-    replyError,
-    replyFiles,
-    setReplyContent,
-    submitReply,
-  ]);
+    }),
+    [
+      replyContent,
+      replyFiles,
+      replyError,
+      postingReply,
+      canSubmitReply,
+      replyActionDisabled,
+      setReplyContent,
+      addReplyFiles,
+      removeReplyFile,
+      submitReply,
+    ],
+  );
 
   useEffect(() => {
-    return () => {
-      unregisterComposerRef.current?.();
-      unregisterComposerRef.current = null;
-    };
-  }, []);
+    return registerComposer(composer);
+  }, [
+    composer,
+    registerComposer,
+  ]);
 
   useEffect(() => {
     if (!inquiry) {
@@ -214,20 +213,7 @@ function InquiryChatDetail() {
                 )}
               </div>
 
-              <ChatInlineComposer
-                content={replyContent}
-                placeholder="返信内容を入力"
-                error={replyError}
-                submitting={postingReply}
-                canSubmit={canSubmitReply}
-                disabled={replyActionDisabled}
-                maxLength={null}
-                files={replyFiles}
-                onContentChange={setReplyContent}
-                onFilesAdd={addReplyFiles}
-                onRemoveFile={removeReplyFile}
-                onSubmit={submitReply}
-              />
+              <ChatInlineComposer {...composer} />
             </div>
           </div>
         ) : null}

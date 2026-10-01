@@ -13,28 +13,13 @@ import {
 import { createPortal } from "react-dom";
 import { ImagePlus, X } from "lucide-react";
 
+import type { ChatComposerConfig } from "../../features/shared/types/chatComposer";
 import IconButton from "../ui/IconButton";
 
 import "./mobileComposerFooter.css";
 
-export type MobileComposerFooterProps = {
-  content: string;
-  placeholder?: string;
-  files?: File[];
-  error?: string | null;
-  submitting?: boolean;
-  canSubmit: boolean;
-  disabled?: boolean;
-  submitLabel?: string;
-  submittingLabel?: string;
-  maxLength?: number | null;
-  maxFiles?: number;
-  accept?: string;
+export type MobileComposerFooterProps = ChatComposerConfig & {
   beforeInput?: ReactNode;
-  onContentChange: (value: string) => void;
-  onFilesAdd?: (files: File[]) => void;
-  onRemoveFile?: (index: number) => void;
-  onSubmit: () => void | Promise<void>;
 };
 
 type MobileComposerImagePreviewProps = {
@@ -110,9 +95,7 @@ export default function MobileComposerFooter({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const lastEmittedContentRef = useRef(content);
-
   const [draft, setDraft] = useState(content);
-
   const inputDisabled = disabled || submitting;
 
   const supportsFiles =
@@ -194,7 +177,6 @@ export default function MobileComposerFooter({
 
     const root = document.documentElement;
     const visualViewport = window.visualViewport;
-
     let animationFrameId: number | null = null;
 
     const updateKeyboardOffset = (): void => {
@@ -354,7 +336,6 @@ export default function MobileComposerFooter({
       event.currentTarget.value;
 
     isComposingRef.current = false;
-
     setDraft(nextValue);
     emitContentChange(nextValue);
   };

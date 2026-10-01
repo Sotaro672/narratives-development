@@ -1,5 +1,6 @@
 // frontend/mall/src/pages/InquiryCreatePage.tsx
 
+import { useMemo } from "react";
 import { ChevronLeft } from "lucide-react";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
@@ -12,6 +13,7 @@ import IconButton from "../components/ui/IconButton";
 import StatePanel from "../components/ui/StatePanel";
 import { useInquiryCreatePage } from "../features/inquiry/presentation/hooks/useInquiryCreatePage";
 import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
+import type { ChatComposerConfig } from "../features/shared/types/chatComposer";
 
 import "../styles/page-layout.css";
 import "../features/shared/styles/chat-detail-page.css";
@@ -44,6 +46,40 @@ export default function InquiryCreatePage() {
   } = useInquiryCreatePage();
 
   const product = productViewModel?.product ?? null;
+
+  const composer = useMemo<ChatComposerConfig>(
+    () => ({
+      content,
+      placeholder: "問い合わせ内容を入力",
+      files,
+      error,
+      submitting,
+      canSubmit,
+      disabled: !productId || !product,
+      submitLabel: "送信",
+      submittingLabel: "送信中",
+      maxLength: 2000,
+      maxFiles: 10,
+      accept: "image/*",
+      onContentChange: setContent,
+      onFilesAdd: handleFilesAdd,
+      onRemoveFile: handleRemoveFile,
+      onSubmit: submitInquiry,
+    }),
+    [
+      content,
+      files,
+      error,
+      submitting,
+      canSubmit,
+      productId,
+      product,
+      setContent,
+      handleFilesAdd,
+      handleRemoveFile,
+      submitInquiry,
+    ],
+  );
 
   const shouldShowMobileComposer =
     isMobilePortrait &&
@@ -82,7 +118,10 @@ export default function InquiryCreatePage() {
         >
           <section className="product-detail-page-layout chat-detail-page">
             {!productId ? (
-              <Alert variant="error" className="chat-detail-page__error">
+              <Alert
+                variant="error"
+                className="chat-detail-page__error"
+              >
                 <p>商品IDが見つかりませんでした。</p>
 
                 <Button
@@ -162,6 +201,7 @@ export default function InquiryCreatePage() {
                                     aria-hidden="true"
                                   />
                                 ) : null}
+
                                 <span>{product.color}</span>
                               </span>
                             ) : (
@@ -263,20 +303,7 @@ export default function InquiryCreatePage() {
                   ) : null}
 
                   {shouldShowDesktopComposer ? (
-                    <ChatInlineComposer
-                      content={content}
-                      placeholder="問い合わせ内容を入力"
-                      files={files}
-                      error={error}
-                      submitting={submitting}
-                      canSubmit={canSubmit}
-                      disabled={!productId || !product}
-                      maxLength={2000}
-                      onContentChange={setContent}
-                      onFilesAdd={handleFilesAdd}
-                      onRemoveFile={handleRemoveFile}
-                      onSubmit={submitInquiry}
-                    />
+                    <ChatInlineComposer {...composer} />
                   ) : null}
                 </div>
               </div>
@@ -286,24 +313,7 @@ export default function InquiryCreatePage() {
       </Layout>
 
       {shouldShowMobileComposer ? (
-        <MobileComposerFooter
-          content={content}
-          placeholder="問い合わせ内容を入力"
-          files={files}
-          error={error}
-          submitting={submitting}
-          canSubmit={canSubmit}
-          disabled={!productId || !product}
-          submitLabel="送信"
-          submittingLabel="送信中"
-          maxLength={2000}
-          maxFiles={10}
-          accept="image/*"
-          onContentChange={setContent}
-          onFilesAdd={handleFilesAdd}
-          onRemoveFile={handleRemoveFile}
-          onSubmit={submitInquiry}
-        />
+        <MobileComposerFooter {...composer} />
       ) : null}
     </>
   );

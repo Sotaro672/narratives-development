@@ -1,209 +1,116 @@
 // frontend/mall/src/pages/InquiryPage.tsx
 
-import { useEffect, useMemo, useState } from "react";
-import { getAuth } from "firebase/auth";
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
+import Layout from "../components/layout/Layout";
+import MobileComposerFooter from "../components/layout/MobileComposerFooter";
+import Alert from "../components/ui/Alert";
+import StatePanel from "../components/ui/StatePanel";
+import ContactUploadProgressModal from "../features/contact/components/ContactUploadProgressModal";
+import { useSettingsInquiryPage } from "../features/contact/hooks/useSettingsInquiryPage";
+import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 
 import "../styles/page-layout.css";
-import "../styles/form.css";
-import "../styles/contact-page.css";
-import "../styles/settings-page.css";
-
-import SettingsSwipePage from "../components/layout/SettingsSwipePage";
-import Button from "../components/ui/Button";
-import MediaUploader from "../components/ui/MediaUploader";
-import Textbox from "../components/ui/Textbox";
-import { fetchCurrentUserProfile } from "../features/auth/api/userApi";
-import ContactUploadProgressModal from "../features/contact/components/ContactUploadProgressModal";
-import { useContactAttachments } from "../features/contact/hooks/useContactAttachments";
-import { useContactSubmit } from "../features/contact/hooks/useContactSubmit";
+import "../features/shared/styles/chat-detail-page.css";
+import "../styles/inquiry-page.css";
 
 export default function InquiryPage() {
-  const auth = getAuth();
-  const currentUser = auth.currentUser;
-
-  const [userName, setUserName] = useState("");
-  const [loadingUser, setLoadingUser] = useState(true);
-  const [userError, setUserError] = useState<string | null>(null);
+  const isMobilePortrait = useMobilePortrait();
 
   const {
-    mediaInputRef,
-    carouselRef,
-    carouselIndex,
-    attachments,
-    setAttachments,
-    setCarouselIndex,
-    handleFilesSelected,
-    handleRemoveAttachment,
-    handleCarouselScroll,
-    handleMoveToSlide,
-    revokeAllAttachmentPreviewUrls,
-  } = useContactAttachments();
-
-  useEffect(() => {
-    let active = true;
-
-    const loadUser = async () => {
-      setLoadingUser(true);
-      setUserError(null);
-
-      try {
-        const profile = await fetchCurrentUserProfile();
-
-        if (!active) {
-          return;
-        }
-
-        const resolvedName = [
-          profile.last_name?.trim(),
-          profile.first_name?.trim(),
-        ]
-          .filter(Boolean)
-          .join(" ");
-
-        if (!resolvedName) {
-          throw new Error("ユーザー名を確認できませんでした。");
-        }
-
-        setUserName(resolvedName);
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-
-        setUserName("");
-        setUserError(
-          error instanceof Error
-            ? error.message
-            : "ユーザー情報の取得に失敗しました。",
-        );
-      } finally {
-        if (active) {
-          setLoadingUser(false);
-        }
-      }
-    };
-
-    void loadUser();
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const {
-    message,
-    setMessage,
-    submitting,
+    loadingUser,
+    userError,
+    composer,
     uploadingAttachments,
     uploadProgress,
     uploadFileProgress,
     uploadFileIndex,
     uploadFileCount,
-    handleSubmit,
-  } = useContactSubmit({
-    currentUser,
-    isLoggedIn: Boolean(currentUser),
-    attachments,
-    setAttachments,
-    setCarouselIndex,
-    revokeAllAttachmentPreviewUrls,
-    source: "mall",
-    nameOverride: userName,
-    companyOverride: "-",
-  });
+  } = useSettingsInquiryPage();
 
-  const canSubmit = useMemo(() => {
-    return (
-      Boolean(currentUser?.email) &&
-      Boolean(userName) &&
-      Boolean(message.trim()) &&
-      !loadingUser &&
-      !submitting
-    );
-  }, [
-    currentUser?.email,
-    userName,
-    message,
-    loadingUser,
-    submitting,
-  ]);
+  const shouldShowMobileComposer =
+    isMobilePortrait &&
+    !loadingUser &&
+    !userError;
 
-  const submitButtonLabel = loadingUser
-    ? "ユーザー情報確認中..."
-    : submitting
-      ? "送信中..."
-      : "問い合わせを送信";
+  const shouldShowDesktopComposer =
+    !isMobilePortrait &&
+    !loadingUser &&
+    !userError;
+
+  const pageLayoutClassName = [
+    "chat-detail-page-layout",
+    "chat-detail-page-layout--inquiry",
+    "settings-inquiry-page-layout",
+    shouldShowMobileComposer
+      ? "settings-inquiry-page-layout--with-mobile-composer"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <>
-      <SettingsSwipePage
-        title="問い合わせ"
-        footerAction={{
-          buttonLabel: submitButtonLabel,
-          disabled: !canSubmit,
-          onButtonClick: () => {
-            void handleSubmit();
-          },
-        }}
+      <Layout
+        title="AMOL"
+        mode="mypage"
+        showHeader={!isMobilePortrait}
+        showFooter={false}
+        mainClassName="inquiry-page"
+        disableFooterPaddingOnDesktop
       >
-        <section className="page-section content-page-section settings-page">
-          <p className="page-description">
-            AMOLへのお問い合わせ内容を入力してください。
-          </p>
+        <div
+          className={pageLayoutClassName}
+          data-chat-detail
+        >
+          <section className="product-detail-page-layout chat-detail-page">
+            <div className="settings-inquiry-page">
+              <div className="settings-inquiry-page__content">
+                <header className="settings-inquiry-page__header">
+                  <h1 className="settings-inquiry-page__title">
+                    問い合わせ
+                  </h1>
 
-          {userError ? (
-            <p className="page-description">
-              {userError}
-            </p>
-          ) : null}
+                  <p className="settings-inquiry-page__description">
+                    AMOLへのお問い合わせ内容を入力してください。
+                  </p>
+                </header>
 
-          <div className="form-block">
-            <Textbox
-              id="inquiry-message"
-              label="お問い合わせ内容"
-              value={message}
-              placeholder="お問い合わせ内容を入力してください"
-              rows={8}
-              disabled={submitting || loadingUser}
-              required
-              onChange={(event) => setMessage(event.target.value)}
-            />
+                {loadingUser ? (
+                  <StatePanel
+                    variant="loading"
+                    title="ユーザー情報を確認中..."
+                  />
+                ) : null}
 
-            <MediaUploader
-              label="添付ファイル画像"
-              hint="アップロードできるのは画像のみです。"
-              emptyText="添付ファイルはまだ選択されていません。"
-              accept="image/*"
-              multiple
-              items={attachments}
-              currentIndex={carouselIndex}
-              inputRef={mediaInputRef}
-              carouselRef={carouselRef}
-              onFilesSelected={handleFilesSelected}
-              onRemoveItem={handleRemoveAttachment}
-              onCarouselScroll={handleCarouselScroll}
-              onMoveToSlide={handleMoveToSlide}
-              selectButtonLabel="ファイルを選択"
-              disabled={submitting || loadingUser}
-            />
-          </div>
+                {!loadingUser && userError ? (
+                  <Alert
+                    variant="error"
+                    className="settings-inquiry-page__error"
+                  >
+                    {userError}
+                  </Alert>
+                ) : null}
 
-          <p className="page-description">
-            お問い合わせ内容によっては、ご回答までにお時間をいただく場合があります。
-          </p>
+                {!loadingUser && !userError ? (
+                  <div className="settings-inquiry-page__notice">
+                    <p className="settings-inquiry-page__description">
+                      お問い合わせ内容によっては、ご回答までにお時間をいただく場合があります。
+                    </p>
+                  </div>
+                ) : null}
+              </div>
 
-          <div className="page-actions settings-page__desktop-action">
-            <Button
-              variant="primary"
-              size="md"
-              disabled={!canSubmit}
-              onClick={() => void handleSubmit()}
-            >
-              {submitButtonLabel}
-            </Button>
-          </div>
-        </section>
-      </SettingsSwipePage>
+              {shouldShowDesktopComposer ? (
+                <ChatInlineComposer {...composer} />
+              ) : null}
+            </div>
+          </section>
+        </div>
+      </Layout>
+
+      {shouldShowMobileComposer ? (
+        <MobileComposerFooter {...composer} />
+      ) : null}
 
       <ContactUploadProgressModal
         open={uploadingAttachments}

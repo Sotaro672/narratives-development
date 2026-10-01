@@ -13,21 +13,7 @@ import {
 
 import IconButton from "../../../../components/ui/IconButton";
 import Textbox from "../../../../components/ui/Textbox";
-
-type ChatInlineComposerProps = {
-  content: string;
-  placeholder: string;
-  error?: string | null;
-  submitting: boolean;
-  canSubmit: boolean;
-  disabled?: boolean;
-  maxLength?: number | null;
-  files?: File[];
-  onContentChange: (value: string) => void;
-  onFilesAdd?: (files: File[]) => void;
-  onRemoveFile?: (index: number) => void;
-  onSubmit: () => void | Promise<void>;
-};
+import type { ChatComposerConfig } from "../../types/chatComposer";
 
 type ChatInlineImagePreviewProps = {
   file: File;
@@ -80,24 +66,36 @@ function ChatInlineImagePreview({
 
 export default function ChatInlineComposer({
   content,
-  placeholder,
+  placeholder = "メッセージを入力",
   error,
-  submitting,
+  submitting = false,
   canSubmit,
   disabled = false,
   maxLength = 500,
+  maxFiles = 10,
+  accept = "image/*",
   files = [],
   onContentChange,
   onFilesAdd,
   onRemoveFile,
   onSubmit,
-}: ChatInlineComposerProps) {
+}: ChatComposerConfig) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputDisabled = disabled || submitting;
 
   const supportsFiles =
     typeof onFilesAdd === "function" &&
     typeof onRemoveFile === "function";
+
+  const remainingFileCount = Math.max(
+    maxFiles - files.length,
+    0,
+  );
+
+  const canAddFiles =
+    supportsFiles &&
+    !inputDisabled &&
+    remainingFileCount > 0;
 
   const handleKeyDown = (
     event: KeyboardEvent<HTMLTextAreaElement>,
@@ -144,9 +142,9 @@ export default function ChatInlineComposer({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept={accept}
               multiple
-              disabled={inputDisabled}
+              disabled={!canAddFiles}
               hidden
               onChange={(event) => {
                 const selectedFiles = Array.from(
@@ -157,11 +155,19 @@ export default function ChatInlineComposer({
 
                 event.currentTarget.value = "";
 
-                if (selectedFiles.length === 0) {
+                if (
+                  selectedFiles.length === 0 ||
+                  remainingFileCount <= 0
+                ) {
                   return;
                 }
 
-                onFilesAdd(selectedFiles);
+                onFilesAdd(
+                  selectedFiles.slice(
+                    0,
+                    remainingFileCount,
+                  ),
+                );
               }}
             />
 
@@ -170,8 +176,12 @@ export default function ChatInlineComposer({
               variant="ghost"
               size="md"
               className="chat-detail-page__desktop-attach-button"
-              aria-label="画像を追加"
-              disabled={inputDisabled}
+              aria-label={
+                remainingFileCount > 0
+                  ? "画像を追加"
+                  : `画像は最大${maxFiles}枚までです`
+              }
+              disabled={!canAddFiles}
               onClick={() => {
                 fileInputRef.current?.click();
               }}

@@ -1,7 +1,24 @@
-// frontend/src/features/contact/hooks/useContactAttachments.ts
-import { ChangeEvent, useRef, useState } from "react";
+// frontend/mall/src/features/contact/hooks/useContactAttachments.ts
+
+import {
+  type ChangeEvent,
+  useCallback,
+  useRef,
+  useState,
+} from "react";
 
 import type { ContactAttachmentItem } from "../../shared/types/contact";
+
+function createAttachmentItem(file: File): ContactAttachmentItem {
+  return {
+    id: `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2)}`,
+    type: "image",
+    previewUrl: URL.createObjectURL(file),
+    fileName: file.name,
+    title: file.name,
+    file,
+  };
+}
 
 export function useContactAttachments() {
   const mediaInputRef = useRef<HTMLInputElement>(null);
@@ -10,67 +27,108 @@ export function useContactAttachments() {
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [attachments, setAttachments] = useState<ContactAttachmentItem[]>([]);
 
-  const handleFilesSelected = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    if (files.length === 0) {
-      return;
-    }
-
+  const addImageFiles = useCallback((files: File[]) => {
     const imageFiles = files.filter((file) => file.type.startsWith("image/"));
 
-    if (imageFiles.length !== files.length) {
-      window.alert("添付できるファイルは画像のみです。");
-    }
-
     if (imageFiles.length === 0) {
-      event.target.value = "";
       return;
     }
 
-    const nextItems = imageFiles.map((file) => ({
-      id: `${file.name}-${file.lastModified}-${Math.random()
-        .toString(36)
-        .slice(2)}`,
-      type: "image" as const,
-      previewUrl: URL.createObjectURL(file),
-      fileName: file.name,
-      title: file.name,
-      file,
-    }));
+    const nextItems = imageFiles.map(createAttachmentItem);
+    setAttachments((currentAttachments) => [
+      ...currentAttachments,
+      ...nextItems,
+    ]);
+  }, []);
 
-    setAttachments((prev) => [...prev, ...nextItems]);
-    event.target.value = "";
-  };
+  const removeAttachmentAtIndex = useCallback((index: number) => {
+    setAttachments((currentAttachments) => {
+      if (index < 0 || index >= currentAttachments.length) {
+        return currentAttachments;
+      }
 
-  const handleRemoveAttachment = (id: string) => {
-    setAttachments((prev) => {
-      const target = prev.find((item) => item.id === id);
+      const target = currentAttachments[index];
+
+      if (target.previewUrl) {
+        URL.revokeObjectURL(target.previewUrl);
+      }
+
+      return currentAttachments.filter(
+        (_attachment, currentIndex) => currentIndex !== index,
+      );
+    });
+  }, []);
+
+  const handleFilesSelected = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.currentTarget.files ?? []);
+      event.currentTarget.value = "";
+
+      if (files.length === 0) {
+        return;
+      }
+
+      const imageFiles = files.filter((file) => file.type.startsWith("image/"));
+
+      if (imageFiles.length !== files.length) {
+        window.alert("添付できるファイルは画像のみです。");
+      }
+
+      addImageFiles(imageFiles);
+    },
+    [addImageFiles],
+  );
+
+  const handleFilesAdd = useCallback(
+    (files: File[]) => {
+      addImageFiles(files);
+    },
+    [addImageFiles],
+  );
+
+  const handleRemoveAttachment = useCallback((id: string) => {
+    setAttachments((currentAttachments) => {
+      const target = currentAttachments.find(
+        (attachment) => attachment.id === id,
+      );
 
       if (target?.previewUrl) {
         URL.revokeObjectURL(target.previewUrl);
       }
 
-      return prev.filter((item) => item.id !== id);
+      return currentAttachments.filter(
+        (attachment) => attachment.id !== id,
+      );
     });
-  };
+  }, []);
 
-  const handleCarouselScroll = () => {
+  const handleRemoveFile = useCallback(
+    (index: number) => {
+      removeAttachmentAtIndex(index);
+    },
+    [removeAttachmentAtIndex],
+  );
+
+  const handleCarouselScroll = useCallback(() => {
     const node = carouselRef.current;
+
     if (!node) {
       return;
     }
 
     const cardWidth = node.clientWidth;
+
     if (cardWidth <= 0) {
       return;
     }
 
     const nextIndex = Math.round(node.scrollLeft / cardWidth);
     setCarouselIndex(nextIndex);
-  };
+  }, []);
 
-  const handleMoveToSlide = (index: number) => {
+  const handleMoveToSlide = useCallback((index: number) => {
     const node = carouselRef.current;
+
     if (!node) {
       return;
     }
@@ -81,15 +139,15 @@ export function useContactAttachments() {
     });
 
     setCarouselIndex(index);
-  };
+  }, []);
 
-  const revokeAllAttachmentPreviewUrls = () => {
-    attachments.forEach((item) => {
-      if (item.previewUrl) {
-        URL.revokeObjectURL(item.previewUrl);
+  const revokeAllAttachmentPreviewUrls = useCallback(() => {
+    attachments.forEach((attachment) => {
+      if (attachment.previewUrl) {
+        URL.revokeObjectURL(attachment.previewUrl);
       }
     });
-  };
+  }, [attachments]);
 
   return {
     mediaInputRef,
@@ -99,7 +157,9 @@ export function useContactAttachments() {
     setAttachments,
     setCarouselIndex,
     handleFilesSelected,
+    handleFilesAdd,
     handleRemoveAttachment,
+    handleRemoveFile,
     handleCarouselScroll,
     handleMoveToSlide,
     revokeAllAttachmentPreviewUrls,
