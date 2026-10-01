@@ -1,12 +1,14 @@
 // frontend/mall/src/pages/TermsPage.tsx
 
 import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import "../styles/landing-page.css";
 import "../styles/terms-page.css";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import { useAuthState } from "../features/shared/hooks/useAuthState";
 
 type LegalDocument = {
@@ -51,16 +53,24 @@ function LegalDocumentCard({ document }: { document: LoadedLegalDocument }) {
 }
 
 export default function TermsPage() {
+  const location = useLocation();
   const { authResolved, isLoggedIn } = useAuthState();
   const isMobilePortrait = useMobilePortrait();
+
   const [documents, setDocuments] = useState<LoadedLegalDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const isSettingsTermsPage =
+    location.pathname === "/terms" &&
+    authResolved &&
+    isLoggedIn;
+
   const shouldShowFooter =
     authResolved &&
     isLoggedIn &&
-    isMobilePortrait;
+    isMobilePortrait &&
+    !isSettingsTermsPage;
 
   useEffect(() => {
     let cancelled = false;
@@ -92,12 +102,11 @@ export default function TermsPage() {
         }
       } catch (error) {
         if (!cancelled) {
-          const message =
+          setErrorMessage(
             error instanceof Error
               ? error.message
-              : "文書の読み込みに失敗しました。";
-
-          setErrorMessage(message);
+              : "文書の読み込みに失敗しました。",
+          );
         }
       } finally {
         if (!cancelled) {
@@ -113,40 +122,52 @@ export default function TermsPage() {
     };
   }, []);
 
+  const content = (
+    <section className="landing-page-section">
+      <div className="landing-page-section__inner">
+        <header className="how-to-use-page__header">
+          <p className="how-to-use-page__eyebrow">Legal</p>
+          <h1 className="how-to-use-page__title">
+            利用規約・プライバシーポリシー・特定商取引法に基づく表記
+          </h1>
+        </header>
+
+        {loading ? (
+          <div className="landing-page-card terms-page">
+            <p className="landing-page-card__text">読み込み中です。</p>
+          </div>
+        ) : null}
+
+        {!loading && errorMessage ? (
+          <div className="landing-page-card terms-page">
+            <p className="landing-page-card__text">{errorMessage}</p>
+          </div>
+        ) : null}
+
+        {!loading && !errorMessage
+          ? documents.map((document) => (
+              <LegalDocumentCard key={document.path} document={document} />
+            ))
+          : null}
+      </div>
+    </section>
+  );
+
+  if (isSettingsTermsPage) {
+    return (
+      <SettingsSwipePage title="規約">
+        {content}
+      </SettingsSwipePage>
+    );
+  }
+
   return (
     <Layout
       title="AMOL"
       mode="landing"
       showFooter={shouldShowFooter}
     >
-      <section className="landing-page-section">
-        <div className="landing-page-section__inner">
-          <header className="how-to-use-page__header">
-            <p className="how-to-use-page__eyebrow">Legal</p>
-            <h1 className="how-to-use-page__title">
-              利用規約・プライバシーポリシー・特定商取引法に基づく表記
-            </h1>
-          </header>
-
-          {loading ? (
-            <div className="landing-page-card terms-page">
-              <p className="landing-page-card__text">読み込み中です。</p>
-            </div>
-          ) : null}
-
-          {!loading && errorMessage ? (
-            <div className="landing-page-card terms-page">
-              <p className="landing-page-card__text">{errorMessage}</p>
-            </div>
-          ) : null}
-
-          {!loading && !errorMessage
-            ? documents.map((document) => (
-                <LegalDocumentCard key={document.path} document={document} />
-              ))
-            : null}
-        </div>
-      </section>
+      {content}
     </Layout>
   );
 }

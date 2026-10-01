@@ -6,9 +6,9 @@
 }
 
 .layout-main {
-  padding-top: var(--amol-header-height);
   min-height: 100vh;
   box-sizing: border-box;
+  padding-top: var(--amol-header-height);
   overflow: visible;
 }
 
@@ -23,5 +23,9 @@
 @media (max-width: 1023px) and (orientation: portrait) {
   .layout-main--with-footer {
     padding-bottom: var(--footer-nav-height);
+  }
+
+  .layout-main--with-action-footer {
+    padding-bottom: var(--footer-action-height);
   }
 }

@@ -1,4 +1,4 @@
-// frontend/amol/src/pages/PayoutAccountCompletePage.tsx
+// frontend/mall/src/pages/PayoutAccountCompletePage.tsx
 
 import { useCallback, useEffect } from "react";
 import { CheckCircle2 } from "lucide-react";
@@ -8,9 +8,8 @@ import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/payout-account-complete-page.css";
 
-import FooterNav from "../components/layout/FooterNav";
-import Layout from "../components/layout/Layout";
-import { useContactViewport } from "../features/contact/hooks/useContactViewport";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
+import Button from "../components/ui/Button";
 
 type PayoutAccountCompleteLocationState = {
   registrationCompleted?: boolean;
@@ -19,7 +18,6 @@ type PayoutAccountCompleteLocationState = {
 export default function PayoutAccountCompletePage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isDesktop } = useContactViewport();
 
   const state = location.state as PayoutAccountCompleteLocationState | null;
   const registrationCompleted = state?.registrationCompleted === true;
@@ -39,13 +37,12 @@ export default function PayoutAccountCompletePage() {
   }
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="口座登録完了"
-      titleClickable={false}
-      mode="default"
-      hideSettingsButton
-      actionButtonLabel={isDesktop ? "売上受取口座へ戻る" : undefined}
-      onActionButtonClick={isDesktop ? handleBackToPayoutAccount : undefined}
+      footerAction={{
+        buttonLabel: "売上受取口座へ戻る",
+        onButtonClick: handleBackToPayoutAccount,
+      }}
     >
       <section className="page-section content-page-section settings-page payout-account-complete-page">
         <div className="payout-account-complete-page__hero">
@@ -78,15 +75,19 @@ export default function PayoutAccountCompletePage() {
         <p className="payout-account-complete-page__security-note">
           銀行口座番号は暗号化して保存し、AMOLの画面では末尾4桁のみ表示します。
         </p>
-      </section>
 
-      {!isDesktop ? (
-        <FooterNav
-          variant="action"
-          buttonLabel="売上受取口座へ戻る"
-          onButtonClick={handleBackToPayoutAccount}
-        />
-      ) : null}
-    </Layout>
+        <div className="page-actions settings-page__desktop-action">
+          <Button
+            type="button"
+            variant="primary"
+            size="lg"
+            fullWidth
+            onClick={handleBackToPayoutAccount}
+          >
+            売上受取口座へ戻る
+          </Button>
+        </div>
+      </section>
+    </SettingsSwipePage>
   );
 }

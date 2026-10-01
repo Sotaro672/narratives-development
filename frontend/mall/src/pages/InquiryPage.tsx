@@ -6,8 +6,9 @@ import { getAuth } from "firebase/auth";
 import "../styles/page-layout.css";
 import "../styles/form.css";
 import "../styles/contact-page.css";
+import "../styles/settings-page.css";
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Button from "../components/ui/Button";
 import MediaUploader from "../components/ui/MediaUploader";
 import Textbox from "../components/ui/Textbox";
@@ -127,15 +128,25 @@ export default function InquiryPage() {
     submitting,
   ]);
 
+  const submitButtonLabel = loadingUser
+    ? "ユーザー情報確認中..."
+    : submitting
+      ? "送信中..."
+      : "問い合わせを送信";
+
   return (
     <>
-      <Layout
+      <SettingsSwipePage
         title="問い合わせ"
-        titleClickable={false}
-        mode="mypage"
-        showFooter
+        footerAction={{
+          buttonLabel: submitButtonLabel,
+          disabled: !canSubmit,
+          onButtonClick: () => {
+            void handleSubmit();
+          },
+        }}
       >
-        <section className="page-section content-page-section">
+        <section className="page-section content-page-section settings-page">
           <p className="page-description">
             AMOLへのお問い合わせ内容を入力してください。
           </p>
@@ -181,22 +192,18 @@ export default function InquiryPage() {
             お問い合わせ内容によっては、ご回答までにお時間をいただく場合があります。
           </p>
 
-          <div className="page-actions">
+          <div className="page-actions settings-page__desktop-action">
             <Button
               variant="primary"
               size="md"
               disabled={!canSubmit}
               onClick={() => void handleSubmit()}
             >
-              {loadingUser
-                ? "ユーザー情報確認中..."
-                : submitting
-                  ? "送信中..."
-                  : "問い合わせを送信"}
+              {submitButtonLabel}
             </Button>
           </div>
         </section>
-      </Layout>
+      </SettingsSwipePage>
 
       <ContactUploadProgressModal
         open={uploadingAttachments}
