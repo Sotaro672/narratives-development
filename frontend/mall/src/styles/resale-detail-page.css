@@ -4,7 +4,7 @@
   max-width: 960px;
   margin: 0 auto;
   padding-top: 24px;
-  padding-bottom: calc(var(--footer-action-height, 76px) + 24px);
+  padding-bottom: 24px;
 }
 
 .resale-detail-page__dismiss-control {
@@ -72,6 +72,10 @@
 }
 
 @media (max-width: 959px) {
+  .resale-detail-page {
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+
   .resale-detail-page--with-dismiss-control {
     padding-top: calc(env(safe-area-inset-top) + 66px);
   }
@@ -86,11 +90,7 @@
 @media (max-width: 760px) {
   .resale-detail-page {
     padding-top: 16px;
-    padding-bottom: calc(var(--footer-action-height, 76px) + env(safe-area-inset-bottom) + 20px);
-  }
-
-  .resale-detail-page--with-dismiss-control {
-    padding-top: calc(env(safe-area-inset-top) + 66px);
+    padding-bottom: calc(20px + env(safe-area-inset-bottom));
   }
 
   .resale-detail-page__edit-form {

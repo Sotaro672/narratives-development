@@ -31,40 +31,6 @@ type FooterProps =
       buttonLabel: string;
       disabled?: boolean;
       onButtonClick: () => void | Promise<void>;
-    }
-  | {
-      variant: "tripleAction";
-      leftButtonLabel: string;
-      centerButtonLabel: string;
-      rightButtonLabel: string;
-      leftButtonDisabled?: boolean;
-      centerButtonDisabled?: boolean;
-      rightButtonDisabled?: boolean;
-      onLeftButtonClick: () => void | Promise<void>;
-      onCenterButtonClick: () => void | Promise<void>;
-      onRightButtonClick: () => void | Promise<void>;
-    }
-  | {
-      variant: "commentAction";
-      value: string;
-      placeholder?: string;
-      buttonLabel: string;
-      disabled?: boolean;
-      posting?: boolean;
-      onChange: (value: string) => void;
-      onSubmit: () => void | Promise<void>;
-    }
-  | {
-      variant: "reviewAction";
-      value: string;
-      rating: number;
-      placeholder?: string;
-      buttonLabel: string;
-      disabled?: boolean;
-      posting?: boolean;
-      onChange: (value: string) => void;
-      onRatingChange: (rating: number) => void;
-      onSubmit: () => void | Promise<void>;
     };
 
 type LayoutProps = {
@@ -153,10 +119,7 @@ export default function Layout({
 
   const isActionFooter =
     shouldShowFooter &&
-    (
-      footerProps?.variant === "action" ||
-      footerProps?.variant === "tripleAction"
-    );
+    footerProps?.variant === "action";
 
   return (
     <div className="layout-shell">

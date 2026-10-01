@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from "react";
 
-import "./mobile-swipe-dismiss-page.css";
+import "./mobileSwipeDismissPage.css";
 
 type MobileSwipeDismissPageProps = {
   children: ReactNode;

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import {
   Heart,
   MessageCircle,
@@ -12,6 +12,7 @@ import {
   UserRound,
 } from "lucide-react";
 
+import Button from "../ui/Button";
 import { getMyAvatar } from "../../features/avatar/api/avatarApi";
 
 import "./footer.css";
@@ -30,54 +31,13 @@ type FooterNavProps =
       buttonLabel: string;
       disabled?: boolean;
       onButtonClick: () => void | Promise<void>;
-    }
-  | {
-      variant: "tripleAction";
-      leftButtonLabel: string;
-      centerButtonLabel: string;
-      rightButtonLabel: string;
-      leftButtonDisabled?: boolean;
-      centerButtonDisabled?: boolean;
-      rightButtonDisabled?: boolean;
-      onLeftButtonClick: () => void | Promise<void>;
-      onCenterButtonClick: () => void | Promise<void>;
-      onRightButtonClick: () => void | Promise<void>;
-    }
-  | {
-      variant: "commentAction";
-      value: string;
-      placeholder?: string;
-      buttonLabel: string;
-      disabled?: boolean;
-      posting?: boolean;
-      onChange: (value: string) => void;
-      onSubmit: () => void | Promise<void>;
-    }
-  | {
-      variant: "reviewAction";
-      value: string;
-      rating: number;
-      placeholder?: string;
-      buttonLabel: string;
-      disabled?: boolean;
-      posting?: boolean;
-      onChange: (value: string) => void;
-      onRatingChange: (rating: number) => void;
-      onSubmit: () => void | Promise<void>;
     };
 
 export default function FooterNav(props: FooterNavProps) {
-  const location = useLocation();
   const [avatarIcon, setAvatarIcon] = useState("");
-  const [reviewRatingOpen, setReviewRatingOpen] = useState(false);
 
   useEffect(() => {
-    if (
-      props.variant === "action" ||
-      props.variant === "tripleAction" ||
-      props.variant === "commentAction" ||
-      props.variant === "reviewAction"
-    ) {
+    if (props.variant === "action") {
       return;
     }
 
@@ -100,10 +60,6 @@ export default function FooterNav(props: FooterNavProps) {
     return unsubscribe;
   }, [props.variant]);
 
-  useEffect(() => {
-    setReviewRatingOpen(false);
-  }, [location.pathname]);
-
   if (props.variant === "action") {
     const {
       buttonLabel,
@@ -111,222 +67,20 @@ export default function FooterNav(props: FooterNavProps) {
       onButtonClick,
     } = props;
 
-    const isResalePageAction = location.pathname === "/resale";
-    const isCatalogPageAction =
-      /^\/(?:lists|favorites)\/[^/]+$/.test(location.pathname);
-
-    const footerClassName = [
-      "footer-nav--action",
-      isResalePageAction ? "footer-nav--resale-action" : "",
-      isCatalogPageAction ? "footer-nav--catalog-action" : "",
-    ]
-      .filter(Boolean)
-      .join(" ");
-
     return (
-      <footer className={footerClassName}>
-        <button
+      <footer className="footer-nav--action">
+        <Button
           type="button"
+          variant="primary"
+          size="lg"
+          fullWidth
           className="footer-nav__action-button"
-          onClick={onButtonClick}
+          onClick={() => void onButtonClick()}
           disabled={disabled}
           aria-label={buttonLabel}
         >
           {buttonLabel}
-        </button>
-      </footer>
-    );
-  }
-
-  if (props.variant === "tripleAction") {
-    const {
-      leftButtonLabel,
-      centerButtonLabel,
-      rightButtonLabel,
-      leftButtonDisabled = false,
-      centerButtonDisabled = false,
-      rightButtonDisabled = false,
-      onLeftButtonClick,
-      onCenterButtonClick,
-      onRightButtonClick,
-    } = props;
-
-    return (
-      <footer className="footer-nav--triple-action">
-        <button
-          type="button"
-          className={[
-            "footer-nav__triple-action-button",
-            "footer-nav__triple-action-button--secondary",
-          ].join(" ")}
-          onClick={onLeftButtonClick}
-          disabled={leftButtonDisabled}
-          aria-label={leftButtonLabel}
-        >
-          {leftButtonLabel}
-        </button>
-
-        <button
-          type="button"
-          className={[
-            "footer-nav__triple-action-button",
-            "footer-nav__triple-action-button--primary",
-          ].join(" ")}
-          onClick={onCenterButtonClick}
-          disabled={centerButtonDisabled}
-          aria-label={centerButtonLabel}
-        >
-          {centerButtonLabel}
-        </button>
-
-        <button
-          type="button"
-          className={[
-            "footer-nav__triple-action-button",
-            "footer-nav__triple-action-button--danger",
-          ].join(" ")}
-          onClick={onRightButtonClick}
-          disabled={rightButtonDisabled}
-          aria-label={rightButtonLabel}
-        >
-          {rightButtonLabel}
-        </button>
-      </footer>
-    );
-  }
-
-  if (props.variant === "commentAction") {
-    const {
-      value,
-      placeholder = "コメントを書く…",
-      buttonLabel,
-      disabled = false,
-      posting = false,
-      onChange,
-      onSubmit,
-    } = props;
-
-    const canSubmit = !disabled && value.trim().length > 0;
-
-    return (
-      <footer className="footer-nav--comment-action">
-        <textarea
-          className="footer-nav__comment-input"
-          value={value}
-          rows={1}
-          placeholder={placeholder}
-          disabled={posting}
-          aria-label={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-        />
-
-        <button
-          type="button"
-          className="footer-nav__comment-button"
-          disabled={!canSubmit}
-          aria-label={buttonLabel}
-          onClick={() => void onSubmit()}
-        >
-          {posting ? "投稿中" : buttonLabel}
-        </button>
-      </footer>
-    );
-  }
-
-  if (props.variant === "reviewAction") {
-    const {
-      value,
-      rating,
-      placeholder = "口コミを入力",
-      buttonLabel,
-      disabled = false,
-      posting = false,
-      onChange,
-      onRatingChange,
-      onSubmit,
-    } = props;
-
-    const canSubmit = !disabled && !posting && value.trim().length > 0;
-    const ratingOptions = [5, 4, 3, 2, 1];
-
-    const handleRatingChange = (nextRating: number) => {
-      onRatingChange(nextRating);
-      setReviewRatingOpen(false);
-    };
-
-    return (
-      <footer className="footer-nav--review-action">
-        <div className="footer-nav__review-rating-wrap">
-          <button
-            type="button"
-            className="footer-nav__review-rating-button"
-            disabled={posting}
-            aria-label="評価"
-            aria-haspopup="listbox"
-            aria-expanded={reviewRatingOpen}
-            onClick={() => setReviewRatingOpen((open) => !open)}
-          >
-            <span className="footer-nav__review-rating-stars">
-              ★{rating}
-            </span>
-            <span
-              className="footer-nav__review-rating-caret"
-              aria-hidden="true"
-            >
-              ▾
-            </span>
-          </button>
-
-          {reviewRatingOpen ? (
-            <div
-              className="footer-nav__review-rating-popover"
-              role="listbox"
-            >
-              {ratingOptions.map((nextRating) => (
-                <button
-                  key={nextRating}
-                  type="button"
-                  className={[
-                    "footer-nav__review-rating-option",
-                    rating === nextRating
-                      ? "footer-nav__review-rating-option--selected"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  role="option"
-                  aria-selected={rating === nextRating}
-                  onClick={() => handleRatingChange(nextRating)}
-                >
-                  ★{nextRating}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        <textarea
-          className={[
-            "footer-nav__comment-input",
-            "footer-nav__review-input",
-          ].join(" ")}
-          value={value}
-          rows={1}
-          placeholder={placeholder}
-          disabled={posting}
-          aria-label={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-        />
-
-        <button
-          type="button"
-          className="footer-nav__comment-button"
-          disabled={!canSubmit}
-          aria-label={buttonLabel}
-          onClick={() => void onSubmit()}
-        >
-          {posting ? "投稿中" : buttonLabel}
-        </button>
+        </Button>
       </footer>
     );
   }
@@ -349,9 +103,7 @@ export default function FooterNav(props: FooterNavProps) {
         to="/lists"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${
-            isActive ? " footer-nav__item--active" : ""
-          }`
+          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
@@ -369,9 +121,7 @@ export default function FooterNav(props: FooterNavProps) {
         to="/market"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${
-            isActive ? " footer-nav__item--active" : ""
-          }`
+          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
@@ -411,9 +161,7 @@ export default function FooterNav(props: FooterNavProps) {
           to="/scan"
           onClick={onNavigate}
           className={({ isActive }) =>
-            `footer-nav__item${
-              isActive ? " footer-nav__item--active" : ""
-            }`
+            `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
           }
         >
           <span className="footer-nav__icon" aria-hidden="true">
@@ -432,9 +180,7 @@ export default function FooterNav(props: FooterNavProps) {
         to="/favorites"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${
-            isActive ? " footer-nav__item--active" : ""
-          }`
+          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
@@ -452,9 +198,7 @@ export default function FooterNav(props: FooterNavProps) {
         to="/wallet"
         onClick={onNavigate}
         className={({ isActive }) =>
-          `footer-nav__item${
-            isActive ? " footer-nav__item--active" : ""
-          }`
+          `footer-nav__item${isActive ? " footer-nav__item--active" : ""}`
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">

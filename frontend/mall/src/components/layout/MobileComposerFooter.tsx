@@ -15,8 +15,7 @@ import { ImagePlus, X } from "lucide-react";
 
 import IconButton from "../ui/IconButton";
 
-import "./mobile-composer-footer.css";
-import "./footer.css";
+import "./mobileComposerFooter.css";
 
 export type MobileComposerFooterProps = {
   content: string;
@@ -504,12 +503,8 @@ export default function MobileComposerFooter({
           aria-label={placeholder}
           disabled={inputDisabled}
           enterKeyHint="enter"
-          onCompositionStart={
-            handleCompositionStart
-          }
-          onCompositionEnd={
-            handleCompositionEnd
-          }
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           onChange={handleContentChange}
         />
 
