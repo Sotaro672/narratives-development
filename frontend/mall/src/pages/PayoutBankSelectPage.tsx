@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Button from "../components/ui/Button";
 import List, { ListRow } from "../components/ui/List";
 import TextState from "../components/ui/TextState";
@@ -21,46 +21,16 @@ type BankCandidate = {
 };
 
 const BANK_CANDIDATES: BankCandidate[] = [
-  {
-    bankCode: "0001",
-    bankName: "みずほ銀行",
-  },
-  {
-    bankCode: "0005",
-    bankName: "三菱UFJ銀行",
-  },
-  {
-    bankCode: "0009",
-    bankName: "三井住友銀行",
-  },
-  {
-    bankCode: "0010",
-    bankName: "りそな銀行",
-  },
-  {
-    bankCode: "0033",
-    bankName: "PayPay銀行",
-  },
-  {
-    bankCode: "0034",
-    bankName: "セブン銀行",
-  },
-  {
-    bankCode: "0035",
-    bankName: "ソニー銀行",
-  },
-  {
-    bankCode: "0036",
-    bankName: "楽天銀行",
-  },
-  {
-    bankCode: "0038",
-    bankName: "住信SBIネット銀行",
-  },
-  {
-    bankCode: "9900",
-    bankName: "ゆうちょ銀行",
-  },
+  { bankCode: "0001", bankName: "みずほ銀行" },
+  { bankCode: "0005", bankName: "三菱UFJ銀行" },
+  { bankCode: "0009", bankName: "三井住友銀行" },
+  { bankCode: "0010", bankName: "りそな銀行" },
+  { bankCode: "0033", bankName: "PayPay銀行" },
+  { bankCode: "0034", bankName: "セブン銀行" },
+  { bankCode: "0035", bankName: "ソニー銀行" },
+  { bankCode: "0036", bankName: "楽天銀行" },
+  { bankCode: "0038", bankName: "住信SBIネット銀行" },
+  { bankCode: "9900", bankName: "ゆうちょ銀行" },
 ];
 
 export default function PayoutBankSelectPage() {
@@ -74,21 +44,12 @@ export default function PayoutBankSelectPage() {
     BANK_CANDIDATES.find((bank) => bank.bankCode === selectedBankCode) ?? null;
 
   const handleSelectBank = (bank: BankCandidate) => {
-    if (validateBankCode(bank.bankCode)) {
-      return;
-    }
-
+    if (validateBankCode(bank.bankCode)) return;
     setSelectedBankCode(bank.bankCode);
   };
 
   const handleNext = () => {
-    if (!selectedBank) {
-      return;
-    }
-
-    if (validateBankCode(selectedBank.bankCode)) {
-      return;
-    }
+    if (!selectedBank || validateBankCode(selectedBank.bankCode)) return;
 
     setBank({
       bankCode: selectedBank.bankCode,
@@ -103,11 +64,13 @@ export default function PayoutBankSelectPage() {
     Boolean(selectedBank && validateBankCode(selectedBank.bankCode));
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="金融機関を選択"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={{
+        buttonLabel: "次へ",
+        disabled: actionButtonDisabled,
+        onButtonClick: handleNext,
+      }}
     >
       <section className="page-section content-page-section settings-page payout-select-page payout-bank-select-page">
         <p className="content-page-description payout-select-page__description">
@@ -134,9 +97,7 @@ export default function PayoutBankSelectPage() {
                       .join(" ")}
                     aria-hidden="true"
                   >
-                    {selected ? (
-                      <Check size={18} strokeWidth={2.5} />
-                    ) : null}
+                    {selected ? <Check size={18} strokeWidth={2.5} /> : null}
                   </span>
                 }
                 ariaLabel={`${bank.bankName} 金融機関コード ${bank.bankCode}${
@@ -152,7 +113,7 @@ export default function PayoutBankSelectPage() {
           金融機関一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
         </TextState>
 
-        <div className="page-actions">
+        <div className="page-actions settings-page__desktop-action">
           <Button
             type="button"
             variant="primary"
@@ -165,6 +126,6 @@ export default function PayoutBankSelectPage() {
           </Button>
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

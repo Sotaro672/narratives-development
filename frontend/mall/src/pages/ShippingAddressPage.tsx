@@ -4,9 +4,11 @@ import "../styles/page-layout.css";
 import "../styles/settings-page.css";
 import "../styles/shipping-address-page.css";
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import ShippingAddressForm from "../features/shipping-address/components/ShippingAddressForm";
 import { useShippingAddressPage } from "../features/shipping-address/hooks/useShippingAddressPage";
+
+const SHIPPING_ADDRESS_FORM_ID = "shipping-address-form";
 
 export default function ShippingAddressPage() {
   const {
@@ -21,12 +23,19 @@ export default function ShippingAddressPage() {
     handleSubmit,
   } = useShippingAddressPage();
 
+  const title = isEditMode
+    ? "配送先情報編集"
+    : "配送先情報登録";
+
   return (
-    <Layout
-      title={isEditMode ? "配送先情報編集" : "配送先情報登録"}
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+    <SettingsSwipePage
+      title={title}
+      footerAction={{
+        buttonLabel: actionButtonLabel,
+        disabled: actionButtonDisabled,
+        buttonType: "submit",
+        buttonForm: SHIPPING_ADDRESS_FORM_ID,
+      }}
     >
       <section className="page-section content-page-section settings-page shipping-address-page">
         <p className="content-page-description shipping-address-page__description">
@@ -36,6 +45,7 @@ export default function ShippingAddressPage() {
         </p>
 
         <ShippingAddressForm
+          formId={SHIPPING_ADDRESS_FORM_ID}
           form={form}
           isLoading={isLoading}
           isLookingUpAddress={isLookingUpAddress}
@@ -46,6 +56,6 @@ export default function ShippingAddressPage() {
           onSubmit={handleSubmit}
         />
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

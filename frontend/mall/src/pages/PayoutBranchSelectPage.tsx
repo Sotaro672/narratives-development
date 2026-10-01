@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import List, { ListRow } from "../components/ui/List";
@@ -23,18 +23,9 @@ type BranchCandidate = {
 };
 
 const MOCK_BRANCH_CANDIDATES: BranchCandidate[] = [
-  {
-    branchCode: "001",
-    branchName: "本店（開発用）",
-  },
-  {
-    branchCode: "101",
-    branchName: "東京支店（開発用）",
-  },
-  {
-    branchCode: "201",
-    branchName: "大阪支店（開発用）",
-  },
+  { branchCode: "001", branchName: "本店（開発用）" },
+  { branchCode: "101", branchName: "東京支店（開発用）" },
+  { branchCode: "201", branchName: "大阪支店（開発用）" },
 ];
 
 function hasNonWhitespace(value: string): boolean {
@@ -50,18 +41,10 @@ export default function PayoutBranchSelectPage() {
   const [selectedBranchCode, setSelectedBranchCode] = useState(draft.branchCode);
 
   useEffect(() => {
-    if (
-      validateBankCode(draft.bankCode) ||
-      !hasNonWhitespace(draft.bankName)
-    ) {
+    if (validateBankCode(draft.bankCode) || !hasNonWhitespace(draft.bankName)) {
       navigate("/settings/payout-account/bank", { replace: true });
     }
-  }, [
-    draft.bankCode,
-    draft.bankName,
-    navigate,
-    validateBankCode,
-  ]);
+  }, [draft.bankCode, draft.bankName, navigate, validateBankCode]);
 
   const selectedBranch =
     MOCK_BRANCH_CANDIDATES.find(
@@ -69,29 +52,19 @@ export default function PayoutBranchSelectPage() {
     ) ?? null;
 
   const handleSelectBranch = (branch: BranchCandidate) => {
-    if (validateBranchCode(branch.branchCode)) {
-      return;
-    }
-
+    if (validateBranchCode(branch.branchCode)) return;
     setSelectedBranchCode(branch.branchCode);
   };
 
   const handleNext = () => {
-    if (!selectedBranch) {
-      return;
-    }
+    if (!selectedBranch) return;
 
-    if (
-      validateBankCode(draft.bankCode) ||
-      !hasNonWhitespace(draft.bankName)
-    ) {
+    if (validateBankCode(draft.bankCode) || !hasNonWhitespace(draft.bankName)) {
       navigate("/settings/payout-account/bank", { replace: true });
       return;
     }
 
-    if (validateBranchCode(selectedBranch.branchCode)) {
-      return;
-    }
+    if (validateBranchCode(selectedBranch.branchCode)) return;
 
     setBranch({
       branchCode: selectedBranch.branchCode,
@@ -110,11 +83,13 @@ export default function PayoutBranchSelectPage() {
     Boolean(selectedBranchError);
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="支店を選択"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={{
+        buttonLabel: "次へ",
+        disabled: actionButtonDisabled,
+        onButtonClick: handleNext,
+      }}
     >
       <section className="page-section content-page-section settings-page payout-select-page payout-branch-select-page">
         <p className="content-page-description payout-select-page__description">
@@ -160,9 +135,7 @@ export default function PayoutBranchSelectPage() {
                       .join(" ")}
                     aria-hidden="true"
                   >
-                    {selected ? (
-                      <Check size={18} strokeWidth={2.5} />
-                    ) : null}
+                    {selected ? <Check size={18} strokeWidth={2.5} /> : null}
                   </span>
                 }
                 ariaLabel={`${branch.branchName} 支店コード ${branch.branchCode}${
@@ -178,7 +151,7 @@ export default function PayoutBranchSelectPage() {
           支店一覧は現在開発用データを使用しています。本番接続時は金融機関情報提供元のデータに切り替えます。
         </TextState>
 
-        <div className="page-actions">
+        <div className="page-actions settings-page__desktop-action">
           <Button
             type="button"
             variant="primary"
@@ -191,6 +164,6 @@ export default function PayoutBranchSelectPage() {
           </Button>
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

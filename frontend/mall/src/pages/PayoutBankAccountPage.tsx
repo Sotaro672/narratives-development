@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import InfoList, { InfoRow } from "../components/ui/InfoList";
@@ -72,10 +72,7 @@ export default function PayoutBankAccountPage() {
   );
 
   const accountNumberError = useMemo(() => {
-    if (!accountNumber) {
-      return "";
-    }
-
+    if (!accountNumber) return "";
     return validateAccountNumber(accountNumber);
   }, [accountNumber, validateAccountNumber]);
 
@@ -89,9 +86,7 @@ export default function PayoutBankAccountPage() {
     !accountHolderNameValid;
 
   const handleNext = () => {
-    if (actionButtonDisabled) {
-      return;
-    }
+    if (actionButtonDisabled) return;
 
     const currentBankCodeError = validateBankCode(draft.bankCode);
 
@@ -123,11 +118,13 @@ export default function PayoutBankAccountPage() {
   };
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="口座情報を入力"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={{
+        buttonLabel: "確認へ進む",
+        disabled: actionButtonDisabled,
+        onButtonClick: handleNext,
+      }}
     >
       <section className="page-section content-page-section settings-page payout-page payout-bank-account-page">
         <p className="content-page-description payout-page__description">
@@ -226,7 +223,7 @@ export default function PayoutBankAccountPage() {
           </p>
         </Card>
 
-        <div className="page-actions">
+        <div className="page-actions settings-page__desktop-action">
           <Button
             type="button"
             variant="primary"
@@ -239,6 +236,6 @@ export default function PayoutBankAccountPage() {
           </Button>
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

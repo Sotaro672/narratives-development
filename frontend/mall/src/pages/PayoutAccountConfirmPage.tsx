@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
-import Layout from "../components/layout/Layout";
+import SettingsSwipePage from "../components/layout/SettingsSwipePage";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
 import { usePayoutAccountRegistration } from "../features/payout/context/PayoutAccountRegistrationProvider";
@@ -159,11 +159,13 @@ export default function PayoutAccountConfirmPage() {
     isSubmitting;
 
   return (
-    <Layout
+    <SettingsSwipePage
       title="口座情報を確認"
-      titleClickable={false}
-      mode="mypage"
-      showFooter
+      footerAction={{
+        buttonLabel: isSubmitting ? "登録中..." : "登録する",
+        disabled: actionButtonDisabled,
+        onButtonClick: handleRegister,
+      }}
     >
       <section className="page-section content-page-section settings-page payout-page payout-account-confirm-page">
         <p className="content-page-description payout-page__description">
@@ -300,7 +302,7 @@ export default function PayoutAccountConfirmPage() {
           </p>
         ) : null}
 
-        <div className="page-actions">
+        <div className="page-actions settings-page__desktop-action">
           <Button
             type="button"
             variant="primary"
@@ -313,6 +315,6 @@ export default function PayoutAccountConfirmPage() {
           </Button>
         </div>
       </section>
-    </Layout>
+    </SettingsSwipePage>
   );
 }

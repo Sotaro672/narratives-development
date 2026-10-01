@@ -7,6 +7,7 @@ import Input from "../../../components/ui/Input";
 import type { ShippingAddressFormValues } from "../../shared/types/shippingAddress";
 
 type ShippingAddressFormProps = {
+  formId?: string;
   form: ShippingAddressFormValues;
   isLoading: boolean;
   isLookingUpAddress: boolean;
@@ -20,6 +21,7 @@ type ShippingAddressFormProps = {
 };
 
 export default function ShippingAddressForm({
+  formId,
   form,
   isLoading,
   isLookingUpAddress,
@@ -31,6 +33,7 @@ export default function ShippingAddressForm({
 }: ShippingAddressFormProps) {
   return (
     <form
+      id={formId}
       className="settings-form shipping-address-page__form"
       onSubmit={onSubmit}
     >
@@ -145,7 +148,7 @@ export default function ShippingAddressForm({
             />
           </div>
 
-          <div className="shipping-address-page__actions">
+          <div className="shipping-address-page__actions settings-page__desktop-action">
             <Button
               type="submit"
               variant="primary"
