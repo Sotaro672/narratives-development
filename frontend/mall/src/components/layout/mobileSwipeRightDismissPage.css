@@ -59,6 +59,18 @@
   min-width: 0;
 }
 
+/*
+ * MobileSwipeRightDismissPage 自体がビューポート高さを管理するため、
+ * 内部の Layout による重複した 100vh を解除する。
+ */
+.mobile-swipe-right-dismiss-page__content > .layout-shell {
+  min-height: 0;
+}
+
+.mobile-swipe-right-dismiss-page__content > .layout-shell > .layout-main {
+  min-height: 0;
+}
+
 .mobile-swipe-right-dismiss-page--dragging,
 .mobile-swipe-right-dismiss-page--returning,
 .mobile-swipe-right-dismiss-page--dismissing {
