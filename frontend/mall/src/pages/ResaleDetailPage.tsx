@@ -143,9 +143,8 @@ export default function ResaleDetailPage() {
         >
           <IconButton
             type="button"
-            variant="secondary"
+            variant="floating"
             size="md"
-            className="resale-detail-page__dismiss-button"
             aria-label="出品詳細を閉じる"
             onClick={handleDismissButtonClick}
           >

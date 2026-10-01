@@ -213,9 +213,8 @@ export default function CatalogPage() {
         >
           <IconButton
             type="button"
-            variant="secondary"
+            variant="floating"
             size="md"
-            className="catalog-page__dismiss-button"
             aria-label="商品詳細を閉じる"
             onClick={handleDismissButtonClick}
           >

@@ -7,7 +7,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import MobileComposerFooter from "../components/layout/MobileComposerFooter";
-import MobileSwipeDismissPage, { type MobileSwipeDismissPageHandle } from "../components/layout/MobileSwipeDismissPage";
+import MobileSwipeDismissPage, {
+  type MobileSwipeDismissPageHandle,
+} from "../components/layout/MobileSwipeDismissPage";
 import Button from "../components/ui/Button";
 import IconButton from "../components/ui/IconButton";
 import RatingSelect from "../components/ui/RatingSelect";
@@ -57,7 +59,8 @@ export default function ScanResultPage() {
     (location.pathname === "/wallet/scan-result" ||
       location.pathname.startsWith("/wallet/scan-result/"));
 
-  const productBlueprintId = state.previewState?.raw.productBlueprintId?.trim() ?? "";
+  const productBlueprintId =
+    state.previewState?.raw.productBlueprintId?.trim() ?? "";
 
   const canSubmitReview =
     isLoggedIn &&
@@ -91,7 +94,13 @@ export default function ScanResultPage() {
     navigate(`/wallet/scan-result?${searchParams.toString()}`, {
       replace: true,
     });
-  }, [isLoggedInMobile, isWalletOverlay, location.search, navigate, state.productId]);
+  }, [
+    isLoggedInMobile,
+    isWalletOverlay,
+    location.search,
+    navigate,
+    state.productId,
+  ]);
 
   const handleSubmitReview = useCallback(async () => {
     if (!canSubmitReview) {
@@ -106,7 +115,12 @@ export default function ScanResultPage() {
 
     setReviewBody("");
     setReviewRating(5);
-  }, [canSubmitReview, reviewBody, reviewRating, submitReview]);
+  }, [
+    canSubmitReview,
+    reviewBody,
+    reviewRating,
+    submitReview,
+  ]);
 
   const handleOpenInquiryPage = useCallback(() => {
     const productId = state.productId.trim();
@@ -172,7 +186,9 @@ export default function ScanResultPage() {
         hideSettingsButton={!isLoggedIn}
         hideAnnouncementButton={!isLoggedIn}
         actionButtonLabel={canOpenInquiryPage ? "問い合わせ" : undefined}
-        onActionButtonClick={canOpenInquiryPage ? handleOpenInquiryPage : undefined}
+        onActionButtonClick={
+          canOpenInquiryPage ? handleOpenInquiryPage : undefined
+        }
         disableFooterPaddingOnDesktop
       >
         {isWalletOverlay ? (
@@ -182,9 +198,8 @@ export default function ScanResultPage() {
           >
             <IconButton
               type="button"
-              variant="secondary"
+              variant="floating"
               size="md"
-              className="scan-result-page__dismiss-button"
               aria-label="スキャン結果を閉じる"
               onClick={handleDismissButtonClick}
             >

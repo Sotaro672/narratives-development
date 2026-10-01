@@ -40,6 +40,7 @@ export default function ShippingAddressForm({
         <>
           <div className="shipping-address-page__name-grid">
             <Input
+              layout="horizontal"
               label="姓"
               type="text"
               value={form.lastName}
@@ -50,6 +51,7 @@ export default function ShippingAddressForm({
             />
 
             <Input
+              layout="horizontal"
               label="セイ"
               type="text"
               value={form.lastNameKana}
@@ -59,6 +61,7 @@ export default function ShippingAddressForm({
             />
 
             <Input
+              layout="horizontal"
               label="名"
               type="text"
               value={form.firstName}
@@ -69,6 +72,7 @@ export default function ShippingAddressForm({
             />
 
             <Input
+              layout="horizontal"
               label="メイ"
               type="text"
               value={form.firstNameKana}
@@ -80,6 +84,7 @@ export default function ShippingAddressForm({
 
           <div className="shipping-address-page__address-grid">
             <Input
+              layout="horizontal"
               label="郵便番号"
               type="text"
               value={form.zipCode}
@@ -97,6 +102,7 @@ export default function ShippingAddressForm({
             />
 
             <Input
+              layout="horizontal"
               label="都道府県"
               type="text"
               value={form.state}
@@ -107,6 +113,7 @@ export default function ShippingAddressForm({
             />
 
             <Input
+              layout="horizontal"
               label="市区町村"
               type="text"
               value={form.city}
@@ -117,6 +124,7 @@ export default function ShippingAddressForm({
             />
 
             <Input
+              layout="horizontal"
               label="住所1"
               type="text"
               value={form.street}
@@ -127,6 +135,7 @@ export default function ShippingAddressForm({
             />
 
             <Input
+              layout="horizontal"
               label="住所2"
               type="text"
               value={form.street2}

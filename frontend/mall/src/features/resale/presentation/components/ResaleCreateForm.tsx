@@ -1,5 +1,6 @@
 // frontend/mall/src/features/resale/presentation/components/ResaleCreateForm.tsx
 
+import Dropdown from "../../../../components/ui/Dropdown";
 import Input from "../../../../components/ui/Input";
 import Textbox from "../../../../components/ui/Textbox";
 
@@ -31,7 +32,6 @@ export default function ResaleCreateForm({
 }: ResaleCreateFormProps) {
   return (
     <section className="resale-create-form">
-
       <div className="page-form">
         <Input
           label="販売価格"
@@ -45,23 +45,17 @@ export default function ResaleCreateForm({
           onChange={(event) => onPriceChange(event.currentTarget.value)}
         />
 
-        <label className="page-form__field">
+        <div className="page-form__field">
           <span className="page-form__label">商品の状態</span>
 
-          <select
-            value={condition}
+          <Dropdown
+            buttonLabel={condition}
+            items={RESALE_CONDITION_OPTIONS}
+            selectedValue={condition}
+            onSelect={onConditionChange}
             disabled={disabled}
-            onChange={(event) =>
-              onConditionChange(event.currentTarget.value as ResaleCondition)
-            }
-          >
-            {RESALE_CONDITION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          />
+        </div>
 
         <Textbox
           label="説明文"

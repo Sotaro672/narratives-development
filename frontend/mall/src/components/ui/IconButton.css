@@ -1,7 +1,8 @@
-/*frontend\mall\src\components\ui\IconButton.css*/
+/* frontend/mall/src/components/ui/IconButton.css */
+
 .ui-icon-button {
-  flex: 0 0 auto;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   padding: 0;
@@ -43,19 +44,25 @@
 
 .ui-icon-button--sm {
   width: 36px;
+  min-width: 36px;
   height: 36px;
+  min-height: 36px;
   font-size: 18px;
 }
 
 .ui-icon-button--md {
   width: 42px;
+  min-width: 42px;
   height: 42px;
+  min-height: 42px;
   font-size: 20px;
 }
 
 .ui-icon-button--lg {
   width: 48px;
+  min-width: 48px;
   height: 48px;
+  min-height: 48px;
   font-size: 22px;
 }
 
@@ -89,4 +96,41 @@
 
 .ui-icon-button--danger:hover:not(:disabled) {
   background: #fef2f2;
+}
+
+.ui-icon-button--floating {
+  border-color: rgba(17, 24, 39, 0.08);
+  background: rgba(255, 255, 255, 0.94);
+  color: var(--color-text, #111827);
+  box-shadow:
+    0 2px 8px rgba(17, 24, 39, 0.08),
+    0 8px 24px rgba(17, 24, 39, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.ui-icon-button--floating:hover:not(:disabled) {
+  background: #ffffff;
+  opacity: 1;
+  box-shadow:
+    0 3px 10px rgba(17, 24, 39, 0.1),
+    0 10px 28px rgba(17, 24, 39, 0.1);
+}
+
+.ui-icon-button--floating:active:not(:disabled) {
+  transform: translateY(2px);
+}
+
+.ui-icon-button--floating:focus-visible {
+  outline-color: var(--color-text, #111827);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-icon-button {
+    transition: none;
+  }
 }

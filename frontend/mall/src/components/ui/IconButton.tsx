@@ -1,9 +1,19 @@
-//frontend\mall\src\components\ui\IconButton.tsx
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+// frontend/mall/src/components/ui/IconButton.tsx
+
+import type {
+  ButtonHTMLAttributes,
+  ReactNode,
+} from "react";
 
 import "./IconButton.css";
 
-type IconButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type IconButtonVariant =
+  | "primary"
+  | "secondary"
+  | "ghost"
+  | "danger"
+  | "floating";
+
 type IconButtonSize = "sm" | "md" | "lg";
 
 type IconButtonProps = Omit<

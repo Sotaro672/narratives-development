@@ -97,9 +97,8 @@ export default function OrderDetail() {
         >
           <IconButton
             type="button"
-            variant="secondary"
+            variant="floating"
             size="md"
-            className="order-detail-page__dismiss-button"
             aria-label="注文詳細を閉じる"
             onClick={handleDismissButtonClick}
           >

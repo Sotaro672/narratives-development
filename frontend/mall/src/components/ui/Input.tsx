@@ -1,9 +1,11 @@
 // frontend/mall/src/components/ui/Input.tsx
 
 import React, { forwardRef, useId } from "react";
+
 import "./input.css";
 
 export type InputSize = "md" | "lg";
+export type InputLayout = "vertical" | "horizontal";
 
 type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> & {
   label?: string;
@@ -11,6 +13,7 @@ type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, "size"> & {
   helperText?: string;
   fullWidth?: boolean;
   size?: InputSize;
+  layout?: InputLayout;
 };
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
@@ -22,6 +25,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       helperText,
       fullWidth = true,
       size = "md",
+      layout = "vertical",
       className = "",
       disabled = false,
       required = false,
@@ -35,8 +39,16 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     const errorId = error ? `${inputId}-error` : undefined;
     const describedBy = [helperId, errorId].filter(Boolean).join(" ") || undefined;
 
+    const rootClassName = [
+      "input-field",
+      fullWidth ? "input-field--full" : "",
+      layout === "horizontal" ? "input-field--horizontal" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+
     return (
-      <div className={`input-field ${fullWidth ? "input-field--full" : ""}`}>
+      <div className={rootClassName}>
         {label ? (
           <label className="input-field__label" htmlFor={inputId}>
             {label}

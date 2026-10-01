@@ -104,9 +104,8 @@ export default function ContentsPage() {
         >
           <IconButton
             type="button"
-            variant="secondary"
+            variant="floating"
             size="md"
-            className="contents-page__dismiss-button"
             aria-label="コンテンツを閉じる"
             onClick={handleDismissButtonClick}
           >
@@ -152,7 +151,9 @@ export default function ContentsPage() {
                 isReplySectionOpen
                   ? "contents-page-mobile-stage--reply-open"
                   : "",
-              ].filter(Boolean).join(" ")}
+              ]
+                .filter(Boolean)
+                .join(" ")}
             >
               <div
                 className="contents-page-mobile-stage__main"
