@@ -1,10 +1,15 @@
 // frontend/mall/src/pages/CatalogPage.tsx
 
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage, {
+  type MobileSwipeDismissPageHandle,
+} from "../components/layout/MobileSwipeDismissPage";
 import Button from "../components/ui/Button";
+import IconButton from "../components/ui/IconButton";
 import { formatPrice } from "../components/utils/price";
 
 import { getMyAvatar } from "../features/avatar/api/avatarApi";
@@ -31,8 +36,10 @@ import "../styles/catalog-page.css";
 
 export default function CatalogPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
+  const swipeDismissRef = useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const {
     catalog,
@@ -127,6 +134,11 @@ export default function CatalogPage() {
     Boolean(normalizedListId) &&
     !reportSubmitting;
 
+  const showMobileCartFooter =
+    isMobilePortrait &&
+    isLoggedIn &&
+    (canAddToCart || isAddingToCart);
+
   const handleOpenListReport = () => {
     if (!canReportList) return;
 
@@ -152,29 +164,88 @@ export default function CatalogPage() {
     handleAvatarClick(normalizedAvatarId);
   };
 
-  return (
+  const handleDismiss = () => {
+    const destination = location.pathname.startsWith("/favorites/")
+      ? "/favorites"
+      : "/lists";
+
+    navigate(destination, {
+      replace: true,
+    });
+  };
+
+  const handleDismissButtonClick = () => {
+    swipeDismissRef.current?.dismiss();
+  };
+
+  const content = (
     <Layout
       title="AMOL"
       titleClickable
       mode={isLoggedIn ? "mypage" : "landing"}
       showHeader={!isMobilePortrait}
-      showFooter={isLoggedIn}
+      showFooter={
+        isMobilePortrait
+          ? showMobileCartFooter
+          : isLoggedIn
+      }
       hideSettingsButton
-      showCartButton={isLoggedIn}
+      showCartButton={isLoggedIn && !isMobilePortrait}
       cartButtonLabel="カート"
       onCartButtonClick={() => navigate("/cart")}
+      footerProps={
+        showMobileCartFooter
+          ? {
+              variant: "action",
+              buttonLabel: isAddingToCart
+                ? "処理中..."
+                : "カートに入れる",
+              disabled: !canAddToCart,
+              onButtonClick: handleAddToCart,
+            }
+          : undefined
+      }
     >
+      {isMobilePortrait ? (
+        <div
+          className="catalog-page__dismiss-control"
+          data-mobile-swipe-dismiss-ignore="true"
+        >
+          <IconButton
+            type="button"
+            variant="secondary"
+            size="md"
+            className="catalog-page__dismiss-button"
+            aria-label="商品詳細を閉じる"
+            onClick={handleDismissButtonClick}
+          >
+            <ChevronDown
+              size={24}
+              strokeWidth={2.25}
+              aria-hidden="true"
+            />
+          </IconButton>
+        </div>
+      ) : null}
+
       <section
         className={[
           "product-detail-page-layout",
           "catalog-page-section",
-          isLoggedIn ? "catalog-page-section--with-footer" : "",
+          isMobilePortrait
+            ? "catalog-page-section--with-dismiss-control"
+            : "",
+          showMobileCartFooter
+            ? "catalog-page-section--with-action-footer"
+            : "",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {isLoadingCatalog ? (
-          <p className="catalog-page-state">カタログ詳細を読み込んでいます。</p>
+          <p className="catalog-page-state">
+            カタログ詳細を読み込んでいます。
+          </p>
         ) : null}
 
         {!isLoadingCatalog && errorMessage ? (
@@ -228,6 +299,7 @@ export default function CatalogPage() {
                     disabled={isLoadingLike || isUpdatingLike}
                     onClick={handleToggleLike}
                   />
+
                   <ReportFlagButton
                     disabled={!canReportList}
                     onClick={handleOpenListReport}
@@ -285,7 +357,7 @@ export default function CatalogPage() {
               </div>
             ) : null}
 
-            {isLoggedIn ? (
+            {isLoggedIn && !isMobilePortrait ? (
               <div className="catalog-page-purchase-action">
                 <Button
                   variant="primary"
@@ -328,5 +400,18 @@ export default function CatalogPage() {
         onClose={closeReport}
       />
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeDismissPage
+      ref={swipeDismissRef}
+      onDismiss={handleDismiss}
+    >
+      {content}
+    </MobileSwipeDismissPage>
   );
 }

@@ -136,7 +136,7 @@
   background: #fff;
   border-top: 1px solid #ddd;
   z-index: var(--footer-nav-z-index);
-  padding: 12px 16px 12px;
+  padding: 12px 16px;
   padding-bottom: calc(env(safe-area-inset-bottom) + 12px);
   box-sizing: border-box;
 }
@@ -157,6 +157,7 @@
   font-size: 15px;
   font-weight: 700;
   line-height: 1;
+  white-space: nowrap;
   cursor: pointer;
   box-sizing: border-box;
 }
@@ -175,6 +176,23 @@
   min-width: 168px;
   max-width: min(82vw, 320px);
   padding: 0 28px;
+}
+
+/* ==============================
+   Catalog page action footer
+   ============================== */
+
+.footer-nav--catalog-action {
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-nav--catalog-action .footer-nav__action-button {
+  width: auto;
+  min-width: max-content;
+  max-width: none;
+  margin: 0;
+  padding: 0 20px;
 }
 
 /* ==============================
@@ -434,7 +452,8 @@
     display: block;
   }
 
-  .footer-nav--action.footer-nav--resale-action {
+  .footer-nav--action.footer-nav--resale-action,
+  .footer-nav--action.footer-nav--catalog-action {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -475,7 +494,7 @@
   }
 
   .footer-nav--action {
-    padding: 10px 12px 10px;
+    padding: 10px 12px;
     padding-bottom: calc(env(safe-area-inset-bottom) + 10px);
   }
 
@@ -488,6 +507,13 @@
     min-width: 156px;
     max-width: min(84vw, 280px);
     padding: 0 24px;
+  }
+
+  .footer-nav--catalog-action .footer-nav__action-button {
+    width: auto;
+    min-width: max-content;
+    max-width: none;
+    padding: 0 18px;
   }
 
   .footer-nav--comment-action,

@@ -14,10 +14,14 @@
   overflow-y: auto;
   overscroll-behavior: none;
   background: #fff;
-  transform: translate3d(0, 0, 0);
-  will-change: transform;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
+}
+
+.mobile-swipe-dismiss-page--dragging,
+.mobile-swipe-dismiss-page--returning,
+.mobile-swipe-dismiss-page--dismissing {
+  will-change: transform;
 }
 
 .mobile-swipe-dismiss-page--dragging {
@@ -75,6 +79,7 @@
     pointer-events: auto;
     user-select: auto;
     -webkit-user-select: auto;
+    will-change: auto;
   }
 }
 

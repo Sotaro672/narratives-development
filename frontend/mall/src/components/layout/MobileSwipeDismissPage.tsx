@@ -607,8 +607,12 @@ const MobileSwipeDismissPage = forwardRef<
     suppressClickRef.current = false;
   };
 
+  const shouldTransform =
+    enabled &&
+    phase !== "idle";
+
   const style: CSSProperties | undefined =
-    enabled
+    shouldTransform
       ? {
           transform: `translate3d(0, ${translateY}px, 0)`,
         }

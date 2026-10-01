@@ -112,9 +112,13 @@ export default function FooterNav(props: FooterNavProps) {
     } = props;
 
     const isResalePageAction = location.pathname === "/resale";
+    const isCatalogPageAction =
+      /^\/(?:lists|favorites)\/[^/]+$/.test(location.pathname);
+
     const footerClassName = [
       "footer-nav--action",
       isResalePageAction ? "footer-nav--resale-action" : "",
+      isCatalogPageAction ? "footer-nav--catalog-action" : "",
     ]
       .filter(Boolean)
       .join(" ");
