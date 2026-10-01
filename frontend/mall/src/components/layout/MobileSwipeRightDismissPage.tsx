@@ -11,11 +11,16 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
+import { ChevronLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+
+import IconButton from "../ui/IconButton";
 
 import "./mobileSwipeRightDismissPage.css";
 
 type MobileSwipeRightDismissPageProps = {
   children: ReactNode;
+  title: string;
   enabled?: boolean;
   dismissGestureEnabled?: boolean;
   className?: string;
@@ -109,6 +114,7 @@ const MobileSwipeRightDismissPage = forwardRef<
 >(function MobileSwipeRightDismissPage(
   {
     children,
+    title,
     enabled = true,
     dismissGestureEnabled = true,
     className,
@@ -117,6 +123,7 @@ const MobileSwipeRightDismissPage = forwardRef<
   },
   ref,
 ) {
+  const navigate = useNavigate();
   const pageRef = useRef<HTMLDivElement | null>(null);
   const gestureRef = useRef<GestureState>({ ...INITIAL_GESTURE });
   const dismissStartedRef = useRef(false);
@@ -338,13 +345,8 @@ const MobileSwipeRightDismissPage = forwardRef<
         return;
       }
 
-      const deltaX =
-        touch.clientX -
-        gesture.startX;
-
-      const deltaY =
-        touch.clientY -
-        gesture.startY;
+      const deltaX = touch.clientX - gesture.startX;
+      const deltaY = touch.clientY - gesture.startY;
 
       if (!gesture.dragging) {
         const distance = Math.hypot(deltaX, deltaY);
@@ -392,8 +394,7 @@ const MobileSwipeRightDismissPage = forwardRef<
       );
 
       const movement =
-        touch.clientX -
-        gesture.lastX;
+        touch.clientX - gesture.lastX;
 
       gesture.velocityX =
         movement / elapsed;
@@ -421,11 +422,7 @@ const MobileSwipeRightDismissPage = forwardRef<
       }
 
       const touch = event.changedTouches[0];
-
-      const endX =
-        touch?.clientX ??
-        gesture.lastX;
-
+      const endX = touch?.clientX ?? gesture.lastX;
       const distance = Math.max(
         0,
         endX - gesture.startX,
@@ -433,13 +430,11 @@ const MobileSwipeRightDismissPage = forwardRef<
 
       const totalElapsed = Math.max(
         1,
-        performance.now() -
-          gesture.startTime,
+        performance.now() - gesture.startTime,
       );
 
       const averageVelocity =
-        distance /
-        totalElapsed;
+        distance / totalElapsed;
 
       const velocity = Math.max(
         gesture.velocityX,
@@ -478,33 +473,25 @@ const MobileSwipeRightDismissPage = forwardRef<
     page.addEventListener(
       "touchstart",
       handleTouchStart,
-      {
-        passive: true,
-      },
+      { passive: true },
     );
 
     page.addEventListener(
       "touchmove",
       handleTouchMove,
-      {
-        passive: false,
-      },
+      { passive: false },
     );
 
     page.addEventListener(
       "touchend",
       handleTouchEnd,
-      {
-        passive: true,
-      },
+      { passive: true },
     );
 
     page.addEventListener(
       "touchcancel",
       handleTouchCancel,
-      {
-        passive: true,
-      },
+      { passive: true },
     );
 
     return () => {
@@ -556,6 +543,10 @@ const MobileSwipeRightDismissPage = forwardRef<
     suppressClickRef.current = false;
   };
 
+  const handleBackClick = () => {
+    navigate(-1);
+  };
+
   const shouldTransform =
     enabled &&
     phase !== "idle";
@@ -599,7 +590,34 @@ const MobileSwipeRightDismissPage = forwardRef<
           : "false"
       }
     >
-      {children}
+      <header
+        className="mobile-swipe-right-dismiss-page__header"
+        data-mobile-swipe-dismiss-ignore="true"
+      >
+        <IconButton
+          type="button"
+          variant="ghost"
+          size="md"
+          className="mobile-swipe-right-dismiss-page__back-button"
+          aria-label="戻る"
+          title="戻る"
+          onClick={handleBackClick}
+        >
+          <ChevronLeft
+            size={24}
+            strokeWidth={2}
+            aria-hidden="true"
+          />
+        </IconButton>
+
+        <h1 className="mobile-swipe-right-dismiss-page__title">
+          {title}
+        </h1>
+      </header>
+
+      <div className="mobile-swipe-right-dismiss-page__content">
+        {children}
+      </div>
     </div>
   );
 });

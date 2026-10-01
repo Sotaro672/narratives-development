@@ -52,60 +52,60 @@ export default function CartPage() {
     navigate(-1);
   }
 
-  const content = (
-    <Layout
-      title="AMOL"
-      mode="mypage"
-      showFooter={isMobilePortrait}
-      hideSettingsButton
-      footerProps={
-        isMobilePortrait
-          ? {
-              variant: "action",
-              buttonLabel: "購入する",
-              disabled: isPurchaseDisabled,
-              onButtonClick: handlePurchase,
-            }
-          : undefined
-      }
-    >
-      <section className="content-page-section cart-page-section-root">
-        {loading ? <CartPageLoading /> : null}
-
-        {!loading && error ? (
-          <CartPageError
-            error={error}
-            onRetry={() => {
-              void reload();
-            }}
-          />
-        ) : null}
-
-        {!loading && !error && !hasItems ? <CartPageEmpty /> : null}
-
-        {!loading && !error && hasItems ? (
-          <CartContent
-            items={items}
-            totalAmount={totalAmount}
-            removingItemKey={removingItemKey}
-            isPurchaseDisabled={isPurchaseDisabled}
-            showPurchaseButton={!isMobilePortrait}
-            onRemoveItem={removeItem}
-            onOpenItem={handleOpenItem}
-            onPurchase={handlePurchase}
-          />
-        ) : null}
-      </section>
-    </Layout>
-  );
-
-  if (!isMobilePortrait) {
-    return content;
-  }
-
   return (
-    <MobileSwipeRightDismissPage onDismiss={handleDismiss}>
-      {content}
+    <MobileSwipeRightDismissPage
+      title="カート"
+      enabled={isMobilePortrait}
+      dismissGestureEnabled={isMobilePortrait}
+      onDismiss={handleDismiss}
+    >
+      <Layout
+        title=""
+        titleClickable={false}
+        mode="mypage"
+        showHeader={false}
+        showFooter={isMobilePortrait}
+        footerProps={
+          isMobilePortrait
+            ? {
+                variant: "action",
+                buttonLabel: "購入する",
+                disabled: isPurchaseDisabled,
+                onButtonClick: handlePurchase,
+              }
+            : undefined
+        }
+      >
+        <section className="content-page-section cart-page-section-root">
+          {loading ? <CartPageLoading /> : null}
+
+          {!loading && error ? (
+            <CartPageError
+              error={error}
+              onRetry={() => {
+                void reload();
+              }}
+            />
+          ) : null}
+
+          {!loading && !error && !hasItems ? (
+            <CartPageEmpty />
+          ) : null}
+
+          {!loading && !error && hasItems ? (
+            <CartContent
+              items={items}
+              totalAmount={totalAmount}
+              removingItemKey={removingItemKey}
+              isPurchaseDisabled={isPurchaseDisabled}
+              showPurchaseButton={!isMobilePortrait}
+              onRemoveItem={removeItem}
+              onOpenItem={handleOpenItem}
+              onPurchase={handlePurchase}
+            />
+          ) : null}
+        </section>
+      </Layout>
     </MobileSwipeRightDismissPage>
   );
 }
