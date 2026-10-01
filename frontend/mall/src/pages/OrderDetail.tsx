@@ -1,8 +1,16 @@
 // frontend/mall/src/pages/OrderDetail.tsx
 
+import { useRef } from "react";
+import { ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage, {
+  type MobileSwipeDismissPageHandle,
+} from "../components/layout/MobileSwipeDismissPage";
+import Badge from "../components/ui/Badge";
+import IconButton from "../components/ui/IconButton";
 import SectionHeader from "../components/ui/SectionHeader";
 
 import OrderDetailItemList from "../features/order/components/OrderDetailItemList";
@@ -10,12 +18,15 @@ import OrderDetailSummary from "../features/order/components/OrderDetailSummary"
 import OrderPaymentSummary from "../features/order/components/OrderPaymentSummary";
 import { useOrderDetail } from "../features/order/hooks/useOrderDetail";
 import { useOrderTradeNavigation } from "../features/order/hooks/useOrderTradeNavigation";
+import { getOrderStatusLabel } from "../features/order/util/orderStatus";
 
 import "../styles/page-layout.css";
 import "../styles/order-detail-page.css";
 
 export default function OrderDetail() {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
+  const swipeDismissRef = useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const {
     order,
@@ -56,26 +67,91 @@ export default function OrderDetail() {
     );
   };
 
+  const handleDismiss = () => {
+    navigate("/wallet", {
+      replace: true,
+    });
+  };
+
+  const handleDismissButtonClick = () => {
+    swipeDismissRef.current?.dismiss();
+  };
+
   const showError = !loading && !order && Boolean(error);
   const showDetail = !loading && Boolean(order);
 
-  return (
-    <Layout title="AMOL" mode="mypage" showFooter>
-      <section className="page-section order-detail-page">
+  const content = (
+    <Layout
+      title="AMOL"
+      mode="mypage"
+      showHeader={!isMobilePortrait}
+      showFooter={!isMobilePortrait}
+    >
+      {isMobilePortrait ? (
+        <div
+          className="order-detail-page__dismiss-control"
+          data-mobile-swipe-dismiss-ignore="true"
+        >
+          <IconButton
+            type="button"
+            variant="secondary"
+            size="md"
+            className="order-detail-page__dismiss-button"
+            aria-label="注文詳細を閉じる"
+            onClick={handleDismissButtonClick}
+          >
+            <ChevronDown
+              size={24}
+              strokeWidth={2.25}
+              aria-hidden="true"
+            />
+          </IconButton>
+
+          {order ? (
+            <Badge
+              variant="neutral"
+              size="md"
+              className="order-detail-page__dismiss-status"
+            >
+              {getOrderStatusLabel(order)}
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
+
+      <section
+        className={[
+          "page-section",
+          "order-detail-page",
+          isMobilePortrait
+            ? "order-detail-page--with-dismiss-control"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         {loading ? (
           <section
             className="order-detail-page__section order-detail-page__state"
             aria-label="読み込み状態"
           >
-            <p className="order-detail-page__state-text">読み込み中です...</p>
+            <p className="order-detail-page__state-text">
+              読み込み中です...
+            </p>
           </section>
         ) : null}
 
         {showError ? (
           <section className="order-detail-page__section order-detail-page__state">
-            <SectionHeader title="注文情報を表示できません" titleAs="h2" />
+            <SectionHeader
+              title="注文情報を表示できません"
+              titleAs="h2"
+            />
 
-            <p className="order-detail-page__state-text" role="alert">
+            <p
+              className="order-detail-page__state-text"
+              role="alert"
+            >
               {error}
             </p>
 
@@ -97,6 +173,7 @@ export default function OrderDetail() {
               order={order}
               error={error}
               tradeNavigationError={tradeNavigationError}
+              showStatus={!isMobilePortrait}
             />
 
             <OrderDetailItemList
@@ -114,5 +191,18 @@ export default function OrderDetail() {
         ) : null}
       </section>
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeDismissPage
+      ref={swipeDismissRef}
+      onDismiss={handleDismiss}
+    >
+      {content}
+    </MobileSwipeDismissPage>
   );
 }

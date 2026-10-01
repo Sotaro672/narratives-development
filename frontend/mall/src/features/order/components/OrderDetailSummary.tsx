@@ -12,12 +12,14 @@ type OrderDetailSummaryProps = {
   order: OrderDetail;
   error?: string | null;
   tradeNavigationError?: string | null;
+  showStatus?: boolean;
 };
 
 export default function OrderDetailSummary({
   order,
   error = null,
   tradeNavigationError = null,
+  showStatus = true,
 }: OrderDetailSummaryProps) {
   const handleCopyOrderId = async (): Promise<void> => {
     await navigator.clipboard.writeText(order.id);
@@ -31,6 +33,7 @@ export default function OrderDetailSummary({
             <span className="order-detail-page__order-id-text">
               注文ID: {order.id}
             </span>
+
             <Copy
               onClick={handleCopyOrderId}
               ariaLabel="注文IDをコピー"
@@ -43,9 +46,11 @@ export default function OrderDetailSummary({
         titleSize="sm"
         eyebrow={`注文日時: ${order.createdAt ? formatDateTime(order.createdAt) : "-"}`}
         right={
-          <Badge variant="neutral" size="md">
-            {getOrderStatusLabel(order)}
-          </Badge>
+          showStatus ? (
+            <Badge variant="neutral" size="md">
+              {getOrderStatusLabel(order)}
+            </Badge>
+          ) : undefined
         }
       />
 
