@@ -50,7 +50,7 @@ export default function ProductDescriptionInquiryPage() {
   const composer = useMemo<ChatComposerConfig>(
     () => ({
       content,
-      placeholder: "商品について確認したい内容を入力",
+      placeholder: "確認したい内容を入力",
       files,
       error,
       submitting,

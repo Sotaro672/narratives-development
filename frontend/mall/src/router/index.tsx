@@ -40,8 +40,8 @@ import OrderDetail from "../pages/OrderDetail";
 import ReturnRequestPage from "../pages/ReturnRequestPage";
 import ScanPage from "../pages/ScanPage";
 import ScanResultPage from "../pages/ScanResultPage";
-import InquiryCreatePage from "../pages/ProductDescriptionInquiryPage";
-import InquiryPage from "../pages/IssueReportPage";
+import ProductDescriptionInquiryPage from "../pages/ProductDescriptionInquiryPage";
+import IssueReportPage from "../pages/IssueReportPage";
 import ChatWorkspacePage from "../pages/ChatWorkspacePage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import TradeChatRedirectPage from "../pages/TradeChatRedirectPage";
@@ -350,7 +350,7 @@ export const router = createBrowserRouter([
     path: "/inquiries/new",
     element: (
       <ProtectedRoute>
-        <InquiryCreatePage />
+        <ProductDescriptionInquiryPage />
       </ProtectedRoute>
     ),
   },
@@ -455,10 +455,10 @@ export const router = createBrowserRouter([
     ),
   },
   {
-    path: "/settings/inquiry",
+    path: "/settings/issue-report",
     element: (
       <ProtectedRoute>
-        <InquiryPage />
+        <IssueReportPage />
       </ProtectedRoute>
     ),
   },

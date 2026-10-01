@@ -118,7 +118,7 @@ export function useIssueReportPage() {
   const composer = useMemo<ChatComposerConfig>(
     () => ({
       content: message,
-      placeholder: "発生している不具合や障害の内容を入力",
+      placeholder: "障害内容を入力",
       files,
       error: null,
       submitting,
