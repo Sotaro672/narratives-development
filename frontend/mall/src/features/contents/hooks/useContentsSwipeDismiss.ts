@@ -15,8 +15,7 @@ type UseContentsSwipeDismissParams = {
 export function useContentsSwipeDismiss({
   onBeforeDismiss,
 }: UseContentsSwipeDismissParams = {}) {
-  const navigate =
-    useNavigate();
+  const navigate = useNavigate();
 
   const swipeDismissRef =
     useRef<MobileSwipeDismissPageHandle | null>(
@@ -27,9 +26,7 @@ export function useContentsSwipeDismiss({
     useCallback(() => {
       onBeforeDismiss?.();
 
-      if (
-        typeof document === "undefined"
-      ) {
+      if (typeof document === "undefined") {
         return;
       }
 
@@ -52,6 +49,9 @@ export function useContentsSwipeDismiss({
 
       navigate("/wallet", {
         replace: true,
+        state: {
+          walletTab: "tokens",
+        },
       });
     }, [
       navigate,

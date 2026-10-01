@@ -1,4 +1,4 @@
-// frontend/amol/src/features/resale/presentation/hooks/useResaleDetailPage.ts
+// frontend\mall\src\features\resale\presentation\hooks\useResaleDetailPage.ts
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -508,6 +508,7 @@ export function useResaleDetailPage() {
         navigate("/wallet", {
           replace: true,
           state: {
+            walletTab: "resales",
             resaleDeleted: true,
             resaleId: normalizedResaleId,
           },
@@ -534,7 +535,11 @@ export function useResaleDetailPage() {
   }, [navigate]);
 
   const handleBackToWallet = useCallback(() => {
-    navigate("/wallet");
+    navigate("/wallet", {
+      state: {
+        walletTab: "resales",
+      },
+    });
   }, [navigate]);
 
   const handleReload = useCallback(async (): Promise<void> => {

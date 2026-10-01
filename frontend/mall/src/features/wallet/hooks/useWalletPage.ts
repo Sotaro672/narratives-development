@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 
 import { getMyAvatar, getPublicAvatar } from "../../avatar/api/avatarApi";
 import { LANDING_PATH } from "../../../lib/navigation";
@@ -15,13 +15,27 @@ import type { WalletTabKey } from "../types";
 import type { WalletOrder } from "../../shared/types/orderTypes";
 import type { WalletDTO, WalletTokenItem } from "../../shared/types/tokenTypes";
 
+type WalletLocationState = {
+  walletTab?: WalletTabKey;
+};
+
 function getErrorMessage(caught: unknown, defaultMessage: string): string {
   return caught instanceof Error ? caught.message : defaultMessage;
 }
 
+function isWalletTabKey(value: unknown): value is WalletTabKey {
+  return value === "history" || value === "tokens" || value === "resales";
+}
+
 export function useWalletPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { avatarId: routeAvatarId } = useParams<{ avatarId?: string }>();
+
+  const locationState = location.state as WalletLocationState | null;
+  const initialTab = isWalletTabKey(locationState?.walletTab)
+    ? locationState.walletTab
+    : "history";
 
   const [avatarId, setAvatarId] = useState("");
   const [viewedAvatarId, setViewedAvatarId] = useState("");
@@ -37,12 +51,22 @@ export function useWalletPage() {
 
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderError, setOrderError] = useState("");
-  const [activeTab, setActiveTab] = useState<WalletTabKey>("history");
+  const [activeTab, setActiveTab] = useState<WalletTabKey>(initialTab);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tokenLoading, setTokenLoading] = useState(false);
   const [tokenError, setTokenError] = useState("");
   const [authResolved, setAuthResolved] = useState(false);
+
+  useEffect(() => {
+    const walletTab = (
+      location.state as WalletLocationState | null
+    )?.walletTab;
+
+    if (isWalletTabKey(walletTab)) {
+      setActiveTab(walletTab);
+    }
+  }, [location.key, location.state]);
 
   useEffect(() => {
     const auth = getAuth();

@@ -70,6 +70,9 @@ export default function OrderDetail() {
   const handleDismiss = () => {
     navigate("/wallet", {
       replace: true,
+      state: {
+        walletTab: "history",
+      },
     });
   };
 

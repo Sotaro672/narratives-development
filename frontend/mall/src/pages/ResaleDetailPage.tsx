@@ -1,10 +1,17 @@
 // frontend/mall/src/pages/ResaleDetailPage.tsx
 
+import { useRef } from "react";
+import { ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage, {
+  type MobileSwipeDismissPageHandle,
+} from "../components/layout/MobileSwipeDismissPage";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
+import IconButton from "../components/ui/IconButton";
 import SectionHeader from "../components/ui/SectionHeader";
 import TextState from "../components/ui/TextState";
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
@@ -28,6 +35,8 @@ import "../features/shared/styles/product-detail.css";
 
 export default function ResaleDetailPage() {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
+  const swipeDismissRef = useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const {
     footerProps,
@@ -50,7 +59,10 @@ export default function ResaleDetailPage() {
 
   function handleOpenResaleChat() {
     const resaleId = item?.id?.trim() ?? "";
-    if (!resaleId) return;
+
+    if (!resaleId) {
+      return;
+    }
 
     navigate(`/chats/resales/${encodeURIComponent(resaleId)}`, {
       state: {
@@ -59,6 +71,16 @@ export default function ResaleDetailPage() {
       },
     });
   }
+
+  const handleDismiss = () => {
+    navigate("/wallet", {
+      replace: true,
+    });
+  };
+
+  const handleDismissButtonClick = () => {
+    swipeDismissRef.current?.dismiss();
+  };
 
   const pageActions =
     footerProps?.variant === "action" ? (
@@ -104,16 +126,59 @@ export default function ResaleDetailPage() {
       </div>
     ) : null;
 
-  return (
-    <Layout title="AMOL" mode="mypage">
-      <div className="page-layout product-detail-page-layout resale-detail-page">
+  const content = (
+    <Layout
+      title="AMOL"
+      mode="mypage"
+      showHeader={!isMobilePortrait}
+      showFooter={!isMobilePortrait}
+    >
+      {isMobilePortrait ? (
+        <div
+          className="resale-detail-page__dismiss-control"
+          data-mobile-swipe-dismiss-ignore="true"
+        >
+          <IconButton
+            type="button"
+            variant="secondary"
+            size="md"
+            className="resale-detail-page__dismiss-button"
+            aria-label="出品詳細を閉じる"
+            onClick={handleDismissButtonClick}
+          >
+            <ChevronDown
+              size={24}
+              strokeWidth={2.25}
+              aria-hidden="true"
+            />
+          </IconButton>
+        </div>
+      ) : null}
+
+      <div
+        className={[
+          "page-layout",
+          "product-detail-page-layout",
+          "resale-detail-page",
+          isMobilePortrait
+            ? "resale-detail-page--with-dismiss-control"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         {loading ? (
-          <TextState variant="loading">読み込み中です...</TextState>
+          <TextState variant="loading">
+            読み込み中です...
+          </TextState>
         ) : null}
 
         {showLoadError ? (
           <Alert variant="error">
-            <SectionHeader title="出品情報を表示できません" titleAs="h2">
+            <SectionHeader
+              title="出品情報を表示できません"
+              titleAs="h2"
+            >
               <p>{errorMessage}</p>
             </SectionHeader>
 
@@ -191,7 +256,8 @@ export default function ResaleDetailPage() {
                 {!isEditing ? (
                   <ProductDescription
                     description={
-                      readonlyInfoProps.description || "説明文はありません。"
+                      readonlyInfoProps.description ||
+                      "説明文はありません。"
                     }
                   />
                 ) : null}
@@ -224,7 +290,10 @@ export default function ResaleDetailPage() {
               </>
             ) : (
               <>
-                <ProductPrice priceLabel={readonlyInfoProps.priceLabel} />
+                <ProductPrice
+                  priceLabel={readonlyInfoProps.priceLabel}
+                />
+
                 <ProductModelMeta
                   conditionLabel={readonlyInfoProps.conditionLabel}
                   model={model}
@@ -233,11 +302,16 @@ export default function ResaleDetailPage() {
             )}
 
             {errorMessage ? (
-              <Alert variant="error">{errorMessage}</Alert>
+              <Alert variant="error">
+                {errorMessage}
+              </Alert>
             ) : null}
 
             {saveMessage ? (
-              <Alert variant="success" role="status">
+              <Alert
+                variant="success"
+                role="status"
+              >
                 {saveMessage}
               </Alert>
             ) : null}
@@ -245,5 +319,18 @@ export default function ResaleDetailPage() {
         ) : null}
       </div>
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeDismissPage
+      ref={swipeDismissRef}
+      onDismiss={handleDismiss}
+    >
+      {content}
+    </MobileSwipeDismissPage>
   );
 }
