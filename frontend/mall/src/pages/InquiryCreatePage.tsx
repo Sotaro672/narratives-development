@@ -1,14 +1,20 @@
 // frontend/mall/src/pages/InquiryCreatePage.tsx
 
+import { ChevronLeft } from "lucide-react";
+
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import MobileComposerFooter from "../components/layout/MobileComposerFooter";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
-import MediaUploader from "../components/ui/MediaUploader";
-import Textbox from "../components/ui/Textbox";
+import Checkbox from "../components/ui/Checkbox";
+import IconButton from "../components/ui/IconButton";
+import StatePanel from "../components/ui/StatePanel";
 import { useInquiryCreatePage } from "../features/inquiry/presentation/hooks/useInquiryCreatePage";
+import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 
+import "../styles/page-layout.css";
+import "../features/shared/styles/chat-detail-page.css";
 import "../styles/inquiry-page.css";
 
 export default function InquiryCreatePage() {
@@ -17,153 +23,266 @@ export default function InquiryCreatePage() {
   const {
     navigate,
     productId,
+    productViewModel,
+    productLoading,
+    productError,
+    privacyPolicy,
+    privacyLoading,
+    privacyError,
+    agreedToPrivacyPolicy,
+    setAgreedToPrivacyPolicy,
     content,
     setContent,
-    mediaItems,
-    currentMediaIndex,
-    fileInputRef,
-    carouselRef,
+    files,
     submitting,
-    submitted,
     error,
     canSubmit,
     submitInquiry,
     handleFilesAdd,
-    handleFilesSelected,
-    handleRemoveMediaItem,
-    handleRemoveMediaFile,
-    handleCarouselScroll,
-    handleMoveToSlide,
+    handleRemoveFile,
     handleBackToScanResult,
   } = useInquiryCreatePage();
 
-  const formDisabled = !productId || submitting;
-  const shouldShowMobileComposer =
-    Boolean(productId) &&
-    !submitted;
+  const product = productViewModel?.product ?? null;
 
-  const files =
-    mediaItems.map(
-      (item) => item.file,
-    );
+  const shouldShowMobileComposer =
+    isMobilePortrait &&
+    Boolean(productId) &&
+    agreedToPrivacyPolicy;
+
+  const shouldShowDesktopComposer =
+    !isMobilePortrait &&
+    Boolean(productId) &&
+    agreedToPrivacyPolicy;
+
+  const pageLayoutClassName = [
+    "chat-detail-page-layout",
+    "chat-detail-page-layout--inquiry",
+    "inquiry-create-page-layout",
+    shouldShowMobileComposer
+      ? "inquiry-create-page-layout--with-mobile-composer"
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <>
       <Layout
         title="AMOL"
         mode="mypage"
-        showHeader
-        showFooter={
-          !isMobilePortrait ||
-          !shouldShowMobileComposer
-        }
+        showHeader={!isMobilePortrait}
+        showFooter={false}
         mainClassName="inquiry-page"
+        disableFooterPaddingOnDesktop
       >
-        <section className="inquiry-page__container">
-          <div className="inquiry-page__header">
-            <h1 className="inquiry-page__title">
-              商品について問い合わせる
-            </h1>
-          </div>
+        <div
+          className={pageLayoutClassName}
+          data-chat-detail
+        >
+          <section className="product-detail-page-layout chat-detail-page">
+            {!productId ? (
+              <Alert variant="error" className="chat-detail-page__error">
+                <p>商品IDが見つかりませんでした。</p>
 
-          {!productId ? (
-            <Alert variant="error" className="inquiry-page__alert">
-              <p>商品IDが見つかりませんでした。</p>
-              <Button
-                variant="secondary"
-                size="md"
-                className="inquiry-page__alert-action"
-                onClick={() => navigate("/scan/result")}
-              >
-                スキャン結果へ戻る
-              </Button>
-            </Alert>
-          ) : null}
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="inquiry-page__alert-action"
+                  onClick={() => navigate("/scan/result")}
+                >
+                  スキャン結果へ戻る
+                </Button>
+              </Alert>
+            ) : null}
 
-          {submitted ? (
-            <Alert variant="success" className="inquiry-page__alert">
-              <p>問い合わせを送信しました。</p>
-              <p>返信があるまでしばらくお待ちください。</p>
-              <Button
-                variant="secondary"
-                size="md"
-                className="inquiry-page__alert-action"
-                onClick={handleBackToScanResult}
-              >
-                スキャン結果へ戻る
-              </Button>
-            </Alert>
-          ) : null}
+            {productId ? (
+              <div className="chat-detail-page__split inquiry-create-page__split">
+                <div className="chat-detail-page__left inquiry-create-page__product-column">
+                  {productLoading ? (
+                    <StatePanel
+                      variant="loading"
+                      title="商品情報を読み込み中..."
+                    />
+                  ) : null}
 
-          {error ? (
-            <Alert variant="error" className="inquiry-page__alert">
-              {error}
-            </Alert>
-          ) : null}
+                  {!productLoading && productError ? (
+                    <Alert
+                      variant="error"
+                      className="inquiry-create-page__product-error"
+                    >
+                      {productError}
+                    </Alert>
+                  ) : null}
 
-          {!submitted ? (
-            <form
-              className="inquiry-page__form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void submitInquiry();
-              }}
-            >
-              <input type="hidden" name="productId" value={productId} />
-              <input type="hidden" name="inquiryType" value="product" />
+                  {!productLoading && !productError && product ? (
+                    <div className="inquiry-create-page__product">
+                      <div className="inquiry-create-page__product-heading">
+                        <IconButton
+                          type="button"
+                          variant="ghost"
+                          size="md"
+                          className="inquiry-create-page__product-back"
+                          aria-label="スキャン結果画面へ戻る"
+                          onClick={handleBackToScanResult}
+                        >
+                          <ChevronLeft size={22} aria-hidden="true" />
+                        </IconButton>
 
-              <div className="inquiry-page__desktop-fields">
-                <Textbox
-                  id="inquiry-content"
-                  name="content"
-                  label="問い合わせ内容"
-                  value={content}
-                  placeholder="問い合わせ内容を入力してください"
-                  rows={8}
-                  maxLength={2000}
-                  disabled={formDisabled}
-                  counterText={`${content.length.toLocaleString()} / 2,000`}
-                  onChange={(event) => setContent(event.target.value)}
-                />
+                        <h2 className="chat-detail-page__subject">
+                          {product.title || "商品詳細"}
+                        </h2>
+                      </div>
 
-                <MediaUploader
-                  label="添付画像"
-                  hint="商品の状態が分かる画像を添付できます。"
-                  emptyText="クリックして写真を追加"
-                  selectButtonLabel="写真を追加"
-                  selectingButtonLabel="処理中..."
-                  accept="image/*"
-                  multiple
-                  items={mediaItems}
-                  currentIndex={currentMediaIndex}
-                  disabled={formDisabled}
-                  selecting={submitting}
-                  selectFromEmptyArea
-                  inputRef={fileInputRef}
-                  carouselRef={carouselRef}
-                  onFilesSelected={handleFilesSelected}
-                  onRemoveItem={handleRemoveMediaItem}
-                  onCarouselScroll={handleCarouselScroll}
-                  onMoveToSlide={handleMoveToSlide}
-                />
+                      <dl className="inquiry-create-page__product-meta">
+                        <div className="inquiry-create-page__product-meta-row">
+                          <dt>ブランド</dt>
+                          <dd>{product.brandName || "-"}</dd>
+                        </div>
+
+                        <div className="inquiry-create-page__product-meta-row">
+                          <dt>型式</dt>
+                          <dd>{product.modelNumber || "-"}</dd>
+                        </div>
+
+                        <div className="inquiry-create-page__product-meta-row">
+                          <dt>サイズ</dt>
+                          <dd>{product.size || "-"}</dd>
+                        </div>
+
+                        <div className="inquiry-create-page__product-meta-row">
+                          <dt>カラー</dt>
+                          <dd>
+                            {product.color ? (
+                              <span className="inquiry-create-page__color">
+                                {product.swatch ? (
+                                  <span
+                                    className="inquiry-create-page__color-swatch"
+                                    style={{ backgroundColor: product.swatch }}
+                                    aria-hidden="true"
+                                  />
+                                ) : null}
+                                <span>{product.color}</span>
+                              </span>
+                            ) : (
+                              "-"
+                            )}
+                          </dd>
+                        </div>
+                      </dl>
+                    </div>
+                  ) : null}
+
+                  {!productLoading && !productError && !product ? (
+                    <StatePanel
+                      variant="empty"
+                      title="商品情報を取得できませんでした。"
+                    />
+                  ) : null}
+                </div>
+
+                <div className="chat-detail-page__right inquiry-create-page__right">
+                  <div className="inquiry-create-page__mobile-product-heading">
+                    <IconButton
+                      type="button"
+                      variant="ghost"
+                      size="md"
+                      className="inquiry-create-page__mobile-back"
+                      aria-label="スキャン結果画面へ戻る"
+                      onClick={handleBackToScanResult}
+                    >
+                      <ChevronLeft size={24} aria-hidden="true" />
+                    </IconButton>
+
+                    <span className="inquiry-create-page__mobile-product-name">
+                      {product?.title || (productLoading ? "読み込み中..." : "商品詳細")}
+                    </span>
+                  </div>
+
+                  <div className="inquiry-create-page__policy">
+                    <div className="inquiry-create-page__policy-scroll">
+                      <header className="inquiry-create-page__policy-header">
+                        <h2 className="inquiry-create-page__policy-title">
+                          プライバシーポリシー
+                        </h2>
+
+                        <p className="inquiry-create-page__policy-description">
+                          お問い合わせを送信する前に、以下の内容をご確認ください。
+                        </p>
+                      </header>
+
+                      {privacyLoading ? (
+                        <StatePanel
+                          variant="loading"
+                          title="プライバシーポリシーを読み込み中..."
+                        />
+                      ) : null}
+
+                      {!privacyLoading && privacyError ? (
+                        <Alert
+                          variant="error"
+                          className="inquiry-create-page__policy-error"
+                        >
+                          {privacyError}
+                        </Alert>
+                      ) : null}
+
+                      {!privacyLoading && !privacyError ? (
+                        <pre className="inquiry-create-page__policy-content">
+                          {privacyPolicy}
+                        </pre>
+                      ) : null}
+                    </div>
+
+                    <div className="inquiry-create-page__agreement">
+                      <Checkbox
+                        id="inquiry-privacy-agreement"
+                        label="プライバシーポリシーに同意する"
+                        checked={agreedToPrivacyPolicy}
+                        disabled={
+                          privacyLoading ||
+                          Boolean(privacyError) ||
+                          !privacyPolicy
+                        }
+                        onChange={(event) => {
+                          setAgreedToPrivacyPolicy(
+                            event.currentTarget.checked,
+                          );
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {error ? (
+                    <Alert
+                      variant="error"
+                      className="inquiry-create-page__submit-error"
+                    >
+                      {error}
+                    </Alert>
+                  ) : null}
+
+                  {shouldShowDesktopComposer ? (
+                    <ChatInlineComposer
+                      content={content}
+                      placeholder="問い合わせ内容を入力"
+                      files={files}
+                      error={error}
+                      submitting={submitting}
+                      canSubmit={canSubmit}
+                      disabled={!productId || !product}
+                      maxLength={2000}
+                      onContentChange={setContent}
+                      onFilesAdd={handleFilesAdd}
+                      onRemoveFile={handleRemoveFile}
+                      onSubmit={submitInquiry}
+                    />
+                  ) : null}
+                </div>
               </div>
-
-              <div className="inquiry-page__meta">
-                <span>商品ID</span>
-                <code>{productId || "-"}</code>
-              </div>
-
-              <Button
-                type="submit"
-                size="lg"
-                className="inquiry-page__submit"
-                disabled={!canSubmit}
-              >
-                {submitting ? "送信中" : "送信する"}
-              </Button>
-            </form>
-          ) : null}
-        </section>
+            ) : null}
+          </section>
+        </div>
       </Layout>
 
       {shouldShowMobileComposer ? (
@@ -174,7 +293,7 @@ export default function InquiryCreatePage() {
           error={error}
           submitting={submitting}
           canSubmit={canSubmit}
-          disabled={!productId}
+          disabled={!productId || !product}
           submitLabel="送信"
           submittingLabel="送信中"
           maxLength={2000}
@@ -182,7 +301,7 @@ export default function InquiryCreatePage() {
           accept="image/*"
           onContentChange={setContent}
           onFilesAdd={handleFilesAdd}
-          onRemoveFile={handleRemoveMediaFile}
+          onRemoveFile={handleRemoveFile}
           onSubmit={submitInquiry}
         />
       ) : null}

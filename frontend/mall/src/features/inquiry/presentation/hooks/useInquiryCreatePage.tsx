@@ -1,73 +1,29 @@
 // frontend/mall/src/features/inquiry/presentation/hooks/useInquiryCreatePage.tsx
 
-import {
-  type ChangeEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import {
-  useNavigate,
-  useSearchParams,
-} from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
-import type {
-  MediaUploaderItem,
-} from "../../../../components/ui/MediaUploader";
-
+import {
+  createScanResultPageViewModel,
+  type ScanResultPageViewModel,
+} from "../../../scan-result/application/scanPageViewModelFactory";
+import { loadPreviewState } from "../../../scan-result/infrastructure/scanResultApi";
 import {
   createInquiry,
   uploadInquiryImage,
   type CreateInquiryRequest,
 } from "../../api/inquiryApi";
 
-export type InquiryMediaItem =
-  MediaUploaderItem & {
-    file: File;
-  };
-
-const PRODUCT_INQUIRY_TYPE =
-  "product" as const;
-
-function createMediaItemId(
-  file: File,
-): string {
-  if (
-    typeof crypto !== "undefined" &&
-    "randomUUID" in crypto
-  ) {
-    return crypto.randomUUID();
-  }
-
-  return `${file.name}-${file.lastModified}-${Math.random()
-    .toString(36)
-    .slice(2)}`;
-}
+const PRODUCT_INQUIRY_TYPE = "product" as const;
+const MAX_FILES = 10;
+const PRIVACY_POLICY_PATH = "/assets/privacy-policy.txt";
 
 export function useInquiryCreatePage() {
   const navigate = useNavigate();
-  const [searchParams] =
-    useSearchParams();
-
-  const fileInputRef =
-    useRef<HTMLInputElement>(null);
-
-  const carouselRef =
-    useRef<HTMLDivElement>(null);
-
-  const objectUrlSetRef =
-    useRef<Set<string>>(
-      new Set(),
-    );
+  const [searchParams] = useSearchParams();
 
   const productId = useMemo(() => {
-    return (
-      searchParams.get(
-        "productId",
-      ) ?? ""
-    ).trim();
+    return (searchParams.get("productId") ?? "").trim();
   }, [searchParams]);
 
   const backTo = useMemo(() => {
@@ -75,377 +31,245 @@ export function useInquiryCreatePage() {
       return "/scan/result";
     }
 
-    return `/scan/result/${encodeURIComponent(
-      productId,
-    )}`;
+    return `/scan/result/${encodeURIComponent(productId)}`;
   }, [productId]);
 
-  const [
-    content,
-    setContent,
-  ] = useState("");
+  const [content, setContent] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const [
-    mediaItems,
-    setMediaItems,
-  ] = useState<
-    InquiryMediaItem[]
-  >([]);
+  const [productViewModel, setProductViewModel] = useState<ScanResultPageViewModel | null>(null);
+  const [productLoading, setProductLoading] = useState(false);
+  const [productError, setProductError] = useState<string | null>(null);
 
-  const [
-    currentMediaIndex,
-    setCurrentMediaIndex,
-  ] = useState(0);
-
-  const [
-    submitting,
-    setSubmitting,
-  ] = useState(false);
-
-  const [
-    submitted,
-    setSubmitted,
-  ] = useState(false);
-
-  const [
-    error,
-    setError,
-  ] = useState<
-    string | null
-  >(null);
+  const [privacyPolicy, setPrivacyPolicy] = useState("");
+  const [privacyLoading, setPrivacyLoading] = useState(true);
+  const [privacyError, setPrivacyError] = useState<string | null>(null);
+  const [agreedToPrivacyPolicy, setAgreedToPrivacyPolicy] = useState(false);
 
   useEffect(() => {
-    return () => {
-      objectUrlSetRef.current.forEach(
-        (url) => {
-          URL.revokeObjectURL(
-            url,
-          );
-        },
-      );
+    let cancelled = false;
 
-      objectUrlSetRef.current.clear();
+    if (!productId) {
+      setProductViewModel(null);
+      setProductLoading(false);
+      setProductError(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadProduct() {
+      setProductLoading(true);
+      setProductError(null);
+      setProductViewModel(null);
+
+      try {
+        const previewState = await loadPreviewState(productId);
+
+        if (cancelled) {
+          return;
+        }
+
+        const viewModel = createScanResultPageViewModel({
+          previewState,
+          ownedByWallet: null,
+        });
+
+        if (!viewModel) {
+          throw new Error("商品情報を取得できませんでした。");
+        }
+
+        setProductViewModel(viewModel);
+      } catch (caught) {
+        if (cancelled) {
+          return;
+        }
+
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "商品情報の読み込みに失敗しました。";
+
+        setProductError(message);
+      } finally {
+        if (!cancelled) {
+          setProductLoading(false);
+        }
+      }
+    }
+
+    void loadProduct();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [productId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPrivacyPolicy() {
+      setPrivacyLoading(true);
+      setPrivacyError(null);
+
+      try {
+        const response = await fetch(PRIVACY_POLICY_PATH);
+
+        if (!response.ok) {
+          throw new Error("プライバシーポリシーの読み込みに失敗しました。");
+        }
+
+        const policy = await response.text();
+
+        if (cancelled) {
+          return;
+        }
+
+        setPrivacyPolicy(policy);
+      } catch (caught) {
+        if (cancelled) {
+          return;
+        }
+
+        const message =
+          caught instanceof Error
+            ? caught.message
+            : "プライバシーポリシーの読み込みに失敗しました。";
+
+        setPrivacyPolicy("");
+        setPrivacyError(message);
+      } finally {
+        if (!cancelled) {
+          setPrivacyLoading(false);
+        }
+      }
+    }
+
+    void loadPrivacyPolicy();
+
+    return () => {
+      cancelled = true;
     };
   }, []);
 
   const canSubmit =
     Boolean(productId) &&
+    Boolean(productViewModel) &&
+    agreedToPrivacyPolicy &&
     Boolean(content.trim()) &&
-    !submitting &&
-    !submitted;
+    !submitting;
 
-  const handleFilesAdd =
-    useCallback(
-      (files: File[]) => {
-        const imageFiles =
-          files.filter((file) =>
-            file.type.startsWith(
-              "image/",
-            ),
-          );
+  const handleFilesAdd = useCallback((nextFiles: File[]) => {
+    const imageFiles = nextFiles.filter((file) => file.type.startsWith("image/"));
 
-        if (imageFiles.length === 0) {
-          return;
-        }
+    if (imageFiles.length === 0) {
+      return;
+    }
 
-        const nextItems =
-          imageFiles.map(
-            (
-              file,
-            ): InquiryMediaItem => {
-              const previewUrl =
-                URL.createObjectURL(
-                  file,
-                );
+    setFiles((previousFiles) => {
+      const availableCount = Math.max(0, MAX_FILES - previousFiles.length);
 
-              objectUrlSetRef.current.add(
-                previewUrl,
-              );
-
-              return {
-                id:
-                  createMediaItemId(
-                    file,
-                  ),
-                type: "image",
-                previewUrl,
-                title: file.name,
-                fileName:
-                  file.name,
-                file,
-              };
-            },
-          );
-
-        setMediaItems(
-          (previousItems) => [
-            ...previousItems,
-            ...nextItems,
-          ],
-        );
-      },
-      [],
-    );
-
-  const handleFilesSelected =
-    useCallback(
-      (
-        event:
-          ChangeEvent<HTMLInputElement>,
-      ) => {
-        const files = Array.from(
-          event.target.files ?? [],
-        );
-
-        handleFilesAdd(files);
-        event.target.value = "";
-      },
-      [handleFilesAdd],
-    );
-
-  const handleRemoveMediaItem =
-    useCallback(
-      (id: string) => {
-        setMediaItems(
-          (previousItems) => {
-            const target =
-              previousItems.find(
-                (item) =>
-                  item.id === id,
-              );
-
-            if (
-              target?.previewUrl
-            ) {
-              URL.revokeObjectURL(
-                target.previewUrl,
-              );
-
-              objectUrlSetRef.current.delete(
-                target.previewUrl,
-              );
-            }
-
-            const nextItems =
-              previousItems.filter(
-                (item) =>
-                  item.id !== id,
-              );
-
-            setCurrentMediaIndex(
-              (currentIndex) => {
-                if (
-                  nextItems.length ===
-                  0
-                ) {
-                  return 0;
-                }
-
-                return Math.min(
-                  currentIndex,
-                  nextItems.length -
-                    1,
-                );
-              },
-            );
-
-            return nextItems;
-          },
-        );
-      },
-      [],
-    );
-
-  const handleRemoveMediaFile =
-    useCallback(
-      (index: number) => {
-        const target =
-          mediaItems[index];
-
-        if (!target) {
-          return;
-        }
-
-        handleRemoveMediaItem(
-          target.id,
-        );
-      },
-      [
-        handleRemoveMediaItem,
-        mediaItems,
-      ],
-    );
-
-  const handleCarouselScroll =
-    useCallback(() => {
-      const carousel =
-        carouselRef.current;
-
-      if (
-        !carousel ||
-        carousel.clientWidth ===
-          0
-      ) {
-        return;
+      if (availableCount === 0) {
+        return previousFiles;
       }
 
-      const nextIndex =
-        Math.round(
-          carousel.scrollLeft /
-            carousel.clientWidth,
-        );
+      return [...previousFiles, ...imageFiles.slice(0, availableCount)];
+    });
+  }, []);
 
-      setCurrentMediaIndex(
-        Math.max(
-          0,
-          Math.min(
-            nextIndex,
-            mediaItems.length -
-              1,
-          ),
+  const handleRemoveFile = useCallback((index: number) => {
+    setFiles((previousFiles) => {
+      if (index < 0 || index >= previousFiles.length) {
+        return previousFiles;
+      }
+
+      return previousFiles.filter((_, fileIndex) => fileIndex !== index);
+    });
+  }, []);
+
+  const submitInquiry = useCallback(async () => {
+    if (!canSubmit) {
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const uploadedImages = await Promise.all(
+        files.map((file) =>
+          uploadInquiryImage({
+            productId,
+            file,
+          }),
         ),
       );
-    }, [mediaItems.length]);
 
-  const handleMoveToSlide =
-    useCallback(
-      (index: number) => {
-        const carousel =
-          carouselRef.current;
+      const payload: CreateInquiryRequest = {
+        productId,
+        content: content.trim(),
+        inquiryType: PRODUCT_INQUIRY_TYPE,
+        images: uploadedImages,
+      };
 
-        const target =
-          carousel?.children.item(
-            index,
-          );
+      const createdInquiry = await createInquiry(payload);
 
-        if (!target) {
-          setCurrentMediaIndex(
-            index,
-          );
+      setContent("");
+      setFiles([]);
 
-          return;
-        }
+      navigate(`/chats/${encodeURIComponent(createdInquiry.id)}`, {
+        replace: true,
+      });
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "問い合わせの送信に失敗しました。";
 
-        target.scrollIntoView({
-          behavior: "smooth",
-          block: "nearest",
-          inline: "start",
-        });
+      setError(message);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [
+    canSubmit,
+    content,
+    files,
+    navigate,
+    productId,
+  ]);
 
-        setCurrentMediaIndex(
-          index,
-        );
-      },
-      [],
-    );
-
-  const clearMediaItems =
-    useCallback(() => {
-      objectUrlSetRef.current.forEach(
-        (url) => {
-          URL.revokeObjectURL(
-            url,
-          );
-        },
-      );
-
-      objectUrlSetRef.current.clear();
-
-      setMediaItems([]);
-      setCurrentMediaIndex(0);
-    }, []);
-
-  const submitInquiry =
-    useCallback(async () => {
-      if (!canSubmit) {
-        return;
-      }
-
-      setSubmitting(true);
-      setError(null);
-
-      try {
-        const uploadedImages =
-          await Promise.all(
-            mediaItems.map(
-              (item) =>
-                uploadInquiryImage(
-                  {
-                    productId,
-                    file: item.file,
-                  },
-                ),
-            ),
-          );
-
-        const payload:
-          CreateInquiryRequest = {
-            productId,
-            content:
-              content.trim(),
-            inquiryType:
-              PRODUCT_INQUIRY_TYPE,
-            images:
-              uploadedImages,
-          };
-
-        await createInquiry(
-          payload,
-        );
-
-        setSubmitted(true);
-        setContent("");
-        clearMediaItems();
-      } catch (caught) {
-        const message =
-          caught instanceof Error
-            ? caught.message
-            : "問い合わせの送信に失敗しました。";
-
-        setError(message);
-      } finally {
-        setSubmitting(false);
-      }
-    }, [
-      canSubmit,
-      clearMediaItems,
-      content,
-      mediaItems,
-      productId,
-    ]);
-
-  const handleBackToScanResult =
-    useCallback(() => {
-      navigate(backTo);
-    }, [
-      backTo,
-      navigate,
-    ]);
+  const handleBackToScanResult = useCallback(() => {
+    navigate(backTo);
+  }, [backTo, navigate]);
 
   return {
     navigate,
     productId,
     backTo,
 
+    productViewModel,
+    productLoading,
+    productError,
+
+    privacyPolicy,
+    privacyLoading,
+    privacyError,
+    agreedToPrivacyPolicy,
+    setAgreedToPrivacyPolicy,
+
     content,
     setContent,
-    mediaItems,
-    currentMediaIndex,
-    fileInputRef,
-    carouselRef,
+    files,
 
     submitting,
-    submitted,
     error,
     canSubmit,
 
     submitInquiry,
     handleFilesAdd,
-    handleFilesSelected,
-    handleRemoveMediaItem,
-    handleRemoveMediaFile,
-    handleCarouselScroll,
-    handleMoveToSlide,
+    handleRemoveFile,
     handleBackToScanResult,
   };
 }
