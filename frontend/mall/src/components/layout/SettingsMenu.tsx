@@ -47,12 +47,18 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
     const confirmed = window.confirm(
       "本当にアカウントを削除しますか？\nFirebase Auth、Firestore、秘密鍵が削除されます。",
     );
-    if (!confirmed) return;
+
+    if (!confirmed) {
+      return;
+    }
 
     const password = window.prompt(
       "本人確認のため現在のパスワードを入力してください。",
     );
-    if (!password) return;
+
+    if (!password) {
+      return;
+    }
 
     try {
       setIsDeleting(true);
@@ -61,6 +67,7 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
         currentUser.email,
         password,
       );
+
       await reauthenticateWithCredential(currentUser, credential);
 
       const idToken = await currentUser.getIdToken(true);
@@ -133,10 +140,13 @@ export default function SettingsMenu({ onItemClick }: SettingsMenuProps) {
         onClick={() => handleNavigate("/settings/shipping-address")}
       />
       <ListItem
-        label="問い合わせ"
-        onClick={() => handleNavigate("/settings/inquiry")}
+        label="障害報告"
+        onClick={() => handleNavigate("/settings/issue-report")}
       />
-      <ListItem label="ログアウト" onClick={handleLogout} />
+      <ListItem
+        label="ログアウト"
+        onClick={handleLogout}
+      />
       <ListItem
         label="規約"
         onClick={() => handleNavigate("/terms")}
