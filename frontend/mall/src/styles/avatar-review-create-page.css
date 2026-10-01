@@ -1,0 +1,106 @@
+/* frontend/mall/src/styles/avatar-review-create-page.css */
+
+.avatar-review-create-page {
+  width: min(720px, 100%);
+  margin: 0 auto;
+}
+
+.avatar-review-create-page__header {
+  margin-bottom: 32px;
+}
+
+.avatar-review-create-page__description {
+  margin: 8px 0 0;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.avatar-review-create-page__state,
+.avatar-review-create-page__form {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.avatar-review-create-page__state p {
+  margin: 0;
+}
+
+.avatar-review-create-page__section {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.avatar-review-create-page__section + .avatar-review-create-page__section {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+
+.avatar-review-create-page__section-title {
+  margin: 0;
+  color: var(--color-text, #111827);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.avatar-review-create-page__evaluation-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.avatar-review-create-page__evaluation-options .ui-radio {
+  min-width: 0;
+}
+
+.avatar-review-create-page__evaluation-options .ui-radio--card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.avatar-review-create-page__comment-count {
+  align-self: flex-end;
+  margin: -8px 0 0;
+  font-size: 12px;
+}
+
+.avatar-review-create-page .chat-detail-page__desktop-composer {
+  width: 100%;
+  min-width: 0;
+}
+
+.avatar-review-create-page .chat-detail-page__desktop-composer-row {
+  width: 100%;
+  min-width: 0;
+}
+
+.avatar-review-create-page .chat-detail-page__desktop-composer-input {
+  min-width: 0;
+}
+
+@media (max-width: 640px) {
+  .avatar-review-create-page__header {
+    margin-bottom: 24px;
+  }
+
+  .avatar-review-create-page__form {
+    gap: 20px;
+  }
+
+  .avatar-review-create-page__section + .avatar-review-create-page__section {
+    padding-top: 20px;
+  }
+
+  .avatar-review-create-page__evaluation-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

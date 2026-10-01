@@ -66,6 +66,14 @@ export default function OrderDetailItem({
     !item.isReturnRequested &&
     !item.isReturnCompleted;
 
+  const actionClassName = [
+    "page-actions",
+    "order-detail-page__cancel-actions",
+    showReturnButton ? "order-detail-page__cancel-actions--return" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <li className="order-detail-page__item">
       <MediaIcon
@@ -79,9 +87,14 @@ export default function OrderDetailItem({
       <div className="order-detail-page__item-body">
         <div className="order-detail-page__item-heading">
           <div className="order-detail-page__item-title-area">
-            <span className="order-detail-page__item-title">{productTitle}</span>
+            <span className="order-detail-page__item-title">
+              {productTitle}
+            </span>
+
             {item.tokenName ? (
-              <span className="order-detail-page__item-token-name">{item.tokenName}</span>
+              <span className="order-detail-page__item-token-name">
+                {item.tokenName}
+              </span>
             ) : null}
           </div>
 
@@ -155,13 +168,23 @@ export default function OrderDetailItem({
             </Button>
           </div>
         ) : item.transferred && !item.isReturnRequested && !item.isReturnCompleted ? null : (
-          <div className="page-actions order-detail-page__cancel-actions">
+          <div className={actionClassName}>
             {item.isReturnCompleted ? (
-              <Button type="button" variant="secondary" size="sm" disabled>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled
+              >
                 返品済み
               </Button>
             ) : item.isReturnRequested ? (
-              <Button type="button" variant="secondary" size="sm" disabled>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled
+              >
                 返品申請済み
               </Button>
             ) : showReturnButton ? (
