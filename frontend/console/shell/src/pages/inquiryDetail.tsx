@@ -82,8 +82,8 @@ export default function InquiryDetail() {
   // Return Inquiry は Inquiry.OrderID + Inquiry.OrderItemIndex を正として
   // 対象 Order item を特定する。
   //
-  // merchandiseRefundMaxAmount は backend が Order snapshot と配賦済みの
-  // 消費税から算出した税込商品返金上限を正とする。
+  // merchandiseRefundMaxAmount / shipping amounts は backend が
+  // Order snapshot と返金ドメインの計算結果から返した値を正とする。
   const returnOrder =
     isReturnInquiry && inquiry?.orderId
       ? orders.find((order) => order.id === inquiry.orderId) ?? null
@@ -99,6 +99,18 @@ export default function InquiryDetail() {
 
   const merchandiseRefundMaxAmount =
     returnOrderItem?.merchandiseRefundMaxAmount ?? 0;
+
+  const outboundShippingAmount =
+    returnOrderItem?.outboundShippingAmount ?? 0;
+
+  const outboundShippingTaxAmount =
+    returnOrderItem?.outboundShippingTaxAmount ?? 0;
+
+  const returnShippingAmount =
+    returnOrderItem?.returnShippingAmount ?? 0;
+
+  const returnShippingTaxAmount =
+    returnOrderItem?.returnShippingTaxAmount ?? 0;
 
   const {
     replyModalOpen,
@@ -314,6 +326,10 @@ export default function InquiryDetail() {
             showReturnRefund={showReturnRefund}
             merchandiseRefundAmount={merchandiseRefundAmount}
             merchandiseRefundMaxAmount={merchandiseRefundMaxAmount}
+            outboundShippingAmount={outboundShippingAmount}
+            outboundShippingTaxAmount={outboundShippingTaxAmount}
+            returnShippingAmount={returnShippingAmount}
+            returnShippingTaxAmount={returnShippingTaxAmount}
             refundOutboundShipping={refundOutboundShipping}
             coverReturnShipping={coverReturnShipping}
             returnRefundSubmitting={returnRefundSubmitting}

@@ -150,6 +150,10 @@ type InquiryOrderItemSummary struct {
 	Qty                        int                    `json:"qty"`
 	Price                      int                    `json:"price"`
 	MerchandiseRefundMaxAmount int                    `json:"merchandiseRefundMaxAmount"`
+	OutboundShippingAmount     int                    `json:"outboundShippingAmount"`
+	OutboundShippingTaxAmount  int                    `json:"outboundShippingTaxAmount"`
+	ReturnShippingAmount       int                    `json:"returnShippingAmount"`
+	ReturnShippingTaxAmount    int                    `json:"returnShippingTaxAmount"`
 	IsCancelled                bool                   `json:"isCancelled"`
 	IsDispatched               bool                   `json:"isDispatched"`
 	IsReturnRequested          bool                   `json:"isReturnRequested"`
@@ -517,7 +521,25 @@ func (q *InquiryDetailQuery) resolveReturnInquiryDetailRefs(
 	if err != nil {
 		return inquiryDetailResolvedRefs{}, err
 	}
+
+	shippingAmountSummary, err := refunddom.CalculateReturnRefundAmount(
+		order,
+		itemIndex,
+		refunddom.ReturnRefundSelection{
+			MerchandiseRefundAmount: refundAmountSummary.RefundAmount,
+			RefundOutboundShipping:  true,
+			CoverReturnShipping:     true,
+		},
+	)
+	if err != nil {
+		return inquiryDetailResolvedRefs{}, err
+	}
+
 	itemSummary.MerchandiseRefundMaxAmount = refundAmountSummary.RefundAmount
+	itemSummary.OutboundShippingAmount = shippingAmountSummary.OutboundShippingAmount
+	itemSummary.OutboundShippingTaxAmount = shippingAmountSummary.OutboundShippingTaxAmount
+	itemSummary.ReturnShippingAmount = shippingAmountSummary.ReturnShippingAmount
+	itemSummary.ReturnShippingTaxAmount = shippingAmountSummary.ReturnShippingTaxAmount
 
 	orders := []InquiryOrderSummary{
 		{

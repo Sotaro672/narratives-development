@@ -28,12 +28,37 @@
 
 .inq-return-refund__option {
   display: flex;
-  align-items: flex-start;
+  min-width: 0;
+  align-items: center;
   gap: 0.75rem;
 }
 
 .inq-return-refund__checkbox {
-  margin-top: 0.25rem;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.inq-return-refund__option-content {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inq-return-refund__total-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.inq-return-refund__total-amount {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 /* =========================================================
@@ -173,4 +198,17 @@
 
 .inq-reply-modal__counter {
   text-align: right;
+}
+
+@media (max-width: 640px) {
+  .inq-return-refund__option-content {
+    align-items: flex-start;
+    flex-direction: column;
+    justify-content: flex-start;
+    gap: 4px;
+  }
+
+  .inq-return-refund__total-footer {
+    align-items: baseline;
+  }
 }

@@ -4,6 +4,7 @@ import { Button } from "../../../../shared/ui/button";
 import {
   Card,
   CardContent,
+  CardFooter,
   CardHeader,
   CardSuffix,
   CardTitle,
@@ -27,6 +28,10 @@ export type InquiryContentCardProps = {
   showReturnRefund?: boolean;
   merchandiseRefundAmount?: number | "";
   merchandiseRefundMaxAmount?: number;
+  outboundShippingAmount?: number;
+  outboundShippingTaxAmount?: number;
+  returnShippingAmount?: number;
+  returnShippingTaxAmount?: number;
   refundOutboundShipping?: boolean;
   coverReturnShipping?: boolean;
   returnRefundSubmitting?: boolean;
@@ -44,6 +49,14 @@ function textOrDash(value: string | null | undefined): string {
   return normalized || "-";
 }
 
+function normalizeAmount(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+
+  return Math.max(0, value);
+}
+
 function formatCurrency(value: number): string {
   if (!Number.isFinite(value)) {
     return "-";
@@ -59,6 +72,10 @@ export default function InquiryContentCard({
   showReturnRefund = false,
   merchandiseRefundAmount = "",
   merchandiseRefundMaxAmount = 0,
+  outboundShippingAmount = 0,
+  outboundShippingTaxAmount = 0,
+  returnShippingAmount = 0,
+  returnShippingTaxAmount = 0,
   refundOutboundShipping = false,
   coverReturnShipping = false,
   returnRefundSubmitting = false,
@@ -74,6 +91,24 @@ export default function InquiryContentCard({
   const inputDisabled =
     returnRefundSubmitting ||
     returnRefundSelectionLocked;
+
+  const merchandiseAmount =
+    typeof merchandiseRefundAmount === "number"
+      ? normalizeAmount(merchandiseRefundAmount)
+      : 0;
+
+  const outboundShippingTotal =
+    normalizeAmount(outboundShippingAmount) +
+    normalizeAmount(outboundShippingTaxAmount);
+
+  const returnShippingTotal =
+    normalizeAmount(returnShippingAmount) +
+    normalizeAmount(returnShippingTaxAmount);
+
+  const selectedTotalAmount =
+    merchandiseAmount +
+    (refundOutboundShipping ? outboundShippingTotal : 0) +
+    (coverReturnShipping ? returnShippingTotal : 0);
 
   return (
     <Card>
@@ -142,6 +177,7 @@ export default function InquiryContentCard({
                       }
                       step={1}
                       value={merchandiseRefundAmount}
+                      placeholder="1円以上、商品代金（税込）の範囲内で返金額を指定してください。"
                       onChange={(event) =>
                         onChangeMerchandiseRefundAmount?.(
                           event.target.value,
@@ -164,14 +200,6 @@ export default function InquiryContentCard({
                     商品代金（税込）:{" "}
                     {formatCurrency(merchandiseRefundMaxAmount)}
                   </Text>
-
-                  <Text
-                    as="div"
-                    size="sm"
-                    wrap="pre-wrap-anywhere"
-                  >
-                    1円以上、商品代金（税込）の範囲内で返金額を指定してください。
-                  </Text>
                 </Stack>
 
                 <label className="inq-return-refund__option">
@@ -187,14 +215,21 @@ export default function InquiryContentCard({
                     className="inq-return-refund__checkbox"
                   />
 
-                  <Stack gap="xs">
+                  <div className="inq-return-refund__option-content">
                     <Text
                       size="sm"
                       weight="medium"
                     >
                       往路
                     </Text>
-                  </Stack>
+
+                    <Text
+                      size="sm"
+                      tone="muted"
+                    >
+                      配送料（税込） {formatCurrency(outboundShippingTotal)}
+                    </Text>
+                  </div>
                 </label>
 
                 <label className="inq-return-refund__option">
@@ -210,14 +245,21 @@ export default function InquiryContentCard({
                     className="inq-return-refund__checkbox"
                   />
 
-                  <Stack gap="xs">
+                  <div className="inq-return-refund__option-content">
                     <Text
                       size="sm"
                       weight="medium"
                     >
                       復路
                     </Text>
-                  </Stack>
+
+                    <Text
+                      size="sm"
+                      tone="muted"
+                    >
+                      配送料（税込） {formatCurrency(returnShippingTotal)}
+                    </Text>
+                  </div>
                 </label>
 
                 {returnRefundErrorMessage ? (
@@ -257,6 +299,25 @@ export default function InquiryContentCard({
           ) : null}
         </Stack>
       </CardContent>
+
+      {showReturnRefund ? (
+        <CardFooter className="inq-return-refund__total-footer">
+          <Text
+            size="sm"
+            weight="medium"
+          >
+            合計金額
+          </Text>
+
+          <Text
+            size="md"
+            weight="bold"
+            className="inq-return-refund__total-amount"
+          >
+            {formatCurrency(selectedTotalAmount)}
+          </Text>
+        </CardFooter>
+      ) : null}
     </Card>
   );
 }

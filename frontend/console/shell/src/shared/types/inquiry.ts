@@ -112,6 +112,10 @@ export type InquiryOrderItemSummary = {
   qty: number;
   price: number;
   merchandiseRefundMaxAmount: number;
+  outboundShippingAmount: number;
+  outboundShippingTaxAmount: number;
+  returnShippingAmount: number;
+  returnShippingTaxAmount: number;
   isCancelled: boolean;
   isDispatched: boolean;
   isReturnRequested: boolean;
