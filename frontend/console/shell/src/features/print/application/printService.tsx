@@ -1,15 +1,11 @@
 // frontend/console/shell/src/features/print/application/printService.tsx
 
 import {
+  createPrintPDFURL as createPrintPDFURLApi,
   createProductsForPrint as createProductsForPrintApi,
   listPrintLogsByProductionId as listPrintLogsByProductionIdApi,
   type PrintLogForPrint,
 } from "../infrastructure/api/printApi";
-import {
-  buildQrPdfBlobA4,
-  openQrPdfInNewTab,
-  type QrPdfItem,
-} from "../utils/qrPdfBuilder";
 
 export type { PrintLogForPrint };
 
@@ -35,8 +31,7 @@ async function ensurePrintLogsForProduction(
     throw new Error("productionId is required");
   }
 
-  const existingLogs =
-    await listPrintLogsByProductionIdApi(productionId);
+  const existingLogs = await listPrintLogsByProductionIdApi(productionId);
 
   if (existingLogs.length > 0) {
     return existingLogs;
@@ -58,34 +53,40 @@ export async function preparePrintForProduction(params: {
   productionId: string;
 }): Promise<PrintLogForPrint[]> {
   const { productionId } = params;
-
-  return ensurePrintLogsForProduction(
-    productionId,
-  );
+  return ensurePrintLogsForProduction(productionId);
 }
 
-async function buildAndOpenQrPdfFromLogs(
-  logs: PrintLogForPrint[],
-): Promise<void> {
-  const qrItems: QrPdfItem[] = [];
+/**
+ * Popup blocker を避けるため、ユーザー操作と同じ同期処理内で
+ * PDF 表示先の空タブを先に確保する。
+ *
+ * noopener を window.open の features に指定すると Window reference を
+ * 取得できない browser があるため、open 後に opener を切り離す。
+ */
+function openPrintPDFPreviewWindow(): Window {
+  const previewWindow = window.open("about:blank", "_blank");
 
-  for (const log of logs) {
-    for (const item of log.items) {
-      qrItems.push({
-        payload: item.qrPayload,
-        label: item.modelNumber,
-      });
-    }
+  if (!previewWindow) {
+    throw new Error("PDF preview popup was blocked");
   }
 
-  if (qrItems.length === 0) return;
+  try {
+    previewWindow.document.title = "PDFを準備中です…";
+    previewWindow.document.body.style.margin = "0";
+    previewWindow.document.body.style.padding = "24px";
+    previewWindow.document.body.style.fontFamily = "sans-serif";
+    previewWindow.document.body.textContent = "PDFを準備中です…";
+  } catch {
+    // about:blank の初期表示設定に失敗しても PDF 遷移自体は継続する。
+  }
 
-  const pdfBlob = await buildQrPdfBlobA4(qrItems, {
-    cols: 5,
-    cellHeight: 100,
-  });
+  try {
+    previewWindow.opener = null;
+  } catch {
+    // opener の切り離しに失敗しても PDF 遷移自体は継続する。
+  }
 
-  openQrPdfInNewTab(pdfBlob);
+  return previewWindow;
 }
 
 function downloadProductIdsCsv(
@@ -131,25 +132,56 @@ function downloadProductIdsCsv(
 /**
  * QR 出力用。
  *
- * 1. GET /products/print-logs?productionId=... で既存 print_log を確認する
- * 2. 存在しない場合だけ POST /products/print-logs を実行する
- * 3. qrPayload を QR コード化して PDF を新しいタブで表示する
+ * 1. ユーザー操作直後に PDF 表示用の空タブを同期で開く
+ * 2. GET /products/print-logs?productionId=... で既存 print_log を確認する
+ * 3. 存在しない場合だけ POST /products/print-logs を実行する
+ * 4. POST /products/print-pdf-url で短時間有効な署名付き HTTPS URL を取得する
+ * 5. 先に確保したタブを backend の application/pdf response へ遷移させる
  *
- * GET が失敗した場合は POST にフォールバックしない。
+ * browser 側では QR / PDF を生成しない。
+ * GET が失敗した場合は POST /products/print-logs にフォールバックしない。
  */
 export async function outputQrForProduction(params: {
   productionId: string;
 }): Promise<PrintLogForPrint[]> {
   const { productionId } = params;
 
-  const logs =
-    await ensurePrintLogsForProduction(productionId);
+  if (!productionId) {
+    throw new Error("productionId is required");
+  }
 
-  if (logs.length === 0) return [];
+  let previewWindow: Window | null = null;
 
-  await buildAndOpenQrPdfFromLogs(logs);
+  try {
+    previewWindow = openPrintPDFPreviewWindow();
 
-  return logs;
+    const logs = await ensurePrintLogsForProduction(productionId);
+
+    if (logs.length === 0) {
+      if (!previewWindow.closed) {
+        previewWindow.close();
+      }
+      return [];
+    }
+
+    const pdfURL = await createPrintPDFURLApi({
+      productionId,
+    });
+
+    if (previewWindow.closed) {
+      throw new Error("PDF preview window was closed");
+    }
+
+    previewWindow.location.replace(pdfURL);
+
+    return logs;
+  } catch (error) {
+    if (previewWindow && !previewWindow.closed) {
+      previewWindow.close();
+    }
+
+    throw error;
+  }
 }
 
 /**
@@ -166,8 +198,7 @@ export async function outputProductIdsCsvForProduction(params: {
 }): Promise<PrintLogForPrint[]> {
   const { productionId } = params;
 
-  const logs =
-    await ensurePrintLogsForProduction(productionId);
+  const logs = await ensurePrintLogsForProduction(productionId);
 
   if (logs.length === 0) return [];
 

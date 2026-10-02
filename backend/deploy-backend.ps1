@@ -14,7 +14,11 @@ param(
   [string]$CloudTasksQueueID = "mint-product-tasks",
 
   # Brand fee settlement Stripe Transfer Cloud Tasks queue
-  [string]$BrandFeeSettlementCloudTasksQueueID = "brand-fee-settlement-tasks"
+  [string]$BrandFeeSettlementCloudTasksQueueID = "brand-fee-settlement-tasks",
+
+  # Secret Manager secret injected into Cloud Run as PRINT_PDF_SIGNING_SECRET
+  [string]$PrintPDFSigningSecretName = "print-pdf-signing-secret",
+  [string]$PrintPDFSigningSecretVersion = "latest"
 )
 
 $ErrorActionPreference = "Stop"
@@ -340,6 +344,95 @@ function Ensure-PayoutAccountKMSAccess {
   Write-Ok "Cloud Run service account can encrypt/decrypt with payout account KMS key"
 }
 
+function Ensure-SecretManagerSecretAccess {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string]$SecretName,
+
+    [Parameter(Mandatory=$true)]
+    [string]$SecretVersion,
+
+    [Parameter(Mandatory=$true)]
+    [string]$ProjectID,
+
+    [Parameter(Mandatory=$true)]
+    [string]$ServiceAccount
+  )
+
+  if ([string]::IsNullOrWhiteSpace($SecretName)) {
+    throw "Print PDF signing secret name is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($SecretVersion)) {
+    throw "Print PDF signing secret version is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ProjectID)) {
+    throw "Secret Manager project ID is empty."
+  }
+
+  if ([string]::IsNullOrWhiteSpace($ServiceAccount)) {
+    throw "Secret Manager service account is empty."
+  }
+
+  Write-Step "Ensuring Secret Manager API"
+
+  & $GCLOUD services enable secretmanager.googleapis.com `
+    --project=$ProjectID | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to enable Secret Manager API."
+  }
+
+  Write-Ok "Secret Manager API is enabled"
+
+  Write-Step "Checking print PDF signing secret: $SecretName"
+
+  & $GCLOUD secrets describe $SecretName `
+    --project=$ProjectID `
+    --format="value(name)" | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Secret Manager secret '$SecretName' was not found. Create it and add a secret version before deploying."
+  }
+
+  Write-Ok "Print PDF signing secret exists: $SecretName"
+
+  Write-Step "Checking print PDF signing secret version: $SecretVersion"
+
+  $SecretVersionState = (
+    & $GCLOUD secrets versions describe $SecretVersion `
+      --secret=$SecretName `
+      --project=$ProjectID `
+      --format="value(state)"
+  )
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to describe secret version '$SecretVersion' for '$SecretName'."
+  }
+
+  $SecretVersionState = "$SecretVersionState".Trim().ToUpperInvariant()
+
+  if ($SecretVersionState -ne "ENABLED") {
+    throw "Secret version '$SecretVersion' for '$SecretName' is not ENABLED. state=$SecretVersionState"
+  }
+
+  Write-Ok "Print PDF signing secret version is enabled: $SecretVersion"
+
+  Write-Step "Granting Cloud Run service account Secret Manager access"
+
+  & $GCLOUD secrets add-iam-policy-binding $SecretName `
+    --project=$ProjectID `
+    --member="serviceAccount:$ServiceAccount" `
+    --role="roles/secretmanager.secretAccessor" | Out-Null
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to grant Secret Manager access to '$ServiceAccount' for '$SecretName'."
+  }
+
+  Write-Ok "Cloud Run service account can access print PDF signing secret"
+}
+
 # ------------------------------------------------------------
 # 0) gcloud environment
 # ------------------------------------------------------------
@@ -547,9 +640,11 @@ if (-not $envMap.ContainsKey("AMOL_ADMIN_FIREBASE_UID") -or [string]::IsNullOrWh
 }
 
 $AdminFirebaseUID = $envMap["AMOL_ADMIN_FIREBASE_UID"].Trim()
+
 if ($AdminFirebaseUID -eq "REPLACE_WITH_FIREBASE_ADMIN_UID") {
   throw "AMOL_ADMIN_FIREBASE_UID still contains the placeholder value. Replace it with the Firebase Authentication UID."
 }
+
 $envMap["AMOL_ADMIN_FIREBASE_UID"] = $AdminFirebaseUID
 
 if (-not $envMap.ContainsKey("AMOL_ADMIN_EMAIL") -or [string]::IsNullOrWhiteSpace($envMap["AMOL_ADMIN_EMAIL"])) {
@@ -557,9 +652,11 @@ if (-not $envMap.ContainsKey("AMOL_ADMIN_EMAIL") -or [string]::IsNullOrWhiteSpac
 }
 
 $AdminEmail = $envMap["AMOL_ADMIN_EMAIL"].Trim()
+
 if ($AdminEmail -ne "caotailangaogang@gmail.com") {
   throw "AMOL_ADMIN_EMAIL must be caotailangaogang@gmail.com."
 }
+
 $envMap["AMOL_ADMIN_EMAIL"] = $AdminEmail
 
 if (
@@ -660,6 +757,12 @@ Ensure-PayoutAccountKMSAccess `
   -ProjectID $ProjectId `
   -ServiceAccount $RunServiceAccount
 
+Ensure-SecretManagerSecretAccess `
+  -SecretName $PrintPDFSigningSecretName `
+  -SecretVersion $PrintPDFSigningSecretVersion `
+  -ProjectID $ProjectId `
+  -ServiceAccount $RunServiceAccount
+
 # Bubblegum Cloud Run の ID Token audience は
 # service URL と同一にします。
 $envMap["SOLANA_BUBBLEGUM_SERVICE_AUDIENCE"] = $envMap["SOLANA_BUBBLEGUM_SERVICE_URL"]
@@ -708,7 +811,6 @@ if ([string]::IsNullOrWhiteSpace($ResolvedBackendURL)) {
 }
 
 $envMap["SELF_BASE_URL"] = $ResolvedBackendURL
-
 $envMap["INTERNAL_BASE_URL"] = $ResolvedBackendURL
 
 # ------------------------------------------------------------
@@ -731,15 +833,10 @@ if ($BrandFeeSettlementCloudTasksQueueID -eq $CloudTasksQueueID) {
 }
 
 $envMap["CLOUD_TASKS_PROJECT_ID"] = $ProjectId
-
 $envMap["CLOUD_TASKS_LOCATION"] = $Region
-
 $envMap["CLOUD_TASKS_QUEUE_ID"] = $CloudTasksQueueID
-
 $envMap["CLOUD_TASKS_SERVICE_ACCOUNT"] = $RunServiceAccount
-
 $envMap["CLOUD_TASKS_AUDIENCE"] = $ResolvedBackendURL
-
 $envMap["BRAND_FEE_SETTLEMENT_CLOUD_TASKS_QUEUE_ID"] = $BrandFeeSettlementCloudTasksQueueID
 
 # Brand fee Settlementはprimary/mint系queueとは分離する。
@@ -760,15 +857,10 @@ Ensure-CloudTasksQueueExists `
 # ------------------------------------------------------------
 
 $envMap["LIST_SAVE_OPERATION_QUEUE_PROJECT_ID"] = $ProjectId
-
 $envMap["LIST_SAVE_OPERATION_QUEUE_LOCATION"] = $Region
-
 $envMap["LIST_SAVE_OPERATION_QUEUE_ID"] = $CloudTasksQueueID
-
 $envMap["LIST_SAVE_OPERATION_QUEUE_TARGET_BASE_URL"] = $ResolvedBackendURL
-
 $envMap["LIST_SAVE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $RunServiceAccount
-
 $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $ResolvedBackendURL
 
 # ------------------------------------------------------------
@@ -779,15 +871,10 @@ $envMap["LIST_SAVE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $ResolvedBackendURL
 # ------------------------------------------------------------
 
 $envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_PROJECT_ID"] = $ProjectId
-
 $envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_LOCATION"] = $Region
-
 $envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_ID"] = $CloudTasksQueueID
-
 $envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_TARGET_BASE_URL"] = $ResolvedBackendURL
-
 $envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_SERVICE_ACCOUNT_EMAIL"] = $RunServiceAccount
-
 $envMap["TOKEN_BLUEPRINT_CREATE_OPERATION_QUEUE_OIDC_AUDIENCE"] = $ResolvedBackendURL
 
 # ------------------------------------------------------------
@@ -807,10 +894,17 @@ foreach ($Key in $envMap.Keys) {
 }
 
 $envArg = [string]::Join(",", $envPairs)
-
 $envKeysForLog = [string]::Join(",", ($envMap.Keys | Sort-Object))
 
 Write-Step "Env vars to update: $envKeysForLog"
+
+$secretPairs = @(
+  "PRINT_PDF_SIGNING_SECRET=${PrintPDFSigningSecretName}:${PrintPDFSigningSecretVersion}"
+)
+
+$secretArg = [string]::Join(",", $secretPairs)
+
+Write-Step "Secret env vars to update: PRINT_PDF_SIGNING_SECRET"
 
 # ------------------------------------------------------------
 # 13) Remove obsolete Cloud Run environment variables
@@ -881,6 +975,9 @@ $deployArgs = @(
   "--update-env-vars",
   $envArg,
 
+  "--update-secrets",
+  $secretArg,
+
   "--min-instances",
   "0",
 
@@ -939,3 +1036,4 @@ Write-Ok "Deployed image: $Image"
 Write-Ok "Backend URL: $ResolvedBackendURL"
 Write-Ok "Cloud Tasks queue: $CloudTasksQueueID"
 Write-Ok "Brand fee settlement Cloud Tasks queue: $BrandFeeSettlementCloudTasksQueueID"
+Write-Ok "Print PDF signing secret: ${PrintPDFSigningSecretName}:$PrintPDFSigningSecretVersion"

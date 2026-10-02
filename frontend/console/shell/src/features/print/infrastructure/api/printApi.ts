@@ -1,7 +1,8 @@
-// frontend/console/product/src/infrastructure/api/printApi.ts
+// frontend/console/shell/src/features/print/infrastructure/api/printApi.ts
 
 import {
   createPrintLogsHTTP,
+  createPrintPDFURLHTTP,
   fetchPrintLogsByProductionId,
   type PrintLogForPrint,
 } from "../repository/productRepositoryHTTP";
@@ -45,4 +46,25 @@ export async function createProductsForPrint(params: {
   const log = await createPrintLogsHTTP(productionId);
 
   return [log];
+}
+
+/**
+ * POST /products/print-pdf-url
+ *
+ * 認証済み Console request から短時間有効な署名付き PDF URL を取得する。
+ * repository 層で API_BASE を基準に絶対 URL へ変換済みのため、
+ * 呼び出し側は返却された URL をそのままブラウザ遷移に使用できる。
+ */
+export async function createPrintPDFURL(params: {
+  productionId: string;
+}): Promise<string> {
+  const { productionId } = params;
+
+  if (!productionId) {
+    throw new Error("productionId is required");
+  }
+
+  const response = await createPrintPDFURLHTTP(productionId);
+
+  return response.url;
 }

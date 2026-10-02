@@ -69,4 +69,8 @@ require (
 
 require cloud.google.com/go/cloudtasks v1.18.0
 
-require cloud.google.com/go/kms v1.33.0
+require (
+	cloud.google.com/go/kms v1.33.0
+	codeberg.org/go-pdf/fpdf v0.12.0
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+)

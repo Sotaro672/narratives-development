@@ -32,6 +32,7 @@ type RouterDeps struct {
 	ListSaveOperations          http.Handler
 	Transportation              http.Handler
 	ProductsPrint               http.Handler
+	ProductsPrintPDF            http.Handler
 	ProductBP                   http.Handler
 	ProductBPCategories         http.Handler
 	TokenBP                     http.Handler
@@ -80,7 +81,7 @@ type RouterDeps struct {
 	// endpoint:
 	//   POST /internal/refund-completion-notifications/process
 	//
-	// Cloud Scheduler等から呼ばれる返金完了通知delivery投入用です。
+	// Cloud Scheduler等から呼ばれる返金完了delivery投入用です。
 	// endpoint:
 	//   POST /internal/refund-completion-notifications/dispatch-due
 	//
@@ -229,6 +230,14 @@ func NewRouter(deps RouterDeps) http.Handler {
 		h := withAuth(deps.Transportation)
 		mux.Handle("/transportation", h)
 		mux.Handle("/transportation/", h)
+	}
+
+	// GET /products/print-pdf は Firebase Auth を通さず、
+	// PrintPDFHandler 内で短時間有効の署名ticketを検証する。
+	// /products およびその他 /products/* は引き続き AuthMiddleware 配下とする。
+	if deps.ProductsPrintPDF != nil {
+		h := withPublic(deps.ProductsPrintPDF)
+		mux.Handle("/products/print-pdf", h)
 	}
 
 	if deps.ProductsPrint != nil {

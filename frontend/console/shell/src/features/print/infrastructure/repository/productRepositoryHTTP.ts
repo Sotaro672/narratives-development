@@ -16,6 +16,10 @@ export type PrintLogForPrint = {
   items: PrintedItemForPrint[];
 };
 
+export type PrintPDFURLResponse = {
+  url: string;
+};
+
 /**
  * POST /products/print-logs
  *
@@ -93,4 +97,65 @@ export async function fetchPrintLogsByProductionId(
   }
 
   return res.json();
+}
+
+/**
+ * POST /products/print-pdf-url
+ *
+ * Firebase Auth 済みの Console request から、
+ * QR PDF を直接表示するための短時間有効な署名 URL を取得する。
+ *
+ * backend response:
+ * {
+ *   "url": "/products/print-pdf?ticket=..."
+ * }
+ *
+ * backend は Host header を信用せず相対 URL を返すため、
+ * frontend 側で API_BASE を基準に絶対 URL へ変換する。
+ */
+export async function createPrintPDFURLHTTP(
+  productionId: string,
+): Promise<PrintPDFURLResponse> {
+  if (!productionId) {
+    throw new Error("productionId is required for print PDF URL creation");
+  }
+
+  const authHeaders = await getAuthHeaders();
+
+  const res = await fetch(`${API_BASE}/products/print-pdf-url`, {
+    method: "POST",
+    headers: {
+      ...authHeaders,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ productionId }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+
+    throw new Error(
+      `Print PDF URL create failed: ${res.status} ${res.statusText}${
+        body ? ` - ${body}` : ""
+      }`,
+    );
+  }
+
+  const response = (await res.json()) as PrintPDFURLResponse;
+
+  if (!response.url || typeof response.url !== "string") {
+    throw new Error("Print PDF URL response does not contain a valid url");
+  }
+
+  let absoluteURL: string;
+
+  try {
+    absoluteURL = new URL(response.url, API_BASE).toString();
+  } catch {
+    throw new Error("Print PDF URL response contains an invalid url");
+  }
+
+  return {
+    url: absoluteURL,
+  };
 }

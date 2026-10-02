@@ -3,7 +3,10 @@ package console
 
 import (
 	"context"
+	"log"
 	"net/http"
+	"os"
+	"time"
 
 	httpin "narratives/internal/adapters/in/http/console"
 	consoleHandler "narratives/internal/adapters/in/http/console/handler"
@@ -11,6 +14,8 @@ import (
 	"narratives/internal/adapters/in/http/middleware"
 	usecase "narratives/internal/application/usecase"
 )
+
+const printPDFSigningSecretEnv = "PRINT_PDF_SIGNING_SECRET"
 
 func (c *Container) RouterDeps() httpin.RouterDeps {
 	var authMw *middleware.AuthMiddleware
@@ -26,6 +31,17 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		bootstrapMw = &middleware.BootstrapAuthMiddleware{
 			FirebaseAuth: c.Infra.FirebaseAuth,
 		}
+	}
+
+	var printPDFSigner *consoleHandler.PrintPDFTicketSigner
+	signer, signerErr := consoleHandler.NewPrintPDFTicketSigner(
+		os.Getenv(printPDFSigningSecretEnv),
+		5*time.Minute,
+	)
+	if signerErr != nil {
+		log.Printf("[console] WARN: print PDF ticket signer is not configured: %v", signerErr)
+	} else {
+		printPDFSigner = signer
 	}
 
 	var (
@@ -47,6 +63,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		internalTokenBlueprintCreateOperationTasksH   http.Handler
 		salesH                                        http.Handler
 		productsPrintH                                http.Handler
+		productsPrintPDFH                             http.Handler
 		productBPH                                    http.Handler
 		productBPCategoriesH                          http.Handler
 		tokenBPH                                      http.Handler
@@ -98,10 +115,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.ReportUC != nil {
-		reportDecisionNotificationsH =
-			consoleHandler.NewReportDecisionNotificationHandler(
-				c.ReportUC,
-			)
+		reportDecisionNotificationsH = consoleHandler.NewReportDecisionNotificationHandler(c.ReportUC)
 	}
 
 	if c.PermissionUC != nil {
@@ -202,8 +216,17 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 	}
 
 	if c.PrintUC != nil && c.PrintQueryService != nil {
-		productsPrintH = consoleHandler.NewPrintHandler(
+		productsPrintH = consoleHandler.NewPrintHandlerWithPDFSigner(
 			c.PrintUC,
+			c.PrintQueryService,
+			printPDFSigner,
+		)
+	}
+
+	if c.PrintQueryService != nil && c.CompanyProductionQueryService != nil {
+		productsPrintPDFH = consoleHandler.NewPrintPDFHandler(
+			printPDFSigner,
+			c.CompanyProductionQueryService,
 			c.PrintQueryService,
 		)
 	}
@@ -463,6 +486,7 @@ func (c *Container) RouterDeps() httpin.RouterDeps {
 		Lists:                          listsH,
 		ListSaveOperations:             listSaveOperationsH,
 		ProductsPrint:                  productsPrintH,
+		ProductsPrintPDF:               productsPrintPDFH,
 		ProductBP:                      productBPH,
 		ProductBPCategories:            productBPCategoriesH,
 		TokenBP:                        tokenBPH,
