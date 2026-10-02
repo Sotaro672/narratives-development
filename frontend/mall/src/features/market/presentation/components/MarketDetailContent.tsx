@@ -64,6 +64,7 @@ type MarketDetailContentProps = {
   onOpenResaleReport: () => void;
   onAddToCart: () => void | Promise<void>;
   reportSubmitting: boolean;
+  showAddToCartButton?: boolean;
 };
 
 export default function MarketDetailContent({
@@ -73,6 +74,7 @@ export default function MarketDetailContent({
   onOpenResaleReport,
   onAddToCart,
   reportSubmitting,
+  showAddToCartButton = true,
 }: MarketDetailContentProps) {
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
@@ -206,6 +208,7 @@ export default function MarketDetailContent({
                 tokenName={tokenName}
                 tokenIcon={tokenIcon}
               />
+
               <AvatarSummaryCard
                 avatarId={sellerAvatarId}
                 avatarName={avatarName}
@@ -216,15 +219,17 @@ export default function MarketDetailContent({
           }
           contentFooter={
             <>
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                disabled={!canAddToCart}
-                onClick={onAddToCart}
-              >
-                {addingToCart ? "追加中" : "カートに入れる"}
-              </Button>
+              {showAddToCartButton ? (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  fullWidth
+                  disabled={!canAddToCart}
+                  onClick={onAddToCart}
+                >
+                  {addingToCart ? "追加中" : "カートに入れる"}
+                </Button>
+              ) : null}
 
               <ProductReviewSection
                 items={reviews?.items ?? []}

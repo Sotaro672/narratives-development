@@ -36,6 +36,8 @@ export default function MarketDetailPage() {
 
   const {
     sellerAvatarId,
+    addingToCart,
+    canAddToCart,
     handleAddToCart,
   } = detail;
 
@@ -110,6 +112,18 @@ export default function MarketDetailPage() {
       titleClickable
       mode="mypage"
       showHeader={!isMobilePortrait}
+      showFooter={isMobilePortrait}
+      footerProps={
+        isMobilePortrait
+          ? {
+              variant: "action",
+              buttonLabel: addingToCart ? "追加中" : "カートに入れる",
+              buttonWidth: "content",
+              disabled: !canAddToCart,
+              onButtonClick: handleAddToCartAndOpenCart,
+            }
+          : undefined
+      }
       hideAnnouncementButton
       hideSettingsButton
       showCartButton
@@ -123,6 +137,7 @@ export default function MarketDetailPage() {
         onOpenResaleReport={handleOpenResaleReport}
         onAddToCart={handleAddToCartAndOpenCart}
         reportSubmitting={reportSubmitting}
+        showAddToCartButton={!isMobilePortrait}
       />
 
       <ReportModal
