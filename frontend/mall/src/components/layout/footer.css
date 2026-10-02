@@ -145,6 +145,18 @@
   white-space: nowrap;
 }
 
+.footer-nav--action--content {
+  align-items: center;
+  justify-content: center;
+}
+
+.footer-nav--action--content .footer-nav__action-button {
+  width: auto;
+  max-width: none;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .footer-nav__avatar-icon {
   display: block;
   width: 24px;
@@ -168,6 +180,10 @@
 @media (max-width: 1023px) {
   .footer-nav--action {
     display: block;
+  }
+
+  .footer-nav--action--content {
+    display: flex;
   }
 }
 

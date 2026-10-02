@@ -29,6 +29,7 @@ type FooterProps =
   | {
       variant: "action";
       buttonLabel: string;
+      buttonWidth?: "full" | "content";
       disabled?: boolean;
       buttonType?: "button" | "submit";
       buttonForm?: string;

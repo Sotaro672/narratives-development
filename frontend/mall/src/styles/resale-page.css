@@ -12,3 +12,9 @@
   font-weight: 700;
   line-height: 1.4;
 }
+
+@media (max-width: 959px) and (orientation: portrait) {
+  .resale-create-page-main--mobile .page-section {
+    padding-top: calc(env(safe-area-inset-top) + 76px);
+  }
+}

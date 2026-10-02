@@ -1,6 +1,8 @@
 // frontend/mall/src/pages/ResaleCreatePage.tsx
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 import Button from "../components/ui/Button";
 
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
@@ -17,6 +19,8 @@ import "../styles/resale-page.css";
 import "../features/shared/styles/product-detail.css";
 
 export default function ResaleCreatePage() {
+  const isMobilePortrait = useMobilePortrait();
+
   const {
     target,
     formattedPrice,
@@ -29,6 +33,7 @@ export default function ResaleCreatePage() {
     hasRequiredListingTarget,
     canSubmit,
     isSubmitting,
+    isUploading,
     errorMessage,
     progress,
     progressOpen,
@@ -45,61 +50,81 @@ export default function ResaleCreatePage() {
     handleSubmit,
   } = useResaleCreatePage();
 
-  return (
-    <>
-      <Layout
-        title="AMOL"
-        mode="mypage"
-        showFooter
-      >
-        <section className="page-section">
-          {!hasRequiredListingTarget ? (
-            <ResaleCreateMissingTarget onBackToWallet={handleBackToWallet} />
-          ) : (
-            <ProductDetailLayout
-              media={
-                <ResaleConditionMediaField
-                  items={conditionMediaItems}
-                  currentIndex={conditionMediaCurrentIndex}
-                  inputRef={conditionMediaInputRef}
-                  carouselRef={conditionMediaCarouselRef}
-                  disabled={isSubmitting}
-                  onFilesSelected={handleConditionMediaSelected}
-                  onRemoveItem={handleRemoveConditionMedia}
-                  onCarouselScroll={handleConditionMediaCarouselScroll}
-                  onMoveToSlide={handleMoveToConditionMediaSlide}
-                />
-              }
-              mediaFooter={
-                <TokenSummaryCard
-                  brandName={target.brandName}
-                  tokenName={target.tokenName}
-                  tokenIcon={target.tokenIconUrl}
-                />
-              }
-            >
-              <ProductIdentity
-                brandName={target.brandName}
-                productName={target.productName}
-                tokenName={target.tokenName}
-              />
+  const showMobileActionFooter =
+    isMobilePortrait && hasRequiredListingTarget;
 
-              <ResaleCreateForm
-                formattedPrice={formattedPrice}
-                condition={condition}
-                description={description}
+  const content = (
+    <Layout
+      title="AMOL"
+      mode="mypage"
+      showHeader={!isMobilePortrait}
+      showFooter={isMobilePortrait ? showMobileActionFooter : true}
+      mainClassName={
+        isMobilePortrait
+          ? "resale-create-page-main--mobile"
+          : undefined
+      }
+      footerProps={
+        showMobileActionFooter
+          ? {
+              variant: "action",
+              buttonLabel: submitButtonLabel,
+              buttonWidth: "content",
+              disabled: !canSubmit || isSubmitting,
+              onButtonClick: handleSubmit,
+            }
+          : undefined
+      }
+    >
+      <section className="page-section">
+        {!hasRequiredListingTarget ? (
+          <ResaleCreateMissingTarget onBackToWallet={handleBackToWallet} />
+        ) : (
+          <ProductDetailLayout
+            media={
+              <ResaleConditionMediaField
+                items={conditionMediaItems}
+                currentIndex={conditionMediaCurrentIndex}
+                inputRef={conditionMediaInputRef}
+                carouselRef={conditionMediaCarouselRef}
                 disabled={isSubmitting}
-                onPriceChange={handlePriceChange}
-                onConditionChange={handleConditionChange}
-                onDescriptionChange={handleDescriptionChange}
+                onFilesSelected={handleConditionMediaSelected}
+                onRemoveItem={handleRemoveConditionMedia}
+                onCarouselScroll={handleConditionMediaCarouselScroll}
+                onMoveToSlide={handleMoveToConditionMediaSlide}
               />
+            }
+            mediaFooter={
+              <TokenSummaryCard
+                brandName={target.brandName}
+                tokenName={target.tokenName}
+                tokenIcon={target.tokenIconUrl}
+              />
+            }
+          >
+            <ProductIdentity
+              brandName={target.brandName}
+              productName={target.productName}
+              tokenName={target.tokenName}
+            />
 
-              {errorMessage ? (
-                <p className="page-error" role="alert">
-                  {errorMessage}
-                </p>
-              ) : null}
+            <ResaleCreateForm
+              formattedPrice={formattedPrice}
+              condition={condition}
+              description={description}
+              disabled={isSubmitting}
+              onPriceChange={handlePriceChange}
+              onConditionChange={handleConditionChange}
+              onDescriptionChange={handleDescriptionChange}
+            />
 
+            {errorMessage ? (
+              <p className="page-error" role="alert">
+                {errorMessage}
+              </p>
+            ) : null}
+
+            {!isMobilePortrait ? (
               <div className="page-actions">
                 <Button
                   type="button"
@@ -112,10 +137,27 @@ export default function ResaleCreatePage() {
                   {submitButtonLabel}
                 </Button>
               </div>
-            </ProductDetailLayout>
-          )}
-        </section>
-      </Layout>
+            ) : null}
+          </ProductDetailLayout>
+        )}
+      </section>
+    </Layout>
+  );
+
+  return (
+    <>
+      {isMobilePortrait ? (
+        <MobileSwipeDismissPage
+          dismissButtonAriaLabel="出品画面を閉じる"
+          dismissGestureEnabled={!isUploading}
+          dismissDisabled={isUploading}
+          onDismiss={handleBackToWallet}
+        >
+          {content}
+        </MobileSwipeDismissPage>
+      ) : (
+        content
+      )}
 
       <ResaleCreateProgressModal
         open={progressOpen}

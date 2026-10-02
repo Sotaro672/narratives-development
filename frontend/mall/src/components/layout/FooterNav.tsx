@@ -29,6 +29,7 @@ type FooterNavProps =
   | {
       variant: "action";
       buttonLabel: string;
+      buttonWidth?: "full" | "content";
       disabled?: boolean;
       buttonType?: "button" | "submit";
       buttonForm?: string;
@@ -63,20 +64,30 @@ export default function FooterNav(props: FooterNavProps) {
   if (props.variant === "action") {
     const {
       buttonLabel,
+      buttonWidth = "full",
       disabled = false,
       buttonType = "button",
       buttonForm,
       onButtonClick,
     } = props;
 
+    const isContentWidth = buttonWidth === "content";
+
     return (
-      <footer className="footer-nav--action">
+      <footer
+        className={[
+          "footer-nav--action",
+          isContentWidth ? "footer-nav--action--content" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         <Button
           type={buttonType}
           form={buttonForm}
           variant="primary"
           size="lg"
-          fullWidth
+          fullWidth={!isContentWidth}
           className="footer-nav__action-button"
           onClick={
             onButtonClick
@@ -114,7 +125,10 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          <ShoppingBag className="footer-nav__svg-icon" strokeWidth={2.2} />
+          <ShoppingBag
+            className="footer-nav__svg-icon"
+            strokeWidth={2.2}
+          />
         </span>
         <span className="footer-nav__label">モール</span>
       </NavLink>
@@ -127,7 +141,10 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          <Store className="footer-nav__svg-icon" strokeWidth={2.2} />
+          <Store
+            className="footer-nav__svg-icon"
+            strokeWidth={2.2}
+          />
         </span>
         <span className="footer-nav__label">マーケット</span>
       </NavLink>
@@ -144,7 +161,10 @@ export default function FooterNav(props: FooterNavProps) {
           aria-label={centerActionLabel}
         >
           <span className="footer-nav__icon" aria-hidden="true">
-            <MessageCircle className="footer-nav__svg-icon" strokeWidth={2.2} />
+            <MessageCircle
+              className="footer-nav__svg-icon"
+              strokeWidth={2.2}
+            />
           </span>
           <span className="footer-nav__label">{centerActionLabel}</span>
         </button>
@@ -157,7 +177,10 @@ export default function FooterNav(props: FooterNavProps) {
           }
         >
           <span className="footer-nav__icon" aria-hidden="true">
-            <ScanLine className="footer-nav__svg-icon" strokeWidth={2.2} />
+            <ScanLine
+              className="footer-nav__svg-icon"
+              strokeWidth={2.2}
+            />
           </span>
           <span className="footer-nav__label">スキャン</span>
         </NavLink>
@@ -171,7 +194,10 @@ export default function FooterNav(props: FooterNavProps) {
         }
       >
         <span className="footer-nav__icon" aria-hidden="true">
-          <Heart className="footer-nav__svg-icon" strokeWidth={2.2} />
+          <Heart
+            className="footer-nav__svg-icon"
+            strokeWidth={2.2}
+          />
         </span>
         <span className="footer-nav__label">お気に入り</span>
       </NavLink>
@@ -185,9 +211,16 @@ export default function FooterNav(props: FooterNavProps) {
       >
         <span className="footer-nav__icon" aria-hidden="true">
           {avatarIcon ? (
-            <img src={avatarIcon} alt="" className="footer-nav__avatar-icon" />
+            <img
+              src={avatarIcon}
+              alt=""
+              className="footer-nav__avatar-icon"
+            />
           ) : (
-            <UserRound className="footer-nav__svg-icon" strokeWidth={2.2} />
+            <UserRound
+              className="footer-nav__svg-icon"
+              strokeWidth={2.2}
+            />
           )}
         </span>
         <span className="footer-nav__label">ウォレット</span>

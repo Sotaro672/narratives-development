@@ -21,6 +21,7 @@ type MobileSwipeDismissPageProps = {
   children: ReactNode;
   enabled?: boolean;
   dismissGestureEnabled?: boolean;
+  dismissDisabled?: boolean;
   className?: string;
   dismissButtonAriaLabel?: string;
   onDismissStart?: () => void;
@@ -66,21 +67,14 @@ function isScrollableElement(element: HTMLElement): boolean {
   const style = window.getComputedStyle(element);
   const overflowY = style.overflowY;
 
-  if (
-    overflowY !== "auto" &&
-    overflowY !== "scroll" &&
-    overflowY !== "overlay"
-  ) {
+  if (overflowY !== "auto" && overflowY !== "scroll" && overflowY !== "overlay") {
     return false;
   }
 
   return element.scrollHeight > element.clientHeight + 1;
 }
 
-function hasScrolledAncestor(
-  target: EventTarget | null,
-  boundary: HTMLElement,
-): boolean {
+function hasScrolledAncestor(target: EventTarget | null, boundary: HTMLElement): boolean {
   let element = target instanceof HTMLElement ? target : null;
 
   while (element && element !== boundary) {
@@ -99,9 +93,7 @@ function shouldIgnoreGesture(target: EventTarget | null): boolean {
     return false;
   }
 
-  return Boolean(
-    target.closest('[data-mobile-swipe-dismiss-ignore="true"]'),
-  );
+  return Boolean(target.closest('[data-mobile-swipe-dismiss-ignore="true"]'));
 }
 
 const MobileSwipeDismissPage = forwardRef<
@@ -112,6 +104,7 @@ const MobileSwipeDismissPage = forwardRef<
     children,
     enabled = true,
     dismissGestureEnabled = true,
+    dismissDisabled = false,
     className,
     dismissButtonAriaLabel = "閉じる",
     onDismissStart,
@@ -184,12 +177,10 @@ const MobileSwipeDismissPage = forwardRef<
     }
 
     clearAnimationTimer();
-
     gestureRef.current.active = false;
     gestureRef.current.dragging = false;
 
-    const dismissDistance =
-      Math.max(page.clientHeight, window.innerHeight) + 32;
+    const dismissDistance = Math.max(page.clientHeight, window.innerHeight) + 32;
 
     setPhase("dismissing");
     setTranslateY(dismissDistance);
@@ -201,13 +192,13 @@ const MobileSwipeDismissPage = forwardRef<
   }, [clearAnimationTimer, finishDismiss]);
 
   const requestDismiss = useCallback(() => {
-    if (!enabled || phase === "dismissing") {
+    if (!enabled || dismissDisabled || phase === "dismissing") {
       return;
     }
 
     notifyDismissStart();
     dismissPage();
-  }, [dismissPage, enabled, notifyDismissStart, phase]);
+  }, [dismissDisabled, dismissPage, enabled, notifyDismissStart, phase]);
 
   useImperativeHandle(
     ref,
@@ -232,7 +223,7 @@ const MobileSwipeDismissPage = forwardRef<
   }, [clearAnimationTimer, enabled, resetGesture]);
 
   useEffect(() => {
-    if (!enabled || dismissGestureEnabled) {
+    if (!enabled || (dismissGestureEnabled && !dismissDisabled)) {
       return;
     }
 
@@ -243,6 +234,7 @@ const MobileSwipeDismissPage = forwardRef<
     setPhase("idle");
   }, [
     clearAnimationTimer,
+    dismissDisabled,
     dismissGestureEnabled,
     enabled,
     resetGesture,
@@ -254,23 +246,21 @@ const MobileSwipeDismissPage = forwardRef<
     }
 
     const previousOverflow = document.body.style.overflow;
-    const previousOverscrollBehavior =
-      document.body.style.overscrollBehavior;
+    const previousOverscrollBehavior = document.body.style.overscrollBehavior;
 
     document.body.style.overflow = "hidden";
     document.body.style.overscrollBehavior = "none";
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      document.body.style.overscrollBehavior =
-        previousOverscrollBehavior;
+      document.body.style.overscrollBehavior = previousOverscrollBehavior;
     };
   }, [enabled]);
 
   useEffect(() => {
     const page = pageRef.current;
 
-    if (!page || !enabled || !dismissGestureEnabled) {
+    if (!page || !enabled || !dismissGestureEnabled || dismissDisabled) {
       return;
     }
 
@@ -314,11 +304,7 @@ const MobileSwipeDismissPage = forwardRef<
     const handleTouchMove = (event: TouchEvent) => {
       const gesture = gestureRef.current;
 
-      if (
-        !gesture.active ||
-        gesture.blocked ||
-        event.touches.length !== 1
-      ) {
+      if (!gesture.active || gesture.blocked || event.touches.length !== 1) {
         return;
       }
 
@@ -339,8 +325,7 @@ const MobileSwipeDismissPage = forwardRef<
         }
 
         const isDownward = deltaY > 0;
-        const isVertical =
-          Math.abs(deltaY) > Math.abs(deltaX);
+        const isVertical = Math.abs(deltaY) > Math.abs(deltaX);
 
         if (!isDownward || !isVertical) {
           gesture.blocked = true;
@@ -354,7 +339,6 @@ const MobileSwipeDismissPage = forwardRef<
 
         gesture.dragging = true;
         suppressClickRef.current = true;
-
         notifyDismissStart();
         setPhase("dragging");
       }
@@ -366,23 +350,14 @@ const MobileSwipeDismissPage = forwardRef<
       event.preventDefault();
 
       const now = performance.now();
-      const elapsed = Math.max(
-        1,
-        now - gesture.lastTime,
-      );
-      const movement =
-        touch.clientY - gesture.lastY;
+      const elapsed = Math.max(1, now - gesture.lastTime);
+      const movement = touch.clientY - gesture.lastY;
 
       gesture.velocityY = movement / elapsed;
       gesture.lastY = touch.clientY;
       gesture.lastTime = now;
 
-      setTranslateY(
-        Math.max(
-          0,
-          deltaY,
-        ),
-      );
+      setTranslateY(Math.max(0, deltaY));
     };
 
     const handleTouchEnd = (event: TouchEvent) => {
@@ -394,22 +369,11 @@ const MobileSwipeDismissPage = forwardRef<
       }
 
       const touch = event.changedTouches[0];
-      const endY =
-        touch?.clientY ?? gesture.lastY;
-      const distance = Math.max(
-        0,
-        endY - gesture.startY,
-      );
-      const totalElapsed = Math.max(
-        1,
-        performance.now() - gesture.startTime,
-      );
-      const averageVelocity =
-        distance / totalElapsed;
-      const velocity = Math.max(
-        gesture.velocityY,
-        averageVelocity,
-      );
+      const endY = touch?.clientY ?? gesture.lastY;
+      const distance = Math.max(0, endY - gesture.startY);
+      const totalElapsed = Math.max(1, performance.now() - gesture.startTime);
+      const averageVelocity = distance / totalElapsed;
+      const velocity = Math.max(gesture.velocityY, averageVelocity);
 
       const shouldDismiss =
         distance >= DISMISS_DISTANCE ||
@@ -440,60 +404,19 @@ const MobileSwipeDismissPage = forwardRef<
       resetGesture();
     };
 
-    page.addEventListener(
-      "touchstart",
-      handleTouchStart,
-      {
-        passive: true,
-      },
-    );
-
-    page.addEventListener(
-      "touchmove",
-      handleTouchMove,
-      {
-        passive: false,
-      },
-    );
-
-    page.addEventListener(
-      "touchend",
-      handleTouchEnd,
-      {
-        passive: true,
-      },
-    );
-
-    page.addEventListener(
-      "touchcancel",
-      handleTouchCancel,
-      {
-        passive: true,
-      },
-    );
+    page.addEventListener("touchstart", handleTouchStart, { passive: true });
+    page.addEventListener("touchmove", handleTouchMove, { passive: false });
+    page.addEventListener("touchend", handleTouchEnd, { passive: true });
+    page.addEventListener("touchcancel", handleTouchCancel, { passive: true });
 
     return () => {
-      page.removeEventListener(
-        "touchstart",
-        handleTouchStart,
-      );
-
-      page.removeEventListener(
-        "touchmove",
-        handleTouchMove,
-      );
-
-      page.removeEventListener(
-        "touchend",
-        handleTouchEnd,
-      );
-
-      page.removeEventListener(
-        "touchcancel",
-        handleTouchCancel,
-      );
+      page.removeEventListener("touchstart", handleTouchStart);
+      page.removeEventListener("touchmove", handleTouchMove);
+      page.removeEventListener("touchend", handleTouchEnd);
+      page.removeEventListener("touchcancel", handleTouchCancel);
     };
   }, [
+    dismissDisabled,
     dismissGestureEnabled,
     dismissPage,
     enabled,
@@ -509,9 +432,7 @@ const MobileSwipeDismissPage = forwardRef<
     };
   }, [clearAnimationTimer]);
 
-  const handleClickCapture = (
-    event: ReactMouseEvent<HTMLDivElement>,
-  ) => {
+  const handleClickCapture = (event: ReactMouseEvent<HTMLDivElement>) => {
     if (!suppressClickRef.current) {
       return;
     }
@@ -521,31 +442,20 @@ const MobileSwipeDismissPage = forwardRef<
     suppressClickRef.current = false;
   };
 
-  const shouldTransform =
-    enabled &&
-    phase !== "idle";
+  const shouldTransform = enabled && phase !== "idle";
 
-  const style: CSSProperties | undefined =
-    shouldTransform
-      ? {
-          transform: `translate3d(0, ${translateY}px, 0)`,
-        }
-      : undefined;
+  const style: CSSProperties | undefined = shouldTransform
+    ? {
+        transform: `translate3d(0, ${translateY}px, 0)`,
+      }
+    : undefined;
 
   const rootClassName = [
     "mobile-swipe-dismiss-page",
-    enabled
-      ? "mobile-swipe-dismiss-page--enabled"
-      : "",
-    phase === "dragging"
-      ? "mobile-swipe-dismiss-page--dragging"
-      : "",
-    phase === "returning"
-      ? "mobile-swipe-dismiss-page--returning"
-      : "",
-    phase === "dismissing"
-      ? "mobile-swipe-dismiss-page--dismissing"
-      : "",
+    enabled ? "mobile-swipe-dismiss-page--enabled" : "",
+    phase === "dragging" ? "mobile-swipe-dismiss-page--dragging" : "",
+    phase === "returning" ? "mobile-swipe-dismiss-page--returning" : "",
+    phase === "dismissing" ? "mobile-swipe-dismiss-page--dismissing" : "",
     className ?? "",
   ]
     .filter(Boolean)
@@ -558,11 +468,8 @@ const MobileSwipeDismissPage = forwardRef<
       style={style}
       onClickCapture={handleClickCapture}
       data-swipe-dismiss-phase={phase}
-      data-swipe-dismiss-gesture-enabled={
-        dismissGestureEnabled
-          ? "true"
-          : "false"
-      }
+      data-swipe-dismiss-gesture-enabled={dismissGestureEnabled ? "true" : "false"}
+      data-swipe-dismiss-disabled={dismissDisabled ? "true" : "false"}
     >
       {enabled ? (
         <div
@@ -574,13 +481,10 @@ const MobileSwipeDismissPage = forwardRef<
             variant="floating"
             size="md"
             aria-label={dismissButtonAriaLabel}
+            disabled={dismissDisabled}
             onClick={requestDismiss}
           >
-            <X
-              size={24}
-              strokeWidth={2.25}
-              aria-hidden="true"
-            />
+            <X size={24} strokeWidth={2.25} aria-hidden="true" />
           </IconButton>
         </div>
       ) : null}
