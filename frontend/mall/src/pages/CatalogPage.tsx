@@ -1,15 +1,11 @@
 // frontend/mall/src/pages/CatalogPage.tsx
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import Layout from "../components/layout/Layout";
-import MobileSwipeDismissPage, {
-  type MobileSwipeDismissPageHandle,
-} from "../components/layout/MobileSwipeDismissPage";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 import Button from "../components/ui/Button";
-import IconButton from "../components/ui/IconButton";
 import { formatPrice } from "../components/utils/price";
 
 import { getMyAvatar } from "../features/avatar/api/avatarApi";
@@ -39,7 +35,6 @@ export default function CatalogPage() {
   const location = useLocation();
   const { authResolved, isLoggedIn } = useAuthState();
   const [currentAvatarId, setCurrentAvatarId] = useState("");
-  const swipeDismissRef = useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const {
     catalog,
@@ -112,10 +107,16 @@ export default function CatalogPage() {
 
       try {
         const avatar = await getMyAvatar();
-        if (cancelled) return;
+
+        if (cancelled) {
+          return;
+        }
+
         setCurrentAvatarId(avatar?.avatarId?.trim() ?? "");
       } catch {
-        if (!cancelled) setCurrentAvatarId("");
+        if (!cancelled) {
+          setCurrentAvatarId("");
+        }
       }
     }
 
@@ -140,7 +141,9 @@ export default function CatalogPage() {
     (canAddToCart || isAddingToCart);
 
   const handleOpenListReport = () => {
-    if (!canReportList) return;
+    if (!canReportList) {
+      return;
+    }
 
     openListReport({
       listId: normalizedListId,
@@ -151,7 +154,9 @@ export default function CatalogPage() {
     const normalizedAvatarId = avatarId.trim();
     const normalizedCurrentAvatarId = currentAvatarId.trim();
 
-    if (!normalizedAvatarId) return;
+    if (!normalizedAvatarId) {
+      return;
+    }
 
     if (
       normalizedCurrentAvatarId &&
@@ -172,10 +177,6 @@ export default function CatalogPage() {
     navigate(destination, {
       replace: true,
     });
-  };
-
-  const handleDismissButtonClick = () => {
-    swipeDismissRef.current?.dismiss();
   };
 
   const content = (
@@ -206,27 +207,6 @@ export default function CatalogPage() {
           : undefined
       }
     >
-      {isMobilePortrait ? (
-        <div
-          className="catalog-page__dismiss-control"
-          data-mobile-swipe-dismiss-ignore="true"
-        >
-          <IconButton
-            type="button"
-            variant="floating"
-            size="md"
-            aria-label="商品詳細を閉じる"
-            onClick={handleDismissButtonClick}
-          >
-            <ChevronDown
-              size={24}
-              strokeWidth={2.25}
-              aria-hidden="true"
-            />
-          </IconButton>
-        </div>
-      ) : null}
-
       <section
         className={[
           "product-detail-page-layout",
@@ -407,7 +387,7 @@ export default function CatalogPage() {
 
   return (
     <MobileSwipeDismissPage
-      ref={swipeDismissRef}
+      dismissButtonAriaLabel="商品詳細を閉じる"
       onDismiss={handleDismiss}
     >
       {content}

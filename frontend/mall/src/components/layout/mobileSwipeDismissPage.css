@@ -1,4 +1,4 @@
-/* frontend/mall/src/components/layout/mobile-swipe-dismiss-page.css */
+/* frontend/mall/src/components/layout/mobileSwipeDismissPage.css */
 
 .mobile-swipe-dismiss-page {
   width: 100%;
@@ -16,6 +16,17 @@
   background: #fff;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
+}
+
+.mobile-swipe-dismiss-page__dismiss-control {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 12px);
+  right: 12px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: auto;
 }
 
 .mobile-swipe-dismiss-page--dragging,
@@ -68,6 +79,7 @@
     -webkit-overflow-scrolling: auto;
   }
 
+  .mobile-swipe-dismiss-page__dismiss-control,
   .mobile-swipe-dismiss-page--enabled::before {
     display: none;
   }

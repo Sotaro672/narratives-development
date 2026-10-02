@@ -143,6 +143,12 @@
   margin-top: 20px;
 }
 
+@media (max-width: 959px) {
+  .avatar-review-page--with-dismiss-control {
+    padding-top: calc(env(safe-area-inset-top) + 66px);
+  }
+}
+
 @media (max-width: 640px) {
   .avatar-review-page__header {
     margin-bottom: 20px;

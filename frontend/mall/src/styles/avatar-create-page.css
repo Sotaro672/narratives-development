@@ -193,6 +193,26 @@
   margin-top: 4px;
 }
 
+@media (max-width: 959px) {
+  .avatar-create-page-main--mobile-edit .avatar-create-page-section {
+    padding-top: calc(env(safe-area-inset-top) + 66px);
+  }
+
+  .avatar-create-page-main--mobile-edit + .footer-nav--action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .avatar-create-page-main--mobile-edit + .footer-nav--action .footer-nav__action-button {
+    width: auto;
+    min-width: max-content;
+    max-width: none;
+    margin: 0;
+    padding-inline: 24px;
+  }
+}
+
 @media (max-width: 420px) {
   .avatar-create-page-section {
     padding-inline: 16px;

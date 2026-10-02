@@ -7,13 +7,6 @@
   padding-bottom: 24px;
 }
 
-.resale-detail-page__dismiss-control {
-  position: fixed;
-  top: calc(env(safe-area-inset-top) + 12px);
-  left: 12px;
-  z-index: 50;
-}
-
 .resale-detail-page__listing-meta {
   margin-top: 0;
 }
@@ -49,12 +42,6 @@
 
   .resale-detail-page--with-dismiss-control {
     padding-top: calc(env(safe-area-inset-top) + 66px);
-  }
-}
-
-@media (min-width: 960px) {
-  .resale-detail-page__dismiss-control {
-    display: none;
   }
 }
 

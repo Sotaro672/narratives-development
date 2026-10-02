@@ -1,17 +1,13 @@
 // frontend/mall/src/pages/ScanResultPage.tsx
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
 import MobileComposerFooter from "../components/layout/MobileComposerFooter";
-import MobileSwipeDismissPage, {
-  type MobileSwipeDismissPageHandle,
-} from "../components/layout/MobileSwipeDismissPage";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 import Button from "../components/ui/Button";
-import IconButton from "../components/ui/IconButton";
 import RatingSelect from "../components/ui/RatingSelect";
 
 import ScanResultCard from "../features/scan-result/presentation/components/ScanResultCard";
@@ -26,7 +22,6 @@ export default function ScanResultPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const isMobilePortrait = useMobilePortrait();
-  const swipeDismissRef = useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const [reviewBody, setReviewBody] = useState("");
   const [reviewRating, setReviewRating] = useState(5);
@@ -161,10 +156,6 @@ export default function ScanResultPage() {
     });
   }, [navigate]);
 
-  const handleDismissButtonClick = useCallback(() => {
-    swipeDismissRef.current?.dismiss();
-  }, []);
-
   const isResalePurchase =
     state.transferResult?.matchedItemType === "resale" ||
     hasMultipleTransfers;
@@ -191,36 +182,20 @@ export default function ScanResultPage() {
         }
         disableFooterPaddingOnDesktop
       >
-        {isWalletOverlay ? (
+        {isWalletOverlay && canOpenInquiryPage ? (
           <div
             className="scan-result-page__dismiss-control"
             data-mobile-swipe-dismiss-ignore="true"
           >
-            <IconButton
+            <Button
               type="button"
-              variant="floating"
+              variant="secondary"
               size="md"
-              aria-label="スキャン結果を閉じる"
-              onClick={handleDismissButtonClick}
+              className="scan-result-page__inquiry-button"
+              onClick={handleOpenInquiryPage}
             >
-              <ChevronDown
-                size={24}
-                strokeWidth={2.25}
-                aria-hidden="true"
-              />
-            </IconButton>
-
-            {canOpenInquiryPage ? (
-              <Button
-                type="button"
-                variant="secondary"
-                size="md"
-                className="scan-result-page__inquiry-button"
-                onClick={handleOpenInquiryPage}
-              >
-                お問い合わせ
-              </Button>
-            ) : null}
+              お問い合わせ
+            </Button>
           </div>
         ) : null}
 
@@ -315,8 +290,8 @@ export default function ScanResultPage() {
 
   return (
     <MobileSwipeDismissPage
-      ref={swipeDismissRef}
       enabled={swipeDismissEnabled}
+      dismissButtonAriaLabel="スキャン結果を閉じる"
       onDismiss={handleDismiss}
     >
       {content}

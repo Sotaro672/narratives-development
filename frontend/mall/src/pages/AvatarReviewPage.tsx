@@ -1,9 +1,11 @@
 // frontend/mall/src/pages/AvatarReviewPage.tsx
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 import Card from "../components/ui/Card";
 import MediaIcon from "../components/ui/MediaIcon";
 import Pagination from "../components/ui/Pagination";
@@ -39,6 +41,8 @@ function formatCreatedAt(value: string): string {
 }
 
 export default function AvatarReviewPage() {
+  const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
   const { avatarId = "" } = useParams<{ avatarId: string }>();
 
   const [avatarName, setAvatarName] = useState("");
@@ -95,6 +99,10 @@ export default function AvatarReviewPage() {
     void load(1);
   }, [load]);
 
+  const handleDismiss = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
   const handleFilterChange = (evaluation: AvatarReviewEvaluation) => {
     const nextEvaluation =
       evaluationFilter === evaluation ? null : evaluation;
@@ -113,9 +121,24 @@ export default function AvatarReviewPage() {
         ? "残念だった評価はまだありません。"
         : "まだ評価はありません。";
 
-  return (
-    <Layout title="AMOL" mode="mypage">
-      <section className="content-page-section avatar-review-page">
+  const content = (
+    <Layout
+      title="AMOL"
+      mode="mypage"
+      showHeader={!isMobilePortrait}
+      showFooter={!isMobilePortrait}
+    >
+      <section
+        className={[
+          "content-page-section",
+          "avatar-review-page",
+          isMobilePortrait
+            ? "avatar-review-page--with-dismiss-control"
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
         {loading ? (
           <TextState variant="loading" className="avatar-review-page__message">
             読み込み中です...
@@ -175,7 +198,8 @@ export default function AvatarReviewPage() {
             ) : (
               <div className="avatar-review-page__list">
                 {result.items.map((review) => {
-                  const reviewerName = review.reviewerAvatarName.trim() || "アバター";
+                  const reviewerName =
+                    review.reviewerAvatarName.trim() || "アバター";
 
                   return (
                     <Card
@@ -231,5 +255,18 @@ export default function AvatarReviewPage() {
         ) : null}
       </section>
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeDismissPage
+      dismissButtonAriaLabel="アバター評価を閉じる"
+      onDismiss={handleDismiss}
+    >
+      {content}
+    </MobileSwipeDismissPage>
   );
 }

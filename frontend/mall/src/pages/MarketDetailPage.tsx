@@ -147,7 +147,10 @@ export default function MarketDetailPage() {
   }
 
   return (
-    <MobileSwipeDismissPage onDismiss={handleDismiss}>
+    <MobileSwipeDismissPage
+      dismissButtonAriaLabel="商品詳細を閉じる"
+      onDismiss={handleDismiss}
+    >
       {content}
     </MobileSwipeDismissPage>
   );

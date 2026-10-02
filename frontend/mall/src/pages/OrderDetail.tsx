@@ -1,16 +1,11 @@
 // frontend/mall/src/pages/OrderDetail.tsx
 
-import { useRef } from "react";
-import { ChevronDown } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
-import MobileSwipeDismissPage, {
-  type MobileSwipeDismissPageHandle,
-} from "../components/layout/MobileSwipeDismissPage";
+import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 import Badge from "../components/ui/Badge";
-import IconButton from "../components/ui/IconButton";
 import SectionHeader from "../components/ui/SectionHeader";
 
 import OrderDetailItemList from "../features/order/components/OrderDetailItemList";
@@ -26,7 +21,6 @@ import "../styles/order-detail-page.css";
 export default function OrderDetail() {
   const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
-  const swipeDismissRef = useRef<MobileSwipeDismissPageHandle | null>(null);
 
   const {
     order,
@@ -76,10 +70,6 @@ export default function OrderDetail() {
     });
   };
 
-  const handleDismissButtonClick = () => {
-    swipeDismissRef.current?.dismiss();
-  };
-
   const showError = !loading && !order && Boolean(error);
   const showDetail = !loading && Boolean(order);
 
@@ -90,34 +80,18 @@ export default function OrderDetail() {
       showHeader={!isMobilePortrait}
       showFooter={!isMobilePortrait}
     >
-      {isMobilePortrait ? (
+      {isMobilePortrait && order ? (
         <div
           className="order-detail-page__dismiss-control"
           data-mobile-swipe-dismiss-ignore="true"
         >
-          <IconButton
-            type="button"
-            variant="floating"
+          <Badge
+            variant="neutral"
             size="md"
-            aria-label="注文詳細を閉じる"
-            onClick={handleDismissButtonClick}
+            className="order-detail-page__dismiss-status"
           >
-            <ChevronDown
-              size={24}
-              strokeWidth={2.25}
-              aria-hidden="true"
-            />
-          </IconButton>
-
-          {order ? (
-            <Badge
-              variant="neutral"
-              size="md"
-              className="order-detail-page__dismiss-status"
-            >
-              {getOrderStatusLabel(order)}
-            </Badge>
-          ) : null}
+            {getOrderStatusLabel(order)}
+          </Badge>
         </div>
       ) : null}
 
@@ -201,7 +175,7 @@ export default function OrderDetail() {
 
   return (
     <MobileSwipeDismissPage
-      ref={swipeDismissRef}
+      dismissButtonAriaLabel="注文詳細を閉じる"
       onDismiss={handleDismiss}
     >
       {content}
