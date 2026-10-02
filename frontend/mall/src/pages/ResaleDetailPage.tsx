@@ -50,6 +50,9 @@ export default function ResaleDetailPage() {
 
   const showLoadError = !loading && !item && Boolean(errorMessage);
   const showDetail = !loading && Boolean(item);
+  const showMobileActionFooter =
+    isMobilePortrait &&
+    Boolean(footerProps);
 
   function handleOpenResaleChat() {
     const resaleId = item?.id?.trim() ?? "";
@@ -74,6 +77,16 @@ export default function ResaleDetailPage() {
       },
     });
   };
+
+  const mobileFooterProps =
+    isMobilePortrait && footerProps
+      ? footerProps.variant === "action"
+        ? {
+            ...footerProps,
+            buttonWidth: "content" as const,
+          }
+        : footerProps
+      : undefined;
 
   const pageActions =
     footerProps?.variant === "action" ? (
@@ -124,7 +137,12 @@ export default function ResaleDetailPage() {
       title="AMOL"
       mode="mypage"
       showHeader={!isMobilePortrait}
-      showFooter={!isMobilePortrait}
+      showFooter={
+        isMobilePortrait
+          ? showMobileActionFooter
+          : true
+      }
+      footerProps={mobileFooterProps}
     >
       <div
         className={[
@@ -244,7 +262,7 @@ export default function ResaleDetailPage() {
                   />
                 ) : null}
 
-                {pageActions}
+                {!isMobilePortrait ? pageActions : null}
               </>
             }
           >

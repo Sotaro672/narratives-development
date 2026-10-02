@@ -34,13 +34,30 @@ type FooterNavProps =
       buttonType?: "button" | "submit";
       buttonForm?: string;
       onButtonClick?: () => void | Promise<void>;
+    }
+  | {
+      variant: "tripleAction";
+      leftButtonLabel: string;
+      centerButtonLabel: string;
+      rightButtonLabel: string;
+      leftButtonDisabled?: boolean;
+      centerButtonDisabled?: boolean;
+      rightButtonDisabled?: boolean;
+      onLeftButtonClick: () => void | Promise<void>;
+      onCenterButtonClick: () => void | Promise<void>;
+      onRightButtonClick: () => void | Promise<void>;
     };
 
 export default function FooterNav(props: FooterNavProps) {
   const [avatarIcon, setAvatarIcon] = useState("");
 
   useEffect(() => {
-    if (props.variant === "action") return;
+    if (
+      props.variant === "action" ||
+      props.variant === "tripleAction"
+    ) {
+      return;
+    }
 
     const auth = getAuth();
 
@@ -103,9 +120,64 @@ export default function FooterNav(props: FooterNavProps) {
     );
   }
 
+  if (props.variant === "tripleAction") {
+    const {
+      leftButtonLabel,
+      centerButtonLabel,
+      rightButtonLabel,
+      leftButtonDisabled = false,
+      centerButtonDisabled = false,
+      rightButtonDisabled = false,
+      onLeftButtonClick,
+      onCenterButtonClick,
+      onRightButtonClick,
+    } = props;
+
+    return (
+      <footer className="footer-nav--action footer-nav--triple-action">
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          className="footer-nav__triple-action-button"
+          disabled={leftButtonDisabled}
+          aria-label={leftButtonLabel}
+          onClick={() => void onLeftButtonClick()}
+        >
+          {leftButtonLabel}
+        </Button>
+
+        <Button
+          type="button"
+          variant="primary"
+          size="lg"
+          className="footer-nav__triple-action-button"
+          disabled={centerButtonDisabled}
+          aria-label={centerButtonLabel}
+          onClick={() => void onCenterButtonClick()}
+        >
+          {centerButtonLabel}
+        </Button>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="lg"
+          className="footer-nav__triple-action-button footer-nav__delete-button"
+          disabled={rightButtonDisabled}
+          aria-label={rightButtonLabel}
+          onClick={() => void onRightButtonClick()}
+        >
+          {rightButtonLabel}
+        </Button>
+      </footer>
+    );
+  }
+
   const renderMode = props.renderMode ?? "bottom";
   const onNavigate = props.onNavigate;
   const centerActionLabel = props.centerActionLabel?.trim() ?? "";
+
   const hasCenterAction =
     centerActionLabel !== "" &&
     typeof props.onCenterActionClick === "function";

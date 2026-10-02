@@ -34,6 +34,18 @@ type FooterProps =
       buttonType?: "button" | "submit";
       buttonForm?: string;
       onButtonClick?: () => void | Promise<void>;
+    }
+  | {
+      variant: "tripleAction";
+      leftButtonLabel: string;
+      centerButtonLabel: string;
+      rightButtonLabel: string;
+      leftButtonDisabled?: boolean;
+      centerButtonDisabled?: boolean;
+      rightButtonDisabled?: boolean;
+      onLeftButtonClick: () => void | Promise<void>;
+      onCenterButtonClick: () => void | Promise<void>;
+      onRightButtonClick: () => void | Promise<void>;
     };
 
 type LayoutProps = {
@@ -122,7 +134,10 @@ export default function Layout({
 
   const isActionFooter =
     shouldShowFooter &&
-    footerProps?.variant === "action";
+    (
+      footerProps?.variant === "action" ||
+      footerProps?.variant === "tripleAction"
+    );
 
   return (
     <div className="layout-shell">
