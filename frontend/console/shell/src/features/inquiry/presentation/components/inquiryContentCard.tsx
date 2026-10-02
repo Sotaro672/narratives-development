@@ -161,7 +161,7 @@ export default function InquiryContentCard({
                     size="sm"
                     wrap="pre-wrap-anywhere"
                   >
-                    商品代金（税込）の返金上限:{" "}
+                    商品代金（税込）:{" "}
                     {formatCurrency(merchandiseRefundMaxAmount)}
                   </Text>
 
@@ -192,14 +192,7 @@ export default function InquiryContentCard({
                       size="sm"
                       weight="medium"
                     >
-                      購入時の配送料も返金する
-                    </Text>
-
-                    <Text
-                      size="sm"
-                      wrap="pre-wrap-anywhere"
-                    >
-                      購入者が支払った往路の配送料とその消費税を、Stripe返金額に含めます。
+                      往路
                     </Text>
                   </Stack>
                 </label>
@@ -222,14 +215,7 @@ export default function InquiryContentCard({
                       size="sm"
                       weight="medium"
                     >
-                      返品時の配送料をブランド側が負担する
-                    </Text>
-
-                    <Text
-                      size="sm"
-                      wrap="pre-wrap-anywhere"
-                    >
-                      復路の配送料をブランド側の負担として計上します。購入者のStripe返金額には加算されません。
+                      復路
                     </Text>
                   </Stack>
                 </label>
