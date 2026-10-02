@@ -1,6 +1,10 @@
 // frontend/console/shell/src/features/print/utils/qrPdfBuilder.ts
 
-import { PDFDocument } from "pdf-lib";
+import {
+  PDFDocument,
+  type PDFImage,
+  type PDFPage,
+} from "pdf-lib";
 import { generateQrPngDataUrl } from "./qrImageConverter";
 
 /**
@@ -13,6 +17,23 @@ export type QrPdfItem = {
   label?: string;
 };
 
+export type QrPdfProgress =
+  | {
+      stage: "generating";
+      completed: number;
+      total: number;
+    }
+  | {
+      stage: "saving";
+      completed: number;
+      total: number;
+    }
+  | {
+      stage: "completed";
+      completed: number;
+      total: number;
+    };
+
 /**
  * PDF 生成時のオプション
  */
@@ -23,7 +44,34 @@ export type QrPdfOptions = {
   cols?: number;
   /** 1 セルの高さ（pt） */
   cellHeight?: number;
+  /** QR / PDF 生成進捗 */
+  onProgress?: (progress: QrPdfProgress) => void;
 };
+
+type LabelImage = {
+  image: PDFImage;
+  width: number;
+  height: number;
+};
+
+const A4_WIDTH = 595.28;
+const A4_HEIGHT = 841.89;
+
+function dataUrlToUint8Array(
+  dataUrl: string,
+  errorMessage: string,
+): Uint8Array {
+  const base64 = dataUrl.split(",")[1] ?? "";
+
+  if (!base64) {
+    throw new Error(errorMessage);
+  }
+
+  return Uint8Array.from(
+    atob(base64),
+    (c) => c.charCodeAt(0),
+  );
+}
 
 /**
  * 日本語を含むラベル文字列を PNG DataURL に変換する。
@@ -93,6 +141,37 @@ function generateLabelPngDataUrl(
   };
 }
 
+async function getOrCreateLabelImage(
+  pdfDoc: PDFDocument,
+  cache: Map<string, LabelImage>,
+  label: string,
+): Promise<LabelImage> {
+  const cached = cache.get(label);
+
+  if (cached) {
+    return cached;
+  }
+
+  const generated = generateLabelPngDataUrl(label);
+
+  const labelBytes = dataUrlToUint8Array(
+    generated.dataUrl,
+    "Failed to generate PDF label PNG data",
+  );
+
+  const image = await pdfDoc.embedPng(labelBytes);
+
+  const result: LabelImage = {
+    image,
+    width: generated.width,
+    height: generated.height,
+  };
+
+  cache.set(label, result);
+
+  return result;
+}
+
 /**
  * QR 一覧を A4 縦で並べた PDF を生成し、Blob を返す。
  *
@@ -104,46 +183,74 @@ export async function buildQrPdfBlobA4(
   items: QrPdfItem[],
   options?: QrPdfOptions,
 ): Promise<Blob> {
-  const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([595.28, 841.89]);
+  if (items.length === 0) {
+    throw new Error("QR PDF items are empty");
+  }
 
-  const cols = options?.cols ?? 4;
-  const marginX = 36;
-  const marginY = 36;
-  const cellWidth = (page.getWidth() - marginX * 2) / cols;
+  const cols = Math.max(
+    1,
+    Math.floor(options?.cols ?? 4),
+  );
+
   const cellHeight = options?.cellHeight ?? 140;
 
-  let xIndex = 0;
-  let yOffset = page.getHeight() - marginY - cellHeight;
+  if (!Number.isFinite(cellHeight) || cellHeight <= 0) {
+    throw new Error("Invalid QR PDF cell height");
+  }
 
-  for (const item of items) {
+  const pdfDoc = await PDFDocument.create();
+
+  let currentPage: PDFPage = pdfDoc.addPage([
+    A4_WIDTH,
+    A4_HEIGHT,
+  ]);
+
+  const marginX = 36;
+  const marginY = 36;
+  const cellWidth = (A4_WIDTH - marginX * 2) / cols;
+
+  let xIndex = 0;
+  let yOffset = A4_HEIGHT - marginY - cellHeight;
+
+  const labelImageCache = new Map<string, LabelImage>();
+  const total = items.length;
+
+  options?.onProgress?.({
+    stage: "generating",
+    completed: 0,
+    total,
+  });
+
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+
     if (xIndex >= cols) {
       xIndex = 0;
       yOffset -= cellHeight;
 
       if (yOffset < marginY) {
-        const newPage = pdfDoc.addPage([595.28, 841.89]);
-        yOffset = newPage.getHeight() - marginY - cellHeight;
+        currentPage = pdfDoc.addPage([
+          A4_WIDTH,
+          A4_HEIGHT,
+        ]);
+
+        yOffset = A4_HEIGHT - marginY - cellHeight;
       }
     }
 
-    const currentPage = pdfDoc.getPages()[pdfDoc.getPageCount() - 1];
     const x = marginX + cellWidth * xIndex;
 
-    const dataUrl = await generateQrPngDataUrl(item.payload, {
-      size: 256,
-      margin: 1,
-    });
+    const dataUrl = await generateQrPngDataUrl(
+      item.payload,
+      {
+        size: 256,
+        margin: 1,
+      },
+    );
 
-    const base64 = dataUrl.split(",")[1] ?? "";
-
-    if (!base64) {
-      throw new Error("Failed to generate QR PNG data");
-    }
-
-    const pngBytes = Uint8Array.from(
-      atob(base64),
-      (c) => c.charCodeAt(0),
+    const pngBytes = dataUrlToUint8Array(
+      dataUrl,
+      `Failed to generate QR PNG data at item ${index + 1}`,
     );
 
     const pngImage = await pdfDoc.embedPng(pngBytes);
@@ -152,6 +259,10 @@ export async function buildQrPdfBlobA4(
       cellWidth - 10,
       cellHeight - 30,
     );
+
+    if (qrSize <= 0) {
+      throw new Error("QR PDF cell is too small");
+    }
 
     const qrX = x + (cellWidth - qrSize) / 2;
     const qrY = yOffset + 20;
@@ -163,47 +274,62 @@ export async function buildQrPdfBlobA4(
       height: qrSize,
     });
 
-    if (item.label) {
-      const label = generateLabelPngDataUrl(item.label);
-      const labelBase64 = label.dataUrl.split(",")[1] ?? "";
+    const labelText = item.label?.trim();
 
-      if (!labelBase64) {
-        throw new Error("Failed to generate PDF label PNG data");
-      }
-
-      const labelBytes = Uint8Array.from(
-        atob(labelBase64),
-        (c) => c.charCodeAt(0),
+    if (labelText) {
+      const label = await getOrCreateLabelImage(
+        pdfDoc,
+        labelImageCache,
+        labelText,
       );
 
-      const labelImage = await pdfDoc.embedPng(labelBytes);
       const maxLabelWidth = cellWidth - 8;
       const targetLabelHeight = 20;
 
-      let labelWidth = targetLabelHeight * (label.width / label.height);
+      let labelWidth =
+        targetLabelHeight *
+        (label.width / label.height);
+
       let labelHeight = targetLabelHeight;
 
       if (labelWidth > maxLabelWidth) {
-        const ratio = maxLabelWidth / labelWidth;
+        const ratio =
+          maxLabelWidth / labelWidth;
+
         labelWidth = maxLabelWidth;
         labelHeight *= ratio;
       }
 
-      const labelX = x + (cellWidth - labelWidth) / 2;
-      const labelY = yOffset;
+      const labelX =
+        x +
+        (cellWidth - labelWidth) / 2;
 
-      currentPage.drawImage(labelImage, {
+      currentPage.drawImage(label.image, {
         x: labelX,
-        y: labelY,
+        y: yOffset,
         width: labelWidth,
         height: labelHeight,
       });
     }
 
     xIndex += 1;
+
+    options?.onProgress?.({
+      stage: "generating",
+      completed: index + 1,
+      total,
+    });
   }
 
-  const pdfBytes = await pdfDoc.save();
+  options?.onProgress?.({
+    stage: "saving",
+    completed: total,
+    total,
+  });
+
+  const pdfBytes = await pdfDoc.save({
+    useObjectStreams: false,
+  });
 
   const ab = pdfBytes.buffer.slice(
     pdfBytes.byteOffset,
@@ -212,10 +338,18 @@ export async function buildQrPdfBlobA4(
 
   const arrayBuffer = ab as ArrayBuffer;
 
-  return new Blob(
+  const blob = new Blob(
     [arrayBuffer],
     {
       type: "application/pdf",
     },
   );
+
+  options?.onProgress?.({
+    stage: "completed",
+    completed: total,
+    total,
+  });
+
+  return blob;
 }

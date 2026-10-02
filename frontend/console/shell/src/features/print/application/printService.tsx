@@ -8,6 +8,7 @@ import {
 import {
   buildQrPdfBlobA4,
   type QrPdfItem,
+  type QrPdfProgress,
 } from "../utils/qrPdfBuilder";
 
 export type { PrintLogForPrint };
@@ -56,7 +57,6 @@ export async function preparePrintForProduction(params: {
   productionId: string;
 }): Promise<PrintLogForPrint[]> {
   const { productionId } = params;
-
   return ensurePrintLogsForProduction(productionId);
 }
 
@@ -78,14 +78,24 @@ function prepareQrPreviewWindow(): Window {
 <title>QR出力</title>
 <style>
 html,body{width:100%;height:100%;margin:0}
-body{display:flex;align-items:center;justify-content:center;background:#fff;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP","Yu Gothic",Meiryo,sans-serif}
-main{display:flex;align-items:center;gap:12px;font-size:14px}
-.spinner{width:18px;height:18px;box-sizing:border-box;border:2px solid #d1d5db;border-top-color:#111827;border-radius:50%;animation:spin .8s linear infinite}
+body{background:#fff;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP","Yu Gothic",Meiryo,sans-serif}
+#qr-preview-status{display:flex;width:100%;height:100%;box-sizing:border-box;align-items:center;justify-content:center}
+#qr-preview-status__content{display:flex;align-items:center;gap:12px;font-size:14px}
+#qr-preview-status__text{white-space:nowrap}
+#qr-preview-error{max-width:720px;padding:24px;font-size:14px;line-height:1.7}
+#qr-preview-error strong{display:block;margin-bottom:8px;font-size:16px}
+#qr-preview-error p{margin:0;color:#6b7280;word-break:break-word}
+.spinner{width:18px;height:18px;box-sizing:border-box;flex:0 0 auto;border:2px solid #d1d5db;border-top-color:#111827;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
-<main><span class="spinner" aria-hidden="true"></span><span>QRコードを作成中です…</span></main>
+<div id="qr-preview-status">
+  <div id="qr-preview-status__content">
+    <span class="spinner" aria-hidden="true"></span>
+    <span id="qr-preview-status__text">印刷データを取得中です…</span>
+  </div>
+</div>
 </body>
 </html>`);
   previewWindow.document.close();
@@ -93,8 +103,136 @@ main{display:flex;align-items:center;gap:12px;font-size:14px}
   return previewWindow;
 }
 
+function updateQrPreviewStatus(
+  previewWindow: Window,
+  message: string,
+): void {
+  if (previewWindow.closed) return;
+
+  const statusText = previewWindow.document.getElementById(
+    "qr-preview-status__text",
+  );
+
+  if (statusText) {
+    statusText.textContent = message;
+  }
+}
+
+function updateQrPreviewProgress(
+  previewWindow: Window,
+  progress: QrPdfProgress,
+): void {
+  if (progress.stage === "generating") {
+    updateQrPreviewStatus(
+      previewWindow,
+      `QRコードを生成中です… ${progress.completed} / ${progress.total}`,
+    );
+    return;
+  }
+
+  if (progress.stage === "saving") {
+    updateQrPreviewStatus(
+      previewWindow,
+      "PDFを作成中です…",
+    );
+    return;
+  }
+
+  updateQrPreviewStatus(
+    previewWindow,
+    "PDFを表示中です…",
+  );
+}
+
+function showQrPreviewError(
+  previewWindow: Window,
+  error: unknown,
+): void {
+  if (previewWindow.closed) return;
+
+  const message =
+    error instanceof Error && error.message.trim()
+      ? error.message
+      : "Unknown error";
+
+  const document = previewWindow.document;
+
+  document.body.innerHTML = "";
+  document.body.style.margin = "0";
+  document.body.style.width = "100%";
+  document.body.style.height = "100%";
+  document.body.style.overflow = "auto";
+
+  const errorContainer = document.createElement("div");
+  errorContainer.id = "qr-preview-error";
+
+  const title = document.createElement("strong");
+  title.textContent = "QR出力に失敗しました。";
+
+  const detail = document.createElement("p");
+  detail.textContent = message;
+
+  errorContainer.appendChild(title);
+  errorContainer.appendChild(detail);
+  document.body.appendChild(errorContainer);
+}
+
+/**
+ * 生成済み PDF Blob を、クリック直後に開いておいたプレビュータブへ表示する。
+ *
+ * Blob URL は表示先の previewWindow 側で生成し、
+ * 同じ Window 内の iframe から参照する。
+ *
+ * PDF Viewer が Blob URL を参照している間に revoke しないよう、
+ * この処理内では URL.revokeObjectURL を実行しない。
+ */
+function displayQrPdfInPreviewWindow(
+  previewWindow: Window,
+  pdfBlob: Blob,
+): void {
+  if (previewWindow.closed) {
+    throw new Error("QR PDF preview window was closed");
+  }
+
+  if (pdfBlob.size === 0) {
+    throw new Error("Generated QR PDF is empty");
+  }
+
+  if (pdfBlob.type !== "application/pdf") {
+    throw new Error(
+      `Generated QR PDF has invalid MIME type: ${pdfBlob.type || "unknown"}`,
+    );
+  }
+
+  const previewGlobal =
+    previewWindow as Window & typeof globalThis;
+
+  const pdfUrl =
+    previewGlobal.URL.createObjectURL(pdfBlob);
+
+  const document = previewWindow.document;
+
+  document.body.innerHTML = "";
+  document.body.style.margin = "0";
+  document.body.style.width = "100%";
+  document.body.style.height = "100%";
+  document.body.style.overflow = "hidden";
+
+  const iframe = document.createElement("iframe");
+
+  iframe.src = pdfUrl;
+  iframe.title = "QR PDF";
+  iframe.style.display = "block";
+  iframe.style.width = "100%";
+  iframe.style.height = "100%";
+  iframe.style.border = "0";
+
+  document.body.appendChild(iframe);
+}
+
 async function buildQrPdfFromLogs(
   logs: PrintLogForPrint[],
+  onProgress?: (progress: QrPdfProgress) => void,
 ): Promise<Blob | null> {
   const qrItems: QrPdfItem[] = [];
 
@@ -116,6 +254,7 @@ async function buildQrPdfFromLogs(
   return buildQrPdfBlobA4(qrItems, {
     cols: 5,
     cellHeight: 100,
+    onProgress,
   });
 }
 
@@ -165,8 +304,9 @@ function downloadProductIdsCsv(
  * 1. ユーザー操作直後に QR PDF 表示用のタブを開く
  * 2. GET /products/print-logs?productionId=... で既存 print_log を確認する
  * 3. 存在しない場合だけ POST /products/print-logs を実行する
- * 4. qrPayload を QR コード化して PDF を生成する
- * 5. 先に開いておいたタブを生成済み PDF の Blob URL へ遷移させる
+ * 4. qrPayload を QR コード化し、進捗をプレビュー画面へ表示する
+ * 5. PDF を生成する
+ * 6. previewWindow 側で Blob URL を生成し、同じ Window 内の iframe へ表示する
  *
  * GET が失敗した場合は POST にフォールバックしない。
  */
@@ -182,33 +322,62 @@ export async function outputQrForProduction(params: {
   const previewWindow = prepareQrPreviewWindow();
 
   try {
-    const logs = await ensurePrintLogsForProduction(productionId);
+    updateQrPreviewStatus(
+      previewWindow,
+      "印刷データを取得中です…",
+    );
+
+    const logs =
+      await ensurePrintLogsForProduction(productionId);
 
     if (logs.length === 0) {
-      previewWindow.close();
-      return [];
+      throw new Error("QR出力対象の商品がありません");
     }
 
-    const pdfBlob = await buildQrPdfFromLogs(logs);
+    updateQrPreviewStatus(
+      previewWindow,
+      "QRコードを生成する準備をしています…",
+    );
+
+    const pdfBlob = await buildQrPdfFromLogs(
+      logs,
+      (progress) => {
+        updateQrPreviewProgress(
+          previewWindow,
+          progress,
+        );
+      },
+    );
 
     if (!pdfBlob) {
-      previewWindow.close();
-      return logs;
+      throw new Error("QR出力対象のQRペイロードがありません");
     }
-
-    const pdfUrl = URL.createObjectURL(pdfBlob);
 
     if (previewWindow.closed) {
       throw new Error("QR PDF preview window was closed");
     }
 
-    previewWindow.location.replace(pdfUrl);
+    updateQrPreviewStatus(
+      previewWindow,
+      "PDFを表示中です…",
+    );
+
+    displayQrPdfInPreviewWindow(
+      previewWindow,
+      pdfBlob,
+    );
 
     return logs;
   } catch (error) {
-    if (!previewWindow.closed) {
-      previewWindow.close();
-    }
+    console.error(
+      "Failed to output QR PDF",
+      error,
+    );
+
+    showQrPreviewError(
+      previewWindow,
+      error,
+    );
 
     throw error;
   }
@@ -228,7 +397,8 @@ export async function outputProductIdsCsvForProduction(params: {
 }): Promise<PrintLogForPrint[]> {
   const { productionId } = params;
 
-  const logs = await ensurePrintLogsForProduction(productionId);
+  const logs =
+    await ensurePrintLogsForProduction(productionId);
 
   if (logs.length === 0) return [];
 
