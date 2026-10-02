@@ -9,6 +9,7 @@ import {
   type ChangeEvent,
   type CompositionEvent,
   type ReactNode,
+  type TextareaHTMLAttributes,
 } from "react";
 import { createPortal } from "react-dom";
 import { ImagePlus, X } from "lucide-react";
@@ -20,6 +21,8 @@ import "./mobileComposerFooter.css";
 
 export type MobileComposerFooterProps = ChatComposerConfig & {
   beforeInput?: ReactNode;
+  inputMode?: TextareaHTMLAttributes<HTMLTextAreaElement>["inputMode"];
+  autoFocus?: boolean;
 };
 
 type MobileComposerImagePreviewProps = {
@@ -85,6 +88,8 @@ export default function MobileComposerFooter({
   maxFiles = 10,
   accept = "image/*",
   beforeInput,
+  inputMode = "text",
+  autoFocus = false,
   onContentChange,
   onFilesAdd,
   onRemoveFile,
@@ -163,6 +168,32 @@ export default function MobileComposerFooter({
         ? "auto"
         : "hidden";
   }, [draft]);
+
+  useEffect(() => {
+    if (!autoFocus || inputDisabled) {
+      return;
+    }
+
+    const textarea = textareaRef.current;
+
+    if (!textarea) {
+      return;
+    }
+
+    const animationFrameId = window.requestAnimationFrame(() => {
+      textarea.focus();
+
+      const cursorPosition = textarea.value.length;
+      textarea.setSelectionRange(
+        cursorPosition,
+        cursorPosition,
+      );
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrameId);
+    };
+  }, [autoFocus, inputDisabled]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -483,6 +514,8 @@ export default function MobileComposerFooter({
           placeholder={placeholder}
           aria-label={placeholder}
           disabled={inputDisabled}
+          inputMode={inputMode}
+          autoFocus={autoFocus}
           enterKeyHint="enter"
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}

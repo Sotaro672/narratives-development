@@ -9,13 +9,16 @@ import {
   type ResaleCondition,
 } from "../../../shared/types/resale";
 
-const DESCRIPTION_MAX_LENGTH = 1000;
+export const RESALE_DESCRIPTION_MAX_LENGTH = 1000;
 
 export type ResaleCreateFormProps = {
   formattedPrice: string;
   condition: ResaleCondition;
   description: string;
   disabled?: boolean;
+  mobileComposerEnabled?: boolean;
+  onPriceFocus?: () => void;
+  onDescriptionFocus?: () => void;
   onPriceChange: (value: string) => void;
   onConditionChange: (value: ResaleCondition) => void;
   onDescriptionChange: (value: string) => void;
@@ -26,6 +29,9 @@ export default function ResaleCreateForm({
   condition,
   description,
   disabled = false,
+  mobileComposerEnabled = false,
+  onPriceFocus,
+  onDescriptionFocus,
   onPriceChange,
   onConditionChange,
   onDescriptionChange,
@@ -41,7 +47,13 @@ export default function ResaleCreateForm({
           placeholder="例：12,000"
           helperText="半角数字で入力してください。"
           required
+          readOnly={mobileComposerEnabled}
           disabled={disabled}
+          onFocus={
+            mobileComposerEnabled
+              ? onPriceFocus
+              : undefined
+          }
           onChange={(event) => onPriceChange(event.currentTarget.value)}
         />
 
@@ -63,9 +75,15 @@ export default function ResaleCreateForm({
           placeholder="購入時期、着用回数、保管状態などを入力してください。"
           rows={6}
           helperText="購入者が商品の状態を判断しやすい内容を入力してください。"
-          counterText={`${description.length}/${DESCRIPTION_MAX_LENGTH}`}
-          maxLength={DESCRIPTION_MAX_LENGTH}
+          counterText={`${description.length}/${RESALE_DESCRIPTION_MAX_LENGTH}`}
+          maxLength={RESALE_DESCRIPTION_MAX_LENGTH}
+          readOnly={mobileComposerEnabled}
           disabled={disabled}
+          onFocus={
+            mobileComposerEnabled
+              ? onDescriptionFocus
+              : undefined
+          }
           onChange={(event) => onDescriptionChange(event.currentTarget.value)}
         />
       </div>

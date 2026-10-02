@@ -1,12 +1,18 @@
 // frontend/mall/src/pages/ResaleCreatePage.tsx
 
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
 import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileComposerFooter from "../components/layout/MobileComposerFooter";
 import MobileSwipeDismissPage from "../components/layout/MobileSwipeDismissPage";
 import Button from "../components/ui/Button";
 
 import ResaleConditionMediaField from "../features/resale/presentation/components/ResaleConditionMediaField";
-import ResaleCreateForm from "../features/resale/presentation/components/ResaleCreateForm";
+import ResaleCreateForm, {
+  RESALE_DESCRIPTION_MAX_LENGTH,
+} from "../features/resale/presentation/components/ResaleCreateForm";
 import ResaleCreateMissingTarget from "../features/resale/presentation/components/ResaleCreateMissingTarget";
 import ResaleCreateProgressModal from "../features/resale/presentation/components/ResaleCreateProgressModal";
 import { useResaleCreatePage } from "../features/resale/presentation/hooks/useResaleCreatePage";
@@ -18,8 +24,12 @@ import "../styles/page-layout.css";
 import "../styles/resale-page.css";
 import "../features/shared/styles/product-detail.css";
 
+type MobileEditor = "price" | "description" | null;
+
 export default function ResaleCreatePage() {
+  const navigate = useNavigate();
   const isMobilePortrait = useMobilePortrait();
+  const [mobileEditor, setMobileEditor] = useState<MobileEditor>(null);
 
   const {
     target,
@@ -50,8 +60,21 @@ export default function ResaleCreatePage() {
     handleSubmit,
   } = useResaleCreatePage();
 
+  const isMobileComposerOpen =
+    isMobilePortrait && mobileEditor !== null;
+
   const showMobileActionFooter =
-    isMobilePortrait && hasRequiredListingTarget;
+    isMobilePortrait &&
+    hasRequiredListingTarget &&
+    !isMobileComposerOpen;
+
+  const handleDismiss = () => {
+    navigate(-1);
+  };
+
+  const handleCloseMobileEditor = () => {
+    setMobileEditor(null);
+  };
 
   const content = (
     <Layout
@@ -61,7 +84,14 @@ export default function ResaleCreatePage() {
       showFooter={isMobilePortrait ? showMobileActionFooter : true}
       mainClassName={
         isMobilePortrait
-          ? "resale-create-page-main--mobile"
+          ? [
+              "resale-create-page-main--mobile",
+              isMobileComposerOpen
+                ? "resale-create-page-main--with-composer"
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" ")
           : undefined
       }
       footerProps={
@@ -113,6 +143,9 @@ export default function ResaleCreatePage() {
               condition={condition}
               description={description}
               disabled={isSubmitting}
+              mobileComposerEnabled={isMobilePortrait}
+              onPriceFocus={() => setMobileEditor("price")}
+              onDescriptionFocus={() => setMobileEditor("description")}
               onPriceChange={handlePriceChange}
               onConditionChange={handleConditionChange}
               onDescriptionChange={handleDescriptionChange}
@@ -149,15 +182,58 @@ export default function ResaleCreatePage() {
       {isMobilePortrait ? (
         <MobileSwipeDismissPage
           dismissButtonAriaLabel="出品画面を閉じる"
-          dismissGestureEnabled={!isUploading}
+          dismissGestureEnabled={!isUploading && !isMobileComposerOpen}
           dismissDisabled={isUploading}
-          onDismiss={handleBackToWallet}
+          onDismiss={handleDismiss}
         >
           {content}
         </MobileSwipeDismissPage>
       ) : (
         content
       )}
+
+      {isMobileComposerOpen ? (
+        <MobileComposerFooter
+          key={mobileEditor}
+          content={
+            mobileEditor === "price"
+              ? formattedPrice
+              : description
+          }
+          placeholder={
+            mobileEditor === "price"
+              ? "販売価格を入力"
+              : "購入時期、着用回数、保管状態などを入力"
+          }
+          inputMode={
+            mobileEditor === "price"
+              ? "numeric"
+              : "text"
+          }
+          autoFocus
+          maxLength={
+            mobileEditor === "description"
+              ? RESALE_DESCRIPTION_MAX_LENGTH
+              : null
+          }
+          disabled={isSubmitting}
+          canSubmit
+          submitLabel="完了"
+          beforeInput={
+            <span>
+              {mobileEditor === "price"
+                ? "販売価格"
+                : `説明文 ${description.length}/${RESALE_DESCRIPTION_MAX_LENGTH}`}
+            </span>
+          }
+          onContentChange={
+            mobileEditor === "price"
+              ? handlePriceChange
+              : handleDescriptionChange
+          }
+          onSubmit={handleCloseMobileEditor}
+        />
+      ) : null}
 
       <ResaleCreateProgressModal
         open={progressOpen}

@@ -17,4 +17,8 @@
   .resale-create-page-main--mobile .page-section {
     padding-top: calc(env(safe-area-inset-top) + 76px);
   }
+
+  .resale-create-page-main--with-composer .page-section {
+    padding-bottom: calc(var(--mobile-composer-height, 56px) + 24px);
+  }
 }
