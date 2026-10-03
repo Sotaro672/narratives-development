@@ -359,10 +359,11 @@ func buildMallUsecases(
 
 	resaleTradeReturnConsultationUC := usecase.NewResaleTradeReturnConsultationUsecase(
 		usecase.NewResaleTradeReturnConsultationUsecaseInput{
-			TradeRepository:           r.tradeRepo,
-			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
-			OrderRepository:           r.orderRepo,
-			MessageRepository:         r.tradeMessageRepo,
+			TradeRepository:             r.tradeRepo,
+			ReturnAgreementRepository:   r.tradeReturnAgreementRepo,
+			OrderRepository:             r.orderRepo,
+			MessageRepository:           r.tradeMessageRepo,
+			IdentityVerificationChecker: identityVerificationUC,
 		},
 	)
 	if resaleTradeReturnConsultationUC == nil {
