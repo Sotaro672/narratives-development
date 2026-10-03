@@ -1,4 +1,5 @@
 // backend/internal/platform/di/admin/container.go
+
 package admin
 
 import (
@@ -84,14 +85,7 @@ func NewContainer(ctx context.Context, infra *shared.Infra) (*Container, error) 
 	}
 
 	adminFirebaseUID := strings.TrimSpace(os.Getenv(adminFirebaseUIDEnv))
-	if adminFirebaseUID == "" {
-		return nil, errors.New("di.admin: AMOL_ADMIN_FIREBASE_UID is empty")
-	}
-
 	adminEmail := strings.TrimSpace(os.Getenv(adminEmailEnv))
-	if adminEmail == "" {
-		return nil, errors.New("di.admin: AMOL_ADMIN_EMAIL is empty")
-	}
 
 	c := &Container{
 		Infra:            infra,

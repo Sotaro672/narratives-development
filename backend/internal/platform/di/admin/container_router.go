@@ -1,4 +1,5 @@
 // backend/internal/platform/di/admin/container_router.go
+
 package admin
 
 import (
@@ -15,13 +16,13 @@ func Register(mux *http.ServeMux, cont *Container) {
 		return
 	}
 
-	var authMw *middleware.AdminAuthMiddleware
-	if cont.Infra != nil && cont.Infra.FirebaseAuth != nil {
-		authMw = &middleware.AdminAuthMiddleware{
-			FirebaseAuth: cont.Infra.FirebaseAuth,
-			AllowedUID:   cont.adminFirebaseUID,
-			AllowedEmail: cont.adminEmail,
-		}
+	authMw := &middleware.AdminAuthMiddleware{
+		AllowedUID:   cont.adminFirebaseUID,
+		AllowedEmail: cont.adminEmail,
+	}
+
+	if cont.Infra != nil {
+		authMw.FirebaseAuth = cont.Infra.FirebaseAuth
 	}
 
 	meHandler := adminhandler.NewMeHandler()
@@ -72,10 +73,12 @@ func Register(mux *http.ServeMux, cont *Container) {
 		cont.mintListQuery,
 		cont.mintDetailQuery,
 	)
+
 	newsHandler := adminhandler.NewNewsHandler(
 		cont.newsUsecase,
 		cont.newsQuery,
 	)
+
 	reportHandler := adminhandler.NewReportHandler(
 		cont.reportUsecase,
 		cont.reportNameQuery,

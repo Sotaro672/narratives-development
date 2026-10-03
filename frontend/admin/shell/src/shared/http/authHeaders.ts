@@ -1,61 +1,16 @@
-//frontend\admin\shell\src\shared\http\authHeaders.ts
-import {
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
+// frontend/admin/shell/src/shared/http/authHeaders.ts
 
-import {
-  auth,
-} from "../../auth/infrastructure/firebaseClient";
+import { isAdminAuthenticated } from "../../auth/application/adminAuth";
 
-function waitForAuthReady(): Promise<User | null> {
-  if (auth.currentUser) {
-    return Promise.resolve(
-      auth.currentUser,
-    );
+const ADMIN_DEV_AUTH_HEADER = "X-AMOL-Admin-Dev-Auth";
+const ADMIN_DEV_AUTH_VALUE = "AMOL-Admin-2026#Start!";
+
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (!isAdminAuthenticated()) {
+    throw new Error("ログインが必要です。");
   }
-
-  return new Promise(
-    (resolve, reject) => {
-      let unsubscribe =
-        () => {};
-
-      unsubscribe =
-        onAuthStateChanged(
-          auth,
-          (user) => {
-            unsubscribe();
-            resolve(
-              user ?? null,
-            );
-          },
-          (error) => {
-            unsubscribe();
-            reject(error);
-          },
-        );
-    },
-  );
-}
-
-export async function getAuthHeaders(): Promise<
-  Record<string, string>
-> {
-  const user =
-    auth.currentUser ??
-    await waitForAuthReady();
-
-  if (!user) {
-    throw new Error(
-      "ログインが必要です。",
-    );
-  }
-
-  const token =
-    await user.getIdToken();
 
   return {
-    Authorization:
-      `Bearer ${token}`,
+    [ADMIN_DEV_AUTH_HEADER]: ADMIN_DEV_AUTH_VALUE,
   };
 }

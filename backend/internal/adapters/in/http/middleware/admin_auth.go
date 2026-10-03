@@ -1,4 +1,5 @@
 // backend/internal/adapters/in/http/middleware/admin_auth.go
+
 package middleware
 
 import (
@@ -6,6 +7,13 @@ import (
 	"log"
 	"net/http"
 	"strings"
+)
+
+const (
+	adminDevAuthHeader   = "X-AMOL-Admin-Dev-Auth"
+	adminDevAuthPassword = "AMOL-Admin-2026#Start!"
+	adminDevUID          = "development-admin"
+	adminDevEmail        = "caotailangaogang@gmail.com"
 )
 
 type adminContextKey struct {
@@ -17,10 +25,12 @@ var (
 	ctxKeyAdminEmail = adminContextKey{name: "adminEmail"}
 )
 
-// AdminAuthMiddleware verifies the Firebase ID token and restricts access
-// to the configured AMOL administrator.
+// AdminAuthMiddleware authenticates the AMOL administrator.
 //
-// Authorization conditions:
+// Development authentication:
+//   - X-AMOL-Admin-Dev-Auth exactly matches adminDevAuthPassword
+//
+// Firebase authentication:
 //   - valid Firebase ID token
 //   - token has not been revoked
 //   - Firebase UID exactly matches AllowedUID
@@ -37,9 +47,21 @@ type AdminAuthMiddleware struct {
 
 func (m *AdminAuthMiddleware) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// CORS preflight is allowed without authentication.
 		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		devAuth := strings.TrimSpace(r.Header.Get(adminDevAuthHeader))
+		if devAuth != "" {
+			if devAuth != adminDevAuthPassword {
+				writeJSONError(w, http.StatusUnauthorized, "invalid admin development credential")
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), ctxKeyAdminUID, adminDevUID)
+			ctx = context.WithValue(ctx, ctxKeyAdminEmail, adminDevEmail)
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
 
@@ -128,12 +150,11 @@ func (m *AdminAuthMiddleware) Handler(next http.Handler) http.Handler {
 
 		ctx := context.WithValue(r.Context(), ctxKeyAdminUID, uid)
 		ctx = context.WithValue(ctx, ctxKeyAdminEmail, email)
-
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-// CurrentAdminUID returns the Firebase UID of the authenticated administrator.
+// CurrentAdminUID returns the authenticated administrator UID.
 func CurrentAdminUID(r *http.Request) (string, bool) {
 	value := r.Context().Value(ctxKeyAdminUID)
 
@@ -145,8 +166,7 @@ func CurrentAdminUID(r *http.Request) (string, bool) {
 	return uid, true
 }
 
-// CurrentAdminEmail returns the Firebase email address of the authenticated
-// administrator.
+// CurrentAdminEmail returns the authenticated administrator email.
 func CurrentAdminEmail(r *http.Request) (string, bool) {
 	value := r.Context().Value(ctxKeyAdminEmail)
 

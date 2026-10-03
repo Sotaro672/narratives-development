@@ -1,4 +1,5 @@
 // frontend/admin/shell/src/pages/LoginPage.tsx
+
 import { type FormEvent, useState } from "react";
 
 import { signInAdmin } from "../auth/application/adminAuth";
@@ -9,19 +10,15 @@ type LoginPageProps = {
   onLogin: () => void;
 };
 
-const EMAIL_VERIFICATION_MESSAGE =
-  "メールアドレスが未認証です。認証メールを送信しました。メール内のリンクから認証してください。";
-
 function resolveLoginErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message === EMAIL_VERIFICATION_MESSAGE) {
-    return error.message;
+  if (error instanceof Error && error.message === "invalid_admin_password") {
+    return "パスワードが正しくありません。";
   }
 
-  return "メールアドレスまたはパスワードが正しくないか、Admin権限がありません。";
+  return "ログインに失敗しました。もう一度お試しください。";
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -33,11 +30,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       return;
     }
 
+    if (!password) {
+      setError("パスワードを入力してください。");
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
 
     try {
-      await signInAdmin(email, password);
+      await signInAdmin(password);
       onLogin();
     } catch (error) {
       console.error("[admin-login] sign in failed", error);
@@ -55,34 +57,26 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
         <form className="login-form" onSubmit={handleSubmit}>
           <label className="login-field">
-            <span>メールアドレス</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              autoComplete="username"
-              disabled={submitting}
-              required
-            />
-          </label>
-
-          <label className="login-field">
             <span>パスワード</span>
             <input
               type="password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setError(null);
+              }}
               autoComplete="current-password"
               disabled={submitting}
+              autoFocus
               required
             />
           </label>
 
-          {error && (
+          {error ? (
             <p className="login-error" role="alert">
               {error}
             </p>
-          )}
+          ) : null}
 
           <button type="submit" className="login-submit" disabled={submitting}>
             {submitting ? "ログイン中..." : "ログイン"}

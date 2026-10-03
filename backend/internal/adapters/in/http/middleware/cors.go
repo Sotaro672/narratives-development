@@ -1,4 +1,5 @@
 // backend/internal/adapters/in/http/middleware/cors.go
+
 package middleware
 
 import (
@@ -44,6 +45,7 @@ func CORS(next http.Handler) http.Handler {
 		"X-Icon-File-Name",
 		"Idempotency-Key",
 		"X-CSRF-Token",
+		"X-AMOL-Admin-Dev-Auth",
 	}, ", ")
 
 	allowedMethods := "GET,POST,PUT,PATCH,DELETE,OPTIONS"

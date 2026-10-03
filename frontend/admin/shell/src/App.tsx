@@ -1,4 +1,5 @@
 // frontend/admin/shell/src/App.tsx
+
 import { useEffect, useState } from "react";
 
 import {
@@ -14,8 +15,8 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = observeAdminAuth((user) => {
-      setAuthenticated(user !== null);
+    const unsubscribe = observeAdminAuth((isAuthenticated) => {
+      setAuthenticated(isAuthenticated);
       setAuthReady(true);
     });
 

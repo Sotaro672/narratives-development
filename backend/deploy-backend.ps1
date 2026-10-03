@@ -447,7 +447,6 @@ $GCLOUD = (Get-Command gcloud.cmd -ErrorAction Stop).Source
 Write-Step "Using gcloud.cmd: $GCLOUD"
 
 $ProjectId = (& $GCLOUD config get-value project)
-
 $ConfiguredAccount = (& $GCLOUD config get-value account)
 
 if ([string]::IsNullOrWhiteSpace($ProjectId)) {
@@ -462,9 +461,7 @@ Write-Ok "gcloud project: $ProjectId"
 Write-Ok "gcloud account: $ConfiguredAccount"
 
 $RunServiceAccount = "narratives-backend-sa@$ProjectId.iam.gserviceaccount.com"
-
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-
 $SourceDir = $ScriptDir
 
 # ------------------------------------------------------------
@@ -478,12 +475,10 @@ if (-not (Test-Path $MainGo)) {
 }
 
 Write-Step "go build check (cmd/api)"
-
 Push-Location $SourceDir
 
 try {
   go version | Out-Null
-
   go build ./cmd/api
 
   if ($LASTEXITCODE -ne 0) {
@@ -533,11 +528,8 @@ else {
 
 if ([string]::IsNullOrWhiteSpace($Image)) {
   $RegistryHost = "$Region-docker.pkg.dev"
-
   $Tag = Get-Date -Format "yyyyMMdd-HHmmss"
-
   $Image = "$RegistryHost/$ProjectId/$RepoName/${ServiceName}:$Tag"
-
   Write-Step "Generated image: $Image"
 }
 else {
@@ -598,12 +590,10 @@ $AllowedKeys = @(
 )
 
 $envMap = @{}
-
 $EnvFile = Join-Path $SourceDir ".env"
 
 if (Test-Path $EnvFile) {
   Write-Ok "Found .env: $EnvFile"
-
   $FileMap = Read-EnvFile $EnvFile
 
   foreach ($Key in $AllowedKeys) {
@@ -635,29 +625,20 @@ if (-not $envMap.ContainsKey("FIREBASE_STORAGE_BUCKET") -or [string]::IsNullOrWh
   throw "FIREBASE_STORAGE_BUCKET is required."
 }
 
-if (-not $envMap.ContainsKey("AMOL_ADMIN_FIREBASE_UID") -or [string]::IsNullOrWhiteSpace($envMap["AMOL_ADMIN_FIREBASE_UID"])) {
-  throw "AMOL_ADMIN_FIREBASE_UID is required."
+if ($envMap.ContainsKey("AMOL_ADMIN_FIREBASE_UID") -and -not [string]::IsNullOrWhiteSpace($envMap["AMOL_ADMIN_FIREBASE_UID"])) {
+  $AdminFirebaseUID = $envMap["AMOL_ADMIN_FIREBASE_UID"].Trim()
+
+  if ($AdminFirebaseUID -eq "REPLACE_WITH_FIREBASE_ADMIN_UID") {
+    throw "AMOL_ADMIN_FIREBASE_UID still contains the placeholder value."
+  }
+
+  $envMap["AMOL_ADMIN_FIREBASE_UID"] = $AdminFirebaseUID
 }
 
-$AdminFirebaseUID = $envMap["AMOL_ADMIN_FIREBASE_UID"].Trim()
-
-if ($AdminFirebaseUID -eq "REPLACE_WITH_FIREBASE_ADMIN_UID") {
-  throw "AMOL_ADMIN_FIREBASE_UID still contains the placeholder value. Replace it with the Firebase Authentication UID."
+if ($envMap.ContainsKey("AMOL_ADMIN_EMAIL") -and -not [string]::IsNullOrWhiteSpace($envMap["AMOL_ADMIN_EMAIL"])) {
+  $AdminEmail = $envMap["AMOL_ADMIN_EMAIL"].Trim()
+  $envMap["AMOL_ADMIN_EMAIL"] = $AdminEmail
 }
-
-$envMap["AMOL_ADMIN_FIREBASE_UID"] = $AdminFirebaseUID
-
-if (-not $envMap.ContainsKey("AMOL_ADMIN_EMAIL") -or [string]::IsNullOrWhiteSpace($envMap["AMOL_ADMIN_EMAIL"])) {
-  throw "AMOL_ADMIN_EMAIL is required."
-}
-
-$AdminEmail = $envMap["AMOL_ADMIN_EMAIL"].Trim()
-
-if ($AdminEmail -ne "caotailangaogang@gmail.com") {
-  throw "AMOL_ADMIN_EMAIL must be caotailangaogang@gmail.com."
-}
-
-$envMap["AMOL_ADMIN_EMAIL"] = $AdminEmail
 
 if (
   -not $envMap.ContainsKey("SOLANA_BUBBLEGUM_SERVICE_URL") -or
@@ -691,7 +672,6 @@ if (
 }
 
 $MallFrontendBaseURL = $envMap["MALL_FRONTEND_BASE_URL"].TrimEnd("/")
-
 $MallFrontendURI = $null
 
 if (
@@ -786,7 +766,6 @@ try {
     -not [string]::IsNullOrWhiteSpace($ExistingServiceURL)
   ) {
     $ResolvedBackendURL = $ExistingServiceURL.TrimEnd("/")
-
     Write-Ok "Backend URL resolved from Cloud Run: $ResolvedBackendURL"
   }
 }
@@ -802,7 +781,6 @@ if (
   )
 ) {
   $ResolvedBackendURL = $envMap["SELF_BASE_URL"].TrimEnd("/")
-
   Write-Ok "Backend URL resolved from SELF_BASE_URL: $ResolvedBackendURL"
 }
 
@@ -1036,4 +1014,4 @@ Write-Ok "Deployed image: $Image"
 Write-Ok "Backend URL: $ResolvedBackendURL"
 Write-Ok "Cloud Tasks queue: $CloudTasksQueueID"
 Write-Ok "Brand fee settlement Cloud Tasks queue: $BrandFeeSettlementCloudTasksQueueID"
-Write-Ok "Print PDF signing secret: ${PrintPDFSigningSecretName}:$PrintPDFSigningSecretVersion"
+Write-Ok "Print PDF signing secret: ${PrintPDFSigningSecretName}:${PrintPDFSigningSecretVersion}"
