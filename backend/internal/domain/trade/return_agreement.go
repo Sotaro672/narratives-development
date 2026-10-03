@@ -183,7 +183,9 @@ var (
 //	agreed -> return_received -> refund_processing -> completed
 //
 // If the seller rejects the requested return, the aggregate remains discussing.
-// If the buyer rejects a seller proposal, it also returns to discussing.
+// If the buyer rejects a seller proposal, it also returns to discussing. While
+// that rejected proposal remains the latest proposal, the buyer may later
+// change the decision and accept it.
 //
 // A return that does not require the physical item to be sent back skips:
 //
@@ -239,7 +241,9 @@ type ReturnConsultation struct {
 //   - RefundAmount must be greater than 0.
 //   - ReturnAgreement moves to proposed.
 //
-// RejectedAt is set when the buyer rejects an agreed seller proposal.
+// RejectedAt is set when the buyer rejects an agreed seller proposal. If the
+// buyer later changes the decision and accepts the same latest proposal,
+// RejectedAt is cleared.
 type ReturnProposal struct {
 	ID string `json:"id"`
 
@@ -343,14 +347,27 @@ func (a *ReturnAgreement) Propose(
 
 // AcceptProposal records explicit buyer acceptance of the latest seller
 // proposal and locks the proposal as the agreed return conditions.
+//
+// The buyer may also change a previous rejection of the same latest proposal.
+// In that case the aggregate is discussing with RejectedAt set. Acceptance
+// clears RejectedAt and moves the aggregate to agreed.
 func (a *ReturnAgreement) AcceptProposal(at time.Time) error {
-	if a == nil ||
-		a.Status != ReturnStatusProposed ||
-		a.Proposal == nil {
+	if a == nil || a.Proposal == nil {
 		return ErrReturnProposalCannotBeAccepted
 	}
-	if a.Proposal.Agreement != ReturnProposalAgreementAgree ||
-		a.Proposal.RejectedAt != nil {
+	if a.Proposal.Agreement != ReturnProposalAgreementAgree {
+		return ErrReturnProposalCannotBeAccepted
+	}
+
+	pendingProposal :=
+		a.Status == ReturnStatusProposed &&
+			a.Proposal.RejectedAt == nil
+
+	previouslyRejectedProposal :=
+		a.Status == ReturnStatusDiscussing &&
+			a.Proposal.RejectedAt != nil
+
+	if !pendingProposal && !previouslyRejectedProposal {
 		return ErrReturnProposalCannotBeAccepted
 	}
 	if at.IsZero() {
@@ -363,6 +380,7 @@ func (a *ReturnAgreement) AcceptProposal(at time.Time) error {
 		return ErrInvalidReturnAgreedAt
 	}
 
+	a.Proposal.RejectedAt = nil
 	a.Status = ReturnStatusAgreed
 	a.AgreedAt = cloneReturnTimePtr(&at)
 	a.UpdatedAt = at

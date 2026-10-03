@@ -59,7 +59,6 @@ function isValidProposal(
     proposal !== null &&
     proposal.id.trim() !== "" &&
     proposal.agreement === "agree" &&
-    !proposal.rejectedAt &&
     (proposal.returnRequirement === "required" ||
       proposal.returnRequirement === "not_required") &&
     proposal.refundAmount !== undefined &&
@@ -80,6 +79,9 @@ export default function TradeReturnAgreementModal({
   onReject,
 }: TradeReturnAgreementModalProps) {
   const validProposal = isValidProposal(proposal);
+  const previouslyRejected =
+    validProposal && Boolean(proposal.rejectedAt);
+
   const handleClose = submitting ? undefined : onCancel;
 
   const handleAccept = (): void => {
@@ -91,7 +93,11 @@ export default function TradeReturnAgreementModal({
   };
 
   const handleReject = (): void => {
-    if (submitting || !validProposal) {
+    if (
+      submitting ||
+      !validProposal ||
+      previouslyRejected
+    ) {
       return;
     }
 
@@ -119,7 +125,9 @@ export default function TradeReturnAgreementModal({
       <ModalBody>
         <div className="trade-return-agreement-modal__body">
           <ModalDescription id="trade-return-agreement-modal-description">
-            出品者から返品条件が提示されました。内容を確認し、同意するか選択してください。同意するとこの条件が返品・返金条件として確定します。
+            {previouslyRejected
+              ? "以前この返品条件に同意しない回答をしています。内容を再確認し、同意する場合は決定を変更できます。"
+              : "出品者から返品条件が提示されました。内容を確認し、同意するか選択してください。同意するとこの条件が返品・返金条件として確定します。"}
           </ModalDescription>
 
           {validProposal ? (
@@ -149,6 +157,12 @@ export default function TradeReturnAgreementModal({
                   {getReturnRequirementLabel(proposal)}
                 </strong>
               </section>
+
+              {previouslyRejected ? (
+                <Alert variant="info">
+                  現在は「この条件に同意しない」が選択されています。決定を変更して同意すると、この返品条件が確定します。
+                </Alert>
+              ) : null}
 
               {proposal.returnRequirement === "required" ? (
                 <Alert variant="info">
@@ -182,7 +196,11 @@ export default function TradeReturnAgreementModal({
             disabled={submitting || !validProposal}
             onClick={handleAccept}
           >
-            {accepting ? "同意中..." : "この条件に同意する"}
+            {accepting
+              ? "同意中..."
+              : previouslyRejected
+                ? "この条件に同意するへ変更"
+                : "この条件に同意する"}
           </Button>
 
           <Button
@@ -190,10 +208,18 @@ export default function TradeReturnAgreementModal({
             variant="secondary"
             size="md"
             fullWidth
-            disabled={submitting || !validProposal}
+            disabled={
+              submitting ||
+              !validProposal ||
+              previouslyRejected
+            }
             onClick={handleReject}
           >
-            {rejecting ? "送信中..." : "この条件に同意しない"}
+            {rejecting
+              ? "送信中..."
+              : previouslyRejected
+                ? "この条件に同意しない"
+                : "この条件に同意しない"}
           </Button>
         </div>
       </ModalFooter>

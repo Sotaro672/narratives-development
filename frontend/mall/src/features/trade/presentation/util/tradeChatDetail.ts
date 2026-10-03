@@ -67,6 +67,17 @@ function isRejectedReturnProposal(
   );
 }
 
+function isBuyerRejectedReturnProposal(
+  proposal: TradeReturnProposal | undefined,
+): boolean {
+  return (
+    !!proposal &&
+    proposal.id.trim() !== "" &&
+    proposal.agreement === "agree" &&
+    Boolean(proposal.rejectedAt)
+  );
+}
+
 export function getTradeOrderAction(
   trade: TradeDetail | null,
 ): TradeOrderActionKind | null {
@@ -130,6 +141,10 @@ export function getTradeOrderAction(
       return "start-return-consultation";
 
     case "discussing":
+      if (isBuyerRejectedReturnProposal(trade.returnProposal)) {
+        return "review-return-proposal";
+      }
+
       return isRejectedReturnProposal(
         trade.returnProposal,
       )

@@ -34,8 +34,7 @@ function getReviewableProposal(
     trade.status !== "active" ||
     trade.isCancelled ||
     !trade.isDispatched ||
-    trade.transferred ||
-    trade.returnStatus !== "proposed"
+    trade.transferred
   ) {
     return null;
   }
@@ -45,9 +44,20 @@ function getReviewableProposal(
   if (
     !proposal ||
     proposal.id.trim() === "" ||
-    proposal.agreement !== "agree" ||
-    proposal.rejectedAt
+    proposal.agreement !== "agree"
   ) {
+    return null;
+  }
+
+  const isPendingReview =
+    trade.returnStatus === "proposed" &&
+    !proposal.rejectedAt;
+
+  const isPreviouslyRejected =
+    trade.returnStatus === "discussing" &&
+    Boolean(proposal.rejectedAt);
+
+  if (!isPendingReview && !isPreviouslyRejected) {
     return null;
   }
 
@@ -89,6 +99,7 @@ export function useTradeReturnAgreement({
   const submitting = submittingAction !== null;
   const accepting = submittingAction === "accept";
   const rejecting = submittingAction === "reject";
+  const previouslyRejected = Boolean(proposal?.rejectedAt);
 
   const reset = useCallback(() => {
     setError("");
@@ -198,6 +209,12 @@ export function useTradeReturnAgreement({
       return;
     }
 
+    if (currentProposal.rejectedAt) {
+      setOpen(false);
+      reset();
+      return;
+    }
+
     setSubmittingAction("reject");
     setError("");
 
@@ -222,6 +239,7 @@ export function useTradeReturnAgreement({
   }, [
     blocked,
     reload,
+    reset,
     submitting,
     trade,
     tradeId,
@@ -235,6 +253,7 @@ export function useTradeReturnAgreement({
     submittingAction,
     accepting,
     rejecting,
+    previouslyRejected,
     openModal,
     closeModal,
     accept,

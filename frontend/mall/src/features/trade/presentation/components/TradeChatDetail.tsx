@@ -250,9 +250,11 @@ export default function TradeChatDetail({
         return;
 
       case "respond-return-consultation":
+      case "update-return-proposal":
         if (
           trade.viewerSide !== "seller" ||
           !trade.isDispatched ||
+          trade.transferred ||
           trade.returnStatus !== "discussing"
         ) {
           return;
@@ -261,19 +263,30 @@ export default function TradeChatDetail({
         returnProposalFlow.openModal();
         return;
 
-      case "review-return-proposal":
+      case "review-return-proposal": {
+        const proposal = trade.returnProposal;
+        const canReviewProposal =
+          trade.returnStatus === "proposed" ||
+          (
+            trade.returnStatus === "discussing" &&
+            proposal?.agreement === "agree" &&
+            Boolean(proposal.rejectedAt)
+          );
+
         if (
           trade.viewerSide !== "buyer" ||
           !trade.isDispatched ||
           trade.transferred ||
-          trade.returnStatus !== "proposed" ||
-          !trade.returnProposal
+          !proposal ||
+          proposal.agreement !== "agree" ||
+          !canReviewProposal
         ) {
           return;
         }
 
         returnAgreementFlow.openModal();
         return;
+      }
 
       case "report-return-dispute":
         if (
@@ -343,7 +356,8 @@ export default function TradeChatDetail({
         ? returnReceiptFlow.error
         : orderAction === "review-return-proposal"
           ? returnAgreementFlow.error
-          : orderAction === "respond-return-consultation"
+          : orderAction === "respond-return-consultation" ||
+              orderAction === "update-return-proposal"
             ? returnProposalFlow.error
             : orderAction === "start-return-consultation"
               ? identityVerification.errorMessage || undefined

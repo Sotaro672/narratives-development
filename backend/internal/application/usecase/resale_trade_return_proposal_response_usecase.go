@@ -67,10 +67,11 @@ type ResaleTradeReturnProposalRefundService interface {
 // Accept:
 //
 //	proposed -> agreed
+//	discussing (buyer rejected latest proposal) -> agreed
 //
 // For returnRequirement=not_required:
 //
-//	proposed
+//	proposed or discussing (buyer rejected latest proposal)
 //	  -> agreed
 //	  -> refund_processing
 //	  -> completed
@@ -157,6 +158,10 @@ type ResaleTradeReturnProposalResponseResult struct {
 
 // Accept records explicit buyer acceptance of the seller's current proposal.
 //
+// A buyer may accept a pending proposal or change a previous rejection of the
+// same latest proposal to acceptance while the negotiation remains discussing.
+// The domain clears RejectedAt when that decision is changed.
+//
 // Repeating acceptance for the same proposal is idempotent when that proposal
 // has already been accepted. This allows recovery when ReturnAgreement,
 // system-message creation, or no-physical-return refund processing succeeded
@@ -194,11 +199,6 @@ func (u *ResaleTradeReturnProposalResponseUsecase) Accept(
 			in,
 			result,
 		)
-	}
-
-	if agreement.Status != tradedom.ReturnStatusProposed {
-		return result,
-			tradedom.ErrReturnProposalCannotBeAccepted
 	}
 
 	if err := agreement.AcceptProposal(
