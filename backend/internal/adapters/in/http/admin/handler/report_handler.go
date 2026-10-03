@@ -45,6 +45,7 @@ type reportCaseResponse struct {
 	TargetCompanyID        string               `json:"targetCompanyId,omitempty"`
 	TargetTokenBlueprintID string               `json:"targetTokenBlueprintId,omitempty"`
 	TargetTokenName        string               `json:"targetTokenName,omitempty"`
+	TargetResaleID         string               `json:"targetResaleId,omitempty"`
 	TargetAuthorID         string               `json:"targetAuthorId"`
 	TargetAuthorName       string               `json:"targetAuthorName,omitempty"`
 	TargetAuthorType       reportdom.ActorType  `json:"targetAuthorType"`
@@ -504,6 +505,13 @@ func (h *ReportHandler) toReportDetailCaseResponse(
 			h.nameQuery.ResolveResaleToken(ctx, reportCase.TargetID)
 	}
 
+	if reportCase.TargetType == reportdom.TargetTypeTrade {
+		response.TargetResaleID = h.nameQuery.ResolveTradeResaleID(
+			ctx,
+			reportCase.TargetID,
+		)
+	}
+
 	return response
 }
 
@@ -532,6 +540,7 @@ func (h *ReportHandler) toReportItemResponse(
 		report.ReporterID,
 	)
 	response.CompanyName = h.nameQuery.ResolveCompanyName(ctx, report.CompanyID)
+
 	return response
 }
 
@@ -539,6 +548,7 @@ func reportTimeString(value time.Time) string {
 	if value.IsZero() {
 		return ""
 	}
+
 	return value.UTC().Format(time.RFC3339Nano)
 }
 

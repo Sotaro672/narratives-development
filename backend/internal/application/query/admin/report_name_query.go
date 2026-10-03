@@ -52,6 +52,10 @@ type reportResaleReader interface {
 	GetByID(ctx context.Context, id string) (resaledom.Resale, error)
 }
 
+type reportResaleTradeReader interface {
+	GetResaleIDByTradeID(ctx context.Context, tradeID string) (string, error)
+}
+
 // ============================================================
 // Query
 // ============================================================
@@ -65,6 +69,7 @@ type ReportNameQuery struct {
 	productBlueprintRepo reportProductBlueprintReader
 	tokenBlueprintRepo   reportTokenBlueprintReader
 	resaleRepo           reportResaleReader
+	resaleTradeReader    reportResaleTradeReader
 }
 
 func NewReportNameQuery(
@@ -76,6 +81,7 @@ func NewReportNameQuery(
 	productBlueprintRepo reportProductBlueprintReader,
 	tokenBlueprintRepo reportTokenBlueprintReader,
 	resaleRepo reportResaleReader,
+	resaleTradeReader reportResaleTradeReader,
 ) *ReportNameQuery {
 	return &ReportNameQuery{
 		avatarRepo:           avatarRepo,
@@ -86,6 +92,7 @@ func NewReportNameQuery(
 		productBlueprintRepo: productBlueprintRepo,
 		tokenBlueprintRepo:   tokenBlueprintRepo,
 		resaleRepo:           resaleRepo,
+		resaleTradeReader:    resaleTradeReader,
 	}
 }
 
@@ -267,6 +274,24 @@ func (q *ReportNameQuery) ResolveResaleToken(
 	}
 
 	return entity.TokenBlueprintID, q.ResolveTokenName(ctx, entity.TokenBlueprintID)
+}
+
+// ResolveTradeResaleID は tradeId から resaleId を解決する。
+// 解決できない場合は空文字列を返す。
+func (q *ReportNameQuery) ResolveTradeResaleID(
+	ctx context.Context,
+	tradeID string,
+) string {
+	if q == nil || q.resaleTradeReader == nil || tradeID == "" {
+		return ""
+	}
+
+	resaleID, err := q.resaleTradeReader.GetResaleIDByTradeID(ctx, tradeID)
+	if err != nil {
+		return ""
+	}
+
+	return resaleID
 }
 
 // ============================================================

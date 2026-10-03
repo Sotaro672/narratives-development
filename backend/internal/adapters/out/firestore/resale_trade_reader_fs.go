@@ -1,10 +1,12 @@
 // backend/internal/adapters/out/firestore/resale_trade_reader_fs.go
+
 package firestore
 
 import (
 	"context"
 	"errors"
 	"sort"
+	"strconv"
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
@@ -35,6 +37,45 @@ func NewResaleTradeReaderFS(client *firestore.Client) *ResaleTradeReaderFS {
 
 func (r *ResaleTradeReaderFS) transferItemsCol() *firestore.CollectionRef {
 	return r.Client.Collection("orderTransferItems")
+}
+
+func (r *ResaleTradeReaderFS) GetResaleIDByTradeID(
+	ctx context.Context,
+	tradeID string,
+) (string, error) {
+	if r == nil || r.Client == nil || r.tradeRepo == nil {
+		return "", ErrResaleTradeReaderNotConfigured
+	}
+	if tradeID == "" {
+		return "", tradedom.ErrInvalidID
+	}
+
+	trade, err := r.tradeRepo.GetByID(ctx, tradeID)
+	if err != nil {
+		return "", err
+	}
+	if trade.ID != tradeID || trade.SellerType != tradedom.SellerTypeAvatar {
+		return "", ErrInvalidTradeDocumentData
+	}
+
+	projectionID := trade.OrderID + "__" + strconv.Itoa(trade.OrderItemIndex)
+	snap, err := r.transferItemsCol().Doc(projectionID).Get(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	projection, err := orderTransferItemFromSnapshot(snap)
+	if err != nil {
+		return "", err
+	}
+	if projection.OrderID != trade.OrderID ||
+		projection.ItemIndex != trade.OrderItemIndex ||
+		projection.ItemType != orderdom.OrderItemTypeResale ||
+		projection.ResaleID == "" {
+		return "", ErrTransferItemProjectionMismatch
+	}
+
+	return projection.ResaleID, nil
 }
 
 func (r *ResaleTradeReaderFS) ListByResaleID(

@@ -7,8 +7,11 @@ import (
 
 	"cloud.google.com/go/firestore"
 	"google.golang.org/api/iterator"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	applicationport "narratives/internal/application/port"
+	reportdom "narratives/internal/domain/report"
 	tradedom "narratives/internal/domain/trade"
 )
 
@@ -116,6 +119,23 @@ func (r *TradeMessageStatsReaderFS) countReports(
 	ctx context.Context,
 	tradeID string,
 ) (int, error) {
+	messageReportCount, err := r.countTradeMessageReports(ctx, tradeID)
+	if err != nil {
+		return 0, err
+	}
+
+	tradeReportCount, err := r.countTradeReports(ctx, tradeID)
+	if err != nil {
+		return 0, err
+	}
+
+	return messageReportCount + tradeReportCount, nil
+}
+
+func (r *TradeMessageStatsReaderFS) countTradeMessageReports(
+	ctx context.Context,
+	tradeID string,
+) (int, error) {
 	query := r.reportCaseCol().
 		Query.
 		Where("targetType", "==", tradeMessageReportTargetType).
@@ -150,4 +170,34 @@ func (r *TradeMessageStatsReaderFS) countReports(
 	}
 
 	return total, nil
+}
+
+func (r *TradeMessageStatsReaderFS) countTradeReports(
+	ctx context.Context,
+	tradeID string,
+) (int, error) {
+	caseID, err := reportdom.BuildCaseID(reportdom.TargetTypeTrade, tradeID)
+	if err != nil {
+		return 0, err
+	}
+
+	snap, err := r.reportCaseCol().Doc(string(caseID)).Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	var doc struct {
+		ReportCount int `firestore:"reportCount"`
+	}
+	if err := snap.DataTo(&doc); err != nil {
+		return 0, err
+	}
+	if doc.ReportCount < 0 {
+		return 0, nil
+	}
+
+	return doc.ReportCount, nil
 }

@@ -33,6 +33,23 @@ function buildResaleDetailPath(reportCase: ReportCase): string | null {
   return `/avatars/${encodeURIComponent(avatarId)}/resales/${encodeURIComponent(resaleId)}`;
 }
 
+function buildTradeDetailPath(reportCase: ReportCase): string | null {
+  const avatarId = reportCase.targetAuthorId?.trim() || "";
+  const resaleId = reportCase.targetResaleId?.trim() || "";
+  const tradeId = reportCase.targetId?.trim() || "";
+
+  if (
+    reportCase.targetType !== "TRADE" ||
+    !avatarId ||
+    !resaleId ||
+    !tradeId
+  ) {
+    return null;
+  }
+
+  return `/avatars/${encodeURIComponent(avatarId)}/resales/${encodeURIComponent(resaleId)}/trades/${encodeURIComponent(tradeId)}`;
+}
+
 function buildTargetAuthorDetailPath(reportCase: ReportCase): string | null {
   const companyId = reportCase.targetCompanyId?.trim() || "";
   const targetAuthorId = reportCase.targetAuthorId?.trim() || "";
@@ -72,6 +89,7 @@ export default function ReportCaseInfoSection({
 
   const targetTokenDetailPath = buildTargetTokenDetailPath(reportCase);
   const resaleDetailPath = buildResaleDetailPath(reportCase);
+  const tradeDetailPath = buildTradeDetailPath(reportCase);
   const targetAuthorDetailPath = buildTargetAuthorDetailPath(reportCase);
 
   return (
@@ -99,6 +117,24 @@ export default function ReportCaseInfoSection({
                 <TextLink
                   tone="inherit"
                   onClick={() => navigate(resaleDetailPath)}
+                >
+                  {reportCase.targetId}
+                </TextLink>
+              ) : (
+                reportCase.targetId || "-"
+              )}
+            </dd>
+          </>
+        ) : null}
+
+        {reportCase.targetType === "TRADE" ? (
+          <>
+            <dt>取引ID</dt>
+            <dd>
+              {tradeDetailPath ? (
+                <TextLink
+                  tone="inherit"
+                  onClick={() => navigate(tradeDetailPath)}
                 >
                   {reportCase.targetId}
                 </TextLink>

@@ -97,6 +97,7 @@ func buildQueries(
 		r.productBlueprintRepo,
 		r.tokenBlueprintRepo,
 		r.resaleRepo,
+		r.resaleTradeReader,
 	)
 
 	resaleTradeQuery := adminquery.NewResaleTradeQuery(
