@@ -126,6 +126,7 @@ export default function HowToUseWorkspacePage() {
   const isHowToUseListRoute = isHowToUseListPath(location.pathname);
   const howToUseItem = getHowToUseItemFromPath(location.pathname);
   const selectedSectionId = decodeHash(location.hash);
+  const hasMultipleSections = (howToUseItem?.sections.length ?? 0) > 1;
 
   const [mobilePane, setMobilePane] = useState<MobilePane>(() =>
     isHowToUseListRoute ? "list" : "detail",
@@ -254,7 +255,8 @@ export default function HowToUseWorkspacePage() {
   const headerMobileContent =
     isMobile &&
     !isHowToUseListRoute &&
-    howToUseItem ? (
+    howToUseItem &&
+    hasMultipleSections ? (
       <nav
         className="how-to-use-header-nav"
         aria-label={`${howToUseItem.title}の項目`}

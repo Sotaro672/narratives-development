@@ -49,9 +49,11 @@ function ItemList({
       <div className="how-to-use-section__items">
         {items.map((item) => {
           const itemKey = getItemKey(item);
+          const hasMultipleSections = item.sections.length > 1;
           const selected = selectedItem?.category === item.category && selectedItem.slug === item.slug;
-          const expanded = !isMobile && expandedItemKey === itemKey;
+          const expanded = !isMobile && hasMultipleSections && expandedItemKey === itemKey;
           const sectionListId = `how-to-use-sections-${itemKey}`;
+          const showArrow = isMobile || hasMultipleSections;
 
           return (
             <div key={itemKey} className={["how-to-use-item-group", expanded ? "how-to-use-item-group--expanded" : ""].filter(Boolean).join(" ")}>
@@ -59,14 +61,14 @@ function ItemList({
                 type="button"
                 className={["how-to-use-item", selected ? "how-to-use-item--selected" : "", expanded ? "how-to-use-item--expanded" : ""].filter(Boolean).join(" ")}
                 aria-current={selected ? "page" : undefined}
-                aria-expanded={isMobile ? undefined : expanded}
-                aria-controls={isMobile ? undefined : sectionListId}
+                aria-expanded={!isMobile && hasMultipleSections ? expanded : undefined}
+                aria-controls={!isMobile && hasMultipleSections ? sectionListId : undefined}
                 onClick={() => {
                   onItemClick(item);
                 }}
               >
                 <span className="how-to-use-item__title">{item.title}</span>
-                <span className="how-to-use-item__arrow" aria-hidden="true" />
+                {showArrow && <span className="how-to-use-item__arrow" aria-hidden="true" />}
               </button>
 
               {!isMobile && expanded && (
@@ -105,7 +107,10 @@ export default function HowToUseListPane() {
   const selectedItem = getSelectedHowToUseItem(location.pathname);
   const selectedSectionId = getSelectedHowToUseSectionId(location.hash);
   const selectedItemKey = selectedItem ? getItemKey(selectedItem) : null;
-  const [expandedItemKey, setExpandedItemKey] = useState<string | null>(selectedItemKey);
+  const selectedHowToUseItem = selectedItem ? [...consoleItems, ...mallItems].find((item) => item.category === selectedItem.category && item.slug === selectedItem.slug) : undefined;
+  const initialExpandedItemKey = selectedHowToUseItem && selectedHowToUseItem.sections.length > 1 ? selectedItemKey : null;
+
+  const [expandedItemKey, setExpandedItemKey] = useState<string | null>(initialExpandedItemKey);
   const [isMobile, setIsMobile] = useState(() => window.matchMedia("(max-width: 959px)").matches);
 
   useEffect(() => {
@@ -124,27 +129,38 @@ export default function HowToUseListPane() {
   }, []);
 
   useEffect(() => {
-    if (!isMobile && selectedItemKey) {
-      setExpandedItemKey(selectedItemKey);
+    if (isMobile) {
+      return;
     }
-  }, [isMobile, selectedItemKey]);
+
+    if (!selectedItemKey || !selectedHowToUseItem || selectedHowToUseItem.sections.length <= 1) {
+      setExpandedItemKey(null);
+      return;
+    }
+
+    setExpandedItemKey(selectedItemKey);
+  }, [isMobile, selectedHowToUseItem, selectedItemKey]);
 
   const handleItemClick = useCallback(
     (item: HowToUseItem) => {
-      if (isMobile) {
-        navigate(`/how-to-use/${encodeURIComponent(item.category)}/${encodeURIComponent(item.slug)}`);
-        return;
+      const itemKey = getItemKey(item);
+      const hasMultipleSections = item.sections.length > 1;
+
+      if (!isMobile) {
+        setExpandedItemKey(hasMultipleSections ? itemKey : null);
       }
 
-      const itemKey = getItemKey(item);
-      setExpandedItemKey((current) => current === itemKey ? null : itemKey);
+      navigate(`/how-to-use/${encodeURIComponent(item.category)}/${encodeURIComponent(item.slug)}`);
     },
     [isMobile, navigate],
   );
 
   const handleSectionClick = useCallback(
     (item: HowToUseItem, section: HowToUseSectionItem) => {
-      setExpandedItemKey(getItemKey(item));
+      if (item.sections.length > 1) {
+        setExpandedItemKey(getItemKey(item));
+      }
+
       navigate({
         pathname: `/how-to-use/${encodeURIComponent(item.category)}/${encodeURIComponent(item.slug)}`,
         hash: `#${encodeURIComponent(section.id)}`,

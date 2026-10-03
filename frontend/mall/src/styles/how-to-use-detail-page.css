@@ -32,6 +32,14 @@
   overflow-wrap: anywhere;
 }
 
+.how-to-use-detail-page-layout--single-section .how-to-use-article-section__title {
+  display: none;
+}
+
+.how-to-use-detail-page-layout--single-section .how-to-use-article-section__content {
+  margin-top: 0;
+}
+
 @media (max-width: 959px) {
   .how-to-use-detail-page {
     padding: 40px 16px 56px;

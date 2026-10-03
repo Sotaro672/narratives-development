@@ -1,6 +1,6 @@
 // frontend/mall/src/pages/HowToUseDetailPage.tsx
 
-import { useEffect } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { Navigate, useLocation, useParams } from "react-router-dom";
 
 import {
@@ -82,6 +82,7 @@ function decodeHash(hash: string): string | null {
 
 export default function HowToUseDetailPage() {
   const location = useLocation();
+  const detailPageRef = useRef<HTMLDivElement>(null);
   const { category, slug = "" } = useParams<{
     category?: string;
     slug?: string;
@@ -89,15 +90,26 @@ export default function HowToUseDetailPage() {
 
   const validCategory = isHowToUseCategory(category) ? category : null;
   const item = validCategory && slug ? findHowToUseItem(validCategory, slug) : undefined;
+  const hasSingleSection = item?.sections.length === 1;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!item) return;
 
     const sectionId = decodeHash(location.hash);
-    if (!sectionId || !item.sections.some((section) => section.id === sectionId)) return;
+    const validSectionId = sectionId && item.sections.some((section) => section.id === sectionId) ? sectionId : null;
+    const scrollContainer = detailPageRef.current?.closest<HTMLElement>(".how-to-use-workspace-page__detail");
+
+    if (!validSectionId) {
+      scrollContainer?.scrollTo({
+        top: 0,
+        left: 0,
+        behavior: "auto",
+      });
+      return;
+    }
 
     const frameId = window.requestAnimationFrame(() => {
-      const target = document.getElementById(sectionId);
+      const target = document.getElementById(validSectionId);
       if (!target) return;
 
       const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -111,14 +123,21 @@ export default function HowToUseDetailPage() {
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [item, location.hash]);
+  }, [item, location.hash, location.key]);
 
   if (!validCategory || !slug || !item) {
     return <Navigate to="/how-to-use" replace />;
   }
 
   return (
-    <div className="how-to-use-detail-page-layout" data-how-to-use-detail>
+    <div
+      ref={detailPageRef}
+      className={[
+        "how-to-use-detail-page-layout",
+        hasSingleSection ? "how-to-use-detail-page-layout--single-section" : "",
+      ].filter(Boolean).join(" ")}
+      data-how-to-use-detail
+    >
       <main className="how-to-use-detail-page">
         <div className="how-to-use-detail-page__inner">
           <h1 className="how-to-use-detail-page__title">{item.title}</h1>
