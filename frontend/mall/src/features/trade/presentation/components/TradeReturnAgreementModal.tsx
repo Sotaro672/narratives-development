@@ -50,6 +50,18 @@ function getReturnRequirementLabel(
   }
 }
 
+function getProposalReason(
+  proposal: TradeReturnProposal | null,
+): string {
+  const reason = proposal?.reason?.trim() ?? "";
+
+  if (!reason) {
+    return "回答理由は記録されていません。";
+  }
+
+  return reason;
+}
+
 function isValidProposal(
   proposal: TradeReturnProposal | null,
 ): proposal is TradeReturnProposal {
@@ -57,7 +69,6 @@ function isValidProposal(
     proposal !== null &&
     proposal.id.trim() !== "" &&
     proposal.agreement === "agree" &&
-    proposal.reason.trim() !== "" &&
     (proposal.returnRequirement === "required" ||
       proposal.returnRequirement === "not_required") &&
     proposal.refundAmount !== undefined &&
@@ -140,7 +151,7 @@ export default function TradeReturnAgreementModal({
                 </ModalDescription>
 
                 <p className="trade-return-agreement-modal__reason-value">
-                  {proposal.reason}
+                  {getProposalReason(proposal)}
                 </p>
               </section>
 

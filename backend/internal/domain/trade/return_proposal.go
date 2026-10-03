@@ -67,7 +67,11 @@ var (
 // ReturnProposal is the seller's latest response to the buyer's return
 // consultation.
 //
-// Reason is required for both agreement and disagreement.
+// New proposals require Reason for both agreement and disagreement.
+//
+// Persisted legacy proposals created before Reason was introduced may have an
+// empty Reason. They remain readable for backward compatibility, but any new or
+// updated proposal must pass ValidateForCreate and therefore include Reason.
 //
 // When Agreement is disagree:
 //   - ReturnRequirement must be empty.
@@ -101,6 +105,8 @@ type ReturnProposal struct {
 //
 // A seller agreement creates a proposal that must later be explicitly accepted
 // by the buyer.
+//
+// Reason is required for every newly created proposal.
 func (a *ReturnAgreement) Propose(
 	proposalID string,
 	agreement ReturnProposalAgreement,
@@ -221,6 +227,8 @@ func (a *ReturnAgreement) RejectProposal(at time.Time) error {
 	return nil
 }
 
+// ValidateForCreate validates a newly created or newly updated seller proposal.
+// Reason is mandatory for all new proposals.
 func (p ReturnProposal) ValidateForCreate() error {
 	if p.ID != "" && !isValidReferenceID(p.ID) {
 		return ErrInvalidReturnProposalID
@@ -260,6 +268,15 @@ func (p ReturnProposal) ValidateForCreate() error {
 	return nil
 }
 
+// ValidateForPersist validates a proposal loaded from or written to persistence.
+//
+// Reason was introduced after ReturnProposal had already been persisted in
+// Firestore. Legacy records may therefore have an empty Reason. Empty Reason is
+// accepted here only for backward-compatible reads of those records.
+//
+// When Reason is present, the current maximum-length policy is still enforced.
+// New proposals cannot use this compatibility path because Propose always calls
+// ValidateForCreate before persistence.
 func (p ReturnProposal) ValidateForPersist() error {
 	if !isValidReferenceID(p.ID) {
 		return ErrInvalidReturnProposalID
@@ -269,7 +286,7 @@ func (p ReturnProposal) ValidateForPersist() error {
 	}
 
 	reason := strings.TrimSpace(p.Reason)
-	if reason == "" ||
+	if reason != "" &&
 		len([]rune(reason)) > MaxReturnProposalReasonLength {
 		return ErrInvalidReturnProposalReason
 	}
