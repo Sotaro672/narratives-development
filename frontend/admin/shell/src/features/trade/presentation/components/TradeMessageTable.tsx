@@ -18,6 +18,7 @@ import { useTradeMessages } from "../hooks/useTradeMessages";
 
 type TradeMessageTableProps = {
   tradeId: string;
+  buyerAvatarName?: string;
   sellerAvatarName?: string;
   returnReportCase?: ReportCase | null;
   returnReport?: ReportItem | null;
@@ -126,6 +127,33 @@ function getDisplaySenderName(
   return SENDER_SIDE_LABELS[displaySenderSide];
 }
 
+function getDisplayMessageContent(
+  message: TradeMessage,
+  returnReportCase?: ReportCase | null,
+): string {
+  const content = message.content.trim();
+
+  if (message.id.trim() !== "return-consultation") {
+    return content || "-";
+  }
+
+  const storedDetail = returnReportCase?.snapshotBody?.trim() ?? "";
+
+  if (!storedDetail) {
+    return content || "-";
+  }
+
+  if (content.includes(storedDetail)) {
+    return content;
+  }
+
+  if (!content) {
+    return `詳細: ${storedDetail}`;
+  }
+
+  return `${content} / 詳細: ${storedDetail}`;
+}
+
 function getCreatedAtTime(value: string): number {
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
@@ -133,6 +161,7 @@ function getCreatedAtTime(value: string): number {
 
 export default function TradeMessageTable({
   tradeId,
+  buyerAvatarName,
   sellerAvatarName,
   returnReportCase,
   returnReport,
@@ -142,6 +171,7 @@ export default function TradeMessageTable({
 
   const participantNames = useMemo<TradeParticipantNames>(() => {
     const result: TradeParticipantNames = {
+      buyer: buyerAvatarName?.trim() || undefined,
       seller: sellerAvatarName?.trim() || undefined,
     };
 
@@ -176,7 +206,12 @@ export default function TradeMessageTable({
     }
 
     return result;
-  }, [messages, returnReport, sellerAvatarName]);
+  }, [
+    buyerAvatarName,
+    messages,
+    returnReport,
+    sellerAvatarName,
+  ]);
 
   const rows = useMemo<TradeMessageTableRow[]>(() => {
     const result: TradeMessageTableRow[] = (messages?.items ?? []).map(
@@ -278,7 +313,10 @@ export default function TradeMessageTable({
             );
           }
 
-          return row.message.content || "-";
+          return getDisplayMessageContent(
+            row.message,
+            returnReportCase,
+          );
         },
         minWidth: "280px",
       },
@@ -334,7 +372,7 @@ export default function TradeMessageTable({
         nowrap: true,
       },
     ],
-    [navigate, participantNames],
+    [navigate, participantNames, returnReportCase],
   );
 
   if (loading && !messages) {

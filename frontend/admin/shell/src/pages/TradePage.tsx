@@ -6,6 +6,7 @@ import { useAvatars } from "../features/avatar/presentation/hooks/useAvatars";
 import ResaleDetailAside from "../features/resale/presentation/components/ResaleDetailAside";
 import { useResaleDetail } from "../features/resale/presentation/hooks/useResaleDetail";
 import TradeMessageTable from "../features/trade/presentation/components/TradeMessageTable";
+import { useResaleTrades } from "../features/trade/presentation/hooks/useResaleTrades";
 import { useTradeReturnReport } from "../features/trade/presentation/hooks/useTradeReturnReport";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 
@@ -18,6 +19,7 @@ export default function TradePage() {
   }>();
 
   const { avatars } = useAvatars();
+  const { trades } = useResaleTrades(resaleId);
   const { resale, loading, error, reload } = useResaleDetail(
     avatarId,
     resaleId,
@@ -32,6 +34,9 @@ export default function TradePage() {
 
   const sellerAvatarName =
     avatars.find((avatar) => avatar.id === avatarId)?.avatarName ?? "";
+
+  const buyerAvatarName =
+    trades?.items.find((trade) => trade.id === tradeId)?.buyerAvatarName ?? "";
 
   return (
     <Page>
@@ -70,6 +75,7 @@ export default function TradePage() {
         main={
           <TradeMessageTable
             tradeId={tradeId}
+            buyerAvatarName={buyerAvatarName}
             sellerAvatarName={sellerAvatarName}
             returnReportCase={returnReportCase}
             returnReport={returnReport}
