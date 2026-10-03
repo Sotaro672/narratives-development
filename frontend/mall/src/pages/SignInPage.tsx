@@ -12,7 +12,9 @@ import "../styles/page-layout.css";
 import "../styles/form.css";
 import "../styles/signIn-page.css";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDismissPage";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import TextButton from "../components/ui/TextButton";
@@ -67,11 +69,16 @@ function resolveSignInErrorMessage(
 export default function SignInPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const isMobilePortrait = useMobilePortrait();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const handleDismiss = () => {
+    navigate(-1);
+  };
 
   const handleSignIn = async () => {
     setError("");
@@ -104,10 +111,14 @@ export default function SignInPage() {
     }
   };
 
-  return (
+  const content = (
     <Layout
-      title="AMOL"
+      title="ログイン"
+      titleClickable={false}
       mode="signin"
+      showHeader={!isMobilePortrait}
+      showBackButton={!isMobilePortrait}
+      onBackButtonClick={handleDismiss}
     >
       <section className="signin-page-section">
         <div className="signin-page-section__inner">
@@ -169,5 +180,18 @@ export default function SignInPage() {
         </div>
       </section>
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeRightDismissPage
+      title="ログイン"
+      onDismiss={handleDismiss}
+    >
+      {content}
+    </MobileSwipeRightDismissPage>
   );
 }

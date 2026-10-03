@@ -1,8 +1,11 @@
 // frontend/mall/src/pages/SignUpPage.tsx
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDismissPage";
 import Alert from "../components/ui/Alert";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -16,6 +19,8 @@ import "../styles/form.css";
 import "../styles/signUp-page.css";
 
 export default function SignUpPage() {
+  const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
   const vm = useSignUpPage();
 
   const [termsText, setTermsText] = useState("");
@@ -33,10 +38,7 @@ export default function SignUpPage() {
         const response = await fetch("/assets/terms-for-user.txt");
         const contentType = response.headers.get("content-type") ?? "";
 
-        if (
-          !response.ok ||
-          !contentType.toLowerCase().startsWith("text/plain")
-        ) {
+        if (!response.ok || !contentType.toLowerCase().startsWith("text/plain")) {
           throw new Error("利用規約を読み込めませんでした。");
         }
 
@@ -64,12 +66,20 @@ export default function SignUpPage() {
     };
   }, []);
 
-  return (
-    <Layout title="AMOL">
+  const handleDismiss = () => {
+    navigate(-1);
+  };
+
+  const content = (
+    <Layout
+      title="新規登録"
+      titleClickable={false}
+      showHeader={!isMobilePortrait}
+      showBackButton={!isMobilePortrait}
+      onBackButtonClick={handleDismiss}
+    >
       <section className="page-section signup-page-section">
-        <p className="page-description">
-          {vm.topMessage}
-        </p>
+        <p className="page-description">{vm.topMessage}</p>
 
         <div className="form-block signup-form-block">
           <Input
@@ -115,26 +125,15 @@ export default function SignUpPage() {
           />
 
           <div className="terms-block">
-            <p className="terms-title">
-              利用規約
-            </p>
+            <p className="terms-title">利用規約</p>
 
-            <Card
-              padding="sm"
-              className="terms-scroll-box"
-            >
+            <Card padding="sm" className="terms-scroll-box">
               {termsLoading ? (
-                <TextState variant="loading">
-                  利用規約を読み込み中...
-                </TextState>
+                <TextState variant="loading">利用規約を読み込み中...</TextState>
               ) : termsError ? (
-                <TextState variant="error">
-                  {termsError}
-                </TextState>
+                <TextState variant="error">{termsError}</TextState>
               ) : (
-                <pre className="terms-text">
-                  {termsText}
-                </pre>
+                <pre className="terms-text">{termsText}</pre>
               )}
             </Card>
           </div>
@@ -142,11 +141,7 @@ export default function SignUpPage() {
           <Checkbox
             label="利用規約に同意します"
             checked={vm.agree}
-            disabled={
-              vm.loading ||
-              termsLoading ||
-              Boolean(termsError)
-            }
+            disabled={vm.loading || termsLoading || Boolean(termsError)}
             onChange={(event) => {
               vm.setAgree(event.target.checked);
               vm.clearError();
@@ -154,10 +149,7 @@ export default function SignUpPage() {
           />
 
           {vm.error ? (
-            <Alert
-              variant="error"
-              className="signup-page__error"
-            >
+            <Alert variant="error" className="signup-page__error">
               {vm.error}
             </Alert>
           ) : null}
@@ -168,16 +160,22 @@ export default function SignUpPage() {
             variant="primary"
             fullWidth
             onClick={vm.handleSignUp}
-            disabled={
-              !vm.canSubmit ||
-              termsLoading ||
-              Boolean(termsError)
-            }
+            disabled={!vm.canSubmit || termsLoading || Boolean(termsError)}
           >
             {vm.loading ? "送信中..." : "認証メールを送信"}
           </Button>
         </div>
       </section>
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeRightDismissPage title="新規登録" onDismiss={handleDismiss}>
+      {content}
+    </MobileSwipeRightDismissPage>
   );
 }

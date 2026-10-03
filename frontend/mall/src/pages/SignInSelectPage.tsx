@@ -2,7 +2,9 @@
 
 import { useNavigate } from "react-router-dom";
 
+import { useMobilePortrait } from "../components/hooks/useMobilePortrait";
 import Layout from "../components/layout/Layout";
+import MobileSwipeRightDismissPage from "../components/layout/MobileSwipeRightDismissPage";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Card from "../components/ui/Card";
@@ -52,6 +54,11 @@ const signInTargets: SignInTarget[] = [
 
 export default function SignInSelectPage() {
   const navigate = useNavigate();
+  const isMobilePortrait = useMobilePortrait();
+
+  const handleDismiss = () => {
+    navigate(-1);
+  };
 
   const handleSignInTargetClick = (target: SignInTarget) => {
     if (target.internalPath) {
@@ -64,8 +71,15 @@ export default function SignInSelectPage() {
     }
   };
 
-  return (
-    <Layout title="AMOL" mode="signin">
+  const content = (
+    <Layout
+      title="ログイン選択"
+      titleClickable={false}
+      mode="signin"
+      showHeader={!isMobilePortrait}
+      showBackButton={!isMobilePortrait}
+      onBackButtonClick={handleDismiss}
+    >
       <main className="sign-up-select-page">
         <div className="sign-up-select-page__inner">
           <header className="sign-up-select-page__header">
@@ -120,5 +134,18 @@ export default function SignInSelectPage() {
         </div>
       </main>
     </Layout>
+  );
+
+  if (!isMobilePortrait) {
+    return content;
+  }
+
+  return (
+    <MobileSwipeRightDismissPage
+      title="ログイン"
+      onDismiss={handleDismiss}
+    >
+      {content}
+    </MobileSwipeRightDismissPage>
   );
 }
