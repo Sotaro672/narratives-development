@@ -23,6 +23,7 @@ import type {
   TradeDetail,
   TradeDetailResponse,
   TradeMessage,
+  TradeMessageImage,
   TradeReturnAgreement,
   TradeReturnConsultationReason,
   TradeReturnRequirement,
@@ -91,6 +92,7 @@ export type DispatchTradeParams = {
 export type ReportTradeReturnDisputeParams = {
   tradeId: string;
   detail: string;
+  images?: TradeMessageImage[];
 };
 
 export type FetchTradeReturnShipmentParams = {
@@ -355,6 +357,7 @@ export async function reportTradeReturnDispute(
 ): Promise<void> {
   const tradeId = requireTradeId(params.tradeId);
   const detail = requireReturnDisputeDetail(params.detail);
+  const images = params.images ?? [];
 
   await fetchTradeWithAuth<unknown>(
     `${buildTradePath(tradeId)}/reports`,
@@ -363,6 +366,7 @@ export async function reportTradeReturnDispute(
       json: {
         reason: "OTHER",
         detail,
+        ...(images.length > 0 ? { images } : {}),
       },
     },
   );

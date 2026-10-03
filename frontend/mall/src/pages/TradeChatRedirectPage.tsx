@@ -30,12 +30,19 @@ function getErrorMessage(
 export default function TradeChatRedirectPage() {
   const navigate = useNavigate();
   const { orderId, itemIndex } = useParams<TradeChatRedirectRouteParams>();
-  const { clearAction } = useChatWorkspace();
+  const {
+    clearComposer,
+    clearHeaderTitle,
+  } = useChatWorkspace();
   const [error, setError] = useState("");
 
   useEffect(() => {
-    clearAction();
-  }, [clearAction]);
+    clearComposer();
+    clearHeaderTitle();
+  }, [
+    clearComposer,
+    clearHeaderTitle,
+  ]);
 
   useEffect(() => {
     let cancelled = false;

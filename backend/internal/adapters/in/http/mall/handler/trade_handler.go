@@ -2,12 +2,14 @@
 package mallHandler
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
 
 	mallquery "narratives/internal/application/query/mall"
 	usecase "narratives/internal/application/usecase"
+	reportdom "narratives/internal/domain/report"
 	tradedom "narratives/internal/domain/trade"
 )
 
@@ -254,6 +256,50 @@ func (h *TradeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type tradeReturnDisputeReportRequest struct {
+	Reason string                           `json:"reason"`
+	Detail string                           `json:"detail"`
+	Images []createTradeMessageImageRequest `json:"images"`
+}
+
+func decodeTradeReturnDisputeReportRequest(
+	w http.ResponseWriter,
+	r *http.Request,
+) (
+	reportdom.ReportReason,
+	string,
+	[]tradedom.MessageImage,
+	bool,
+) {
+	var request tradeReturnDisputeReportRequest
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&request); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid json body")
+		return "", "", nil, false
+	}
+
+	reason := reportdom.ReportReason(
+		strings.ToUpper(strings.TrimSpace(request.Reason)),
+	)
+	if err := reason.Validate(); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid report reason")
+		return "", "", nil, false
+	}
+
+	detail := strings.TrimSpace(request.Detail)
+	if detail == "" {
+		writeJSONError(w, http.StatusBadRequest, "report detail required")
+		return "", "", nil, false
+	}
+
+	images := toTradeMessageImages(request.Images)
+
+	return reason, detail, images, true
+}
+
 func (h *TradeHandler) reportTrade(
 	w http.ResponseWriter,
 	r *http.Request,
@@ -279,7 +325,8 @@ func (h *TradeHandler) reportTrade(
 		return
 	}
 
-	reason, detail, ok := decodeReportRequest(w, r)
+	reason, detail, images, ok :=
+		decodeTradeReturnDisputeReportRequest(w, r)
 	if !ok {
 		return
 	}
@@ -291,6 +338,7 @@ func (h *TradeHandler) reportTrade(
 			AvatarID: avatarID,
 			Reason:   reason,
 			Detail:   detail,
+			Images:   images,
 		},
 	)
 	if err != nil {
@@ -489,6 +537,15 @@ func writeTradeReportErr(
 	case errors.Is(err, tradedom.ErrNotFound),
 		errors.Is(err, tradedom.ErrReturnAgreementNotFound):
 		notFound(w)
+
+	case errors.Is(err, tradedom.ErrTooManyMessageImages),
+		errors.Is(err, tradedom.ErrInvalidMessageImageFileName),
+		errors.Is(err, tradedom.ErrInvalidMessageImageFileURL),
+		errors.Is(err, tradedom.ErrInvalidMessageImageObjectPath),
+		errors.Is(err, tradedom.ErrInvalidMessageImageFileSize),
+		errors.Is(err, tradedom.ErrInvalidMessageImageMIMEType),
+		errors.Is(err, tradedom.ErrDuplicateMessageImage):
+		badRequest(w, err.Error())
 
 	case errors.Is(err, tradedom.ErrReturnDisputeNotAllowed),
 		errors.Is(err, tradedom.ErrReturnAgreementConflict):

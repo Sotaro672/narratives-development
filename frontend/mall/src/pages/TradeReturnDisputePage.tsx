@@ -14,6 +14,7 @@ import StatePanel from "../components/ui/StatePanel";
 import ChatInlineComposer from "../features/shared/presentation/components/ChatInlineComposer";
 import type { ChatComposerConfig } from "../features/shared/types/chatComposer";
 import { reportTradeReturnDispute } from "../features/trade/infrastructure/tradeApi";
+import { uploadTradeMessageImage } from "../features/trade/infrastructure/tradeMessageImageApi";
 import useTradeThread from "../features/trade/presentation/hooks/useTradeThread";
 import { getErrorMessage } from "../features/trade/presentation/util/tradeChatDetail";
 
@@ -25,6 +26,8 @@ type TradeReturnDisputeRouteParams = {
 };
 
 const MAX_DETAIL_LENGTH = 5000;
+const MAX_REPORT_IMAGES = 10;
+const MAX_REPORT_IMAGE_SIZE_BYTES = 20 * 1024 * 1024;
 
 export default function TradeReturnDisputePage() {
   const navigate = useNavigate();
@@ -35,6 +38,7 @@ export default function TradeReturnDisputePage() {
   const thread = useTradeThread(normalizedTradeId);
 
   const [content, setContent] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [agreedToReportConditions, setAgreedToReportConditions] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
@@ -126,6 +130,61 @@ export default function TradeReturnDisputePage() {
     setSubmissionError("");
   }, []);
 
+  const handleFilesAdd = useCallback((nextFiles: File[]) => {
+    const imageFiles = nextFiles.filter((file) =>
+      file.type.startsWith("image/"),
+    );
+
+    if (imageFiles.length !== nextFiles.length) {
+      setSubmissionError("画像ファイルのみ添付できます。");
+      return;
+    }
+
+    const oversizedFile = imageFiles.find(
+      (file) => file.size > MAX_REPORT_IMAGE_SIZE_BYTES,
+    );
+
+    if (oversizedFile) {
+      setSubmissionError("画像は1枚20MB以下にしてください。");
+      return;
+    }
+
+    setFiles((currentFiles) => {
+      const remainingCount = Math.max(
+        MAX_REPORT_IMAGES - currentFiles.length,
+        0,
+      );
+
+      if (remainingCount === 0) {
+        setSubmissionError(
+          `画像は最大${MAX_REPORT_IMAGES}枚まで添付できます。`,
+        );
+        return currentFiles;
+      }
+
+      const filesToAdd = imageFiles.slice(0, remainingCount);
+
+      if (imageFiles.length > remainingCount) {
+        setSubmissionError(
+          `画像は最大${MAX_REPORT_IMAGES}枚まで添付できます。`,
+        );
+      } else {
+        setSubmissionError("");
+      }
+
+      return [...currentFiles, ...filesToAdd];
+    });
+  }, []);
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setFiles((currentFiles) =>
+      currentFiles.filter(
+        (_file, currentIndex) => currentIndex !== index,
+      ),
+    );
+    setSubmissionError("");
+  }, []);
+
   const handleSubmit = useCallback(async (): Promise<void> => {
     const trade = thread.trade;
 
@@ -156,9 +215,19 @@ export default function TradeReturnDisputePage() {
     setSubmissionError("");
 
     try {
+      const images = await Promise.all(
+        files.map((file) =>
+          uploadTradeMessageImage({
+            tradeId: normalizedTradeId,
+            file,
+          }),
+        ),
+      );
+
       await reportTradeReturnDispute({
         tradeId: normalizedTradeId,
         detail: normalizedContent,
+        images,
       });
 
       navigate(chatPath, { replace: true });
@@ -176,6 +245,7 @@ export default function TradeReturnDisputePage() {
     agreedToReportConditions,
     canSubmit,
     chatPath,
+    files,
     navigate,
     normalizedContent,
     normalizedTradeId,
@@ -186,6 +256,7 @@ export default function TradeReturnDisputePage() {
   const composer = useMemo<ChatComposerConfig>(
     () => ({
       content,
+      files,
       placeholder: "報告内容を入力",
       error: submissionError || null,
       submitting,
@@ -194,14 +265,21 @@ export default function TradeReturnDisputePage() {
       submitLabel: "報告",
       submittingLabel: "報告中...",
       maxLength: MAX_DETAIL_LENGTH,
+      maxFiles: MAX_REPORT_IMAGES,
+      accept: "image/*",
       onContentChange: handleContentChange,
+      onFilesAdd: handleFilesAdd,
+      onRemoveFile: handleRemoveFile,
       onSubmit: handleSubmit,
     }),
     [
       canEdit,
       canSubmit,
       content,
+      files,
       handleContentChange,
+      handleFilesAdd,
+      handleRemoveFile,
       handleSubmit,
       submissionError,
       submitting,
@@ -278,7 +356,7 @@ export default function TradeReturnDisputePage() {
                   </h2>
 
                   <p className="trade-return-dispute-page__description">
-                    出品者が返品に合意しなかったため、この取引について運営へ報告できます。取引の状況や、確認してほしい内容を具体的に入力してください。
+                    出品者が返品に合意しなかったため、この取引について運営へ報告できます。取引の状況や、確認してほしい内容を具体的に入力してください。必要に応じて商品の状態などが分かる画像も添付できます。
                   </p>
                 </section>
 

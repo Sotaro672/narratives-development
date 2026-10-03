@@ -23,6 +23,7 @@ type ReportTradeReturnDisputeByAvatarInput struct {
 	AvatarID string
 	Reason   reportdom.ReportReason
 	Detail   string
+	Images   []tradedom.MessageImage
 }
 
 func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
@@ -52,6 +53,13 @@ func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
 		return reportdom.AddReportResult{}, reportdom.ErrReportDetailRequired
 	}
 
+	if err := validateTradeMessageImageScope(
+		tradeID,
+		input.Images,
+	); err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
 	trade, err := u.tradeRepo.GetByID(ctx, tradeID)
 	if err != nil {
 		return reportdom.AddReportResult{}, err
@@ -64,7 +72,7 @@ func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
 		return reportdom.AddReportResult{}, ErrReportForbidden
 	}
 	if trade.SellerType != tradedom.SellerTypeAvatar ||
-		trade.SellerAvatarID == "" {
+		strings.TrimSpace(trade.SellerAvatarID) == "" {
 		return reportdom.AddReportResult{}, ErrReportForbidden
 	}
 
@@ -80,6 +88,20 @@ func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
 	}
 
 	now := u.now().UTC()
+
+	message, err := tradedom.NewMessageForCreate(
+		reportTradeReturnDisputeSystemMessageID,
+		tradeID,
+		tradedom.MessageSenderSideSystem,
+		tradedom.MessageSenderTypeSystem,
+		"system",
+		"購入者が運営へ返品問題を報告しました。",
+		input.Images,
+	)
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+	message.CreatedAt = now
 
 	reportCase, err := reportdom.NewReportCase(
 		reportdom.NewReportCaseParams{
@@ -117,17 +139,6 @@ func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
 	if err != nil {
 		return reportdom.AddReportResult{}, err
 	}
-
-	message, err := tradedom.NewSystemMessageForCreate(
-		reportTradeReturnDisputeSystemMessageID,
-		tradeID,
-		"購入者が運営へ返品問題を報告しました。",
-	)
-	if err != nil {
-		return reportdom.AddReportResult{}, err
-	}
-
-	message.CreatedAt = now
 
 	if _, err := u.tradeMessageRepo.Create(ctx, message); err != nil &&
 		!errors.Is(err, tradedom.ErrMessageAlreadyExists) {
