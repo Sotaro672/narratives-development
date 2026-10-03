@@ -32,6 +32,7 @@ import PostCommentGuide from "../features/howToUse/presentation/components/mall/
 import PostProductReviewGuide from "../features/howToUse/presentation/components/mall/PostProductReviewGuide";
 import PurchaseGuide from "../features/howToUse/presentation/components/mall/PurchaseGuide";
 import RequestRefundGuide from "../features/howToUse/presentation/components/mall/RequestRefundGuide";
+import ResaleReturnGuide from "../features/howToUse/presentation/components/mall/ResaleReturnGuide";
 import ReviewResaleGuide from "../features/howToUse/presentation/components/mall/ReviewResaleGuide";
 import ShippingAddressRegistrationGuide from "../features/howToUse/presentation/components/mall/ShippingAddressRegistrationGuide";
 import TradeGuide from "../features/howToUse/presentation/components/mall/TradeGuide";
@@ -61,6 +62,7 @@ function renderGuide(category: HowToUseCategory, slug: string) {
   if (category === "mall" && slug === "comment") return <PostCommentGuide />;
   if (category === "mall" && slug === "cancel") return <CancelOderGuide />;
   if (category === "mall" && slug === "return") return <RequestRefundGuide />;
+  if (category === "mall" && slug === "resale-return") return <ResaleReturnGuide />;
   if (category === "mall" && slug === "review") return <PostProductReviewGuide />;
   if (category === "mall" && slug === "payout-account") return <OpenPayoutAccountGuide />;
   if (category === "mall" && slug === "resale") return <ListMarketGuide />;

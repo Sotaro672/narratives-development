@@ -228,12 +228,23 @@ export const mallItems: HowToUseItem[] = [
   {
     category: "mall",
     slug: "return",
-    title: "返品",
-    description: "購入した商品の返品手続きと返送方法を確認します。",
+    title: "返品（ブランド販売）",
+    description: "ブランドから購入した商品の返品手続きと返送方法を確認します。",
     sections: [
       { id: "return-request", title: "返品申請" },
       { id: "return-reply", title: "返信入力" },
       { id: "return-close", title: "お問い合わせの終了" },
+    ],
+  },
+  {
+    category: "mall",
+    slug: "resale-return",
+    title: "返品（フリマ取引）",
+    description: "フリマ取引で購入した商品の返品相談、合意、返送手順を確認します。",
+    sections: [
+      { id: "resale-return-consultation", title: "返品について相談する" },
+      { id: "resale-return-agreement", title: "返品に合意する" },
+      { id: "resale-return-shipping", title: "商品を返送する" },
     ],
   },
   {
