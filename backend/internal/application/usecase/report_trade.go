@@ -4,11 +4,14 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	reportdom "narratives/internal/domain/report"
 	tradedom "narratives/internal/domain/trade"
 )
+
+const reportTradeReturnDisputeSystemMessageID = "return-dispute-reported"
 
 type ReportTradeReturnDisputeByAvatarInput struct {
 	TradeID  string
@@ -24,7 +27,9 @@ func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
 	if err := u.ensureReportRepository(); err != nil {
 		return reportdom.AddReportResult{}, err
 	}
-	if u.tradeRepo == nil || u.returnAgreementRepo == nil {
+	if u.tradeRepo == nil ||
+		u.tradeMessageRepo == nil ||
+		u.returnAgreementRepo == nil {
 		return reportdom.AddReportResult{}, ErrReportUsecaseNotConfigured
 	}
 
@@ -58,20 +63,15 @@ func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
 		return reportdom.AddReportResult{}, ErrReportForbidden
 	}
 
-	agreement, err := u.returnAgreementRepo.GetByTradeID(
-		ctx,
-		tradeID,
-	)
+	agreement, err := u.returnAgreementRepo.GetByTradeID(ctx, tradeID)
 	if err != nil {
 		return reportdom.AddReportResult{}, err
 	}
 
 	if agreement.Status != tradedom.ReturnStatusDiscussing ||
 		agreement.Proposal == nil ||
-		agreement.Proposal.Agreement !=
-			tradedom.ReturnProposalAgreementDisagree {
-		return reportdom.AddReportResult{},
-			tradedom.ErrReturnDisputeNotAllowed
+		agreement.Proposal.Agreement != tradedom.ReturnProposalAgreementDisagree {
+		return reportdom.AddReportResult{}, tradedom.ErrReturnDisputeNotAllowed
 	}
 
 	now := u.now().UTC()
@@ -108,12 +108,24 @@ func (u *ReportUsecase) ReportTradeReturnDisputeByAvatar(
 		return reportdom.AddReportResult{}, err
 	}
 
-	result, err := u.reportRepo.AddReport(
-		ctx,
-		reportCase,
-		report,
+	result, err := u.reportRepo.AddReport(ctx, reportCase, report)
+	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	message, err := tradedom.NewSystemMessageForCreate(
+		reportTradeReturnDisputeSystemMessageID,
+		tradeID,
+		"購入者が運営へ返品問題を報告しました。",
 	)
 	if err != nil {
+		return reportdom.AddReportResult{}, err
+	}
+
+	message.CreatedAt = now
+
+	if _, err := u.tradeMessageRepo.Create(ctx, message); err != nil &&
+		!errors.Is(err, tradedom.ErrMessageAlreadyExists) {
 		return reportdom.AddReportResult{}, err
 	}
 

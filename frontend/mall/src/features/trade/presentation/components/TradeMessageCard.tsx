@@ -58,7 +58,10 @@ function getSystemMessageActorSide(
     return "seller";
   }
 
-  if (messageId === "return-consultation") {
+  if (
+    messageId === "return-consultation" ||
+    messageId === "return-dispute-reported"
+  ) {
     return "buyer";
   }
 

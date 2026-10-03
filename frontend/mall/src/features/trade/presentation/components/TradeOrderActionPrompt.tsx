@@ -30,6 +30,8 @@ function getPromptText(
         : "返品について相談しますか？";
     case "respond-return-consultation":
       return "購入者から返品についての相談が届いています。";
+    case "update-return-proposal":
+      return "返品相談への回答を変更できます。";
     case "review-return-proposal":
       return "出品者から返品条件が提示されています。";
     case "report-return-dispute":
@@ -71,6 +73,8 @@ function getActionLabel(
         return "送信中...";
       case "respond-return-consultation":
         return "回答中...";
+      case "update-return-proposal":
+        return "更新中...";
       case "review-return-proposal":
         return "処理中...";
       case "report-return-dispute":
@@ -91,6 +95,8 @@ function getActionLabel(
       return "返品について相談する";
     case "respond-return-consultation":
       return "返品相談に回答する";
+    case "update-return-proposal":
+      return "回答を更新する";
     case "review-return-proposal":
       return "返品条件を確認する";
     case "report-return-dispute":

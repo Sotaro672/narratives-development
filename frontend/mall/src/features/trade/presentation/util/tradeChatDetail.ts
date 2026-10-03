@@ -10,6 +10,7 @@ export type TradeOrderActionKind =
   | "dispatch"
   | "start-return-consultation"
   | "respond-return-consultation"
+  | "update-return-proposal"
   | "review-return-proposal"
   | "report-return-dispute"
   | "prepare-return-shipment"
@@ -84,7 +85,9 @@ export function getTradeOrderAction(
 
     switch (trade.returnStatus) {
       case "discussing":
-        return "respond-return-consultation";
+        return trade.returnProposal
+          ? "update-return-proposal"
+          : "respond-return-consultation";
 
       case "agreed":
         return (

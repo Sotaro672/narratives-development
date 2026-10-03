@@ -95,7 +95,29 @@ export function useTradeReturnProposal({
       return;
     }
 
-    reset();
+    const proposal = trade?.returnProposal;
+
+    if (!proposal) {
+      reset();
+      setOpen(true);
+      return;
+    }
+
+    setAgreementState(proposal.agreement);
+    setError("");
+
+    if (
+      proposal.agreement === "agree" &&
+      proposal.returnRequirement &&
+      proposal.refundAmount !== undefined
+    ) {
+      setReturnRequirementState(proposal.returnRequirement);
+      setRefundAmountState(proposal.refundAmount);
+    } else {
+      setReturnRequirementState(null);
+      setRefundAmountState("");
+    }
+
     setOpen(true);
   }, [blocked, reset, trade, tradeId]);
 
@@ -123,9 +145,7 @@ export function useTradeReturnProposal({
 
     if (agreement === "agree") {
       if (!returnRequirement) {
-        setError(
-          "商品を返品してもらうか選択してください。",
-        );
+        setError("商品を返品してもらうか選択してください。");
         return;
       }
 
@@ -135,9 +155,7 @@ export function useTradeReturnProposal({
       }
 
       if (!Number.isInteger(refundAmount)) {
-        setError(
-          "返金額は1円単位の整数で入力してください。",
-        );
+        setError("返金額は1円単位の整数で入力してください。");
         return;
       }
 
@@ -158,9 +176,7 @@ export function useTradeReturnProposal({
 
       if (refundAmount > refundAmountMax) {
         setError(
-          `返金額は${refundAmountMax.toLocaleString(
-            "ja-JP",
-          )}円以下で入力してください。`,
+          `返金額は${refundAmountMax.toLocaleString("ja-JP")}円以下で入力してください。`,
         );
         return;
       }
@@ -186,7 +202,6 @@ export function useTradeReturnProposal({
 
       setOpen(false);
       reset();
-
       await reload();
     } catch (caught) {
       setError(
