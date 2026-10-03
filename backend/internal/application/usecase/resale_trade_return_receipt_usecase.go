@@ -10,6 +10,7 @@ import (
 
 	orderdom "narratives/internal/domain/order"
 	refunddom "narratives/internal/domain/refund"
+	resaledom "narratives/internal/domain/resale"
 	salesreceivabledom "narratives/internal/domain/salesReceivable"
 	tradedom "narratives/internal/domain/trade"
 )
@@ -83,6 +84,7 @@ type ResaleTradeReturnReceiptUsecase struct {
 	returnAgreementRepo tradedom.ReturnAgreementRepository
 	returnShipmentRepo  tradedom.ReturnShipmentRepository
 	messageRepo         tradedom.MessageRepository
+	resaleRepo          resaledom.Repository
 	orderService        ResaleTradeReturnReceiptOrderService
 	itemRefundService   ResaleTradeReturnReceiptItemRefundService
 
@@ -96,6 +98,7 @@ type NewResaleTradeReturnReceiptUsecaseInput struct {
 	ReturnAgreementRepository tradedom.ReturnAgreementRepository
 	ReturnShipmentRepository  tradedom.ReturnShipmentRepository
 	MessageRepository         tradedom.MessageRepository
+	ResaleRepository          resaledom.Repository
 	OrderService              ResaleTradeReturnReceiptOrderService
 	ItemRefundService         ResaleTradeReturnReceiptItemRefundService
 	RefundCompletionNotifier  ReturnReceiptRefundCompletionNotifier
@@ -109,6 +112,7 @@ func NewResaleTradeReturnReceiptUsecase(
 		returnAgreementRepo:      in.ReturnAgreementRepository,
 		returnShipmentRepo:       in.ReturnShipmentRepository,
 		messageRepo:              in.MessageRepository,
+		resaleRepo:               in.ResaleRepository,
 		orderService:             in.OrderService,
 		itemRefundService:        in.ItemRefundService,
 		refundCompletionNotifier: in.RefundCompletionNotifier,
@@ -173,6 +177,12 @@ type ResaleTradeReturnReceiptResult struct {
 //	-> ItemRefundUsecase using accepted Proposal.RefundAmount
 //	-> refund completion notification
 //	-> ReturnAgreement completed
+//	-> Resale sold -> suspended
+//	-> completion system message
+//
+// The Resale transition is retry-safe. If ReturnAgreement was already completed
+// by a previous request but the Resale update or system-message creation failed,
+// a retry resumes from completed and ensures both side effects.
 //
 // Current shipping-refund policy:
 //   - RefundOutboundShipping=false
@@ -288,14 +298,24 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 	}
 
 	// completed is the authoritative terminal state for this Trade return.
-	// Once reached, financial completion and notification delivery were already
-	// confirmed before ReturnAgreement.Complete. An idempotent retry therefore
-	// does not depend on the operational ReturnShipment record remaining readable.
+	// Financial completion and notification delivery were already confirmed
+	// before ReturnAgreement.Complete. Resale suspension and system-message
+	// creation are retry-safe side effects and are therefore ensured again here.
 	if agreement.Status == tradedom.ReturnStatusCompleted {
-		result.FinanciallyCompleted = true
-		result.ReturnCompleted = true
-		result.NotificationEnsured = true
-		result.AlreadyCompleted = true
+		if agreement.CompletedAt == nil ||
+			agreement.CompletedAt.IsZero() {
+			return result,
+				ErrResaleTradeReturnReceiptAgreementCompletionMismatch
+		}
+
+		if _, err := ensureReturnedResaleSuspended(
+			ctx,
+			uc.resaleRepo,
+			targetItem.ResaleID,
+			*agreement.CompletedAt,
+		); err != nil {
+			return result, err
+		}
 
 		if err := uc.ensureCompletedSystemMessage(
 			ctx,
@@ -306,6 +326,10 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 			return result, err
 		}
 
+		result.FinanciallyCompleted = true
+		result.ReturnCompleted = true
+		result.NotificationEnsured = true
+		result.AlreadyCompleted = true
 		return result, nil
 	}
 
@@ -410,6 +434,15 @@ func (uc *ResaleTradeReturnReceiptUsecase) ReceiveReturn(
 		agreement.CompletedAt.IsZero() {
 		return result,
 			ErrResaleTradeReturnReceiptAgreementCompletionMismatch
+	}
+
+	if _, err := ensureReturnedResaleSuspended(
+		ctx,
+		uc.resaleRepo,
+		targetItem.ResaleID,
+		*agreement.CompletedAt,
+	); err != nil {
+		return result, err
 	}
 
 	if err := uc.ensureCompletedSystemMessage(
@@ -581,6 +614,7 @@ func (uc *ResaleTradeReturnReceiptUsecase) validateConfigured() error {
 		uc.returnAgreementRepo == nil ||
 		uc.returnShipmentRepo == nil ||
 		uc.messageRepo == nil ||
+		uc.resaleRepo == nil ||
 		uc.orderService == nil ||
 		uc.itemRefundService == nil ||
 		uc.refundCompletionNotifier == nil ||

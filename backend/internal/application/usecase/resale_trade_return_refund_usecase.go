@@ -10,6 +10,7 @@ import (
 
 	orderdom "narratives/internal/domain/order"
 	refunddom "narratives/internal/domain/refund"
+	resaledom "narratives/internal/domain/resale"
 	salesreceivabledom "narratives/internal/domain/salesReceivable"
 	tradedom "narratives/internal/domain/trade"
 )
@@ -96,6 +97,11 @@ type ResaleTradeReturnRefundCompletionNotifier interface {
 //	-> ItemRefundUsecase using accepted Proposal.RefundAmount
 //	-> refund completion notification
 //	-> ReturnAgreement completed
+//	-> Resale sold -> suspended
+//
+// The final Resale status transition is retry-safe. If ReturnAgreement was
+// already completed by a previous attempt but the Resale update failed, a retry
+// resumes from the completed state and ensures the returned Resale is suspended.
 //
 // This usecase intentionally does not depend on:
 //   - ReturnShipment
@@ -114,6 +120,7 @@ type ResaleTradeReturnRefundCompletionNotifier interface {
 type ResaleTradeReturnRefundUsecase struct {
 	tradeRepo           tradedom.Repository
 	returnAgreementRepo tradedom.ReturnAgreementRepository
+	resaleRepo          resaledom.Repository
 	orderService        ResaleTradeReturnRefundOrderService
 	itemRefundService   ResaleTradeReturnRefundItemRefundService
 
@@ -125,6 +132,7 @@ type ResaleTradeReturnRefundUsecase struct {
 type NewResaleTradeReturnRefundUsecaseInput struct {
 	TradeRepository           tradedom.Repository
 	ReturnAgreementRepository tradedom.ReturnAgreementRepository
+	ResaleRepository          resaledom.Repository
 	OrderService              ResaleTradeReturnRefundOrderService
 	ItemRefundService         ResaleTradeReturnRefundItemRefundService
 	RefundCompletionNotifier  ResaleTradeReturnRefundCompletionNotifier
@@ -136,6 +144,7 @@ func NewResaleTradeReturnRefundUsecase(
 	return &ResaleTradeReturnRefundUsecase{
 		tradeRepo:                in.TradeRepository,
 		returnAgreementRepo:      in.ReturnAgreementRepository,
+		resaleRepo:               in.ResaleRepository,
 		orderService:             in.OrderService,
 		itemRefundService:        in.ItemRefundService,
 		refundCompletionNotifier: in.RefundCompletionNotifier,
@@ -190,14 +199,17 @@ type ResaleTradeReturnRefundResult struct {
 //
 //	agreed
 //	  -> refund_processing
+//	  -> completed
+//	  -> Resale suspended
 //
-// A later retry resumes from refund_processing using the same immutable
-// ReturnProposal conditions.
+// A later retry resumes from refund_processing or completed using the same
+// immutable ReturnProposal conditions.
 //
 // ItemRefundUsecase owns purchaser Stripe Refund and seller-side financial
 // idempotency. This usecase marks ReturnAgreement completed only after those
 // financial operations and the purchaser refund-completion notification have
-// succeeded.
+// succeeded. Once completed, the associated Resale is moved from sold to
+// suspended so it is never automatically republished.
 func (uc *ResaleTradeReturnRefundUsecase) Refund(
 	ctx context.Context,
 	in RefundResaleTradeReturnInput,
@@ -321,6 +333,21 @@ func (uc *ResaleTradeReturnRefundUsecase) Refund(
 	}
 
 	if agreement.Status == tradedom.ReturnStatusCompleted {
+		if agreement.CompletedAt == nil ||
+			agreement.CompletedAt.IsZero() {
+			return result,
+				ErrResaleTradeReturnRefundAgreementCompletionMismatch
+		}
+
+		if _, err := ensureReturnedResaleSuspended(
+			ctx,
+			uc.resaleRepo,
+			targetItem.ResaleID,
+			*agreement.CompletedAt,
+		); err != nil {
+			return result, err
+		}
+
 		result.FinanciallyCompleted = true
 		result.ReturnCompleted = true
 		result.NotificationEnsured = true
@@ -417,6 +444,15 @@ func (uc *ResaleTradeReturnRefundUsecase) Refund(
 			ErrResaleTradeReturnRefundAgreementCompletionMismatch
 	}
 
+	if _, err := ensureReturnedResaleSuspended(
+		ctx,
+		uc.resaleRepo,
+		targetItem.ResaleID,
+		*agreement.CompletedAt,
+	); err != nil {
+		return result, err
+	}
+
 	return result, nil
 }
 
@@ -487,6 +523,7 @@ func (uc *ResaleTradeReturnRefundUsecase) validateConfigured() error {
 	if uc == nil ||
 		uc.tradeRepo == nil ||
 		uc.returnAgreementRepo == nil ||
+		uc.resaleRepo == nil ||
 		uc.orderService == nil ||
 		uc.itemRefundService == nil ||
 		uc.refundCompletionNotifier == nil ||

@@ -118,7 +118,7 @@ export default function TradeReturnProposalPage() {
     }
 
     setAgreementState(proposal.agreement);
-    setResponseReason(proposal.reason?.trim() ?? "");
+    setResponseReason("");
     setSubmissionError("");
 
     if (

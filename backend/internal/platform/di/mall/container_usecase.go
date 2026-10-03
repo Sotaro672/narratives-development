@@ -783,6 +783,7 @@ func buildMallUsecases(
 		usecase.NewResaleTradeReturnRefundUsecaseInput{
 			TradeRepository:           r.tradeRepo,
 			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
+			ResaleRepository:          r.resaleRepo,
 			OrderService:              orderUC,
 			ItemRefundService:         itemRefundUC,
 			RefundCompletionNotifier:  refundCompletionNotificationUC,
@@ -815,6 +816,7 @@ func buildMallUsecases(
 			ReturnAgreementRepository: r.tradeReturnAgreementRepo,
 			ReturnShipmentRepository:  r.tradeReturnShipmentRepo,
 			MessageRepository:         r.tradeMessageRepo,
+			ResaleRepository:          r.resaleRepo,
 			OrderService:              orderUC,
 			ItemRefundService:         itemRefundUC,
 			RefundCompletionNotifier:  refundCompletionNotificationUC,
