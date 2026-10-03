@@ -2,6 +2,7 @@
 
 import { useNavigate, useParams } from "react-router-dom";
 
+import { useAvatars } from "../features/avatar/presentation/hooks/useAvatars";
 import ResaleDetailAside from "../features/resale/presentation/components/ResaleDetailAside";
 import { useResaleDetail } from "../features/resale/presentation/hooks/useResaleDetail";
 import TradeMessageTable from "../features/trade/presentation/components/TradeMessageTable";
@@ -16,6 +17,7 @@ export default function TradePage() {
     tradeId?: string;
   }>();
 
+  const { avatars } = useAvatars();
   const { resale, loading, error, reload } = useResaleDetail(
     avatarId,
     resaleId,
@@ -23,9 +25,13 @@ export default function TradePage() {
 
   const {
     reportCase: returnReportCase,
+    report: returnReport,
     loading: returnReportLoading,
     error: returnReportError,
   } = useTradeReturnReport(tradeId);
+
+  const sellerAvatarName =
+    avatars.find((avatar) => avatar.id === avatarId)?.avatarName ?? "";
 
   return (
     <Page>
@@ -61,7 +67,14 @@ export default function TradePage() {
       />
 
       <DetailPageBody
-        main={<TradeMessageTable tradeId={tradeId} />}
+        main={
+          <TradeMessageTable
+            tradeId={tradeId}
+            sellerAvatarName={sellerAvatarName}
+            returnReportCase={returnReportCase}
+            returnReport={returnReport}
+          />
+        }
         aside={
           <ResaleDetailAside
             resale={resale}

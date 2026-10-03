@@ -2,13 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import type { ReportCase } from "../../../../shared/type/report";
+import type {
+  ReportCase,
+  ReportItem,
+} from "../../../../shared/type/report";
 import { getReportIfExists } from "../../../report/infrastructure/reportApi";
 
 export function useTradeReturnReport(
   tradeId: string | undefined,
 ) {
   const [reportCase, setReportCase] = useState<ReportCase | null>(null);
+  const [report, setReport] = useState<ReportItem | null>(null);
   const [loading, setLoading] = useState(Boolean(tradeId?.trim()));
   const [error, setError] = useState<string | null>(null);
 
@@ -17,6 +21,7 @@ export function useTradeReturnReport(
 
     if (!normalizedTradeId) {
       setReportCase(null);
+      setReport(null);
       setLoading(false);
       setError(null);
       return;
@@ -31,8 +36,10 @@ export function useTradeReturnReport(
       );
 
       setReportCase(result?.case ?? null);
+      setReport(result?.reports.items[0] ?? null);
     } catch (cause) {
       setReportCase(null);
+      setReport(null);
       setError(
         cause instanceof Error
           ? cause.message
@@ -49,6 +56,7 @@ export function useTradeReturnReport(
 
   return {
     reportCase,
+    report,
     loading,
     error,
     reload,

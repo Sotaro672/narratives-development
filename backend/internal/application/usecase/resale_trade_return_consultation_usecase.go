@@ -286,6 +286,7 @@ func (u *ResaleTradeReturnConsultationUsecase) Create(
 			ctx,
 			tradeID,
 			in.Reason,
+			detail,
 		)
 		if err != nil {
 			return result, err
@@ -371,6 +372,7 @@ func (u *ResaleTradeReturnConsultationUsecase) Create(
 					ctx,
 					tradeID,
 					in.Reason,
+					detail,
 				)
 			if ensureErr != nil {
 				return result, ensureErr
@@ -390,6 +392,7 @@ func (u *ResaleTradeReturnConsultationUsecase) Create(
 		ctx,
 		tradeID,
 		in.Reason,
+		detail,
 	)
 	if err != nil {
 		// ReturnAgreement has already been persisted at this point.
@@ -410,12 +413,14 @@ func (u *ResaleTradeReturnConsultationUsecase) ensureSystemMessage(
 	ctx context.Context,
 	tradeID string,
 	reason tradedom.ReturnConsultationReason,
+	detail string,
 ) (bool, error) {
 	message, err := tradedom.NewSystemMessageForCreate(
 		resaleTradeReturnConsultationSystemMessageID,
 		tradeID,
 		buildResaleTradeReturnConsultationSystemMessage(
 			reason,
+			detail,
 		),
 	)
 	if err != nil {
@@ -444,9 +449,17 @@ func (u *ResaleTradeReturnConsultationUsecase) ensureSystemMessage(
 
 func buildResaleTradeReturnConsultationSystemMessage(
 	reason tradedom.ReturnConsultationReason,
+	detail string,
 ) string {
-	return "購入者が返品についての相談を開始しました。返品理由: " +
+	message := "購入者が返品についての相談を開始しました。返品理由: " +
 		resaleTradeReturnConsultationReasonLabel(reason)
+
+	normalizedDetail := strings.TrimSpace(detail)
+	if normalizedDetail != "" {
+		message += " / 詳細: " + normalizedDetail
+	}
+
+	return message
 }
 
 func resaleTradeReturnConsultationReasonLabel(
