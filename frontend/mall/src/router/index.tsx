@@ -46,6 +46,7 @@ import ChatWorkspacePage from "../pages/ChatWorkspacePage";
 import ChatDetailPage from "../pages/ChatDetailPage";
 import TradeChatRedirectPage from "../pages/TradeChatRedirectPage";
 import TradeReturnConsultationPage from "../pages/TradeReturnConsultationPage";
+import TradeReturnDisputePage from "../pages/TradeReturnDisputePage";
 import DispatchPage from "../pages/DispatchPage";
 import WalletStackPage from "../pages/WalletStackPage";
 import PublicWalletPage from "../pages/PublicWalletPage";
@@ -328,6 +329,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <TradeReturnConsultationPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/trades/:tradeId/return-dispute",
+    element: (
+      <ProtectedRoute>
+        <TradeReturnDisputePage />
       </ProtectedRoute>
     ),
   },

@@ -1,0 +1,75 @@
+/* frontend/mall/src/styles/trade-return-dispute-page.css */
+
+.trade-return-dispute-page {
+  width: min(720px, 100%);
+  margin: 0 auto;
+}
+
+.trade-return-dispute-page__state,
+.trade-return-dispute-page__content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.trade-return-dispute-page__section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trade-return-dispute-page__section + .trade-return-dispute-page__section {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+
+.trade-return-dispute-page__section-title {
+  margin: 0;
+  color: var(--color-text, #111827);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.trade-return-dispute-page__description {
+  margin: 0;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.trade-return-dispute-page__state > .ui-button {
+  width: fit-content;
+  align-self: flex-start;
+}
+
+@media (max-width: 959px) {
+  .trade-return-dispute-page {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .trade-return-dispute-page__state,
+  .trade-return-dispute-page__content {
+    gap: 20px;
+  }
+
+  .trade-return-dispute-page__section {
+    gap: 14px;
+  }
+
+  .trade-return-dispute-page__section + .trade-return-dispute-page__section {
+    padding-top: 20px;
+  }
+
+  .trade-return-dispute-page__section-title {
+    font-size: 16px;
+  }
+
+  .trade-return-dispute-page__description {
+    font-size: 13px;
+    line-height: 1.75;
+  }
+}

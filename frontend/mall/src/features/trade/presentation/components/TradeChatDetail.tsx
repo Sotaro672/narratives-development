@@ -24,7 +24,6 @@ import useTradeCancel from "../hooks/useTradeCancel";
 import useTradeMessageReport from "../hooks/useTradeMessageReport";
 import useTradeReply from "../hooks/useTradeReply";
 import useTradeReturnAgreement from "../hooks/useTradeReturnAgreement";
-import useTradeReturnDispute from "../hooks/useTradeReturnDispute";
 import useTradeReturnProposal from "../hooks/useTradeReturnProposal";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
 import useTradeReturnShipment from "../hooks/useTradeReturnShipment";
@@ -115,18 +114,6 @@ export default function TradeChatDetail({
       returnShipmentFlow.loading,
   });
 
-  const returnDisputeFlow = useTradeReturnDispute({
-    tradeId: thread.tradeId,
-    trade: thread.trade,
-    reload: thread.reload,
-    blocked:
-      cancelFlow.cancelling ||
-      returnProposalFlow.submitting ||
-      returnAgreementFlow.submitting ||
-      returnShipmentFlow.loading ||
-      returnReceiptFlow.submitting,
-  });
-
   const reply = useTradeReply({
     tradeId: thread.tradeId,
     trade: thread.trade,
@@ -137,8 +124,7 @@ export default function TradeChatDetail({
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
-      returnReceiptFlow.submitting ||
-      returnDisputeFlow.submitting,
+      returnReceiptFlow.submitting,
   });
 
   const report = useTradeMessageReport({
@@ -216,7 +202,6 @@ export default function TradeChatDetail({
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
       returnReceiptFlow.submitting ||
-      returnDisputeFlow.submitting ||
       !trade ||
       !orderAction ||
       trade.status !== "active" ||
@@ -301,7 +286,9 @@ export default function TradeChatDetail({
           return;
         }
 
-        returnDisputeFlow.openModal();
+        navigate(
+          `/trades/${encodeURIComponent(thread.tradeId)}/return-dispute`,
+        );
         return;
 
       case "prepare-return-shipment": {
@@ -344,26 +331,23 @@ export default function TradeChatDetail({
     returnAgreementFlow.submitting ||
     returnShipmentFlow.loading ||
     returnReceiptFlow.submitting ||
-    returnDisputeFlow.submitting ||
     (
       orderAction === "start-return-consultation" &&
       identityVerification.isLoading
     );
 
   const orderActionError =
-    orderAction === "report-return-dispute"
-      ? returnDisputeFlow.error
-      : orderAction === "prepare-return-shipment"
-        ? returnShipmentFlow.error
-        : orderAction === "receive-return"
-          ? returnReceiptFlow.error
-          : orderAction === "review-return-proposal"
-            ? returnAgreementFlow.error
-            : orderAction === "respond-return-consultation"
-              ? returnProposalFlow.error
-              : orderAction === "start-return-consultation"
-                ? identityVerification.errorMessage || undefined
-                : undefined;
+    orderAction === "prepare-return-shipment"
+      ? returnShipmentFlow.error
+      : orderAction === "receive-return"
+        ? returnReceiptFlow.error
+        : orderAction === "review-return-proposal"
+          ? returnAgreementFlow.error
+          : orderAction === "respond-return-consultation"
+            ? returnProposalFlow.error
+            : orderAction === "start-return-consultation"
+              ? identityVerification.errorMessage || undefined
+              : undefined;
 
   return (
     <>
@@ -556,25 +540,6 @@ export default function TradeChatDetail({
         }}
       />
 
-      <ChatComposerModal
-        open={returnDisputeFlow.open}
-        title="運営へ報告する"
-        content={returnDisputeFlow.content}
-        placeholder="取引の状況や解決してほしい内容を入力してください"
-        error={returnDisputeFlow.error}
-        submitting={returnDisputeFlow.submitting}
-        canSubmit={returnDisputeFlow.canSubmit}
-        submitLabel="運営へ報告する"
-        submittingLabel="報告中..."
-        description="出品者が返品に合意しなかったため、この取引を運営へ報告できます。取引の状況や確認してほしい内容を入力してください。"
-        maxLength={5000}
-        onContentChange={returnDisputeFlow.setContent}
-        onCancel={returnDisputeFlow.closeModal}
-        onSubmit={() => {
-          void returnDisputeFlow.submit();
-        }}
-      />
-
       <TradeReturnProposalModal
         open={returnProposalFlow.open}
         agreement={returnProposalFlow.agreement}
@@ -640,7 +605,9 @@ export default function TradeChatDetail({
         qrCodePayload={
           returnShipmentFlow.qrCodePayload
         }
-        error={returnShipmentFlow.error}
+        error={
+          returnShipmentFlow.error
+        }
         loading={
           returnShipmentFlow.loading
         }
@@ -660,7 +627,9 @@ export default function TradeChatDetail({
         refundAmount={
           returnReceiptFlow.refundAmount
         }
-        error={returnReceiptFlow.error}
+        error={
+          returnReceiptFlow.error
+        }
         submitting={
           returnReceiptFlow.submitting
         }
