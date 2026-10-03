@@ -41,6 +41,7 @@ export function useOrderTradeNavigation() {
         navigate(`/chats/trades/${encodeURIComponent(trade.id)}`, {
           state: {
             trade,
+            returnTo: `/orders/${encodeURIComponent(normalizedOrderId)}`,
           },
         });
       } catch (caught) {

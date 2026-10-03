@@ -107,7 +107,8 @@ function ChatWorkspaceContent() {
 
   const hasDetailReturnTarget =
     returnTo.startsWith("/market/") ||
-    returnTo.startsWith("/resales/");
+    returnTo.startsWith("/resales/") ||
+    returnTo.startsWith("/orders/");
 
   const isChatListRoute = isChatListPath(location.pathname);
   const isMobileChatDetail = isMobile && !isChatListRoute;
