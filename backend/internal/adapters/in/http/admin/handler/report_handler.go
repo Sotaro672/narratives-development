@@ -17,6 +17,7 @@ import (
 	usecase "narratives/internal/application/usecase"
 	common "narratives/internal/domain/common"
 	reportdom "narratives/internal/domain/report"
+	tradedom "narratives/internal/domain/trade"
 )
 
 const adminReportsPath = "/admin/reports"
@@ -96,8 +97,9 @@ type reportDetailResponse struct {
 }
 
 type reportDecisionRequest struct {
-	Decision string `json:"decision"`
-	Reason   string `json:"reason"`
+	Decision      string `json:"decision"`
+	Reason        string `json:"reason"`
+	ContinueTrade bool   `json:"continueTrade"`
 }
 
 type reportRouteKind int
@@ -302,18 +304,20 @@ func (h *ReportHandler) handleDecision(
 		return
 	}
 
-	reason := request.Reason
+	reason := strings.TrimSpace(request.Reason)
 	if reason == "" {
 		writeJSONError(w, http.StatusBadRequest, "decision_reason_required")
 		return
 	}
 
 	var decision usecase.ReportDecision
-	switch strings.ToUpper(request.Decision) {
+	switch strings.ToUpper(strings.TrimSpace(request.Decision)) {
 	case string(usecase.ReportDecisionKeep):
 		decision = usecase.ReportDecisionKeep
+
 	case string(usecase.ReportDecisionRemove):
 		decision = usecase.ReportDecisionRemove
+
 	default:
 		writeJSONError(w, http.StatusBadRequest, "invalid_decision")
 		return
@@ -322,10 +326,11 @@ func (h *ReportHandler) handleDecision(
 	result, err := h.uc.DecideReportCase(
 		r.Context(),
 		usecase.DecideReportCaseInput{
-			CaseID:    caseID,
-			Decision:  decision,
-			Reason:    reason,
-			DecidedBy: adminUID,
+			CaseID:        caseID,
+			Decision:      decision,
+			Reason:        reason,
+			DecidedBy:     adminUID,
+			ContinueTrade: request.ContinueTrade,
 		},
 	)
 	if err != nil {
@@ -429,8 +434,10 @@ func parseReportSortOrder(value string) (common.SortOrder, bool) {
 	switch common.SortOrder(value) {
 	case common.SortAsc:
 		return common.SortAsc, true
+
 	case common.SortDesc:
 		return common.SortDesc, true
+
 	default:
 		return "", false
 	}
@@ -441,6 +448,7 @@ func reportPerPage(value string) int {
 	if perPage > 200 {
 		return 200
 	}
+
 	return perPage
 }
 
@@ -573,6 +581,15 @@ func writeReportError(
 
 	if errors.Is(err, reportdom.ErrCaseAlreadyRemoved) {
 		writeJSONError(w, http.StatusConflict, "report_case_already_removed")
+		return
+	}
+
+	if errors.Is(err, tradedom.ErrReturnDiscussionResumeNotAllowed) ||
+		errors.Is(err, tradedom.ErrInvalidReturnAgreementUpdatedAt) ||
+		errors.Is(err, tradedom.ErrReturnAgreementConflict) ||
+		errors.Is(err, tradedom.ErrTradeAlreadyClosed) ||
+		errors.Is(err, tradedom.ErrInvalidStatus) {
+		writeJSONError(w, http.StatusConflict, "trade_return_state_conflict")
 		return
 	}
 

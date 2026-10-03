@@ -209,6 +209,7 @@ export function useReportDetail(caseId: string | undefined) {
     async (
       decision: ReportDecision,
       decisionReason: string,
+      continueTrade = false,
     ): Promise<ReportCase | null> => {
       const normalizedCaseId = caseId?.trim() ?? "";
       const normalizedReason = decisionReason.trim();
@@ -220,6 +221,23 @@ export function useReportDetail(caseId: string | undefined) {
 
       if (!normalizedReason) {
         setDecisionError("裁定理由を入力してください。");
+        return null;
+      }
+
+      if (
+        reportCase?.targetType === "TRADE" &&
+        decision === "KEEP" &&
+        !continueTrade
+      ) {
+        setDecisionError("取引を続行する場合はチェックしてください。");
+        return null;
+      }
+
+      if (
+        reportCase?.targetType !== "TRADE" &&
+        continueTrade
+      ) {
+        setDecisionError("取引続行は取引トラブルの裁定でのみ指定できます。");
         return null;
       }
 
@@ -248,6 +266,7 @@ export function useReportDetail(caseId: string | undefined) {
         const updatedCase = await decideReport(normalizedCaseId, {
           decision,
           reason: normalizedReason,
+          continueTrade,
         });
 
         if (requestId !== decisionRequestIdRef.current) {
@@ -275,19 +294,35 @@ export function useReportDetail(caseId: string | undefined) {
         }
       }
     },
-    [caseId, deciding, refreshPendingCount, reportCase?.targetType],
+    [
+      caseId,
+      deciding,
+      refreshPendingCount,
+      reportCase?.targetType,
+    ],
   );
 
   const keep = useCallback(
-    async (decisionReason: string) => {
-      return decide("KEEP", decisionReason);
+    async (
+      decisionReason: string,
+      continueTrade = false,
+    ) => {
+      return decide(
+        "KEEP",
+        decisionReason,
+        continueTrade,
+      );
     },
     [decide],
   );
 
   const remove = useCallback(
     async (decisionReason: string) => {
-      return decide("REMOVE", decisionReason);
+      return decide(
+        "REMOVE",
+        decisionReason,
+        false,
+      );
     },
     [decide],
   );

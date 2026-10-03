@@ -133,4 +133,5 @@ export type ReportDetailParams = {
 export type ReportDecisionInput = {
   decision: ReportDecision;
   reason: string;
+  continueTrade?: boolean;
 };

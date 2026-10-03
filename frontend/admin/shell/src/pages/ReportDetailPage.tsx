@@ -44,9 +44,11 @@ export default function ReportDetailPage() {
 
   const {
     decisionReason,
+    continueTrade,
     decisionModalOpen,
     decisionAttempted,
     setDecisionReason,
+    setContinueTrade,
     openDecisionModal,
     closeDecisionModal,
     handleKeep,
@@ -158,11 +160,13 @@ export default function ReportDetailPage() {
           status={reportCase.status}
           targetType={reportCase.targetType}
           decisionReason={decisionReason}
+          continueTrade={continueTrade}
           deciding={deciding}
           decisionError={decisionAttempted ? decisionError : null}
           canKeep={canKeep}
           canRemove={canRemove}
           onChangeDecisionReason={setDecisionReason}
+          onChangeContinueTrade={setContinueTrade}
           onClose={closeDecisionModal}
           onKeep={handleKeep}
           onRemove={handleRemove}

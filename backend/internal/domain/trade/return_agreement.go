@@ -152,6 +152,9 @@ var (
 	ErrReturnDisputeNotAllowed = errors.New(
 		"trade: return dispute is not allowed",
 	)
+	ErrReturnDiscussionResumeNotAllowed = errors.New(
+		"trade: return discussion resume is not allowed",
+	)
 )
 
 // ============================================================
@@ -493,6 +496,7 @@ func (a *ReturnAgreement) MarkReturnReceivedBySeller(at time.Time) error {
 
 	at = at.UTC()
 	if err := a.validateTransitionTime(at); err != nil ||
+		a.AgreedAt == nil ||
 		at.Before(*a.AgreedAt) {
 		return ErrInvalidReturnReceivedAt
 	}
@@ -598,6 +602,42 @@ func (a *ReturnAgreement) MarkDisputed(at time.Time) error {
 
 	a.Status = ReturnStatusDisputed
 	a.DisputedAt = cloneReturnTimePtr(&at)
+	a.UpdatedAt = at
+	return nil
+}
+
+// ResumeDiscussion returns an Admin-reviewed return dispute to the normal
+// buyer/seller negotiation flow.
+//
+// The current dispute workflow is opened only after the seller declined the
+// buyer's return request. Therefore only a disputed agreement whose latest
+// seller proposal is "disagree" may be resumed. Admin may then instruct both
+// parties to continue the discussion, after which the seller can update the
+// proposal and the buyer can continue communicating.
+//
+// Resuming clears DisputedAt because the aggregate is no longer under platform
+// adjudication.
+func (a *ReturnAgreement) ResumeDiscussion(at time.Time) error {
+	if a == nil ||
+		a.Status != ReturnStatusDisputed ||
+		a.DisputedAt == nil ||
+		a.DisputedAt.IsZero() ||
+		a.Proposal == nil ||
+		a.Proposal.Agreement != ReturnProposalAgreementDisagree {
+		return ErrReturnDiscussionResumeNotAllowed
+	}
+	if at.IsZero() {
+		return ErrInvalidReturnAgreementUpdatedAt
+	}
+
+	at = at.UTC()
+	if err := a.validateTransitionTime(at); err != nil ||
+		at.Before(*a.DisputedAt) {
+		return ErrInvalidReturnAgreementUpdatedAt
+	}
+
+	a.Status = ReturnStatusDiscussing
+	a.DisputedAt = nil
 	a.UpdatedAt = at
 	return nil
 }
@@ -787,7 +827,8 @@ func (a ReturnAgreement) validatePersistedState() error {
 			a.ReturnShippedAt != nil ||
 			a.ReturnReceivedAt != nil ||
 			a.RefundProcessingAt != nil ||
-			a.CompletedAt != nil {
+			a.CompletedAt != nil ||
+			a.DisputedAt != nil {
 			return ErrInvalidReturnAgreementState
 		}
 

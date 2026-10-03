@@ -15,10 +15,11 @@ const (
 )
 
 type DecideReportCaseInput struct {
-	CaseID    reportdom.CaseID
-	Decision  ReportDecision
-	Reason    string
-	DecidedBy string
+	CaseID        reportdom.CaseID
+	Decision      ReportDecision
+	Reason        string
+	DecidedBy     string
+	ContinueTrade bool
 }
 
 func (u *ReportUsecase) DecideReportCase(
@@ -33,10 +34,19 @@ func (u *ReportUsecase) DecideReportCase(
 	}
 
 	switch input.Decision {
-	case ReportDecisionKeep, ReportDecisionRemove:
+	case ReportDecisionKeep:
 		if err := u.ensureDecisionNotificationRepository(); err != nil {
 			return reportdom.ReportCase{}, err
 		}
+
+	case ReportDecisionRemove:
+		if input.ContinueTrade {
+			return reportdom.ReportCase{}, ErrReportInvalidDecision
+		}
+		if err := u.ensureDecisionNotificationRepository(); err != nil {
+			return reportdom.ReportCase{}, err
+		}
+
 	default:
 		return reportdom.ReportCase{}, ErrReportInvalidDecision
 	}
@@ -49,6 +59,7 @@ func (u *ReportUsecase) DecideReportCase(
 	switch input.Decision {
 	case ReportDecisionKeep:
 		decidedCase, err = u.keepReportCase(ctx, input)
+
 	case ReportDecisionRemove:
 		decidedCase, err = u.removeReportCase(ctx, input)
 	}
@@ -75,19 +86,55 @@ func (u *ReportUsecase) keepReportCase(
 		return reportdom.ReportCase{}, err
 	}
 
+	// TRADE の KEEP は返品紛争に対する「取引続行」裁定として扱う。
+	// ContinueTrade=true の場合のみ、ReportCase を KEPT にした後で
+	// disputed の ReturnAgreement を discussing へ戻し、運営メッセージを登録する。
+	//
+	// TRADE 以外では ContinueTrade を受け付けない。
+	if reportCase.TargetType == reportdom.TargetTypeTrade {
+		if !input.ContinueTrade {
+			return reportdom.ReportCase{}, ErrReportInvalidDecision
+		}
+	} else if input.ContinueTrade {
+		return reportdom.ReportCase{}, ErrReportInvalidDecision
+	}
+
+	now := u.now().UTC()
+
 	if err := reportCase.Keep(
 		input.Reason,
-		u.now().UTC(),
+		now,
 		input.DecidedBy,
 	); err != nil {
 		return reportdom.ReportCase{}, err
 	}
 
-	return u.reportRepo.UpdateCase(
+	updatedCase, err := u.reportRepo.UpdateCase(
 		ctx,
 		reportCase.ID,
 		reportdom.NewCasePatchFromEntity(reportCase),
 	)
+	if err != nil {
+		return reportdom.ReportCase{}, err
+	}
+
+	if updatedCase.TargetType == reportdom.TargetTypeTrade &&
+		input.ContinueTrade {
+		if err := u.resumeTradeReturnDiscussion(
+			ctx,
+			updatedCase.TargetID,
+			input.Reason,
+			now,
+		); err != nil {
+			// ReportCase は既に KEPT として永続化されている。
+			// resumeTradeReturnDiscussion は冪等に実装し、同じ裁定を
+			// 再試行した際に ReturnAgreement とシステムメッセージの
+			// 未完了処理だけを再実行できるようにする。
+			return reportdom.ReportCase{}, err
+		}
+	}
+
+	return updatedCase, nil
 }
 
 func (u *ReportUsecase) removeReportCase(

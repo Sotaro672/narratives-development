@@ -2,15 +2,20 @@
 
 import { useCallback, useState } from "react";
 
-type DecisionAction = (
+type KeepDecisionAction = (
+  decisionReason: string,
+  continueTrade?: boolean,
+) => Promise<unknown | null>;
+
+type RemoveDecisionAction = (
   decisionReason: string,
 ) => Promise<unknown | null>;
 
 type UseReportDecisionModalParams = {
   canDecide: boolean;
   deciding: boolean;
-  keep: DecisionAction;
-  remove: DecisionAction;
+  keep: KeepDecisionAction;
+  remove: RemoveDecisionAction;
 };
 
 export function useReportDecisionModal({
@@ -20,11 +25,13 @@ export function useReportDecisionModal({
   remove,
 }: UseReportDecisionModalParams) {
   const [decisionReason, setDecisionReason] = useState("");
+  const [continueTrade, setContinueTrade] = useState(false);
   const [decisionModalOpen, setDecisionModalOpen] = useState(false);
   const [decisionAttempted, setDecisionAttempted] = useState(false);
 
   const resetDecisionState = useCallback(() => {
     setDecisionReason("");
+    setContinueTrade(false);
     setDecisionAttempted(false);
   }, []);
 
@@ -54,12 +61,16 @@ export function useReportDecisionModal({
   const handleKeep = useCallback(async () => {
     setDecisionAttempted(true);
 
-    const result = await keep(decisionReason);
+    const result = await keep(
+      decisionReason,
+      continueTrade,
+    );
 
     if (result) {
       handleDecisionSuccess();
     }
   }, [
+    continueTrade,
     decisionReason,
     handleDecisionSuccess,
     keep,
@@ -81,9 +92,11 @@ export function useReportDecisionModal({
 
   return {
     decisionReason,
+    continueTrade,
     decisionModalOpen,
     decisionAttempted,
     setDecisionReason,
+    setContinueTrade,
     openDecisionModal,
     closeDecisionModal,
     handleKeep,

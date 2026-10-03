@@ -55,6 +55,15 @@ const resaleTradeReturnProposalSystemMessageIDPrefix = "return-proposal-"
 //
 //	discussing -> discussing
 //
+// If a return dispute is escalated to Admin, this usecase must not update the
+// seller proposal while ReturnAgreement remains disputed. Admin must explicitly
+// resume the discussion first:
+//
+//	disputed
+//	  -> Admin ResumeDiscussion
+//	  -> discussing
+//	  -> seller may update proposal through this usecase
+//
 // A proposal with agreement=agree must later be explicitly accepted by the
 // buyer before any return shipment or refund processing may begin.
 //
@@ -131,14 +140,12 @@ type ResaleTradeReturnProposalResult struct {
 // Create records or idempotently confirms the seller's latest return proposal.
 //
 // agreement=agree:
-//
 //   - ReturnRequirement must be required or not_required.
 //   - RefundAmount must be greater than 0.
 //   - RefundAmount must not exceed the authoritative merchandise refund maximum.
 //   - ReturnAgreement moves from discussing to proposed.
 //
 // agreement=disagree:
-//
 //   - ReturnRequirement must be empty.
 //   - RefundAmount must be 0.
 //   - ReturnAgreement remains discussing.
@@ -146,6 +153,12 @@ type ResaleTradeReturnProposalResult struct {
 // Repeating the currently persisted proposal with the same contents is
 // idempotent. This is important when ReturnAgreement was persisted but system
 // message creation failed and the HTTP request is retried.
+//
+// A seller disagreement may remain as the latest proposal while a dispute is
+// reviewed by Admin. After Admin explicitly resumes the discussion, the same
+// persisted disagreement remains available to the UI as the current answer.
+// Submitting the same disagreement is idempotent, while changing it to an
+// agreement creates a new proposal.
 //
 // A previously buyer-rejected proposal is not considered an idempotent match;
 // the seller may submit the same conditions again as a new proposal.
@@ -307,6 +320,10 @@ func (u *ResaleTradeReturnProposalUsecase) Create(
 	// If the same active proposal already exists, treat the request as an
 	// idempotent retry. This also repairs a previous request that persisted the
 	// aggregate but failed before creating its system message.
+	//
+	// After an Admin dispute resume, an unchanged seller disagreement is also
+	// handled here because the ReturnAgreement has already returned to
+	// discussing and the same disagreement remains the latest proposal.
 	if sameResaleTradeReturnProposal(
 		agreement,
 		in.Agreement,
@@ -330,6 +347,9 @@ func (u *ResaleTradeReturnProposalUsecase) Create(
 		return result, nil
 	}
 
+	// disputed is intentionally not accepted here. Admin must explicitly move
+	// the ReturnAgreement back to discussing before the seller can change the
+	// return proposal.
 	if agreement.Status !=
 		tradedom.ReturnStatusDiscussing {
 		return result,
@@ -535,6 +555,8 @@ func sameResaleTradeReturnProposal(
 			tradedom.ReturnStatusProposed
 
 	case tradedom.ReturnProposalAgreementDisagree:
+		// This also covers an Admin-resumed dispute. ResumeDiscussion returns the
+		// aggregate to discussing while retaining the latest seller disagreement.
 		return agreement.Status ==
 			tradedom.ReturnStatusDiscussing
 

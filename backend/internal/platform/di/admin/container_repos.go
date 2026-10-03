@@ -36,8 +36,10 @@ type repos struct {
 	resaleImageRepo                *fsrepo.ResaleImageRepositoryFS
 	resaleReviewRepo               *fsrepo.ResaleReviewRepositoryFS
 	resaleTradeReader              *fsrepo.ResaleTradeReaderFS
+	tradeRepo                      *fsrepo.TradeRepositoryFS
 	tradeMessageRepo               *fsrepo.TradeMessageRepositoryFS
 	tradeMessageStatsReader        *fsrepo.TradeMessageStatsReaderFS
+	tradeReturnAgreementRepo       *fsrepo.TradeReturnAgreementRepositoryFS
 	cartRepo                       *fsrepo.CartRepositoryFS
 }
 
@@ -75,8 +77,10 @@ func buildRepos(fsClient *firestore.Client) *repos {
 		resaleImageRepo:                fsrepo.NewResaleImageRepositoryFS(fsClient),
 		resaleReviewRepo:               fsrepo.NewResaleReviewRepositoryFS(fsClient),
 		resaleTradeReader:              fsrepo.NewResaleTradeReaderFS(fsClient),
+		tradeRepo:                      fsrepo.NewTradeRepositoryFS(fsClient),
 		tradeMessageRepo:               fsrepo.NewTradeMessageRepositoryFS(fsClient),
 		tradeMessageStatsReader:        fsrepo.NewTradeMessageStatsReaderFS(fsClient),
+		tradeReturnAgreementRepo:       fsrepo.NewTradeReturnAgreementRepositoryFS(fsClient),
 		cartRepo:                       fsrepo.NewCartRepositoryFS(fsClient),
 	}
 }

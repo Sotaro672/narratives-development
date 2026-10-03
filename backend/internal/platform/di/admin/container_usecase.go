@@ -64,6 +64,15 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 	if r.announcementAttachmentRepo == nil {
 		return nil, errors.New("di.admin: announcement attachment repository is nil")
 	}
+	if r.tradeRepo == nil {
+		return nil, errors.New("di.admin: trade repository is nil")
+	}
+	if r.tradeMessageRepo == nil {
+		return nil, errors.New("di.admin: trade message repository is nil")
+	}
+	if r.tradeReturnAgreementRepo == nil {
+		return nil, errors.New("di.admin: trade return agreement repository is nil")
+	}
 
 	contactUsecase := usecase.NewContactUsecase(
 		r.contactRepo,
@@ -223,6 +232,10 @@ func buildUsecases(ctx context.Context, r *repos) (*usecases, error) {
 
 			ResaleRepo:      r.resaleRepo,
 			ResaleModerator: resaleUsecase,
+
+			TradeRepo:           r.tradeRepo,
+			TradeMessageRepo:    r.tradeMessageRepo,
+			ReturnAgreementRepo: r.tradeReturnAgreementRepo,
 
 			AnnouncementRepo:      r.announcementRepo,
 			AnnouncementModerator: announcementUsecase,

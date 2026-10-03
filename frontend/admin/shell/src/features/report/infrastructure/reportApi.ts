@@ -183,6 +183,7 @@ export async function decideReport(
       body: JSON.stringify({
         decision: input.decision,
         reason,
+        continueTrade: input.continueTrade === true,
       }),
     },
   );

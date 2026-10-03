@@ -1,3 +1,5 @@
+/* frontend/admin/shell/src/features/report/presentation/components/ReportDecisionModal.css */
+
 .report-decision-modal__overlay {
   position: fixed;
   inset: 0;
@@ -49,6 +51,53 @@
   gap: 12px;
   padding: 20px;
   overflow-y: auto;
+}
+
+.report-decision-modal__option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  background: #fafafa;
+  cursor: pointer;
+}
+
+.report-decision-modal__option:has(.report-decision-modal__checkbox:disabled) {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.report-decision-modal__checkbox {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  cursor: pointer;
+}
+
+.report-decision-modal__checkbox:disabled {
+  cursor: not-allowed;
+}
+
+.report-decision-modal__option-content {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.report-decision-modal__option-title {
+  color: #171717;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.report-decision-modal__option-description {
+  color: #666666;
+  font-size: 12px;
+  line-height: 1.6;
 }
 
 .report-decision-modal__field {

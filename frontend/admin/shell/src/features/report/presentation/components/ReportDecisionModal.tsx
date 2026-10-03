@@ -15,11 +15,13 @@ type ReportDecisionModalProps = {
   status: ReportCaseStatus;
   targetType?: ReportTargetType;
   decisionReason: string;
+  continueTrade: boolean;
   deciding: boolean;
   decisionError: string | null;
   canKeep: boolean;
   canRemove: boolean;
   onChangeDecisionReason: (value: string) => void;
+  onChangeContinueTrade: (value: boolean) => void;
   onClose: () => void;
   onKeep: () => void | Promise<void>;
   onRemove: () => void | Promise<void>;
@@ -32,7 +34,7 @@ function getDescription(
   if (targetType === "TRADE") {
     return status === "KEPT"
       ? "この取引トラブルは確認済みです。"
-      : "取引トラブルの通報内容を確認し、運営での確認結果を確定します。";
+      : "取引トラブルの内容を確認し、返品相談を続行するか裁定します。";
   }
 
   if (targetType === "TRADE_MESSAGE") {
@@ -75,7 +77,7 @@ function getPlaceholder(
   targetType?: ReportTargetType,
 ): string {
   if (targetType === "TRADE") {
-    return "取引トラブルの確認結果や判断の根拠を入力してください。";
+    return "購入者・出品者へ伝える相談続行の理由を入力してください。";
   }
 
   if (targetType === "TRADE_MESSAGE") {
@@ -111,7 +113,7 @@ function getPlaceholder(
 function getNote(targetType?: ReportTargetType): string {
   switch (targetType) {
     case "TRADE":
-      return "この裁定では取引自体や取引メッセージを削除しません。確認結果は通報した購入者へ通知されます。";
+      return "「取引を続行する」を選択して裁定すると、運営確認中の状態を解除して返品相談を再開し、入力した内容をAMOLからの案内メッセージとして取引チャットへ登録します。";
 
     case "TRADE_MESSAGE":
       return "取引コメントは削除対象ではありません。この裁定ではコメント内容を変更・削除しません。";
@@ -139,7 +141,7 @@ function getKeepLabel(targetType?: ReportTargetType): string {
       return "変化なし";
 
     case "TRADE":
-      return "確認済みにする";
+      return "裁定する";
 
     default:
       return "維持する";
@@ -168,11 +170,13 @@ export default function ReportDecisionModal({
   status,
   targetType,
   decisionReason,
+  continueTrade,
   deciding,
   decisionError,
   canKeep,
   canRemove,
   onChangeDecisionReason,
+  onChangeContinueTrade,
   onClose,
   onKeep,
   onRemove,
@@ -195,7 +199,11 @@ export default function ReportDecisionModal({
 
   if (!open) return null;
 
+  const isTrade = targetType === "TRADE";
   const reasonRequired = decisionReason.trim().length === 0;
+  const keepDisabled =
+    reasonRequired ||
+    (isTrade && !continueTrade);
   const description = getDescription(status, targetType);
   const placeholder = getPlaceholder(status, targetType);
   const note = getNote(targetType);
@@ -260,9 +268,31 @@ export default function ReportDecisionModal({
         </header>
 
         <div className="report-decision-modal__body">
+          {isTrade ? (
+            <label className="report-decision-modal__option">
+              <input
+                className="report-decision-modal__checkbox"
+                type="checkbox"
+                checked={continueTrade}
+                disabled={deciding}
+                onChange={(event) =>
+                  onChangeContinueTrade(event.target.checked)
+                }
+              />
+              <span className="report-decision-modal__option-content">
+                <span className="report-decision-modal__option-title">
+                  取引を続行する
+                </span>
+                <span className="report-decision-modal__option-description">
+                  運営確認中を解除し、購入者と出品者の返品相談を再開します。
+                </span>
+              </span>
+            </label>
+          ) : null}
+
           <label className="report-decision-modal__field">
             <span className="report-decision-modal__label">
-              裁定理由
+              {isTrade ? "裁定理由・案内メッセージ" : "裁定理由"}
             </span>
             <textarea
               className="report-decision-modal__textarea"
@@ -308,7 +338,7 @@ export default function ReportDecisionModal({
                 variant="secondary"
                 size="md"
                 loading={deciding}
-                disabled={reasonRequired}
+                disabled={keepDisabled}
                 onClick={() => void onKeep()}
               >
                 {keepLabel}
