@@ -50,6 +50,9 @@ type TradeReturnConsultation struct {
 // TradeReturnProposal represents the seller's latest answer to a return
 // consultation.
 //
+// Reason contains the seller's explanation for the response and is required for
+// both agreement and disagreement.
+//
 // When Agreement is "agree", ReturnRequirement and RefundAmount contain the
 // conditions presented to the buyer.
 //
@@ -58,6 +61,7 @@ type TradeReturnProposal struct {
 	ID string `json:"id"`
 
 	Agreement         tradedom.ReturnProposalAgreement `json:"agreement"`
+	Reason            string                           `json:"reason"`
 	ReturnRequirement tradedom.ReturnRequirement       `json:"returnRequirement,omitempty"`
 	RefundAmount      int                              `json:"refundAmount,omitempty"`
 

@@ -43,7 +43,7 @@ const resaleTradeReturnProposalSystemMessageIDPrefix = "return-proposal-"
 //   - authenticate the seller against the persisted Trade
 //   - confirm the authoritative Order item is paid, dispatched and not transferred
 //   - load the Trade ReturnAgreement
-//   - validate the seller's proposed refund against the authoritative Order
+//   - validate the seller's response reason and proposed refund
 //   - persist ReturnAgreement.Propose()
 //   - create an idempotent system timeline message
 //
@@ -73,8 +73,7 @@ type ResaleTradeReturnProposalUsecase struct {
 	returnAgreementRepo tradedom.ReturnAgreementRepository
 	orderRepo           orderdom.Repository
 	messageRepo         tradedom.MessageRepository
-
-	now func() time.Time
+	now                 func() time.Time
 }
 
 type NewResaleTradeReturnProposalUsecaseInput struct {
@@ -116,6 +115,7 @@ type CreateResaleTradeReturnProposalInput struct {
 	SellerAvatarID string
 
 	Agreement         tradedom.ReturnProposalAgreement
+	Reason            string
 	ReturnRequirement tradedom.ReturnRequirement
 	RefundAmount      int
 }
@@ -139,6 +139,10 @@ type ResaleTradeReturnProposalResult struct {
 
 // Create records or idempotently confirms the seller's latest return proposal.
 //
+// reason:
+//   - required for both agreement=agree and agreement=disagree.
+//   - must not exceed tradedom.MaxReturnProposalReasonLength.
+//
 // agreement=agree:
 //   - ReturnRequirement must be required or not_required.
 //   - RefundAmount must be greater than 0.
@@ -150,15 +154,15 @@ type ResaleTradeReturnProposalResult struct {
 //   - RefundAmount must be 0.
 //   - ReturnAgreement remains discussing.
 //
-// Repeating the currently persisted proposal with the same contents is
-// idempotent. This is important when ReturnAgreement was persisted but system
-// message creation failed and the HTTP request is retried.
+// Repeating the currently persisted proposal with the same contents, including
+// the same reason, is idempotent. This is important when ReturnAgreement was
+// persisted but system message creation failed and the HTTP request is retried.
 //
 // A seller disagreement may remain as the latest proposal while a dispute is
 // reviewed by Admin. After Admin explicitly resumes the discussion, the same
 // persisted disagreement remains available to the UI as the current answer.
-// Submitting the same disagreement is idempotent, while changing it to an
-// agreement creates a new proposal.
+// Submitting the same disagreement and reason is idempotent, while changing the
+// answer or reason creates a new proposal.
 //
 // A previously buyer-rejected proposal is not considered an idempotent match;
 // the seller may submit the same conditions again as a new proposal.
@@ -180,6 +184,13 @@ func (u *ResaleTradeReturnProposalUsecase) Create(
 	if sellerAvatarID == "" {
 		return ResaleTradeReturnProposalResult{},
 			ErrResaleTradeReturnProposalInvalidSeller
+	}
+
+	reason := strings.TrimSpace(in.Reason)
+	if reason == "" ||
+		len([]rune(reason)) > tradedom.MaxReturnProposalReasonLength {
+		return ResaleTradeReturnProposalResult{},
+			tradedom.ErrInvalidReturnProposalReason
 	}
 
 	if !tradedom.IsValidReturnProposalAgreement(in.Agreement) {
@@ -327,6 +338,7 @@ func (u *ResaleTradeReturnProposalUsecase) Create(
 	if sameResaleTradeReturnProposal(
 		agreement,
 		in.Agreement,
+		reason,
 		in.ReturnRequirement,
 		in.RefundAmount,
 	) {
@@ -361,6 +373,7 @@ func (u *ResaleTradeReturnProposalUsecase) Create(
 	if err := agreement.Propose(
 		"",
 		in.Agreement,
+		reason,
 		in.ReturnRequirement,
 		in.RefundAmount,
 		now,
@@ -453,21 +466,30 @@ func (u *ResaleTradeReturnProposalUsecase) ensureSystemMessage(
 func buildResaleTradeReturnProposalSystemMessage(
 	proposal tradedom.ReturnProposal,
 ) string {
+	reason := strings.TrimSpace(proposal.Reason)
+
 	switch proposal.Agreement {
 	case tradedom.ReturnProposalAgreementAgree:
 		return fmt.Sprintf(
-			"出品者が返品条件を提示しました。返金額: %d円、商品返送: %s",
+			"出品者が返品条件を提示しました。返金額: %d円、商品返送: %s\n回答理由: %s",
 			proposal.RefundAmount,
 			resaleTradeReturnRequirementLabel(
 				proposal.ReturnRequirement,
 			),
+			reason,
 		)
 
 	case tradedom.ReturnProposalAgreementDisagree:
-		return "出品者が返品に合意しませんでした。メッセージで相談を継続してください。"
+		return fmt.Sprintf(
+			"出品者が返品に合意しませんでした。メッセージで相談を継続してください。\n回答理由: %s",
+			reason,
+		)
 
 	default:
-		return "出品者が返品相談に回答しました。"
+		return fmt.Sprintf(
+			"出品者が返品相談に回答しました。\n回答理由: %s",
+			reason,
+		)
 	}
 }
 
@@ -477,10 +499,8 @@ func resaleTradeReturnRequirementLabel(
 	switch requirement {
 	case tradedom.ReturnRequirementRequired:
 		return "必要"
-
 	case tradedom.ReturnRequirementNotRequired:
 		return "不要"
-
 	default:
 		return "-"
 	}
@@ -532,6 +552,7 @@ func validateResaleTradeReturnProposalTarget(
 func sameResaleTradeReturnProposal(
 	agreement tradedom.ReturnAgreement,
 	proposalAgreement tradedom.ReturnProposalAgreement,
+	reason string,
 	returnRequirement tradedom.ReturnRequirement,
 	refundAmount int,
 ) bool {
@@ -544,6 +565,7 @@ func sameResaleTradeReturnProposal(
 	proposal := agreement.Proposal
 
 	if proposal.Agreement != proposalAgreement ||
+		strings.TrimSpace(proposal.Reason) != strings.TrimSpace(reason) ||
 		proposal.ReturnRequirement != returnRequirement ||
 		proposal.RefundAmount != refundAmount {
 		return false

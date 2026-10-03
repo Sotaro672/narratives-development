@@ -365,6 +365,7 @@ type tradeReturnProposalDoc struct {
 	ID string `firestore:"id"`
 
 	Agreement         string `firestore:"agreement"`
+	Reason            string `firestore:"reason"`
 	ReturnRequirement string `firestore:"returnRequirement,omitempty"`
 	RefundAmount      int    `firestore:"refundAmount,omitempty"`
 
@@ -423,6 +424,7 @@ func tradeReturnProposalToDoc(
 	return &tradeReturnProposalDoc{
 		ID:                proposal.ID,
 		Agreement:         string(proposal.Agreement),
+		Reason:            proposal.Reason,
 		ReturnRequirement: string(proposal.ReturnRequirement),
 		RefundAmount:      proposal.RefundAmount,
 		CreatedAt:         proposal.CreatedAt.UTC(),
@@ -521,6 +523,7 @@ func docToTradeReturnProposal(
 		Agreement: tradedom.ReturnProposalAgreement(
 			doc.Agreement,
 		),
+		Reason: doc.Reason,
 		ReturnRequirement: tradedom.ReturnRequirement(
 			doc.ReturnRequirement,
 		),
@@ -633,6 +636,7 @@ func cloneTradeReturnProposal(
 	return &tradedom.ReturnProposal{
 		ID:                proposal.ID,
 		Agreement:         proposal.Agreement,
+		Reason:            proposal.Reason,
 		ReturnRequirement: proposal.ReturnRequirement,
 		RefundAmount:      proposal.RefundAmount,
 		CreatedAt:         proposal.CreatedAt.UTC(),

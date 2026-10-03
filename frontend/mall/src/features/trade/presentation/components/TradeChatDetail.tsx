@@ -24,7 +24,6 @@ import useTradeCancel from "../hooks/useTradeCancel";
 import useTradeMessageReport from "../hooks/useTradeMessageReport";
 import useTradeReply from "../hooks/useTradeReply";
 import useTradeReturnAgreement from "../hooks/useTradeReturnAgreement";
-import useTradeReturnProposal from "../hooks/useTradeReturnProposal";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
 import useTradeReturnShipment from "../hooks/useTradeReturnShipment";
 import useTradeThread from "../hooks/useTradeThread";
@@ -37,7 +36,6 @@ import { createTradeDispatchQrPayload } from "../util/tradeDispatchQr";
 import TradeMessageCard from "./TradeMessageCard";
 import TradeOrderActionPrompt from "./TradeOrderActionPrompt";
 import TradeReturnAgreementModal from "./TradeReturnAgreementModal";
-import TradeReturnProposalModal from "./TradeReturnProposalModal";
 import TradeReturnReceiptModal from "./TradeReturnReceiptModal";
 import TradeReturnShipmentModal from "./TradeReturnShipmentModal";
 import TradeThreadHeader from "./TradeThreadHeader";
@@ -77,20 +75,11 @@ export default function TradeChatDetail({
     reload: thread.reload,
   });
 
-  const returnProposalFlow = useTradeReturnProposal({
-    tradeId: thread.tradeId,
-    trade: thread.trade,
-    reload: thread.reload,
-    blocked: cancelFlow.cancelling,
-  });
-
   const returnAgreementFlow = useTradeReturnAgreement({
     tradeId: thread.tradeId,
     trade: thread.trade,
     reload: thread.reload,
-    blocked:
-      cancelFlow.cancelling ||
-      returnProposalFlow.submitting,
+    blocked: cancelFlow.cancelling,
   });
 
   const returnShipmentFlow = useTradeReturnShipment({
@@ -99,7 +88,6 @@ export default function TradeChatDetail({
     reload: thread.reload,
     blocked:
       cancelFlow.cancelling ||
-      returnProposalFlow.submitting ||
       returnAgreementFlow.submitting,
   });
 
@@ -109,7 +97,6 @@ export default function TradeChatDetail({
     reload: thread.reload,
     blocked:
       cancelFlow.cancelling ||
-      returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading,
   });
@@ -121,7 +108,6 @@ export default function TradeChatDetail({
     loading: thread.loading,
     blocked:
       cancelFlow.cancelling ||
-      returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
       returnReceiptFlow.submitting,
@@ -198,7 +184,6 @@ export default function TradeChatDetail({
 
     if (
       cancelFlow.cancelling ||
-      returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
       returnReceiptFlow.submitting ||
@@ -260,7 +245,9 @@ export default function TradeChatDetail({
           return;
         }
 
-        returnProposalFlow.openModal();
+        navigate(
+          `/trades/${encodeURIComponent(thread.tradeId)}/return-proposal`,
+        );
         return;
 
       case "review-return-proposal": {
@@ -340,7 +327,6 @@ export default function TradeChatDetail({
 
   const orderActionProcessing =
     cancelFlow.cancelling ||
-    returnProposalFlow.submitting ||
     returnAgreementFlow.submitting ||
     returnShipmentFlow.loading ||
     returnReceiptFlow.submitting ||
@@ -356,12 +342,9 @@ export default function TradeChatDetail({
         ? returnReceiptFlow.error
         : orderAction === "review-return-proposal"
           ? returnAgreementFlow.error
-          : orderAction === "respond-return-consultation" ||
-              orderAction === "update-return-proposal"
-            ? returnProposalFlow.error
-            : orderAction === "start-return-consultation"
-              ? identityVerification.errorMessage || undefined
-              : undefined;
+          : orderAction === "start-return-consultation"
+            ? identityVerification.errorMessage || undefined
+            : undefined;
 
   return (
     <>
@@ -551,39 +534,6 @@ export default function TradeChatDetail({
         onCancel={cancelFlow.closeModal}
         onSubmit={() => {
           void cancelFlow.submit();
-        }}
-      />
-
-      <TradeReturnProposalModal
-        open={returnProposalFlow.open}
-        agreement={returnProposalFlow.agreement}
-        returnRequirement={
-          returnProposalFlow.returnRequirement
-        }
-        refundAmount={
-          returnProposalFlow.refundAmount
-        }
-        refundAmountMax={
-          returnProposalFlow.refundAmountMax
-        }
-        error={returnProposalFlow.error}
-        submitting={
-          returnProposalFlow.submitting
-        }
-        onAgreementChange={
-          returnProposalFlow.setAgreement
-        }
-        onReturnRequirementChange={
-          returnProposalFlow.setReturnRequirement
-        }
-        onRefundAmountChange={
-          returnProposalFlow.setRefundAmount
-        }
-        onCancel={
-          returnProposalFlow.closeModal
-        }
-        onSubmit={() => {
-          void returnProposalFlow.submit();
         }}
       />
 

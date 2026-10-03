@@ -587,6 +587,7 @@ func (q *TradeQuery) getTradeReturnState(
 		proposal := tradedto.TradeReturnProposal{
 			ID:                agreement.Proposal.ID,
 			Agreement:         agreement.Proposal.Agreement,
+			Reason:            agreement.Proposal.Reason,
 			ReturnRequirement: agreement.Proposal.ReturnRequirement,
 			RefundAmount:      agreement.Proposal.RefundAmount,
 		}

@@ -87,6 +87,7 @@ export type TradeReturnConsultation = {
 export type TradeReturnProposal = {
   id: string;
   agreement: TradeReturnAgreement;
+  reason: string;
   returnRequirement?: TradeReturnRequirement;
   refundAmount?: number;
   createdAt: string;
@@ -111,12 +112,14 @@ export type CreateTradeReturnConsultationResponse = {
 export type CreateTradeReturnProposalParams = {
   tradeId: string;
   agreement: TradeReturnAgreement;
+  reason: string;
   returnRequirement?: TradeReturnRequirement;
   refundAmount?: number;
 };
 
 export type CreateTradeReturnProposalRequest = {
   agreement: TradeReturnAgreement;
+  reason: string;
   returnRequirement?: TradeReturnRequirement;
   refundAmount?: number;
 };

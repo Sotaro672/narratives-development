@@ -43,10 +43,8 @@ function getReturnRequirementLabel(
   switch (proposal?.returnRequirement) {
     case "required":
       return "商品の返送が必要";
-
     case "not_required":
       return "商品の返送は不要";
-
     default:
       return "-";
   }
@@ -59,6 +57,7 @@ function isValidProposal(
     proposal !== null &&
     proposal.id.trim() !== "" &&
     proposal.agreement === "agree" &&
+    proposal.reason.trim() !== "" &&
     (proposal.returnRequirement === "required" ||
       proposal.returnRequirement === "not_required") &&
     proposal.refundAmount !== undefined &&
@@ -132,6 +131,19 @@ export default function TradeReturnAgreementModal({
 
           {validProposal ? (
             <>
+              <section
+                className="trade-return-agreement-modal__section"
+                aria-labelledby="trade-return-agreement-reason-label"
+              >
+                <ModalDescription id="trade-return-agreement-reason-label">
+                  回答理由
+                </ModalDescription>
+
+                <p className="trade-return-agreement-modal__reason-value">
+                  {proposal.reason}
+                </p>
+              </section>
+
               <section
                 className="trade-return-agreement-modal__section"
                 aria-labelledby="trade-return-agreement-refund-label"
@@ -217,9 +229,7 @@ export default function TradeReturnAgreementModal({
           >
             {rejecting
               ? "送信中..."
-              : previouslyRejected
-                ? "この条件に同意しない"
-                : "この条件に同意しない"}
+              : "この条件に同意しない"}
           </Button>
         </div>
       </ModalFooter>

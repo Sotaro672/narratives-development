@@ -35,6 +35,7 @@ import type {
 
 const TRADE_BASE_PATH = "/mall/me/trades";
 const MAX_RETURN_CONSULTATION_DETAIL_LENGTH = 5000;
+const MAX_RETURN_PROPOSAL_REASON_LENGTH = 5000;
 const MAX_RETURN_DISPUTE_DETAIL_LENGTH = 5000;
 
 type TradeRequestOptions = {
@@ -167,6 +168,22 @@ function requireReturnConsultationDetail(detail: string): string {
   }
 
   return normalizedDetail;
+}
+
+function requireReturnProposalReason(reason: string): string {
+  const normalizedReason = reason.trim();
+
+  if (!normalizedReason) {
+    throw new Error("回答理由を入力してください。");
+  }
+
+  if (normalizedReason.length > MAX_RETURN_PROPOSAL_REASON_LENGTH) {
+    throw new Error(
+      `回答理由は${MAX_RETURN_PROPOSAL_REASON_LENGTH}文字以内で入力してください。`,
+    );
+  }
+
+  return normalizedReason;
 }
 
 function requireReturnDisputeDetail(detail: string): string {
@@ -375,6 +392,7 @@ export async function createTradeReturnProposal(
 ): Promise<void> {
   const tradeId = requireTradeId(params.tradeId);
   const agreement = requireReturnAgreement(params.agreement);
+  const reason = requireReturnProposalReason(params.reason);
 
   if (agreement === "disagree") {
     await fetchTradeWithAuth<unknown>(
@@ -383,6 +401,7 @@ export async function createTradeReturnProposal(
         method: "POST",
         json: {
           agreement,
+          reason,
         },
       },
     );
@@ -399,6 +418,7 @@ export async function createTradeReturnProposal(
       method: "POST",
       json: {
         agreement,
+        reason,
         returnRequirement,
         refundAmount,
       },

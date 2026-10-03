@@ -13,6 +13,7 @@ import (
 
 type createTradeReturnProposalRequest struct {
 	Agreement         tradedom.ReturnProposalAgreement `json:"agreement"`
+	Reason            string                           `json:"reason"`
 	ReturnRequirement tradedom.ReturnRequirement       `json:"returnRequirement,omitempty"`
 	RefundAmount      int                              `json:"refundAmount,omitempty"`
 }
@@ -22,10 +23,13 @@ type createTradeReturnProposalRequest struct {
 // Records the authenticated seller Avatar's response to a buyer return
 // consultation.
 //
+// A reason is required regardless of whether the seller agrees or disagrees.
+//
 // Body when agreeing:
 //
 //	{
 //	  "agreement": "agree",
+//	  "reason": "商品の状態を確認し、返品に合意します。",
 //	  "returnRequirement": "required",
 //	  "refundAmount": 5000
 //	}
@@ -33,7 +37,8 @@ type createTradeReturnProposalRequest struct {
 // Body when disagreeing:
 //
 //	{
-//	  "agreement": "disagree"
+//	  "agreement": "disagree",
+//	  "reason": "出品時の商品状態との差異を確認できないため、返品には合意できません。"
 //	}
 //
 // SellerAvatarID is never accepted from the client. The authenticated Avatar
@@ -81,6 +86,7 @@ func (h *TradeHandler) createReturnProposal(
 			TradeID:           tradeID,
 			SellerAvatarID:    avatarID,
 			Agreement:         req.Agreement,
+			Reason:            strings.TrimSpace(req.Reason),
 			ReturnRequirement: req.ReturnRequirement,
 			RefundAmount:      req.RefundAmount,
 		},
@@ -120,6 +126,7 @@ func writeTradeReturnProposalErr(
 
 	case errors.Is(err, tradedom.ErrInvalidID),
 		errors.Is(err, tradedom.ErrInvalidReturnProposalAgreement),
+		errors.Is(err, tradedom.ErrInvalidReturnProposalReason),
 		errors.Is(err, tradedom.ErrInvalidReturnRequirement),
 		errors.Is(err, tradedom.ErrInvalidReturnRefundAmount):
 		badRequest(w, err.Error())
