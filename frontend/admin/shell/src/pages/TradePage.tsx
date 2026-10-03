@@ -5,6 +5,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ResaleDetailAside from "../features/resale/presentation/components/ResaleDetailAside";
 import { useResaleDetail } from "../features/resale/presentation/hooks/useResaleDetail";
 import TradeMessageTable from "../features/trade/presentation/components/TradeMessageTable";
+import { useTradeReturnReport } from "../features/trade/presentation/hooks/useTradeReturnReport";
 import Page, { DetailPageBody, PageHeader } from "../shared/ui/Page/Page";
 
 export default function TradePage() {
@@ -19,6 +20,12 @@ export default function TradePage() {
     avatarId,
     resaleId,
   );
+
+  const {
+    reportCase: returnReportCase,
+    loading: returnReportLoading,
+    error: returnReportError,
+  } = useTradeReturnReport(tradeId);
 
   return (
     <Page>
@@ -61,6 +68,9 @@ export default function TradePage() {
             loading={loading}
             error={error}
             onReload={reload}
+            returnReportCaseId={returnReportCase?.id}
+            returnReportLoading={returnReportLoading}
+            returnReportError={returnReportError}
           />
         }
       />

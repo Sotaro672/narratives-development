@@ -3,7 +3,10 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 
-import type { TradeMessage } from "../../../../shared/type/trade";
+import type {
+  TradeMessage,
+  TradeMessageSenderSide,
+} from "../../../../shared/type/trade";
 import Table, { type TableColumn } from "../../../../shared/ui/Table/Table";
 import TextLink from "../../../../shared/ui/TextLink/TextLink";
 import { formatDateTime } from "../../../../shared/util/dateFormat";
@@ -13,11 +16,77 @@ type TradeMessageTableProps = {
   tradeId: string;
 };
 
-const SENDER_SIDE_LABELS: Record<TradeMessage["senderSide"], string> = {
+const SENDER_SIDE_LABELS: Record<TradeMessageSenderSide, string> = {
   buyer: "購入者",
   seller: "出品者",
   system: "システム",
 };
+
+function getSystemMessageActorSide(
+  message: TradeMessage,
+): "buyer" | "seller" | null {
+  if (
+    message.senderSide !== "system" ||
+    message.senderType !== "system"
+  ) {
+    return null;
+  }
+
+  const messageId = message.id.trim();
+
+  if (messageId === "dispatch") {
+    return "seller";
+  }
+
+  if (messageId === "return-consultation") {
+    return "buyer";
+  }
+
+  if (
+    messageId.startsWith("return-proposal-accepted-") ||
+    messageId.startsWith("return-proposal-rejected-") ||
+    messageId.startsWith("return-shipment-ready-")
+  ) {
+    return "buyer";
+  }
+
+  if (
+    messageId.startsWith("return-proposal-") ||
+    messageId.startsWith("return-completed-")
+  ) {
+    return "seller";
+  }
+
+  return null;
+}
+
+function getDisplaySenderSide(
+  message: TradeMessage,
+): TradeMessageSenderSide {
+  if (message.senderSide !== "system") {
+    return message.senderSide;
+  }
+
+  return getSystemMessageActorSide(message) ?? "system";
+}
+
+function getDisplaySenderName(
+  message: TradeMessage,
+  displaySenderSide: TradeMessageSenderSide,
+): string {
+  if (displaySenderSide === "system") {
+    return message.senderName || "AMOL";
+  }
+
+  if (
+    message.senderSide === displaySenderSide &&
+    message.senderType === "avatar"
+  ) {
+    return message.senderName || message.senderId || SENDER_SIDE_LABELS[displaySenderSide];
+  }
+
+  return SENDER_SIDE_LABELS[displaySenderSide];
+}
 
 export default function TradeMessageTable({
   tradeId,
@@ -31,12 +100,15 @@ export default function TradeMessageTable({
         key: "senderName",
         header: "送信者",
         render: (message) => {
-          const name = message.senderName || message.senderId || "-";
-          const sideLabel = SENDER_SIDE_LABELS[message.senderSide];
+          const displaySenderSide = getDisplaySenderSide(message);
+          const name = getDisplaySenderName(message, displaySenderSide);
+          const sideLabel = SENDER_SIDE_LABELS[displaySenderSide];
           return `${name}（${sideLabel}）`;
         },
-        sortValue: (message) =>
-          message.senderName || message.senderId || "",
+        sortValue: (message) => {
+          const displaySenderSide = getDisplaySenderSide(message);
+          return getDisplaySenderName(message, displaySenderSide);
+        },
         nowrap: true,
       },
       {

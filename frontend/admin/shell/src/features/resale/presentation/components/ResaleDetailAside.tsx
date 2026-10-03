@@ -11,6 +11,9 @@ type ResaleDetailAsideProps = {
   loading: boolean;
   error: string | null;
   onReload: () => void | Promise<void>;
+  returnReportCaseId?: string;
+  returnReportLoading?: boolean;
+  returnReportError?: string | null;
 };
 
 export default function ResaleDetailAside({
@@ -18,6 +21,9 @@ export default function ResaleDetailAside({
   loading,
   error,
   onReload,
+  returnReportCaseId,
+  returnReportLoading,
+  returnReportError,
 }: ResaleDetailAsideProps) {
   const navigate = useNavigate();
 
@@ -30,7 +36,9 @@ export default function ResaleDetailAside({
       <div role="alert">
         <p>Resaleを取得できませんでした。</p>
         <p>{error}</p>
-        <button type="button" onClick={() => void onReload()}>再読み込み</button>
+        <button type="button" onClick={() => void onReload()}>
+          再読み込み
+        </button>
       </div>
     );
   }
@@ -38,6 +46,11 @@ export default function ResaleDetailAside({
   if (!resale) {
     return <p role="alert">Resaleが見つかりませんでした。</p>;
   }
+
+  const showReturnReport =
+    returnReportLoading !== undefined ||
+    returnReportError !== undefined ||
+    returnReportCaseId !== undefined;
 
   return (
     <section className="ui-detail-section">
@@ -97,6 +110,30 @@ export default function ResaleDetailAside({
             )}
           </dd>
         </div>
+
+        {showReturnReport ? (
+          <div>
+            <dt>返品報告</dt>
+            <dd>
+              {returnReportLoading ? (
+                "確認中..."
+              ) : returnReportError ? (
+                "-"
+              ) : returnReportCaseId ? (
+                <TextLink
+                  tone="accent"
+                  onClick={() =>
+                    navigate(`/reports/${encodeURIComponent(returnReportCaseId)}`)
+                  }
+                >
+                  あり
+                </TextLink>
+              ) : (
+                "なし"
+              )}
+            </dd>
+          </div>
+        ) : null}
 
         <div>
           <dt>登録日時</dt>

@@ -1,6 +1,7 @@
 // frontend/admin/shell/src/features/report/infrastructure/reportApi.ts
 
 import { getAuthHeaders } from "../../../shared/http/authHeaders";
+
 import type {
   ReportCase,
   ReportCaseListResponse,
@@ -17,25 +18,32 @@ function requireBackendBaseUrl(): string {
   if (!BACKEND_BASE_URL) {
     throw new Error("VITE_BACKEND_BASE_URL is not configured.");
   }
+
   return BACKEND_BASE_URL;
 }
 
 function requireCaseId(caseId: string): string {
   const normalizedCaseId = caseId.trim();
+
   if (!normalizedCaseId) {
     throw new Error("caseId is required.");
   }
+
   return normalizedCaseId;
 }
 
-async function requireOk(response: Response, message: string): Promise<void> {
+async function requireOk(
+  response: Response,
+  message: string,
+): Promise<void> {
   if (response.ok) {
     return;
   }
 
   let detail = "";
+
   try {
-    const body = await response.json() as { error?: string };
+    const body = (await response.json()) as { error?: string };
     detail = body.error ? ` error=${body.error}` : "";
   } catch {
     // Response body may not be JSON.
@@ -50,6 +58,7 @@ function appendStringParam(
   value: string | undefined,
 ): void {
   const normalizedValue = value?.trim();
+
   if (normalizedValue) {
     query.set(key, normalizedValue);
   }
@@ -84,6 +93,7 @@ export async function listReports(
   });
 
   await requireOk(response, "Failed to load reports.");
+
   return response.json() as Promise<ReportCaseListResponse>;
 }
 
@@ -116,6 +126,34 @@ export async function getReport(
   });
 
   await requireOk(response, "Failed to load report.");
+
+  return response.json() as Promise<ReportDetailResponse>;
+}
+
+export async function getReportIfExists(
+  caseId: string,
+): Promise<ReportDetailResponse | null> {
+  const normalizedCaseId = requireCaseId(caseId);
+  const backendBaseUrl = requireBackendBaseUrl();
+  const authHeaders = await getAuthHeaders();
+
+  const response = await fetch(
+    `${backendBaseUrl}/admin/reports/${encodeURIComponent(normalizedCaseId)}`,
+    {
+      method: "GET",
+      headers: {
+        ...authHeaders,
+        Accept: "application/json",
+      },
+    },
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  await requireOk(response, "Failed to load report.");
+
   return response.json() as Promise<ReportDetailResponse>;
 }
 
@@ -132,6 +170,7 @@ export async function decideReport(
   }
 
   const authHeaders = await getAuthHeaders();
+
   const response = await fetch(
     `${backendBaseUrl}/admin/reports/${encodeURIComponent(normalizedCaseId)}/decision`,
     {
@@ -149,5 +188,6 @@ export async function decideReport(
   );
 
   await requireOk(response, "Failed to decide report.");
+
   return response.json() as Promise<ReportCase>;
 }
