@@ -24,7 +24,6 @@ import useTradeCancel from "../hooks/useTradeCancel";
 import useTradeMessageReport from "../hooks/useTradeMessageReport";
 import useTradeReply from "../hooks/useTradeReply";
 import useTradeReturnAgreement from "../hooks/useTradeReturnAgreement";
-import useTradeReturnConsultation from "../hooks/useTradeReturnConsultation";
 import useTradeReturnDispute from "../hooks/useTradeReturnDispute";
 import useTradeReturnProposal from "../hooks/useTradeReturnProposal";
 import useTradeReturnReceipt from "../hooks/useTradeReturnReceipt";
@@ -39,7 +38,6 @@ import { createTradeDispatchQrPayload } from "../util/tradeDispatchQr";
 import TradeMessageCard from "./TradeMessageCard";
 import TradeOrderActionPrompt from "./TradeOrderActionPrompt";
 import TradeReturnAgreementModal from "./TradeReturnAgreementModal";
-import TradeReturnConsultationModal from "./TradeReturnConsultationModal";
 import TradeReturnProposalModal from "./TradeReturnProposalModal";
 import TradeReturnReceiptModal from "./TradeReturnReceiptModal";
 import TradeReturnShipmentModal from "./TradeReturnShipmentModal";
@@ -80,23 +78,11 @@ export default function TradeChatDetail({
     reload: thread.reload,
   });
 
-  const returnConsultationFlow = useTradeReturnConsultation({
-    tradeId: thread.tradeId,
-    trade: thread.trade,
-    reload: thread.reload,
-    blocked:
-      cancelFlow.cancelling ||
-      identityVerification.isLoading ||
-      !identityVerification.isVerified,
-  });
-
   const returnProposalFlow = useTradeReturnProposal({
     tradeId: thread.tradeId,
     trade: thread.trade,
     reload: thread.reload,
-    blocked:
-      cancelFlow.cancelling ||
-      returnConsultationFlow.submitting,
+    blocked: cancelFlow.cancelling,
   });
 
   const returnAgreementFlow = useTradeReturnAgreement({
@@ -105,7 +91,6 @@ export default function TradeChatDetail({
     reload: thread.reload,
     blocked:
       cancelFlow.cancelling ||
-      returnConsultationFlow.submitting ||
       returnProposalFlow.submitting,
   });
 
@@ -115,7 +100,6 @@ export default function TradeChatDetail({
     reload: thread.reload,
     blocked:
       cancelFlow.cancelling ||
-      returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting,
   });
@@ -126,7 +110,6 @@ export default function TradeChatDetail({
     reload: thread.reload,
     blocked:
       cancelFlow.cancelling ||
-      returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading,
@@ -138,7 +121,6 @@ export default function TradeChatDetail({
     reload: thread.reload,
     blocked:
       cancelFlow.cancelling ||
-      returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
@@ -152,7 +134,6 @@ export default function TradeChatDetail({
     loading: thread.loading,
     blocked:
       cancelFlow.cancelling ||
-      returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
@@ -231,7 +212,6 @@ export default function TradeChatDetail({
 
     if (
       cancelFlow.cancelling ||
-      returnConsultationFlow.submitting ||
       returnProposalFlow.submitting ||
       returnAgreementFlow.submitting ||
       returnShipmentFlow.loading ||
@@ -279,7 +259,9 @@ export default function TradeChatDetail({
           return;
         }
 
-        returnConsultationFlow.openModal();
+        navigate(
+          `/trades/${encodeURIComponent(thread.tradeId)}/return-consultation`,
+        );
         return;
 
       case "respond-return-consultation":
@@ -358,7 +340,6 @@ export default function TradeChatDetail({
 
   const orderActionProcessing =
     cancelFlow.cancelling ||
-    returnConsultationFlow.submitting ||
     returnProposalFlow.submitting ||
     returnAgreementFlow.submitting ||
     returnShipmentFlow.loading ||
@@ -381,8 +362,7 @@ export default function TradeChatDetail({
             : orderAction === "respond-return-consultation"
               ? returnProposalFlow.error
               : orderAction === "start-return-consultation"
-                ? identityVerification.errorMessage ||
-                  returnConsultationFlow.error
+                ? identityVerification.errorMessage || undefined
                 : undefined;
 
   return (
@@ -592,28 +572,6 @@ export default function TradeChatDetail({
         onCancel={returnDisputeFlow.closeModal}
         onSubmit={() => {
           void returnDisputeFlow.submit();
-        }}
-      />
-
-      <TradeReturnConsultationModal
-        open={returnConsultationFlow.open}
-        reason={returnConsultationFlow.reason}
-        detail={returnConsultationFlow.detail}
-        error={returnConsultationFlow.error}
-        submitting={
-          returnConsultationFlow.submitting
-        }
-        onReasonChange={
-          returnConsultationFlow.setReason
-        }
-        onDetailChange={
-          returnConsultationFlow.setDetail
-        }
-        onCancel={
-          returnConsultationFlow.closeModal
-        }
-        onSubmit={() => {
-          void returnConsultationFlow.submit();
         }}
       />
 

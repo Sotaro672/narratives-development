@@ -1,0 +1,109 @@
+/* frontend/mall/src/styles/trade-return-consultation-page.css */
+
+.trade-return-consultation-page {
+  width: min(720px, 100%);
+  margin: 0 auto;
+}
+
+.trade-return-consultation-page__header {
+  margin-bottom: 32px;
+}
+
+.trade-return-consultation-page__description {
+  margin: 0;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.trade-return-consultation-page__state,
+.trade-return-consultation-page__content,
+.trade-return-consultation-page__verification {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.trade-return-consultation-page__section {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.trade-return-consultation-page__section + .trade-return-consultation-page__section {
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border, #e5e7eb);
+}
+
+.trade-return-consultation-page__section-title {
+  margin: 0;
+  color: var(--color-text, #111827);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.trade-return-consultation-page__reason-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  min-width: 0;
+}
+
+.trade-return-consultation-page__reason-options .ui-chip {
+  width: 100%;
+  min-width: 0;
+  justify-content: center;
+}
+
+.trade-return-consultation-page__verification > .ui-button,
+.trade-return-consultation-page__state > .ui-button {
+  width: fit-content;
+  align-self: flex-start;
+}
+
+@media (max-width: 959px) {
+  .trade-return-consultation-page {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+
+  .trade-return-consultation-page__header {
+    margin-bottom: 24px;
+  }
+
+  .trade-return-consultation-page__content,
+  .trade-return-consultation-page__state,
+  .trade-return-consultation-page__verification {
+    gap: 20px;
+  }
+
+  .trade-return-consultation-page__section {
+    gap: 14px;
+  }
+
+  .trade-return-consultation-page__section + .trade-return-consultation-page__section {
+    padding-top: 20px;
+  }
+
+  .trade-return-consultation-page__section-title {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 640px) {
+  .trade-return-consultation-page__description {
+    font-size: 13px;
+  }
+
+  .trade-return-consultation-page__reason-options {
+    grid-template-columns: 1fr;
+  }
+
+  .trade-return-consultation-page__reason-options .ui-chip {
+    justify-content: flex-start;
+    text-align: left;
+  }
+}
